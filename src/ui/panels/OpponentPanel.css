@@ -44,3 +44,29 @@
   font-size: 0.85em;
   color: var(--text-soft);
 }
+
+.opp-acting {
+  border-color: var(--accent);
+}
+
+.opp-tag {
+  font-size: 0.65em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--text-soft);
+  margin-left: 6px;
+}
+
+.opp-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 6px;
+}
+.opp-dot.online { background: var(--success); }
+.opp-dot.offline { background: #707070; }

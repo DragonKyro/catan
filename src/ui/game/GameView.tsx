@@ -1,6 +1,8 @@
 import { useGameStore } from '@/store/gameStore';
+import { useNetworkStore } from '@/store/networkStore';
 import { Board } from './Board';
 import { AIDriver } from './AIDriver';
+import { ConnectionStatusOverlay } from './ConnectionStatusOverlay';
 import { PhaseBanner } from '@/ui/panels/PhaseBanner';
 import { HandPanel } from '@/ui/panels/HandPanel';
 import { OpponentPanel } from '@/ui/panels/OpponentPanel';
@@ -8,6 +10,7 @@ import { ActionBar } from '@/ui/panels/ActionBar';
 import { DiceDisplay } from '@/ui/panels/DiceDisplay';
 import { BankPanel } from '@/ui/panels/BankPanel';
 import { PendingTradeBanner } from '@/ui/panels/PendingTradeBanner';
+import { ChatPanel } from '@/ui/chat/ChatPanel';
 import { BankTradeDialog } from '@/ui/dialogs/BankTradeDialog';
 import { PlayerTradeDialog } from '@/ui/dialogs/PlayerTradeDialog';
 import { DiscardDialog } from '@/ui/dialogs/DiscardDialog';
@@ -25,6 +28,8 @@ export function GameView() {
   const error = useGameStore((s) => s.error);
   const dismissError = useGameStore((s) => s.dismissError);
   const pendingRobberHex = useGameStore((s) => s.pendingRobberHex);
+  const role = useNetworkStore((s) => s.role);
+  const isOnline = role !== 'solo';
 
   const isGameOver = game.phase === 'gameOver';
 
@@ -46,6 +51,7 @@ export function GameView() {
         <ActionBar />
         <OpponentPanel />
         <BankPanel />
+        {isOnline && <ChatPanel compact />}
       </aside>
 
       {error && (
@@ -62,6 +68,7 @@ export function GameView() {
       {pendingRobberHex && <RobberStealDialog />}
       {isGameOver && <GameOverDialog />}
       {handoffPending && !isGameOver && <PassDeviceScreen />}
+      {isOnline && <ConnectionStatusOverlay />}
     </div>
   );
 }

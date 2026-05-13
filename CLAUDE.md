@@ -16,10 +16,12 @@ Four layers, separated by directory:
 
 - **`src/game/`** — pure TypeScript game logic. No React, no DOM, no network imports. All state mutations go through `applyAction(state, action) => state`. Deterministic. Unit-tested.
 - **`src/ai/`** — pure heuristic AI. Exports `chooseAction(state, playerId) => Action | null` and `shouldAcceptTrade`. No React or store imports — same purity contract as `src/game/`.
-- **`src/net/`** — Trystero wrapper. Broadcasts actions to peers, applies remote actions, handles room create/join and mid-game rejoin via state snapshot. (Phase 3+ — not implemented yet.)
+- **`src/net/`** — Trystero/torrent wrapper. Typed channels for hello/lobby/start/action/snapshot/chat, persistent UUID via localStorage, short room codes. Consumed only by `networkStore`.
 - **`src/ui/`** — React components + SVG board. Reads state from `src/store`, dispatches actions via the store, hosts the `AIDriver` component that runs AI moves.
 
-A Zustand store (`src/store/`) holds the canonical `GameState` shared across all peers, plus UI-only state (uiMode, dialog, pendingRobberHex, handoffPending).
+Two Zustand stores under `src/store/`:
+- `gameStore` — `GameState` + UI mode + dialogs + pendingRobberHex + handoffPending. Exposes `dispatch(action)` (broadcasts) and `applyLocal(action)` (silent, used by network receivers).
+- `networkStore` — connection state, role (solo/host/guest/spectator), lobby, chat, online peer tracking. Registers with `gameStore` via `registerBroadcastHandler` to avoid circular imports.
 
 ## Expansion model
 
@@ -29,10 +31,16 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 
 ## Multiplayer model
 
+- **Trystero `/torrent`** for WebRTC signaling (BitTorrent trackers). No backend. App ID `catan-friends-v1`; room code doubles as the password for E2E encryption.
+- Trystero `peerId` is volatile (Math.random). Stable identity is a `localStorage` UUID (`catan.uuid`), exchanged via the `hello` channel.
 - Full state replication: every peer holds the full `GameState`.
-- Actions (not state diffs) are broadcast over the wire.
+- Actions (not state diffs) are broadcast as `{ action, byUuid }` envelopes; receivers verify the UUID owns the action's player seat.
 - Randomness (dice, dev card draws) is decided by the acting player and included in the action payload, so all peers reduce to the same state.
-- Rejoin: a returning player reconnects with their persistent UUID; any peer can re-send the state snapshot.
+- **Lobby** is host-authoritative: host owns `LobbyState`, broadcasts it on changes. Host clicks Start → broadcasts the initial `GameState` via `start`.
+- **Rejoin / spectator**: when a peer joins mid-game, the host responds with `snap` (gameState + chat + seatUuids). Newcomer's role: UUID matches a seat → guest; otherwise spectator (read-only).
+- **Disconnect**: pause indefinitely. UI shows offline dot + `ConnectionStatusOverlay`. No auto-skip.
+- **AI in online**: only the host runs `AIDriver` (`role === 'host' || role === 'solo'`). If host drops, AIs freeze.
+- **Chat**: in-memory in `networkStore.chat`, not part of `GameState`. System messages auto-generated on joins/leaves/game-start.
 - No anti-cheat — friends-only.
 
 ## Trading model
@@ -78,6 +86,24 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 
 `.github/workflows/deploy.yml` builds and deploys to GitHub Pages on push to `main`. The Vite `base` is `/catan/` to match the repo name. If the repo is renamed, update `base` in `vite.config.ts`.
 
+## Roadmap
+
+- [x] Phase 0 — Project scaffold
+- [x] Phase 1 — Game logic engine
+- [x] Phase 2 — Hot-seat UI
+- [x] Phase 3 — AI + player-to-player trading
+- [x] Phase 4 — Online multiplayer + in-game chat
+- [ ] Phase 5 — Seafarers expansion
+- [ ] Phase 6 — Cities & Knights expansion
+- [ ] Phase 7 — Traders & Barbarians expansion
+- [ ] Phase 8 — Explorers & Pirates expansion
+- [ ] Phase 9 — *Rivals for Catan* (2-player card-game variant)
+- [ ] Phase 10 — Rivals: Era of Gold
+- [ ] Phase 11 — Rivals: Era of Turmoil
+- [ ] Phase 12 — Rivals: Era of Progress
+- [ ] Phase 13 — Rivals: Era of Barbarians
+- [ ] Phase 14 — Rivals: Era of Merchants
+
 ## Where to start next
 
-Phases 0–3 complete: scaffold, engine, hot-seat UI, AI + player trading. Next likely steps are Phase 4 (multiplayer via Trystero — flesh out `src/net/`) or expansion modules in `src/game/modules/`.
+Phases 0–4 complete. Next is the first expansion module in `src/game/modules/` — start with Seafarers (smallest delta from base). The action union and engine dispatcher are extensible; new actions plug in via a new entry in `modules/base.ts` and (when an expansion lands) a new `RuleModule` file alongside it.

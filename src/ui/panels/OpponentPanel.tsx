@@ -1,4 +1,5 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
+import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { totalResources } from '@/game/resources';
 import './OpponentPanel.css';
@@ -12,22 +13,48 @@ const PLAYER_COLOR_CSS: Record<string, string> = {
 
 export function OpponentPanel() {
   const game = useGameStore((s) => s.game!);
-  const acting = getActingPlayerId(game);
-  const opponents = game.players.filter((p) => p.id !== acting);
+  const role = useNetworkStore((s) => s.role);
+  const onlineUuids = useNetworkStore((s) => s.onlineUuids);
+  const uuidForPlayer = useNetworkStore((s) => s.uuidForPlayer);
+
+  // Choose which players to show as "opponents" (i.e., not in HandPanel).
+  // - solo: everyone except the acting player.
+  // - online player: everyone except me.
+  // - spectator: everyone.
+  let hiddenId: string | null = null;
+  if (role === 'solo') hiddenId = getActingPlayerId(game);
+  else if (role === 'guest' || role === 'host') hiddenId = getMyPlayerId(game);
+
+  const opponents = game.players.filter((p) => p.id !== hiddenId);
+  const actingId = getActingPlayerId(game);
+
   return (
     <section className="opps">
       {opponents.map((p) => {
-        // Opponents' VP excludes hidden VP cards.
         const visibleVp = calculateVictoryPoints(game, p.id, false);
         const cards = p.devCards.unplayed.length + p.devCards.boughtThisTurn.length;
+        const isActing = p.id === actingId;
+        const uuid = uuidForPlayer(p.id);
+        const onlineStatus: 'na' | 'online' | 'offline' =
+          role === 'solo' || p.isAI
+            ? 'na'
+            : uuid && onlineUuids.has(uuid)
+              ? 'online'
+              : 'offline';
         return (
-          <div key={p.id} className="opp">
+          <div key={p.id} className={`opp ${isActing ? 'opp-acting' : ''}`}>
             <div className="opp-head">
               <span
                 className="opp-swatch"
                 style={{ background: PLAYER_COLOR_CSS[p.color] }}
               />
-              <span className="opp-name">{p.name}</span>
+              <span className="opp-name">
+                {p.name}
+                {p.isAI && <span className="opp-tag">AI</span>}
+                {onlineStatus !== 'na' && (
+                  <span className={`opp-dot ${onlineStatus}`} />
+                )}
+              </span>
               <span className="opp-vp" title="Visible VP">{visibleVp}+ VP</span>
             </div>
             <div className="opp-stats">

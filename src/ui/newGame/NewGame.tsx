@@ -8,7 +8,11 @@ const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3'];
 const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai'];
 const PLAYER_COLOR_HEX = ['#d94545', '#3a6ec9', '#e08b3c', '#efefef'];
 
-export function NewGame() {
+interface Props {
+  onBack?: () => void;
+}
+
+export function NewGame({ onBack }: Props = {}) {
   const [numPlayers, setNumPlayers] = useState(3);
   const [names, setNames] = useState(DEFAULT_NAMES);
   const [types, setTypes] = useState<PlayerKind[]>(DEFAULT_TYPES);
@@ -35,8 +39,13 @@ export function NewGame() {
   return (
     <div className="newgame-wrap">
       <div className="newgame-card">
-        <h1 className="newgame-title">Catan</h1>
-        <p className="newgame-subtitle">Settle. Build. Trade. Conquer.</p>
+        {onBack && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <Button variant="ghost" size="sm" onClick={onBack}>← Back</Button>
+          </div>
+        )}
+        <h1 className="newgame-title">Local hot-seat</h1>
+        <p className="newgame-subtitle">All players on one device</p>
 
         <label className="newgame-field">
           <span>Players</span>

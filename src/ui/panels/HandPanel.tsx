@@ -1,4 +1,5 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
+import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
 import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
@@ -8,19 +9,47 @@ import './HandPanel.css';
 
 export function HandPanel() {
   const { game, dispatch, openDialog, uiMode, setMode } = useGameStore();
+  const role = useNetworkStore((s) => s.role);
   if (!game) return null;
+
+  // Whose hand do we display?
+  // - solo: the acting player (rotates through hot-seat).
+  // - online player: always the local seat (us).
+  // - spectator: no hand visible.
+  if (role === 'spectator') {
+    return (
+      <section className="hand">
+        <header className="hand-header">
+          <h3>Spectating</h3>
+        </header>
+        <div className="hand-empty" style={{ padding: '8px 0' }}>
+          You are watching this game.
+        </div>
+      </section>
+    );
+  }
+
+  let viewedId: string;
+  if (role === 'solo') {
+    viewedId = getActingPlayerId(game);
+  } else {
+    const myPid = getMyPlayerId(game);
+    if (!myPid) return null;
+    viewedId = myPid;
+  }
+  const player = game.players.find((p) => p.id === viewedId)!;
   const acting = getActingPlayerId(game);
-  const player = game.players.find((p) => p.id === acting)!;
-  // Humans control their own cards; for AI we still display the hand so the
-  // user can watch the game, but disable the "play" buttons.
+  const isMyTurn = viewedId === acting;
+  // Card-playing is allowed only when it's our turn AND we're not an AI being
+  // watched in solo mode (AI cards aren't human-clickable).
   const canPlayCards =
     !player.isAI &&
+    isMyTurn &&
     (game.phase === 'main' || game.phase === 'rollOrPlayKnight') &&
     !game.hasPlayedDevCardThisTurn &&
     uiMode.kind === 'idle';
   const vp = calculateVictoryPoints(game, player.id, true);
 
-  // Group unplayed dev cards by type with counts.
   const cardCounts: Record<string, number> = {};
   for (const c of player.devCards.unplayed) {
     cardCounts[c] = (cardCounts[c] ?? 0) + 1;
@@ -28,10 +57,8 @@ export function HandPanel() {
 
   const onPlay = (card: string) => {
     if (card === 'knight') {
-      // Just dispatch directly; engine handles phase transition to moveRobber.
       dispatch({ type: 'playKnight', playerId: player.id });
     } else if (card === 'roadBuilding') {
-      // Enter road-placement mode with 2 free placements.
       setMode({ kind: 'roadBuilding', remaining: 2 });
     } else if (card === 'yearOfPlenty') {
       openDialog('yearOfPlenty');
@@ -43,7 +70,9 @@ export function HandPanel() {
   return (
     <section className="hand">
       <header className="hand-header">
-        <h3>{player.isAI ? `${player.name}'s hand` : 'Your hand'}</h3>
+        <h3>
+          {role === 'solo' ? (player.isAI ? `${player.name}'s hand` : 'Your hand') : 'Your hand'}
+        </h3>
         <span style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
           {player.isAI && <span className="hand-ai">AI</span>}
           <span className="hand-vp" title="Victory points">{vp} VP</span>

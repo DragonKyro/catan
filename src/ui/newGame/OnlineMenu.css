@@ -1,0 +1,95 @@
+.online-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.online-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+.online-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.online-title {
+  margin: 0;
+  flex: 1;
+  text-align: center;
+}
+
+.online-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9em;
+  color: var(--text-soft);
+}
+
+.online-field input {
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 1em;
+  font-family: inherit;
+}
+
+.online-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.online-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.online-divider {
+  position: relative;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 4px 0;
+}
+
+.online-divider::before,
+.online-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 40%;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+.online-divider::before {
+  left: 0;
+}
+
+.online-divider::after {
+  right: 0;
+}
+
+.online-divider span {
+  background: var(--panel);
+  padding: 0 8px;
+  position: relative;
+}

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useGameStore } from '@/store/gameStore';
+import { useNetworkStore } from '@/store/networkStore';
 import { getActingPlayerId } from '@/game/helpers';
 import { chooseAction, shouldAcceptTrade } from '@/ai';
 
@@ -8,11 +9,17 @@ const AI_TRADE_DELAY_MS = 350;
 
 // Drives any AI-controlled acting player by computing their next action
 // and dispatching it. Mounts inside GameView and renders nothing.
+//
+// Only runs when we're solo or the host of the online room — otherwise
+// every peer would race to dispatch AI moves.
 export function AIDriver() {
   const { game, handoffPending, dialog, pendingRobberHex, dispatch } = useGameStore();
+  const role = useNetworkStore((s) => s.role);
+  const canDriveAI = role === 'solo' || role === 'host';
 
   // Main turn-loop driver
   useEffect(() => {
+    if (!canDriveAI) return;
     if (!game) return;
     if (game.winner) return;
     if (handoffPending) return;
@@ -38,11 +45,12 @@ export function AIDriver() {
       }
     }, AI_ACTION_DELAY_MS);
     return () => clearTimeout(t);
-  }, [game, handoffPending, dialog, pendingRobberHex, dispatch]);
+  }, [game, handoffPending, dialog, pendingRobberHex, dispatch, canDriveAI]);
 
   // Trade-accept driver: when a trade is open, any AI opponent that should
   // accept fires after a short stagger. First accept wins.
   useEffect(() => {
+    if (!canDriveAI) return;
     if (!game?.pendingTrade) return;
     const trade = game.pendingTrade;
     const aiOpponents = game.players.filter(
@@ -65,7 +73,7 @@ export function AIDriver() {
       timeouts.push(id);
     }
     return () => timeouts.forEach((t) => window.clearTimeout(t));
-  }, [game?.pendingTrade, dispatch]);
+  }, [game?.pendingTrade, dispatch, canDriveAI, game?.players]);
 
   return null;
 }

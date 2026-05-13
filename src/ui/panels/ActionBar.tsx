@@ -1,4 +1,5 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
+import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { Button } from '@/ui/shared/Button';
 import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
@@ -6,10 +7,31 @@ import './ActionBar.css';
 
 export function ActionBar() {
   const { game, dispatch, setMode, openDialog, uiMode } = useGameStore();
+  const role = useNetworkStore((s) => s.role);
   if (!game) return null;
   const acting = getActingPlayerId(game);
   const player = game.players.find((p) => p.id === acting)!;
   const phase = game.phase;
+
+  if (role === 'spectator') {
+    return (
+      <div className="actionbar actionbar-hint">
+        Spectating — you can chat but can't take actions.
+      </div>
+    );
+  }
+
+  // In online mode, only show actions when it's our turn.
+  if (role !== 'solo') {
+    const myPid = getMyPlayerId(game);
+    if (myPid !== acting && phase !== 'gameOver') {
+      return (
+        <div className="actionbar actionbar-thinking">
+          <span className="actionbar-spinner" aria-hidden /> Waiting for {player.name}…
+        </div>
+      );
+    }
+  }
 
   // AI is acting — show a thinking indicator instead of buttons.
   if (player.isAI && phase !== 'gameOver') {
