@@ -1,0 +1,32 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.banner-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.banner-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #00000040;
+}
+
+.banner-name {
+  font-weight: 700;
+  font-size: 1.05em;
+}
+
+.banner-instruction {
+  color: var(--text-soft);
+  font-size: 0.95em;
+}

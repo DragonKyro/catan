@@ -1,0 +1,98 @@
+import { useGameStore, getActingPlayerId } from '@/store/gameStore';
+import { RESOURCES } from '@/game/types';
+import { ResourceChip } from '@/ui/shared/ResourceChip';
+import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
+import { Button } from '@/ui/shared/Button';
+import { calculateVictoryPoints } from '@/game/scoring/points';
+import './HandPanel.css';
+
+export function HandPanel() {
+  const { game, dispatch, openDialog, uiMode, setMode } = useGameStore();
+  if (!game) return null;
+  const acting = getActingPlayerId(game);
+  const player = game.players.find((p) => p.id === acting)!;
+  const canPlayCards =
+    (game.phase === 'main' || game.phase === 'rollOrPlayKnight') &&
+    !game.hasPlayedDevCardThisTurn &&
+    uiMode.kind === 'idle';
+  const vp = calculateVictoryPoints(game, player.id, true);
+
+  // Group unplayed dev cards by type with counts.
+  const cardCounts: Record<string, number> = {};
+  for (const c of player.devCards.unplayed) {
+    cardCounts[c] = (cardCounts[c] ?? 0) + 1;
+  }
+
+  const onPlay = (card: string) => {
+    if (card === 'knight') {
+      // Just dispatch directly; engine handles phase transition to moveRobber.
+      dispatch({ type: 'playKnight', playerId: player.id });
+    } else if (card === 'roadBuilding') {
+      // Enter road-placement mode with 2 free placements.
+      setMode({ kind: 'roadBuilding', remaining: 2 });
+    } else if (card === 'yearOfPlenty') {
+      openDialog('yearOfPlenty');
+    } else if (card === 'monopoly') {
+      openDialog('monopoly');
+    }
+  };
+
+  return (
+    <section className="hand">
+      <header className="hand-header">
+        <h3>Your hand</h3>
+        <span className="hand-vp" title="Victory points (private)">{vp} VP</span>
+      </header>
+
+      <div className="hand-resources">
+        {RESOURCES.map((r) => (
+          <ResourceChip key={r} resource={r} count={player.resources[r]} dimmed={player.resources[r] === 0} />
+        ))}
+      </div>
+
+      <div className="hand-section">
+        <div className="hand-section-label">Development cards</div>
+        <div className="hand-cards">
+          {Object.entries(cardCounts).map(([card, count]) => (
+            <DevCardChip
+              key={card}
+              card={card as never}
+              count={count}
+              onClick={canPlayCards ? () => onPlay(card) : undefined}
+              disabled={!canPlayCards}
+              title={canPlayCards ? `Play ${DEV_LABEL[card as keyof typeof DEV_LABEL]}` : 'Cannot play right now'}
+            />
+          ))}
+          {player.devCards.boughtThisTurn.map((c, i) => (
+            <DevCardChip key={`bt-${i}`} card={c} faceDown title="Bought this turn — playable next turn" />
+          ))}
+          {player.devCards.victoryPoints > 0 && (
+            <DevCardChip
+              card="victoryPoint"
+              count={player.devCards.victoryPoints}
+              title="Hidden victory point (counts at game end)"
+            />
+          )}
+          {Object.keys(cardCounts).length === 0 &&
+            player.devCards.boughtThisTurn.length === 0 &&
+            player.devCards.victoryPoints === 0 && (
+              <span className="hand-empty">No development cards</span>
+            )}
+        </div>
+      </div>
+
+      <div className="hand-flags">
+        {player.hasLongestRoad && (
+          <Button variant="ghost" size="sm" title="Longest Road bonus (+2 VP)">
+            🛣️ Longest Road
+          </Button>
+        )}
+        {player.hasLargestArmy && (
+          <Button variant="ghost" size="sm" title="Largest Army bonus (+2 VP)">
+            ⚔️ Largest Army
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}

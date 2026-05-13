@@ -41,11 +41,22 @@ export function generateBoard(rngState: number): { board: BoardState; rngState: 
   let robberHex: HexId | null = null;
   graph.hexIds.forEach((id, i) => {
     const terrain = terrains[i]!;
+    const corners = graph.hexCorners.get(id)!;
+    let cx = 0;
+    let cy = 0;
+    for (const vid of corners) {
+      cx += graph.vertices[vid]!.position.x;
+      cy += graph.vertices[vid]!.position.y;
+    }
+    cx /= corners.length;
+    cy /= corners.length;
     hexes[id] = {
       id,
       coord: graph.hexCoords.get(id)!,
       terrain,
       numberToken: null,
+      corners,
+      center: { x: Math.round(cx * 100) / 100, y: Math.round(cy * 100) / 100 },
     };
     if (terrain === 'desert') robberHex = id;
   });

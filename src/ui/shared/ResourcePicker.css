@@ -1,0 +1,44 @@
+.rpicker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rpicker-row {
+  display: grid;
+  grid-template-columns: 80px 28px 32px 28px 40px;
+  align-items: center;
+  gap: 8px;
+}
+
+.rpicker-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 1.05em;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.rpicker-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.rpicker-btn:hover:not(:disabled) {
+  background: #2c4154;
+}
+
+.rpicker-value {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.rpicker-cap {
+  color: var(--text-soft);
+  font-size: 0.85em;
+}

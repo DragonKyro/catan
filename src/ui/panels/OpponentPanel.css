@@ -1,0 +1,46 @@
+.opps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opp {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.opp-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid #00000040;
+}
+
+.opp-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.opp-vp {
+  color: var(--text-soft);
+  font-size: 0.9em;
+}
+
+.opp-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.85em;
+  color: var(--text-soft);
+}

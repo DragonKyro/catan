@@ -16,6 +16,7 @@ import {
   subtractResources,
   canAfford,
 } from '../resources';
+import { canConnectRoad } from '../placement';
 
 export function handleBuyDevCard(
   state: GameState,
@@ -131,7 +132,7 @@ export function handlePlayRoadBuilding(
   next = { ...next, hasPlayedDevCardThisTurn: true };
 
   const tryPlaceRoad = (s: GameState, edge: EdgeId): GameState => {
-    if (!canConnectFreeRoad(s, action.playerId, edge)) {
+    if (!canConnectRoad(s, action.playerId, edge)) {
       throw new Error('Invalid free road placement');
     }
     return updatePlayer(s, action.playerId, (p) => ({
@@ -145,34 +146,6 @@ export function handlePlayRoadBuilding(
     next = tryPlaceRoad(next, eid);
   }
   return next;
-}
-
-function canConnectFreeRoad(
-  state: GameState,
-  playerId: string,
-  edgeId: EdgeId,
-): boolean {
-  const edge = state.board.edges[edgeId];
-  if (!edge) return false;
-  for (const p of state.players) if (p.roads.includes(edgeId)) return false;
-  const player = getPlayer(state, playerId);
-  const [v1, v2] = edge.vertices;
-  for (const v of [v1, v2]) {
-    let blocked = false;
-    for (const p of state.players) {
-      if (p.id === playerId) continue;
-      if (p.settlements.includes(v) || p.cities.includes(v)) {
-        blocked = true;
-        break;
-      }
-    }
-    if (player.settlements.includes(v) || player.cities.includes(v)) return true;
-    if (blocked) continue;
-    for (const eid of state.board.vertices[v]!.edges) {
-      if (eid !== edgeId && player.roads.includes(eid)) return true;
-    }
-  }
-  return false;
 }
 
 export function handlePlayYearOfPlenty(

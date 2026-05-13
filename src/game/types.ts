@@ -32,6 +32,8 @@ export interface Hex {
   coord: HexCoord;
   terrain: Terrain;
   numberToken: number | null;
+  corners: VertexId[]; // 6 vertex IDs in clockwise order, for SVG polygon rendering
+  center: { x: number; y: number }; // pixel center of the hex
 }
 
 // ============================================================================

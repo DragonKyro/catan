@@ -1,0 +1,66 @@
+.hand {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hand-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.hand-header h3 {
+  margin: 0;
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.hand-vp {
+  font-weight: 700;
+  font-size: 1em;
+  color: var(--accent);
+}
+
+.hand-resources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hand-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hand-section-label {
+  font-size: 0.75em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.hand-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hand-empty {
+  color: var(--text-soft);
+  font-size: 0.9em;
+  font-style: italic;
+}
+
+.hand-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
