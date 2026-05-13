@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\klui\\.knowledge\\projects\\c--Users-klui-Desktop-Kyle-P-catan\\memory"
+    ]
+  }
+}
