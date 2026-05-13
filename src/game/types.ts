@@ -109,6 +109,7 @@ export interface Player {
   id: PlayerId;
   name: string;
   color: PlayerColor;
+  isAI: boolean;
   resources: ResourceBank;
   devCards: DevCardHand;
   settlements: VertexId[];
@@ -152,6 +153,12 @@ export interface GameSettings {
   expansions: string[];
 }
 
+export interface PendingTrade {
+  proposerId: PlayerId;
+  give: Partial<ResourceBank>;
+  receive: Partial<ResourceBank>;
+}
+
 export interface GameState {
   settings: GameSettings;
   rngState: number;
@@ -163,10 +170,12 @@ export interface GameState {
   setupState?: SetupState;
   discardState?: DiscardState;
   pendingRobberMove?: RobberMoveContext;
+  pendingTrade?: PendingTrade;
   bank: ResourceBank;
   devCardDeck: DevCardType[];
   hasRolledThisTurn: boolean;
   hasPlayedDevCardThisTurn: boolean;
+  tradesProposedThisTurn: number;
   largestArmy: { holder: PlayerId; size: number } | null;
   longestRoad: { holder: PlayerId; length: number } | null;
   lastRoll: { dice: [number, number]; total: number; player: PlayerId } | null;
@@ -252,6 +261,20 @@ export interface BankTradeAction extends ActionBase {
   receive: Resource;
 }
 
+export interface ProposeTradeAction extends ActionBase {
+  type: 'proposeTrade';
+  give: Partial<ResourceBank>;
+  receive: Partial<ResourceBank>;
+}
+
+export interface AcceptTradeAction extends ActionBase {
+  type: 'acceptTrade';
+}
+
+export interface CancelTradeAction extends ActionBase {
+  type: 'cancelTrade';
+}
+
 export interface EndTurnAction extends ActionBase {
   type: 'endTurn';
 }
@@ -271,6 +294,9 @@ export type Action =
   | PlayYearOfPlentyAction
   | PlayMonopolyAction
   | BankTradeAction
+  | ProposeTradeAction
+  | AcceptTradeAction
+  | CancelTradeAction
   | EndTurnAction;
 
 export type ActionType = Action['type'];

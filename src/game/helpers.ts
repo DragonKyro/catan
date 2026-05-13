@@ -22,3 +22,16 @@ export function getPlayer(state: GameState, playerId: PlayerId): Player {
   if (!p) throw new Error(`Unknown player: ${playerId}`);
   return p;
 }
+
+// Determines the player currently acting at this micro-step. In most phases
+// that's the player at currentPlayerIndex; during discard it's the first
+// player in the required map (per turn order).
+export function getActingPlayerId(state: GameState): PlayerId {
+  if (state.phase === 'discard' && state.discardState) {
+    const required = state.discardState.required;
+    for (const id of state.playerOrder) {
+      if (required[id] !== undefined) return id;
+    }
+  }
+  return state.playerOrder[state.currentPlayerIndex]!;
+}

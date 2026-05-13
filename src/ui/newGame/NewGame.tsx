@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { useGameStore } from '@/store/gameStore';
+import type { PlayerKind } from '@/game/createGame';
 import './NewGame.css';
 
-const DEFAULT_NAMES = ['Player 1', 'Player 2', 'Player 3', 'Player 4'];
+const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3'];
+const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai'];
 const PLAYER_COLOR_HEX = ['#d94545', '#3a6ec9', '#e08b3c', '#efefef'];
 
 export function NewGame() {
   const [numPlayers, setNumPlayers] = useState(3);
   const [names, setNames] = useState(DEFAULT_NAMES);
+  const [types, setTypes] = useState<PlayerKind[]>(DEFAULT_TYPES);
   const [vp, setVp] = useState(10);
   const [seed, setSeed] = useState('');
   const newGame = useGameStore((s) => s.newGame);
@@ -17,9 +20,16 @@ export function NewGame() {
     const finalSeed = seed ? hashSeed(seed) : Math.floor(Math.random() * 0xffffffff);
     newGame({
       playerNames: names.slice(0, numPlayers),
+      playerTypes: types.slice(0, numPlayers),
       seed: finalSeed,
       settings: { victoryPointsToWin: vp },
     });
+  };
+
+  const setType = (i: number, kind: PlayerKind) => {
+    const next = [...types];
+    next[i] = kind;
+    setTypes(next);
   };
 
   return (
@@ -46,7 +56,7 @@ export function NewGame() {
 
         <div className="newgame-players">
           {Array.from({ length: numPlayers }).map((_, i) => (
-            <label key={i} className="newgame-player">
+            <div key={i} className="newgame-player">
               <span
                 className="newgame-swatch"
                 style={{ background: PLAYER_COLOR_HEX[i] }}
@@ -62,7 +72,23 @@ export function NewGame() {
                 }}
                 maxLength={20}
               />
-            </label>
+              <div className="newgame-segmented newgame-segmented-sm">
+                <button
+                  type="button"
+                  className={`newgame-seg${types[i] === 'human' ? ' active' : ''}`}
+                  onClick={() => setType(i, 'human')}
+                >
+                  Human
+                </button>
+                <button
+                  type="button"
+                  className={`newgame-seg${types[i] === 'ai' ? ' active' : ''}`}
+                  onClick={() => setType(i, 'ai')}
+                >
+                  AI
+                </button>
+              </div>
+            </div>
           ))}
         </div>
 

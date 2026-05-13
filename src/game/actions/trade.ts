@@ -1,4 +1,13 @@
-import type { GameState, BankTradeAction, Resource } from '../types';
+import type {
+  GameState,
+  BankTradeAction,
+  ProposeTradeAction,
+  AcceptTradeAction,
+  CancelTradeAction,
+  Resource,
+  ResourceBank,
+} from '../types';
+import { RESOURCES } from '../types';
 import { currentPlayerId, updatePlayer, getPlayer } from '../helpers';
 import { addResources, subtractResources } from '../resources';
 
@@ -37,4 +46,94 @@ export function handleBankTrade(state: GameState, action: BankTradeAction): Game
     }),
   };
   return next;
+}
+
+// === Player-to-player trade ===
+
+function totalOf(partial: Partial<ResourceBank>): number {
+  let t = 0;
+  for (const r of RESOURCES) t += partial[r] ?? 0;
+  return t;
+}
+
+function hasAll(bank: ResourceBank, demand: Partial<ResourceBank>): boolean {
+  for (const r of RESOURCES) {
+    if ((demand[r] ?? 0) > bank[r]) return false;
+  }
+  return true;
+}
+
+export function handleProposeTrade(
+  state: GameState,
+  action: ProposeTradeAction,
+): GameState {
+  if (state.phase !== 'main') {
+    throw new Error(`Cannot propose trade in phase ${state.phase}`);
+  }
+  if (action.playerId !== currentPlayerId(state)) {
+    throw new Error('Only the current player can propose a trade');
+  }
+  if (state.pendingTrade) {
+    throw new Error('A trade is already pending — cancel it first');
+  }
+  if (totalOf(action.give) === 0 || totalOf(action.receive) === 0) {
+    throw new Error('Trade must have something on both sides');
+  }
+  const player = getPlayer(state, action.playerId);
+  if (!hasAll(player.resources, action.give)) {
+    throw new Error("You don't have the resources you're offering");
+  }
+  return {
+    ...state,
+    pendingTrade: {
+      proposerId: action.playerId,
+      give: { ...action.give },
+      receive: { ...action.receive },
+    },
+    tradesProposedThisTurn: state.tradesProposedThisTurn + 1,
+  };
+}
+
+export function handleAcceptTrade(
+  state: GameState,
+  action: AcceptTradeAction,
+): GameState {
+  if (!state.pendingTrade) throw new Error('No trade to accept');
+  if (action.playerId === state.pendingTrade.proposerId) {
+    throw new Error("You can't accept your own trade");
+  }
+  const acceptor = getPlayer(state, action.playerId);
+  const proposer = getPlayer(state, state.pendingTrade.proposerId);
+  if (!hasAll(acceptor.resources, state.pendingTrade.receive)) {
+    throw new Error("You don't have the resources the proposer wants");
+  }
+  if (!hasAll(proposer.resources, state.pendingTrade.give)) {
+    throw new Error('The proposer no longer has the offered resources');
+  }
+  let next: GameState = updatePlayer(state, proposer.id, (p) => ({
+    ...p,
+    resources: addResources(
+      subtractResources(p.resources, state.pendingTrade!.give),
+      state.pendingTrade!.receive,
+    ),
+  }));
+  next = updatePlayer(next, acceptor.id, (p) => ({
+    ...p,
+    resources: addResources(
+      subtractResources(p.resources, state.pendingTrade!.receive),
+      state.pendingTrade!.give,
+    ),
+  }));
+  return { ...next, pendingTrade: undefined };
+}
+
+export function handleCancelTrade(
+  state: GameState,
+  action: CancelTradeAction,
+): GameState {
+  if (!state.pendingTrade) throw new Error('No trade to cancel');
+  if (action.playerId !== state.pendingTrade.proposerId) {
+    throw new Error('Only the proposer can cancel');
+  }
+  return { ...state, pendingTrade: undefined };
 }

@@ -70,3 +70,149 @@ describe('bank trade', () => {
     ).toThrow(/itself/i);
   });
 });
+
+describe('player-to-player trade', () => {
+  it('propose creates a pendingTrade and accept swaps resources', () => {
+    let s = reachMainPhase();
+    s = giveResources(s, 'p0', { wood: 2 });
+    s = giveResources(s, 'p1', { brick: 2 });
+    const p0Before = { ...s.players[0]!.resources };
+    const p1Before = { ...s.players[1]!.resources };
+    s = applyAction(s, {
+      type: 'proposeTrade',
+      playerId: 'p0',
+      give: { wood: 1 },
+      receive: { brick: 1 },
+    });
+    expect(s.pendingTrade).toBeDefined();
+    expect(s.pendingTrade?.proposerId).toBe('p0');
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' });
+    expect(s.pendingTrade).toBeUndefined();
+    expect(s.players[0]!.resources.wood).toBe(p0Before.wood - 1);
+    expect(s.players[0]!.resources.brick).toBe(p0Before.brick + 1);
+    expect(s.players[1]!.resources.brick).toBe(p1Before.brick - 1);
+    expect(s.players[1]!.resources.wood).toBe(p1Before.wood + 1);
+  });
+
+  it('cannot accept your own trade', () => {
+    let s = reachMainPhase();
+    s = giveResources(s, 'p0', { wood: 2 });
+    s = applyAction(s, {
+      type: 'proposeTrade',
+      playerId: 'p0',
+      give: { wood: 1 },
+      receive: { brick: 1 },
+    });
+    expect(() => applyAction(s, { type: 'acceptTrade', playerId: 'p0' })).toThrow();
+  });
+
+  it('cannot accept without the receive-side resources', () => {
+    let s = reachMainPhase();
+    s = giveResources(s, 'p0', { wood: 2 });
+    // p1 has no brick by default after setup
+    s = {
+      ...s,
+      players: s.players.map((p) =>
+        p.id === 'p1'
+          ? { ...p, resources: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 } }
+          : p,
+      ),
+    };
+    s = applyAction(s, {
+      type: 'proposeTrade',
+      playerId: 'p0',
+      give: { wood: 1 },
+      receive: { brick: 1 },
+    });
+    expect(() => applyAction(s, { type: 'acceptTrade', playerId: 'p1' })).toThrow(/don't have/i);
+  });
+
+  it('cannot propose if you lack the give-side resources', () => {
+    let s = reachMainPhase();
+    // strip p0 of resources
+    s = {
+      ...s,
+      players: s.players.map((p) =>
+        p.id === 'p0'
+          ? { ...p, resources: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 } }
+          : p,
+      ),
+    };
+    expect(() =>
+      applyAction(s, {
+        type: 'proposeTrade',
+        playerId: 'p0',
+        give: { wood: 1 },
+        receive: { brick: 1 },
+      }),
+    ).toThrow();
+  });
+
+  it('cannot propose two trades at once', () => {
+    let s = reachMainPhase();
+    s = giveResources(s, 'p0', { wood: 2, sheep: 2 });
+    s = applyAction(s, {
+      type: 'proposeTrade',
+      playerId: 'p0',
+      give: { wood: 1 },
+      receive: { brick: 1 },
+    });
+    expect(() =>
+      applyAction(s, {
+        type: 'proposeTrade',
+        playerId: 'p0',
+        give: { sheep: 1 },
+        receive: { brick: 1 },
+      }),
+    ).toThrow(/already pending/i);
+  });
+
+  it('only the proposer can cancel', () => {
+    let s = reachMainPhase();
+    s = giveResources(s, 'p0', { wood: 2 });
+    s = applyAction(s, {
+      type: 'proposeTrade',
+      playerId: 'p0',
+      give: { wood: 1 },
+      receive: { brick: 1 },
+    });
+    expect(() => applyAction(s, { type: 'cancelTrade', playerId: 'p1' })).toThrow(/proposer/i);
+    s = applyAction(s, { type: 'cancelTrade', playerId: 'p0' });
+    expect(s.pendingTrade).toBeUndefined();
+  });
+
+  it('end-turn auto-cancels a pending trade', () => {
+    let s = reachMainPhase();
+    s = giveResources(s, 'p0', { wood: 2 });
+    s = applyAction(s, {
+      type: 'proposeTrade',
+      playerId: 'p0',
+      give: { wood: 1 },
+      receive: { brick: 1 },
+    });
+    expect(s.pendingTrade).toBeDefined();
+    s = applyAction(s, { type: 'endTurn', playerId: 'p0' });
+    expect(s.pendingTrade).toBeUndefined();
+  });
+
+  it('rejects empty trade sides', () => {
+    let s = reachMainPhase();
+    s = giveResources(s, 'p0', { wood: 2 });
+    expect(() =>
+      applyAction(s, {
+        type: 'proposeTrade',
+        playerId: 'p0',
+        give: {},
+        receive: { brick: 1 },
+      }),
+    ).toThrow();
+    expect(() =>
+      applyAction(s, {
+        type: 'proposeTrade',
+        playerId: 'p0',
+        give: { wood: 1 },
+        receive: {},
+      }),
+    ).toThrow();
+  });
+});

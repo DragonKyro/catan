@@ -11,7 +11,10 @@ export function HandPanel() {
   if (!game) return null;
   const acting = getActingPlayerId(game);
   const player = game.players.find((p) => p.id === acting)!;
+  // Humans control their own cards; for AI we still display the hand so the
+  // user can watch the game, but disable the "play" buttons.
   const canPlayCards =
+    !player.isAI &&
     (game.phase === 'main' || game.phase === 'rollOrPlayKnight') &&
     !game.hasPlayedDevCardThisTurn &&
     uiMode.kind === 'idle';
@@ -40,8 +43,11 @@ export function HandPanel() {
   return (
     <section className="hand">
       <header className="hand-header">
-        <h3>Your hand</h3>
-        <span className="hand-vp" title="Victory points (private)">{vp} VP</span>
+        <h3>{player.isAI ? `${player.name}'s hand` : 'Your hand'}</h3>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+          {player.isAI && <span className="hand-ai">AI</span>}
+          <span className="hand-vp" title="Victory points">{vp} VP</span>
+        </span>
       </header>
 
       <div className="hand-resources">

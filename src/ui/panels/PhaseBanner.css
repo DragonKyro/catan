@@ -24,6 +24,20 @@
 .banner-name {
   font-weight: 700;
   font-size: 1.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.banner-ai-tag {
+  font-size: 0.6em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--text-soft);
 }
 
 .banner-instruction {

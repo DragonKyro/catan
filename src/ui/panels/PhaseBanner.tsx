@@ -57,7 +57,10 @@ export function PhaseBanner() {
           className="banner-swatch"
           style={{ background: PLAYER_COLOR_CSS[player.color] }}
         />
-        <span className="banner-name">{player.name}</span>
+        <span className="banner-name">
+          {player.name}
+          {player.isAI && <span className="banner-ai-tag">AI</span>}
+        </span>
       </div>
       <div className="banner-instruction">{instruction(game, uiMode.kind)}</div>
     </div>

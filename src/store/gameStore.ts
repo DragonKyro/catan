@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type {
-  GameState,
-  Action,
-  HexId,
-  PlayerId,
-} from '@/game/types';
+import type { Action, HexId, PlayerId } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
+import { getActingPlayerId } from '@/game/helpers';
+import type { GameState } from '@/game/types';
+
+// Re-export the pure helper for callers used to importing it from the store.
+export { getActingPlayerId };
 
 export type UIMode =
   | { kind: 'idle' }
@@ -20,6 +20,7 @@ export type UIMode =
 
 export type DialogName =
   | 'bankTrade'
+  | 'playerTrade'
   | 'yearOfPlenty'
   | 'monopoly';
 
@@ -44,19 +45,6 @@ interface AppStore {
   acknowledgeHandoff: () => void;
   dismissError: () => void;
   setPendingRobberHex: (hex: HexId | null) => void;
-}
-
-// Determines the player currently acting at this micro-step. In most phases
-// that's the player at currentPlayerIndex; during discard it's the first
-// player in the required map (per turn order).
-export function getActingPlayerId(state: GameState): PlayerId {
-  if (state.phase === 'discard' && state.discardState) {
-    const required = state.discardState.required;
-    for (const id of state.playerOrder) {
-      if (required[id] !== undefined) return id;
-    }
-  }
-  return state.playerOrder[state.currentPlayerIndex]!;
 }
 
 const phaseToMode = (state: GameState): UIMode => {
@@ -108,10 +96,17 @@ export const useGameStore = create<AppStore>((set, get) => ({
       const next = applyAction(before, action);
       const beforeActor = getActingPlayerId(before);
       const nextActor = next.phase === 'gameOver' ? beforeActor : getActingPlayerId(next);
+      const nextActorPlayer = next.players.find((p) => p.id === nextActor);
+      // Only fire pass-device handoff when the next actor is a human and we
+      // genuinely changed actors. AI players never need a handoff.
       const handoff =
         next.phase !== 'gameOver' &&
         beforeActor !== nextActor &&
+        !nextActorPlayer?.isAI &&
         nextActor !== get().handoffAcknowledgedForPlayer;
+      // Preserve playerTrade dialog through dispatch when proposer's trade
+      // was just created and we want them to keep it open. For now always
+      // clear on dispatch — caller can re-open if needed.
       set({
         game: next,
         uiMode: phaseToMode(next),

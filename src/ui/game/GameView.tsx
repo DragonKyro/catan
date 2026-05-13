@@ -1,12 +1,15 @@
 import { useGameStore } from '@/store/gameStore';
 import { Board } from './Board';
+import { AIDriver } from './AIDriver';
 import { PhaseBanner } from '@/ui/panels/PhaseBanner';
 import { HandPanel } from '@/ui/panels/HandPanel';
 import { OpponentPanel } from '@/ui/panels/OpponentPanel';
 import { ActionBar } from '@/ui/panels/ActionBar';
 import { DiceDisplay } from '@/ui/panels/DiceDisplay';
 import { BankPanel } from '@/ui/panels/BankPanel';
+import { PendingTradeBanner } from '@/ui/panels/PendingTradeBanner';
 import { BankTradeDialog } from '@/ui/dialogs/BankTradeDialog';
+import { PlayerTradeDialog } from '@/ui/dialogs/PlayerTradeDialog';
 import { DiscardDialog } from '@/ui/dialogs/DiscardDialog';
 import { RobberStealDialog } from '@/ui/dialogs/RobberStealDialog';
 import { YearOfPlentyDialog } from '@/ui/dialogs/YearOfPlentyDialog';
@@ -27,6 +30,8 @@ export function GameView() {
 
   return (
     <div className="gameview">
+      <AIDriver />
+
       <main className="gameview-board">
         <Board />
         <div className="gameview-dice-overlay">
@@ -36,6 +41,7 @@ export function GameView() {
 
       <aside className="gameview-side">
         <PhaseBanner />
+        {game.pendingTrade && <PendingTradeBanner />}
         <HandPanel />
         <ActionBar />
         <OpponentPanel />
@@ -49,6 +55,7 @@ export function GameView() {
       )}
 
       {dialog === 'bankTrade' && <BankTradeDialog />}
+      {dialog === 'playerTrade' && <PlayerTradeDialog />}
       {dialog === 'yearOfPlenty' && <YearOfPlentyDialog />}
       {dialog === 'monopoly' && <MonopolyDialog />}
       {game.phase === 'discard' && !handoffPending && <DiscardDialog />}

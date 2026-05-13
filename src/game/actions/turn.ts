@@ -28,6 +28,8 @@ export function handleEndTurn(state: GameState, action: EndTurnAction): GameStat
     phase: 'rollOrPlayKnight',
     hasRolledThisTurn: false,
     hasPlayedDevCardThisTurn: false,
+    tradesProposedThisTurn: 0,
     lastRoll: null,
+    pendingTrade: undefined,
   };
 }

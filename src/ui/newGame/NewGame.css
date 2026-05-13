@@ -91,7 +91,7 @@
 
 .newgame-player {
   display: grid;
-  grid-template-columns: 24px 1fr;
+  grid-template-columns: 24px 1fr auto;
   align-items: center;
   gap: 10px;
 }
@@ -104,6 +104,16 @@
   padding: 7px 10px;
   font-size: 0.95em;
   font-family: inherit;
+  min-width: 0;
+}
+
+.newgame-segmented-sm {
+  padding: 2px;
+}
+
+.newgame-segmented-sm .newgame-seg {
+  padding: 4px 8px;
+  font-size: 0.85em;
 }
 
 .newgame-swatch {

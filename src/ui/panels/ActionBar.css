@@ -23,3 +23,26 @@
   font-size: 0.9em;
   text-align: center;
 }
+
+.actionbar-thinking {
+  color: var(--text-soft);
+  font-size: 0.95em;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.actionbar-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: actionbar-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes actionbar-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}

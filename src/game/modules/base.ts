@@ -14,6 +14,9 @@ import {
   handlePlayYearOfPlenty,
   handlePlayMonopoly,
   handleBankTrade,
+  handleProposeTrade,
+  handleAcceptTrade,
+  handleCancelTrade,
   handleEndTurn,
 } from '../actions';
 
@@ -35,6 +38,9 @@ export const baseModule: RuleModule = {
     playYearOfPlenty: handlePlayYearOfPlenty as never,
     playMonopoly: handlePlayMonopoly as never,
     bankTrade: handleBankTrade as never,
+    proposeTrade: handleProposeTrade as never,
+    acceptTrade: handleAcceptTrade as never,
+    cancelTrade: handleCancelTrade as never,
     endTurn: handleEndTurn as never,
   },
 };

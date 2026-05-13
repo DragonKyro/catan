@@ -11,6 +11,15 @@ export function ActionBar() {
   const player = game.players.find((p) => p.id === acting)!;
   const phase = game.phase;
 
+  // AI is acting — show a thinking indicator instead of buttons.
+  if (player.isAI && phase !== 'gameOver') {
+    return (
+      <div className="actionbar actionbar-thinking">
+        <span className="actionbar-spinner" aria-hidden /> {player.name} is thinking…
+      </div>
+    );
+  }
+
   if (phase === 'rollOrPlayKnight') {
     const hasKnight =
       !game.hasPlayedDevCardThisTurn && player.devCards.unplayed.includes('knight');
@@ -98,7 +107,14 @@ export function ActionBar() {
               >
                 🃏 Buy Dev Card
               </Button>
-              <Button onClick={() => openDialog('bankTrade')}>🔁 Bank trade</Button>
+              <Button onClick={() => openDialog('bankTrade')}>🔁 Bank</Button>
+              <Button
+                onClick={() => openDialog('playerTrade')}
+                disabled={!!game.pendingTrade}
+                title="Propose a trade to all opponents"
+              >
+                🤝 Players
+              </Button>
             </div>
             <Button
               variant="primary"
