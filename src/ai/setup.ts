@@ -37,8 +37,29 @@ export function chooseSetupRoad(
     const edge = state.board.edges[eid]!;
     const otherVid =
       edge.vertices[0] === settlementVid ? edge.vertices[1] : edge.vertices[0];
-    // Look at what the next settlement spot from there could score
-    const nextScore = vertexScore(state, otherVid, playerId);
+    const otherVertex = state.board.vertices[otherVid]!;
+    // Base value: what could be settled here (or extended toward) next?
+    let nextScore = vertexScore(state, otherVid, playerId);
+    // Setup-time risk penalties. Pointing the starter road at a vertex
+    // that's already adjacent to an opponent's settle is a wasted road —
+    // we can never settle on that vertex, AND the opponent can race us
+    // to anything further along that direction. Big penalty so we'd only
+    // pick such a road if literally every other option is worse.
+    for (const n of otherVertex.neighborVertices) {
+      for (const p of state.players) {
+        if (p.id === playerId) continue;
+        if (p.settlements.includes(n) || p.cities.includes(n)) {
+          nextScore -= 4;
+        }
+      }
+    }
+    for (const ne of otherVertex.edges) {
+      if (ne === eid) continue;
+      for (const p of state.players) {
+        if (p.id === playerId) continue;
+        if (p.roads.includes(ne)) nextScore -= 2;
+      }
+    }
     if (nextScore > bestNextScore) {
       bestNextScore = nextScore;
       bestEid = eid;

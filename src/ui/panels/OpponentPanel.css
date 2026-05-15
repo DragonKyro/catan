@@ -45,6 +45,14 @@
   color: var(--text-soft);
 }
 
+.opp-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.85em;
+  color: var(--text-soft);
+}
+
 .opp-acting {
   border-color: var(--accent);
   border-width: 2px;

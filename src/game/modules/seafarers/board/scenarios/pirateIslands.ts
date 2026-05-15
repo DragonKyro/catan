@@ -39,12 +39,23 @@ export const pirateIslands = buildScenario({
   defaultIslandBonusVp: 2,
   land: [...MAIN, ...PIRATE_ISLES],
   ports: [
-    { q: -3, r: 0, direction: 0, type: 'generic' },
-    { q: -3, r: 2, direction: 3, type: 'generic' },
+    // (-3, 0) has no coastal edge at 3p (its open side is outside radius 3).
+    // Anchor the NW generic port on the desert hex (-1, -2), which has sea
+    // on its NE side toward (0, -3).
+    { q: -1, r: -2, direction: 5, type: 'generic' },
+    { q: -3, r: 2, direction: 1, type: 'generic' },
     { q: -1, r: 0, direction: 1, type: 'wheat' },
     { q: 1, r: -2, direction: 5, type: 'sheep' },
     { q: 2, r: 0, direction: 2, type: 'wood' },
-    { q: 0, r: 3, direction: 2, type: 'brick' },
+    { q: 0, r: 3, direction: 4, type: 'brick' },
   ],
   landExtra5_6: EXTRA_5_6,
+  ports5_6: [
+    { q: -3, r: 0, direction: 3, type: 'generic' },
+    { q: -3, r: 2, direction: 1, type: 'generic' },
+    { q: -1, r: 0, direction: 1, type: 'wheat' },
+    { q: 1, r: -2, direction: 5, type: 'sheep' },
+    { q: 2, r: 0, direction: 2, type: 'wood' },
+    { q: 0, r: 3, direction: 4, type: 'brick' },
+  ],
 });

@@ -1,9 +1,18 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints } from '@/game/scoring/points';
+import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { totalResources } from '@/game/resources';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import './OpponentPanel.css';
+
+// Base game piece limits per player. Engine already enforces these via the
+// `length < N` checks in build handlers; surfaced here so players can see at
+// a glance how much expansion runway each opponent has left.
+const MAX_SETTLEMENTS = 5;
+const MAX_CITIES = 4;
+const MAX_ROADS = 15;
+const MAX_SHIPS = 15;
 
 export function OpponentPanel() {
   const game = useGameStore((s) => s.game!);
@@ -65,10 +74,27 @@ export function OpponentPanel() {
               <span title="Resource cards">🂠 {totalResources(p.resources)}</span>
               <span title="Dev cards (face down)">🂡 {cards}</span>
               <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
-              <span title="Roads">🛣️ {p.roads.length}</span>
-              {p.ships.length > 0 && <span title="Ships">⛵ {p.ships.length}</span>}
-              {p.hasLongestRoad && <span title="Longest Road">★ Road</span>}
-              {p.hasLargestArmy && <span title="Largest Army">★ Army</span>}
+              <span title="Longest contiguous road">
+                📏 {calculateLongestRoad(game, p.id)}
+              </span>
+              {p.hasLongestRoad && <span title="Longest Road bonus">★ Road</span>}
+              {p.hasLargestArmy && <span title="Largest Army bonus">★ Army</span>}
+            </div>
+            <div className="opp-pieces" title="Pieces remaining (built / cap)">
+              <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>
+                🏠 {MAX_SETTLEMENTS - p.settlements.length}
+              </span>
+              <span title={`Cities: ${p.cities.length}/${MAX_CITIES}`}>
+                🏛️ {MAX_CITIES - p.cities.length}
+              </span>
+              <span title={`Roads: ${p.roads.length}/${MAX_ROADS}`}>
+                🛣️ {MAX_ROADS - p.roads.length}
+              </span>
+              {p.ships.length > 0 && (
+                <span title={`Ships: ${p.ships.length}/${MAX_SHIPS}`}>
+                  ⛵ {MAX_SHIPS - p.ships.length}
+                </span>
+              )}
             </div>
           </div>
         );

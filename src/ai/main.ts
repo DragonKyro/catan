@@ -14,6 +14,7 @@ import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
 import { tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
 import { chooseDevCardPlay } from './devcard';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { calculateVictoryPoints } from '@/game/scoring/points';
 import { chooseWinPlan } from './winPaths';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
@@ -92,19 +93,18 @@ export function chooseMainPhaseAction(
   }
 
   // 3) BUY DEV CARD — but only once we're not actively expanding.
-  //    Watching AI games it became clear they were buying dev cards
-  //    while sitting on settle-able vertices and unbuilt roads. That's
-  //    bad strategy: dev cards are slow VP (no production), expansion
-  //    compounds. Gates, in order:
-  //      a) saveForCity: hand small AND city is the active goal — wait
-  //         to convert wheat/ore into actual VP first.
-  //      b) earlyGame: turn < 5 with fewer than 2 settlements placed
-  //         (i.e. just past initial placement). Building > dev card.
-  //      c) hasOpenSettleSpot: already-reachable open spot AND we have
-  //         most of a settlement (≥3/4 of cost) — finish the settle.
-  //      d) couldRoadToSettleSpot: no reachable spot, but a single
-  //         road would unlock one AND we have wood+brick. Build that
-  //         road first instead of spending sheep/wheat/ore on a card.
+  //    Dev cards are slow VP (no production); expansion compounds.
+  //    Gates that SKIP the dev card purchase:
+  //      a) saveForCity: we're close to a city (1-2 cards away). Buying
+  //         a card now would spend wheat+ore that we need for the city,
+  //         setting us back 1-2 turns. Wait. (Even at handSize 7 — the
+  //         city gives us 2 VP and demolishes a settle, freeing tokens;
+  //         dev cards usually do neither.)
+  //      b) earlyGame: just past initial placement (<2 placed). Build first.
+  //      c) hasOpenSettleSpot: a reachable open spot AND we already have
+  //         most of a settlement's materials.
+  //      d) couldRoadToSettleSpot: no reachable spot, but a single road
+  //         would unlock one AND we have wood+brick. Build that road.
   if (
     canAfford(player.resources, COSTS.devCard) &&
     state.devCardDeck.length > 0
@@ -112,7 +112,18 @@ export function chooseMainPhaseAction(
     const needs = reportNeeds(state, playerId);
     let handSize = 0;
     for (const r of RESOURCES) handSize += player.resources[r];
-    const saveForCity = needs.goal === 'city' && handSize <= 5;
+    const cityShortfall =
+      (needs.byResource.wheat ?? 0) + (needs.byResource.ore ?? 0);
+    const saveForCity =
+      needs.goal === 'city' &&
+      player.settlements.length > 0 &&
+      // 1-2 cards from a city. Card cost (sheep+wheat+ore) directly
+      // overlaps with city cost (2 wheat+3 ore) — buying now would set
+      // us back. Allow handSize up to 8 here because a city upgrade
+      // converts a settle into a city (net hand change: 2W+3O→0, plus
+      // we gain VP), which is more 7-out relief than a dev card buy.
+      cityShortfall <= 2 &&
+      handSize <= 8;
     const placedSettlesAndCities = player.settlements.length + player.cities.length;
     const earlyGame = placedSettlesAndCities < 2;
     const settleCostHave =
@@ -138,13 +149,12 @@ export function chooseMainPhaseAction(
   }
 
   // 4) BUILD ROAD
-  //    Two reasons to build:
+  //    Score each candidate road by its NEW endpoint (the vertex not
+  //    already in our network). Reasons to build:
   //      (a) Unlock a new high-value settlement spot we can't currently reach.
-  //      (b) Pursue Longest Road (+2 VP). Reachable when:
-  //          - no current LR holder AND our chain is within 1-2 of length 5
-  //          - someone else holds, and our chain is within 1-2 of theirs
-  //    When (b) applies we drop the "must unlock a great vertex" threshold
-  //    sharply — any extension that grows our chain has direct VP value.
+  //      (b) Pursue Longest Road (+2 VP) when within 1-2 of claim length.
+  //      (c) Spend down spare wood/brick to avoid hoarding — every turn
+  //          we hold idle road materials is a turn we don't expand.
   if (
     canAfford(player.resources, COSTS.road) &&
     player.roads.length < 15
@@ -153,118 +163,173 @@ export function chooseMainPhaseAction(
     const myRoadLen = calculateLongestRoad(state, playerId);
     const lrHolder = state.longestRoad?.holder ?? null;
     const lrLength = state.longestRoad?.length ?? 0;
-    // Length at which we'd CLAIM Longest Road: 5 if no one has it, else
-    // current holder's length + 1.
     let lrClaimTarget = 0;
     if (lrHolder === null) lrClaimTarget = LR_CLAIM_LENGTH;
     else if (lrHolder !== playerId) lrClaimTarget = lrLength + 1;
-    // Within 2 of claiming → pursue. Defending (already hold) doesn't fire
-    // here because we'd need a separate "extend our lead" branch; that's a
-    // smaller win and saved for future tuning.
     const pursuingLR = lrClaimTarget > 0 && myRoadLen + 2 >= lrClaimTarget;
 
     // Consult the win plan: if it says we need more settlements, we're
-    // willing to accept a lower-quality unlock to keep progressing
-    // (avoids the "stuck at 9 VP, can't reach any new vertex" failure mode).
+    // willing to accept a lower-quality unlock.
     const winPlan = chooseWinPlan(state, playerId);
     const planNeedsSettlements = winPlan.gap.newSettlementsNeeded > 0;
 
+    // Hand pressure: if we're sitting on lots of wood/brick we MUST
+    // spend it (idle road materials = wasted economy, plus 7-out risk).
+    let handSize = 0;
+    for (const r of RESOURCES) handSize += player.resources[r];
+    const spareForRoad =
+      player.resources.wood + player.resources.brick >= 4;
+    const handPressure = handSize >= 7;
+
+    // Catch-up boost: if we're significantly behind the leader, we can't
+    // afford to be picky. Drop the road threshold an extra notch so we
+    // grab mid-tier expansion opportunities instead of stalling at 3 VP
+    // while others race past. Avoid this for the leader themselves.
+    const myVp = calculateVictoryPoints(state, playerId, false);
+    let leaderVp = 0;
+    for (const op of state.players) {
+      if (op.id === playerId) continue;
+      const v = calculateVictoryPoints(state, op.id, false);
+      if (v > leaderVp) leaderVp = v;
+    }
+    const fallingBehind = leaderVp - myVp >= 3;
+
     // Threshold tiers:
-    //   - LR pursuit: very low (any extension scores ~2 VP value)
-    //   - Plan wants more settlements: stricter than before to stop
-    //     "useless roads toward each other" — was 2.5, now 3.5. A
-    //     2.5-pip endpoint is barely worth the road; 3.5 weeds out the
-    //     marginal extensions while still letting good plans through.
-    //   - Otherwise: original strict threshold
+    //   - LR pursuit: very low (any extension is worth ~2 VP)
+    //   - Plan wants settlements: 3.5 (weed out marginal extensions)
+    //   - Hand pressure / spare materials: 2.5 (be willing to extend even
+    //     toward mid-quality spots — better than hoarding for the 7)
+    //   - Otherwise: original strict 4.5
     let threshold = ROAD_TARGET_THRESHOLD;
     if (pursuingLR) threshold = ROAD_TARGET_THRESHOLD_LR;
+    else if (handPressure || spareForRoad) threshold = 2.5;
     else if (planNeedsSettlements) threshold = 3.5;
+    if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
 
-    if (openSpots === 0 || pursuingLR) {
+    // Gate: when do we EVEN look for a road?
+    //   - LR pursuit
+    //   - No open settlement spots reachable through current network
+    //   - We have spare wood/brick OR hand pressure (don't sit on it)
+    const willingToBuild =
+      pursuingLR || openSpots === 0 || spareForRoad || handPressure;
+
+    if (willingToBuild) {
       let bestEid: EdgeId | null = null;
-      let bestVertexScore = -Infinity;
+      let bestScore = -Infinity;
+
       for (const eid of state.board.edgeIds) {
         if (!canConnectRoad(state, playerId, eid)) continue;
         const edge = state.board.edges[eid]!;
-        let endpointBest = -Infinity;
-        let endpointBestVid: VertexId | null = null;
+        // Identify the NEW endpoint — the one not already in our network.
+        // If BOTH endpoints are in our network the road just closes a
+        // loop (no expansion value, ~0 LR value). Skip.
+        let newVid: VertexId | null = null;
         for (const v of edge.vertices) {
-          let blocked = false;
-          const vertex = state.board.vertices[v]!;
+          if (!isOurVertex(state, playerId, v, eid)) {
+            newVid = v;
+            break;
+          }
+        }
+        if (newVid === null) continue;
+        // If the new endpoint is already settled (by us or anyone), this
+        // road plugs into a dead-end: no settle target, and an opponent's
+        // settle on it also BREAKS any longest-road chain we'd hope to
+        // extend through it. Pure waste.
+        const newVertex = state.board.vertices[newVid]!;
+        const settledHere = state.players.some(
+          (p) => p.settlements.includes(newVid!) || p.cities.includes(newVid!),
+        );
+        if (settledHere) continue;
+        // Settlement-eligibility at the new endpoint. If we can't settle
+        // here (adjacent to someone else's settle), the road is at best
+        // a way-station toward something further. Outside of LR pursuit,
+        // skip these entirely — pointing roads at unsettle-able spots is
+        // exactly the "roads in all directions" failure mode we're trying
+        // to avoid. For LR pursuit a way-station road still extends our
+        // chain, so it's allowed there.
+        let blockedAdjacent = false;
+        for (const n of newVertex.neighborVertices) {
           for (const p of state.players) {
-            if (p.settlements.includes(v) || p.cities.includes(v)) {
-              blocked = true;
+            if (p.settlements.includes(n) || p.cities.includes(n)) {
+              blockedAdjacent = true;
               break;
             }
-            for (const n of vertex.neighborVertices) {
-              if (p.settlements.includes(n) || p.cities.includes(n)) {
-                blocked = true;
-                break;
-              }
-            }
-            if (blocked) break;
           }
-          if (blocked) continue;
-          const s = vertexScore(state, v, playerId);
-          if (s > endpointBest) {
-            endpointBest = s;
-            endpointBestVid = v;
-          }
+          if (blockedAdjacent) break;
         }
-        // Contested-endpoint penalty: if an enemy road already touches
-        // the new endpoint, the spot is contested — they can settle it
-        // (cutting us off) before we can. Skip these unless we're LR-
-        // pursuing (where the road has direct VP value regardless).
+        if (blockedAdjacent && !pursuingLR) continue;
+
+        const base = vertexScore(state, newVid, playerId);
+        // Contested-endpoint penalty: enemy roads at the new endpoint
+        // mean an opponent could settle here before we can.
         let contestedPenalty = 0;
-        if (!pursuingLR && endpointBestVid !== null) {
-          const ev = state.board.vertices[endpointBestVid]!;
-          let enemyRoadsAtEndpoint = 0;
-          for (const neid of ev.edges) {
-            if (neid === eid) continue;
+        if (!pursuingLR) {
+          let enemyRoadsAtNew = 0;
+          for (const ne of newVertex.edges) {
+            if (ne === eid) continue;
             for (const p of state.players) {
               if (p.id === playerId) continue;
-              if (p.roads.includes(neid)) enemyRoadsAtEndpoint++;
+              if (p.roads.includes(ne)) enemyRoadsAtNew++;
             }
           }
-          if (enemyRoadsAtEndpoint > 0) contestedPenalty = 2 * enemyRoadsAtEndpoint;
+          if (enemyRoadsAtNew > 0) contestedPenalty = 2 * enemyRoadsAtNew;
         }
-        // LR-pursuit bias: any road extension is worth ~LR's 2 VP, so
-        // floor the score at a moderate value when LR is the target.
         const finalScore = pursuingLR
-          ? Math.max(endpointBest, ROAD_TARGET_THRESHOLD_LR + 0.5)
-          : endpointBest - contestedPenalty;
-        if (finalScore > bestVertexScore) {
-          bestVertexScore = finalScore;
+          ? Math.max(base - (blockedAdjacent ? 2.5 : 0), ROAD_TARGET_THRESHOLD_LR + 0.5)
+          : base - contestedPenalty;
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
           bestEid = eid;
         }
       }
-      if (bestEid && bestVertexScore >= threshold) {
+      if (bestEid && bestScore >= threshold) {
         return { type: 'buildRoad', playerId, edge: bestEid };
       }
     }
   }
 
-  // 5a) FAVORABLE PLAYER TRADE — only fires when a clearly mutually-good
-  //     2:1 swap exists with a non-threat opponent. Preferred over bank
-  //     trade because it's higher value (2:1 player vs 4:1/3:1 bank) and
-  //     reduces "AI just bank-trades constantly" feel.
+  // 5) PLAYER TRADES BEFORE BANK. The bank is always 4:1 (or 3:1 / 2:1 by
+  //    port — still worse than most player trades). Trading with players
+  //    is strictly higher trade-efficiency, so try player trades first
+  //    and only fall back to the bank when no player trade was findable.
+  //    5a: favorable (2:1) — try first, mutually-good swap with non-threats.
+  //    5b: broader (1:1, 2:1, creative multi-resource) — wider net.
   if (allowPlayerTrade) {
     const favorable = tryProposeFavorableTrade(state, playerId);
     if (favorable) return favorable;
-  }
-
-  // 5b) BANK TRADE to enable an unlock
-  const tradeAction = tryBankTrade(state, playerId);
-  if (tradeAction) return tradeAction;
-
-  // 6) PROPOSE TRADE to other players — broader search (1:1 included).
-  if (allowPlayerTrade) {
     const proposal = tryProposeTrade(state, playerId);
     if (proposal) return proposal;
   }
 
-  // 7) End turn
+  // 5c) BANK TRADE — last resort. tradesProposedThisTurn caps player
+  //     trades at 2 per turn, so we still reach here once we've exhausted
+  //     our player-trade budget.
+  const tradeAction = tryBankTrade(state, playerId);
+  if (tradeAction) return tradeAction;
+
+  // 6) End turn
   return null;
+}
+
+// Is `v` already part of `playerId`'s road network? True if they have a
+// settlement / city on it, or one of their roads touches it (other than
+// the candidate edge `excludeEid`, which we're about to consider).
+function isOurVertex(
+  state: GameState,
+  playerId: PlayerId,
+  v: VertexId,
+  excludeEid: EdgeId,
+): boolean {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return false;
+  if (player.settlements.includes(v) || player.cities.includes(v)) return true;
+  const vertex = state.board.vertices[v];
+  if (!vertex) return false;
+  for (const e of vertex.edges) {
+    if (e === excludeEid) continue;
+    if (player.roads.includes(e)) return true;
+  }
+  return false;
 }
 
 // Counts vertices reachable through this player's existing road network
@@ -317,10 +382,10 @@ function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
   // back-and-forth churn: AI with 4 brick would trade for wood, then trade
   // back to brick the next turn. Now:
   //  1) Goal-driven: we have a concrete build goal AND a specific shortfall.
-  //  2) Discard-imminent: handSize >= 8 (next 7 would force a discard).
-  // The "general balance" trigger is gone — every trade must clearly help.
+  //  2) Discard-imminent: handSize >= 7 (at 8 we're forced to discard;
+  //     starting the spend-down at 7 gives a one-turn buffer).
   const wantingForGoal = needs.goal !== 'none';
-  const discardImminent = handSize >= 8;
+  const discardImminent = handSize >= 7;
   if (!wantingForGoal && !discardImminent) return null;
 
   // Pick the resource we want most. Goal mode targets the needed resource;

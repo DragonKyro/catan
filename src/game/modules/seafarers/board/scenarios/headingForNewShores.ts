@@ -53,7 +53,7 @@ export const headingForNewShores = buildScenario({
   ports: [
     { q: 1, r: -1, direction: 0, type: 'generic' },
     { q: 1, r: 0, direction: 1, type: 'ore' },
-    { q: 0, r: 1, direction: 2, type: 'wheat' },
+    { q: 0, r: 1, direction: 1, type: 'wheat' },
     { q: -2, r: 2, direction: 3, type: 'generic' },
     { q: -2, r: 0, direction: 4, type: 'sheep' },
     { q: 0, r: -2, direction: 5, type: 'wood' },
@@ -62,11 +62,11 @@ export const headingForNewShores = buildScenario({
   ports5_6: [
     { q: 1, r: -1, direction: 0, type: 'generic' },
     { q: 1, r: 0, direction: 1, type: 'ore' },
-    { q: 0, r: 1, direction: 2, type: 'wheat' },
+    { q: 0, r: 1, direction: 1, type: 'wheat' },
     { q: -2, r: 2, direction: 3, type: 'generic' },
-    { q: -4, r: 2, direction: 4, type: 'sheep' },
+    { q: -4, r: 2, direction: 5, type: 'sheep' },
     { q: 0, r: -2, direction: 5, type: 'wood' },
-    { q: 4, r: 0, direction: 1, type: 'generic' },
-    { q: -4, r: 4, direction: 3, type: 'brick' },
+    { q: 4, r: 0, direction: 2, type: 'generic' },
+    { q: -4, r: 4, direction: 4, type: 'brick' },
   ],
 });

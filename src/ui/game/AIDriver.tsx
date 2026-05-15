@@ -53,7 +53,17 @@ export function AIDriver() {
       const isProposer = acting === game.pendingTrade.proposerId;
       const isCurrentNonProposer = acting === currentTurnId && !isProposer;
       if (!isProposer && !isCurrentNonProposer) return;
-      delay = AI_PROPOSER_WAIT_MS;
+      // Only wait the full 10s if a human could still respond. In an
+      // all-AI game there's no one to wait for — let the proposer
+      // resolve immediately. Same for situations where every human
+      // already auto-rejected for lack of resources.
+      const humanCanRespond = game.players.some((p) => {
+        if (p.isAI) return false;
+        if (p.id === game.pendingTrade!.proposerId) return false;
+        if (game.pendingTrade!.rejectedBy.includes(p.id)) return false;
+        return true;
+      });
+      delay = humanCanRespond ? AI_PROPOSER_WAIT_MS : AI_ACTION_DELAY_MS;
     }
 
     const t = setTimeout(() => {

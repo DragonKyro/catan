@@ -51,15 +51,15 @@ export function GameOverDialog() {
   return (
     <DialogShell
       title="🏆 Game over"
-      blocking
       variant="modal"
+      // No `blocking`: clicking the backdrop or the × in the header
+      // minimizes to the floating restore pill so the player can inspect
+      // the final board without dismissing the results entirely.
+      onClose={() => setMinimized(true)}
       footer={
-        <>
-          <Button onClick={() => setMinimized(true)}>Inspect board</Button>
-          <Button variant="primary" onClick={resetGame}>
-            New game
-          </Button>
-        </>
+        <Button variant="primary" onClick={resetGame}>
+          New game
+        </Button>
       }
     >
       <p style={{ marginTop: 0, fontSize: '1.05em' }}>

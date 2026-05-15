@@ -45,10 +45,10 @@ export const fourIslands = buildScenario({
   ports: [
     { q: 0, r: -2, direction: 0, type: 'generic' },
     { q: 3, r: -1, direction: 2, type: 'wheat' },
-    { q: -1, r: 3, direction: 3, type: 'sheep' },
+    { q: -1, r: 3, direction: 5, type: 'sheep' },
     { q: -3, r: 1, direction: 4, type: 'wood' },
-    { q: 1, r: -3, direction: 5, type: 'ore' },
-    { q: 0, r: 3, direction: 2, type: 'brick' },
+    { q: 1, r: -3, direction: 0, type: 'ore' },
+    { q: 0, r: 3, direction: 5, type: 'brick' },
   ],
   landExtra5_6: EXTRA_5_6,
 });

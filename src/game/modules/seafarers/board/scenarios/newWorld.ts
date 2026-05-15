@@ -36,10 +36,18 @@ export const newWorld = buildScenario({
   ports: [
     { q: -2, r: 0, direction: 4, type: 'generic' },
     { q: 2, r: -2, direction: 0, type: 'wheat' },
-    { q: 1, r: 1, direction: 2, type: 'sheep' },
+    { q: 1, r: 1, direction: 0, type: 'sheep' },
     { q: -2, r: 2, direction: 3, type: 'ore' },
+    { q: 0, r: -2, direction: 5, type: 'wood' },
+    { q: 3, r: 0, direction: 2, type: 'brick' },
+  ],
+  landExtra5_6: EXTRA_5_6,
+  ports5_6: [
+    { q: -2, r: 0, direction: 4, type: 'generic' },
+    { q: 2, r: -2, direction: 0, type: 'wheat' },
+    { q: 1, r: 1, direction: 0, type: 'sheep' },
+    { q: -2, r: 2, direction: 4, type: 'ore' },
     { q: 0, r: -2, direction: 5, type: 'wood' },
     { q: 3, r: 0, direction: 1, type: 'brick' },
   ],
-  landExtra5_6: EXTRA_5_6,
 });

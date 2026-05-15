@@ -42,7 +42,7 @@ export const clothForCatan = buildScenario({
     { q: 0, r: 1, direction: 2, type: 'wheat' },
     { q: -2, r: 1, direction: 3, type: 'wood' },
     { q: 0, r: -1, direction: 5, type: 'brick' },
-    { q: -1, r: 0, direction: 4, type: 'ore' },
+    { q: -1, r: 0, direction: 3, type: 'ore' },
   ],
   landExtra5_6: EXTRA_5_6,
 });

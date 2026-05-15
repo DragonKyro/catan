@@ -39,12 +39,12 @@ export const fogIsland = buildScenario({
   defaultIslandBonusVp: 3,
   land: [...STARTING, ...FOG_ISLAND],
   ports: [
-    { q: 0, r: -1, direction: 0, type: 'generic' },
+    { q: 0, r: -1, direction: 5, type: 'generic' },
     { q: 1, r: 0, direction: 1, type: 'sheep' },
     { q: 0, r: 1, direction: 2, type: 'generic' },
     { q: -2, r: 2, direction: 3, type: 'wheat' },
     { q: -2, r: 1, direction: 4, type: 'brick' },
-    { q: -1, r: 0, direction: 5, type: 'ore' },
+    { q: -1, r: 0, direction: 4, type: 'ore' },
   ],
   landExtra5_6: EXTRA_5_6,
 });

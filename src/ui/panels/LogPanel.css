@@ -25,6 +25,54 @@
   font-size: 0.95em;
 }
 
+.log-search {
+  position: relative;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.log-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 24px 4px 8px;
+  font-size: 0.85em;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  color: inherit;
+}
+
+.log-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.log-search-clear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 1.05em;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.log-search-clear:hover {
+  color: var(--text);
+}
+
+.log-search-meta {
+  padding: 4px 10px;
+  font-size: 0.75em;
+  color: var(--text-soft);
+  text-align: center;
+  border-top: 1px solid var(--panel-border);
+}
+
 .log-list {
   flex: 1;
   overflow-y: auto;
