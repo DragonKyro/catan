@@ -1,0 +1,24 @@
+.bank {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bank-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+}
+
+.bank-resources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

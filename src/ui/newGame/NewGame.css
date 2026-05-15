@@ -1,0 +1,124 @@
+.newgame-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.newgame-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+.newgame-title {
+  margin: 0;
+  font-size: 2.4em;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.newgame-subtitle {
+  margin: -12px 0 6px;
+  text-align: center;
+  color: var(--text-soft);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.78em;
+}
+
+.newgame-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9em;
+  color: var(--text-soft);
+}
+
+.newgame-field input {
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 1em;
+  font-family: inherit;
+}
+
+.newgame-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.newgame-segmented {
+  display: flex;
+  gap: 4px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.newgame-seg {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.newgame-seg.active {
+  background: var(--accent);
+  color: #1a1a1a;
+}
+
+.newgame-players {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.newgame-player {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.newgame-player input {
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 0.95em;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.newgame-segmented-sm {
+  padding: 2px;
+}
+
+.newgame-segmented-sm .newgame-seg {
+  padding: 4px 8px;
+  font-size: 0.85em;
+}
+
+.newgame-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #00000040;
+}

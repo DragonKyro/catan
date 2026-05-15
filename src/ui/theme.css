@@ -1,0 +1,55 @@
+:root {
+  /* Terrain palette — modern flat */
+  --terrain-wood: #3d7a3d;
+  --terrain-brick: #c97a3d;
+  --terrain-sheep: #a8d96b;
+  --terrain-wheat: #f0c449;
+  --terrain-ore: #8a8a96;
+  --terrain-desert: #d9c598;
+  --ocean: #3b7ab8;
+  --ocean-deep: #2e6398;
+
+  /* Player colors */
+  --player-red: #d94545;
+  --player-blue: #3a6ec9;
+  --player-orange: #e08b3c;
+  --player-white: #efefef;
+
+  /* Number-token rules */
+  --token-fill: #f7f1d8;
+  --token-edge: #4a3a25;
+  --token-hot: #c9302c; /* 6 and 8 */
+
+  /* Surfaces */
+  --bg: #0f1922;
+  --panel: #1c2934;
+  --panel-soft: #243443;
+  --panel-border: #2f4254;
+  --text: #e6ecf2;
+  --text-soft: #97a7b8;
+  --accent: #ffce6b;
+  --danger: #e25c5c;
+  --success: #5dba8a;
+
+  /* Sizes */
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+button {
+  font-family: inherit;
+}
+
+.app-root {
+  min-height: 100vh;
+}

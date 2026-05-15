@@ -1,0 +1,41 @@
+.dchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-soft);
+  font-size: 0.9em;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.dchip-icon {
+  font-size: 1.1em;
+}
+
+.dchip-back {
+  background: #3b2a45;
+  border-color: #6a4a83;
+  color: var(--text-soft);
+}
+
+.dchip-clickable {
+  cursor: pointer;
+  transition: background 80ms;
+}
+.dchip-clickable:hover {
+  background: #2c4154;
+}
+
+.dchip-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dchip-count {
+  margin-left: 4px;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,24 @@
+.rchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  min-width: 40px;
+  justify-content: center;
+}
+
+.rchip-wood { background: rgba(61, 122, 61, 0.25); border-color: var(--terrain-wood); }
+.rchip-brick { background: rgba(201, 122, 61, 0.25); border-color: var(--terrain-brick); }
+.rchip-sheep { background: rgba(168, 217, 107, 0.25); border-color: var(--terrain-sheep); }
+.rchip-wheat { background: rgba(240, 196, 73, 0.25); border-color: var(--terrain-wheat); }
+.rchip-ore { background: rgba(138, 138, 150, 0.3); border-color: var(--terrain-ore); }
+
+.rchip-sm { font-size: 0.8em; padding: 1px 6px; }
+.rchip-md { font-size: 0.95em; }
+.rchip-lg { font-size: 1.15em; padding: 4px 12px; }
+
+.rchip-dim { opacity: 0.45; }
+.rchip-count { font-variant-numeric: tabular-nums; }

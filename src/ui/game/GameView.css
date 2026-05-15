@@ -1,0 +1,57 @@
+.gameview {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 12px;
+  padding: 12px;
+  min-height: 100vh;
+  max-height: 100vh;
+}
+
+.gameview-board {
+  position: relative;
+  background: var(--ocean-deep);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+}
+
+.gameview-dice-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+}
+
+.gameview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.gameview-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--danger);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  z-index: 150;
+  max-width: 600px;
+  text-align: center;
+  font-size: 0.95em;
+}
+
+@media (max-width: 900px) {
+  .gameview {
+    grid-template-columns: 1fr;
+    grid-template-rows: 60vh 1fr;
+    max-height: none;
+  }
+}

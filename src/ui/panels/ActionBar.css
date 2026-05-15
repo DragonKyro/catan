@@ -1,0 +1,48 @@
+.actionbar {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.actionbar-row {
+  display: flex;
+  gap: 6px;
+}
+
+.actionbar-row > .btn {
+  flex: 1;
+}
+
+.actionbar-hint {
+  color: var(--text-soft);
+  font-style: italic;
+  font-size: 0.9em;
+  text-align: center;
+}
+
+.actionbar-thinking {
+  color: var(--text-soft);
+  font-size: 0.95em;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.actionbar-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: actionbar-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes actionbar-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}

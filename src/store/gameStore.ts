@@ -1,12 +1,202 @@
 import { create } from 'zustand';
+import type { Action, HexId, PlayerId } from '@/game/types';
+import { applyAction } from '@/game/engine';
+import { createGame, type CreateGameOptions } from '@/game/createGame';
+import { getActingPlayerId } from '@/game/helpers';
 import type { GameState } from '@/game/types';
 
-interface GameStore {
-  state: GameState | null;
-  setState: (state: GameState) => void;
+// Re-export the pure helper for callers used to importing it from the store.
+export { getActingPlayerId };
+
+// Optional broadcast hook — when the network layer is active it registers a
+// function here so dispatched actions are sent to peers as a side effect.
+// Kept here (rather than in networkStore) to avoid a circular module import.
+let broadcastHandler: ((action: Action) => void) | null = null;
+export function registerBroadcastHandler(fn: ((a: Action) => void) | null): void {
+  broadcastHandler = fn;
 }
 
-export const useGameStore = create<GameStore>((set) => ({
-  state: null,
-  setState: (state) => set({ state }),
+// Some store behavior (pass-device handoff) needs to know if we're in an
+// online session. Provide a hook for the network layer to set this.
+let isOnlinePredicate: () => boolean = () => false;
+export function registerOnlinePredicate(fn: () => boolean): void {
+  isOnlinePredicate = fn;
+}
+
+export type UIMode =
+  | { kind: 'idle' }
+  | { kind: 'buildSettlement' }
+  | { kind: 'buildCity' }
+  | { kind: 'buildRoad' }
+  | { kind: 'placeSetupSettlement' }
+  | { kind: 'placeSetupRoad' }
+  | { kind: 'moveRobber' }
+  | { kind: 'roadBuilding'; remaining: 1 | 2 };
+
+export type DialogName =
+  | 'bankTrade'
+  | 'playerTrade'
+  | 'yearOfPlenty'
+  | 'monopoly';
+
+interface AppStore {
+  game: GameState | null;
+  uiMode: UIMode;
+  dialog: DialogName | null;
+  handoffPending: boolean;
+  handoffAcknowledgedForPlayer: PlayerId | null;
+  error: string | null;
+  // When the user has clicked a hex during moveRobber and there are 2+ steal
+  // candidates, this holds the chosen hex until the steal-target dialog
+  // resolves and dispatches the actual moveRobber action.
+  pendingRobberHex: HexId | null;
+
+  newGame: (opts: CreateGameOptions) => void;
+  setGameState: (state: GameState) => void;
+  resetGame: () => void;
+  dispatch: (action: Action) => void;
+  applyLocal: (action: Action) => void;
+  setMode: (mode: UIMode) => void;
+  openDialog: (d: DialogName) => void;
+  closeDialog: () => void;
+  acknowledgeHandoff: () => void;
+  dismissError: () => void;
+  setPendingRobberHex: (hex: HexId | null) => void;
+}
+
+const phaseToMode = (state: GameState): UIMode => {
+  if (state.phase === 'setupRound1' || state.phase === 'setupRound2') {
+    return state.setupState?.step === 'settlement'
+      ? { kind: 'placeSetupSettlement' }
+      : { kind: 'placeSetupRoad' };
+  }
+  if (state.phase === 'moveRobber') return { kind: 'moveRobber' };
+  return { kind: 'idle' };
+};
+
+// Shared transition logic — called by both `dispatch` (local action) and
+// `applyLocal` (action arriving over the network) so they keep the store
+// in the same shape and fire the same handoff logic.
+function applyTransition(
+  set: (s: Partial<{
+    game: GameState;
+    uiMode: UIMode;
+    dialog: null;
+    error: null;
+    handoffPending: boolean;
+    handoffAcknowledgedForPlayer: PlayerId | null;
+    pendingRobberHex: null;
+  }>) => void,
+  get: () => { handoffAcknowledgedForPlayer: PlayerId | null },
+  before: GameState,
+  next: GameState,
+): void {
+  const beforeActor = getActingPlayerId(before);
+  const nextActor =
+    next.phase === 'gameOver' ? beforeActor : getActingPlayerId(next);
+  const nextActorPlayer = next.players.find((p) => p.id === nextActor);
+  const online = isOnlinePredicate();
+  // Pass-device handoff is for hot-seat only. AI never needs handoff.
+  // Online sessions never use it — each player has their own device.
+  const handoff =
+    !online &&
+    next.phase !== 'gameOver' &&
+    beforeActor !== nextActor &&
+    !nextActorPlayer?.isAI &&
+    nextActor !== get().handoffAcknowledgedForPlayer;
+  set({
+    game: next,
+    uiMode: phaseToMode(next),
+    dialog: null,
+    error: null,
+    handoffPending: handoff,
+    handoffAcknowledgedForPlayer: handoff
+      ? get().handoffAcknowledgedForPlayer
+      : nextActor,
+    pendingRobberHex: null,
+  });
+}
+
+export const useGameStore = create<AppStore>((set, get) => ({
+  game: null,
+  uiMode: { kind: 'idle' },
+  dialog: null,
+  handoffPending: false,
+  handoffAcknowledgedForPlayer: null,
+  error: null,
+  pendingRobberHex: null,
+
+  newGame: (opts) => {
+    const game = createGame(opts);
+    set({
+      game,
+      uiMode: phaseToMode(game),
+      dialog: null,
+      handoffPending: false,
+      handoffAcknowledgedForPlayer: getActingPlayerId(game),
+      error: null,
+      pendingRobberHex: null,
+    });
+  },
+
+  resetGame: () => set({
+    game: null,
+    uiMode: { kind: 'idle' },
+    dialog: null,
+    handoffPending: false,
+    handoffAcknowledgedForPlayer: null,
+    error: null,
+    pendingRobberHex: null,
+  }),
+
+  dispatch: (action) => {
+    const before = get().game;
+    if (!before) return;
+    try {
+      const next = applyAction(before, action);
+      applyTransition(set, get, before, next);
+      // Broadcast to peers only after local apply succeeds.
+      if (broadcastHandler) broadcastHandler(action);
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
+  },
+
+  applyLocal: (action) => {
+    const before = get().game;
+    if (!before) return;
+    try {
+      const next = applyAction(before, action);
+      applyTransition(set, get, before, next);
+    } catch (e) {
+      // Remote action failed locally — log but don't surface as user error.
+      console.warn('[gameStore] applyLocal rejected action:', (e as Error).message);
+    }
+  },
+
+  setGameState: (state) => {
+    set({
+      game: state,
+      uiMode: phaseToMode(state),
+      dialog: null,
+      handoffPending: false,
+      handoffAcknowledgedForPlayer: getActingPlayerId(state),
+      error: null,
+      pendingRobberHex: null,
+    });
+  },
+
+  setMode: (mode) => set({ uiMode: mode, error: null }),
+  openDialog: (d) => set({ dialog: d, error: null }),
+  closeDialog: () => set({ dialog: null }),
+  acknowledgeHandoff: () => {
+    const game = get().game;
+    if (!game) return;
+    set({
+      handoffPending: false,
+      handoffAcknowledgedForPlayer: getActingPlayerId(game),
+    });
+  },
+  dismissError: () => set({ error: null }),
+  setPendingRobberHex: (hex) => set({ pendingRobberHex: hex }),
 }));

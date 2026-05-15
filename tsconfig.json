@@ -16,9 +16,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["vitest/globals"],
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src", "tests"]

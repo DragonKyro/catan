@@ -1,0 +1,11 @@
+.ptrade-section {
+  margin-bottom: 12px;
+}
+
+.ptrade-section-label {
+  font-size: 0.75em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  margin-bottom: 6px;
+}
