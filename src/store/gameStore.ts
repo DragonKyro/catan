@@ -4,6 +4,7 @@ import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
 import type { GameState } from '@/game/types';
+import { useLogStore } from './logStore';
 
 // Re-export the pure helper for callers used to importing it from the store.
 export { getActingPlayerId };
@@ -128,6 +129,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
 
   newGame: (opts) => {
     const game = createGame(opts);
+    useLogStore.getState().reset(game);
     set({
       game,
       uiMode: phaseToMode(game),
@@ -139,21 +141,25 @@ export const useGameStore = create<AppStore>((set, get) => ({
     });
   },
 
-  resetGame: () => set({
-    game: null,
-    uiMode: { kind: 'idle' },
-    dialog: null,
-    handoffPending: false,
-    handoffAcknowledgedForPlayer: null,
-    error: null,
-    pendingRobberHex: null,
-  }),
+  resetGame: () => {
+    useLogStore.getState().reset();
+    set({
+      game: null,
+      uiMode: { kind: 'idle' },
+      dialog: null,
+      handoffPending: false,
+      handoffAcknowledgedForPlayer: null,
+      error: null,
+      pendingRobberHex: null,
+    });
+  },
 
   dispatch: (action) => {
     const before = get().game;
     if (!before) return;
     try {
       const next = applyAction(before, action);
+      useLogStore.getState().record(before, action, next);
       applyTransition(set, get, before, next);
       // Broadcast to peers only after local apply succeeds.
       if (broadcastHandler) broadcastHandler(action);
@@ -167,6 +173,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
     if (!before) return;
     try {
       const next = applyAction(before, action);
+      useLogStore.getState().record(before, action, next);
       applyTransition(set, get, before, next);
     } catch (e) {
       // Remote action failed locally — log but don't surface as user error.
@@ -175,6 +182,9 @@ export const useGameStore = create<AppStore>((set, get) => ({
   },
 
   setGameState: (state) => {
+    // Set on snapshot/rejoin — reset the log; we don't have history of the
+    // pre-join actions.
+    useLogStore.getState().reset(state);
     set({
       game: state,
       uiMode: phaseToMode(state),

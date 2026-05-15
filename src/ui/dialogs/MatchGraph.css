@@ -1,0 +1,90 @@
+.mgraph {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mgraph-empty {
+  color: var(--text-soft);
+  font-style: italic;
+  padding: 12px 0;
+}
+
+.mgraph-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.mgraph-tab {
+  background: transparent;
+  color: var(--text-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.82em;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mgraph-tab:hover {
+  color: var(--text);
+}
+
+.mgraph-tab.is-active {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.mgraph-svg {
+  width: 100%;
+  height: auto;
+  background: var(--panel-soft);
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+}
+
+.mgraph-grid {
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 1;
+}
+
+.mgraph-axis {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1;
+}
+
+.mgraph-tick {
+  fill: var(--text-soft);
+  font-size: 9px;
+  font-family: inherit;
+}
+
+.mgraph-axislabel {
+  fill: var(--text-soft);
+  font-size: 10px;
+  font-family: inherit;
+}
+
+.mgraph-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.88em;
+}
+
+.mgraph-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mgraph-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid #00000040;
+}

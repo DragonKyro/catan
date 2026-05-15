@@ -53,16 +53,21 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 2 — Hot-seat UI (SVG board, panels, dialogs)
 - [x] Phase 3 — AI opponents + player-to-player trading
 - [x] Phase 4 — Online multiplayer (Trystero peer-to-peer) + in-game chat
-- [ ] Phase 5 — Seafarers expansion
-- [ ] Phase 6 — Cities & Knights expansion
-- [ ] Phase 7 — Traders & Barbarians expansion
-- [ ] Phase 8 — Explorers & Pirates expansion
-- [ ] Phase 9 — *Rivals for Catan* (2-player card-game variant)
-- [ ] Phase 10 — Rivals expansion: Era of Gold
-- [ ] Phase 11 — Rivals expansion: Era of Turmoil
-- [ ] Phase 12 — Rivals expansion: Era of Progress
-- [ ] Phase 13 — Rivals expansion: Era of Barbarians
-- [ ] Phase 14 — Rivals expansion: Era of Merchants
+- [ ] Phase 5 — Base game 5–6 player extension
+- [ ] Phase 6 — Seafarers expansion
+- [ ] Phase 7 — Seafarers 5–6 player extension
+- [ ] Phase 8 — Cities & Knights expansion
+- [ ] Phase 9 — Cities & Knights 5–6 player extension
+- [ ] Phase 10 — Traders & Barbarians expansion
+- [ ] Phase 11 — Traders & Barbarians 5–6 player extension
+- [ ] Phase 12 — Explorers & Pirates expansion
+- [ ] Phase 13 — Explorers & Pirates 5–6 player extension
+- [ ] Phase 14 — *Rivals for Catan* (2-player card-game variant)
+- [ ] Phase 15 — Rivals expansion: Era of Gold
+- [ ] Phase 16 — Rivals expansion: Era of Turmoil
+- [ ] Phase 17 — Rivals expansion: Era of Progress
+- [ ] Phase 18 — Rivals expansion: Era of Barbarians
+- [ ] Phase 19 — Rivals expansion: Era of Merchants
 
 ## Scope
 

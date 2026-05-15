@@ -1,7 +1,9 @@
 import { useGameStore } from '@/store/gameStore';
+import { useLogStore } from '@/store/logStore';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
+import { MatchGraph } from './MatchGraph';
 
 const PLAYER_COLOR_CSS: Record<string, string> = {
   red: 'var(--player-red)',
@@ -12,6 +14,7 @@ const PLAYER_COLOR_CSS: Record<string, string> = {
 
 export function GameOverDialog() {
   const { game, resetGame } = useGameStore();
+  const timeline = useLogStore((s) => s.timeline);
   if (!game || !game.winner) return null;
   const winner = game.players.find((p) => p.id === game.winner)!;
 
@@ -24,6 +27,7 @@ export function GameOverDialog() {
     <DialogShell
       title="🏆 Game over"
       blocking
+      variant="modal"
       footer={<Button variant="primary" onClick={resetGame}>New game</Button>}
     >
       <p style={{ marginTop: 0, fontSize: '1.05em' }}>
@@ -69,6 +73,7 @@ export function GameOverDialog() {
           })}
         </tbody>
       </table>
+      <MatchGraph players={game.players} timeline={timeline} />
     </DialogShell>
   );
 }

@@ -4,6 +4,8 @@ import type {
   ProposeTradeAction,
   AcceptTradeAction,
   CancelTradeAction,
+  CounterTradeAction,
+  RejectTradeAction,
   Resource,
   ResourceBank,
 } from '../types';
@@ -89,6 +91,7 @@ export function handleProposeTrade(
       proposerId: action.playerId,
       give: { ...action.give },
       receive: { ...action.receive },
+      rejectedBy: [],
     },
     tradesProposedThisTurn: state.tradesProposedThisTurn + 1,
   };
@@ -132,8 +135,63 @@ export function handleCancelTrade(
   action: CancelTradeAction,
 ): GameState {
   if (!state.pendingTrade) throw new Error('No trade to cancel');
-  if (action.playerId !== state.pendingTrade.proposerId) {
-    throw new Error('Only the proposer can cancel');
+  const isProposer = action.playerId === state.pendingTrade.proposerId;
+  const isCurrent = action.playerId === currentPlayerId(state);
+  // Either the proposer of the current pending trade or the active turn
+  // player may cancel. The latter matters after a counter: the original
+  // proposer is no longer `proposerId`, but they should still be able to
+  // walk away from the negotiation.
+  if (!isProposer && !isCurrent) {
+    throw new Error('Only the proposer or current player can cancel');
   }
   return { ...state, pendingTrade: undefined };
+}
+
+export function handleRejectTrade(
+  state: GameState,
+  action: RejectTradeAction,
+): GameState {
+  if (!state.pendingTrade) throw new Error('No trade to reject');
+  if (action.playerId === state.pendingTrade.proposerId) {
+    throw new Error("You can't reject your own trade");
+  }
+  if (state.pendingTrade.rejectedBy.includes(action.playerId)) return state;
+  return {
+    ...state,
+    pendingTrade: {
+      ...state.pendingTrade,
+      rejectedBy: [...state.pendingTrade.rejectedBy, action.playerId],
+    },
+  };
+}
+
+export function handleCounterTrade(
+  state: GameState,
+  action: CounterTradeAction,
+): GameState {
+  if (state.phase !== 'main') {
+    throw new Error(`Cannot counter in phase ${state.phase}`);
+  }
+  if (!state.pendingTrade) throw new Error('No trade to counter');
+  if (action.playerId === state.pendingTrade.proposerId) {
+    throw new Error("You can't counter your own trade");
+  }
+  if (totalOf(action.give) === 0 || totalOf(action.receive) === 0) {
+    throw new Error('Counter must have something on both sides');
+  }
+  const counterer = getPlayer(state, action.playerId);
+  if (!hasAll(counterer.resources, action.give)) {
+    throw new Error("You don't have the resources you're offering");
+  }
+  // Replace the pending trade. The counterer becomes the new proposer; the
+  // original proposer is implicit (still the current player) and can accept.
+  return {
+    ...state,
+    pendingTrade: {
+      proposerId: action.playerId,
+      give: { ...action.give },
+      receive: { ...action.receive },
+      rejectedBy: [],
+    },
+  };
 }

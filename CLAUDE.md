@@ -93,16 +93,21 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 - [x] Phase 2 — Hot-seat UI
 - [x] Phase 3 — AI + player-to-player trading
 - [x] Phase 4 — Online multiplayer + in-game chat
-- [ ] Phase 5 — Seafarers expansion
-- [ ] Phase 6 — Cities & Knights expansion
-- [ ] Phase 7 — Traders & Barbarians expansion
-- [ ] Phase 8 — Explorers & Pirates expansion
-- [ ] Phase 9 — *Rivals for Catan* (2-player card-game variant)
-- [ ] Phase 10 — Rivals: Era of Gold
-- [ ] Phase 11 — Rivals: Era of Turmoil
-- [ ] Phase 12 — Rivals: Era of Progress
-- [ ] Phase 13 — Rivals: Era of Barbarians
-- [ ] Phase 14 — Rivals: Era of Merchants
+- [ ] Phase 5 — Base game 5–6 player extension
+- [ ] Phase 6 — Seafarers expansion
+- [ ] Phase 7 — Seafarers 5–6 player extension
+- [ ] Phase 8 — Cities & Knights expansion
+- [ ] Phase 9 — Cities & Knights 5–6 player extension
+- [ ] Phase 10 — Traders & Barbarians expansion
+- [ ] Phase 11 — Traders & Barbarians 5–6 player extension
+- [ ] Phase 12 — Explorers & Pirates expansion
+- [ ] Phase 13 — Explorers & Pirates 5–6 player extension
+- [ ] Phase 14 — *Rivals for Catan* (2-player card-game variant)
+- [ ] Phase 15 — Rivals: Era of Gold
+- [ ] Phase 16 — Rivals: Era of Turmoil
+- [ ] Phase 17 — Rivals: Era of Progress
+- [ ] Phase 18 — Rivals: Era of Barbarians
+- [ ] Phase 19 — Rivals: Era of Merchants
 
 ## Where to start next
 

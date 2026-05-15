@@ -10,7 +10,7 @@ import { ActionBar } from '@/ui/panels/ActionBar';
 import { DiceDisplay } from '@/ui/panels/DiceDisplay';
 import { BankPanel } from '@/ui/panels/BankPanel';
 import { PendingTradeBanner } from '@/ui/panels/PendingTradeBanner';
-import { ChatPanel } from '@/ui/chat/ChatPanel';
+import { SidePanelTabs } from '@/ui/panels/SidePanelTabs';
 import { BankTradeDialog } from '@/ui/dialogs/BankTradeDialog';
 import { PlayerTradeDialog } from '@/ui/dialogs/PlayerTradeDialog';
 import { DiscardDialog } from '@/ui/dialogs/DiscardDialog';
@@ -42,6 +42,14 @@ export function GameView() {
         <div className="gameview-dice-overlay">
           <DiceDisplay />
         </div>
+        {/* Docked dialogs render inside the board column so they sit at the
+            bottom of the board without covering the side panel. */}
+        {dialog === 'bankTrade' && <BankTradeDialog />}
+        {dialog === 'playerTrade' && <PlayerTradeDialog />}
+        {dialog === 'yearOfPlenty' && <YearOfPlentyDialog />}
+        {dialog === 'monopoly' && <MonopolyDialog />}
+        {game.phase === 'discard' && !handoffPending && <DiscardDialog />}
+        {pendingRobberHex && <RobberStealDialog />}
       </main>
 
       <aside className="gameview-side">
@@ -51,7 +59,7 @@ export function GameView() {
         <ActionBar />
         <OpponentPanel />
         <BankPanel />
-        {isOnline && <ChatPanel compact />}
+        <SidePanelTabs showChat={isOnline} />
       </aside>
 
       {error && (
@@ -60,12 +68,6 @@ export function GameView() {
         </div>
       )}
 
-      {dialog === 'bankTrade' && <BankTradeDialog />}
-      {dialog === 'playerTrade' && <PlayerTradeDialog />}
-      {dialog === 'yearOfPlenty' && <YearOfPlentyDialog />}
-      {dialog === 'monopoly' && <MonopolyDialog />}
-      {game.phase === 'discard' && !handoffPending && <DiscardDialog />}
-      {pendingRobberHex && <RobberStealDialog />}
       {isGameOver && <GameOverDialog />}
       {handoffPending && !isGameOver && <PassDeviceScreen />}
       {isOnline && <ConnectionStatusOverlay />}

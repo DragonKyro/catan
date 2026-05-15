@@ -157,6 +157,10 @@ export interface PendingTrade {
   proposerId: PlayerId;
   give: Partial<ResourceBank>;
   receive: Partial<ResourceBank>;
+  // Players who have explicitly rejected this offer. Purely informational —
+  // a rejection does not cancel the trade; the proposer can still wait for
+  // another player to accept or for the timer/end-turn auto-cancel.
+  rejectedBy: PlayerId[];
 }
 
 export interface GameState {
@@ -275,6 +279,16 @@ export interface CancelTradeAction extends ActionBase {
   type: 'cancelTrade';
 }
 
+export interface RejectTradeAction extends ActionBase {
+  type: 'rejectTrade';
+}
+
+export interface CounterTradeAction extends ActionBase {
+  type: 'counterTrade';
+  give: Partial<ResourceBank>;
+  receive: Partial<ResourceBank>;
+}
+
 export interface EndTurnAction extends ActionBase {
   type: 'endTurn';
 }
@@ -297,6 +311,8 @@ export type Action =
   | ProposeTradeAction
   | AcceptTradeAction
   | CancelTradeAction
+  | RejectTradeAction
+  | CounterTradeAction
   | EndTurnAction;
 
 export type ActionType = Action['type'];

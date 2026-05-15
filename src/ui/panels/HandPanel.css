@@ -76,3 +76,33 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+.hand-hidden {
+  padding: 4px 0;
+}
+
+.hand-facedown {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--panel-soft);
+  border: 1px dashed var(--panel-border);
+  border-radius: 8px;
+  color: var(--text-soft);
+}
+
+.hand-facedown-icon {
+  font-size: 1.4em;
+}
+
+.hand-facedown-count {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.hand-facedown-label {
+  font-size: 0.85em;
+  color: var(--text-soft);
+}

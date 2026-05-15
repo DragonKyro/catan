@@ -1,11 +1,137 @@
-.ptrade-section {
-  margin-bottom: 12px;
+.ptrade-hint {
+  margin: 0 0 10px;
+  color: var(--text-soft);
+  font-size: 0.88em;
 }
 
-.ptrade-section-label {
-  font-size: 0.75em;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.ptrade-pill {
+  display: inline-block;
+  width: 1.4em;
+  text-align: center;
+  border-radius: 4px;
+  padding: 0 2px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.ptrade-pill-give {
+  background: #d97b7b;
+}
+
+.ptrade-pill-get {
+  background: #7bbf7a;
+}
+
+.ptrade-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ptrade-row {
+  display: grid;
+  grid-template-columns: 36px 1fr 64px 36px;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-soft);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px 6px;
+  transition: border-color 0.15s;
+}
+
+.ptrade-row.is-give {
+  border-color: rgba(217, 123, 123, 0.55);
+}
+
+.ptrade-row.is-get {
+  border-color: rgba(123, 191, 122, 0.55);
+}
+
+.ptrade-btn {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 1.2em;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 0;
+  height: 32px;
+}
+
+.ptrade-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #1a1a1a;
+}
+
+.ptrade-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ptrade-btn-give {
+  color: #d97b7b;
+}
+
+.ptrade-btn-get {
+  color: #7bbf7a;
+}
+
+.ptrade-mid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ptrade-name {
+  font-weight: 600;
+}
+
+.ptrade-have {
+  margin-left: auto;
+  font-size: 0.78em;
   color: var(--text-soft);
-  margin-bottom: 6px;
+}
+
+.ptrade-value {
+  display: flex;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.ptrade-side {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.95em;
+}
+
+.ptrade-side-give {
+  background: rgba(217, 123, 123, 0.18);
+  color: #e89090;
+}
+
+.ptrade-side-get {
+  background: rgba(123, 191, 122, 0.18);
+  color: #9ed29c;
+}
+
+.ptrade-side-zero {
+  color: var(--text-soft);
+}
+
+.ptrade-summary {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 0.92em;
+  color: var(--text-soft);
+}
+
+.ptrade-summary-side strong {
+  color: var(--text);
 }

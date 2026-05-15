@@ -17,6 +17,8 @@ import {
   handleProposeTrade,
   handleAcceptTrade,
   handleCancelTrade,
+  handleRejectTrade,
+  handleCounterTrade,
   handleEndTurn,
 } from '../actions';
 
@@ -41,6 +43,8 @@ export const baseModule: RuleModule = {
     proposeTrade: handleProposeTrade as never,
     acceptTrade: handleAcceptTrade as never,
     cancelTrade: handleCancelTrade as never,
+    rejectTrade: handleRejectTrade as never,
+    counterTrade: handleCounterTrade as never,
     endTurn: handleEndTurn as never,
   },
 };

@@ -11,7 +11,7 @@ import { canPlaceSettlement, canConnectRoad } from '@/game/placement';
 import { canAfford } from '@/game/resources';
 import { getBankTradeRate } from '@/game/actions/trade';
 import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
-import { tryProposeTrade } from './trade';
+import { tryProposeTrade, shouldAcceptTrade } from './trade';
 import { chooseDevCardPlay } from './devcard';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
@@ -23,10 +23,17 @@ export function chooseMainPhaseAction(
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return null;
 
-  // If we have a pending trade we proposed, wait (we'll cancel via the timer).
-  // The driver loop will eventually call this again after acceptance or after
-  // we cancel. We avoid getting stuck by cancelling on the next call.
-  if (state.pendingTrade?.proposerId === playerId) {
+  // Handle any pending trade involving us before doing anything else:
+  // - If we proposed it, cancel (the driver's wait already gave humans time).
+  // - If it's a counter to our trade (or any trade we're now the current
+  //   player on), accept if beneficial, otherwise cancel.
+  if (state.pendingTrade) {
+    if (state.pendingTrade.proposerId === playerId) {
+      return { type: 'cancelTrade', playerId };
+    }
+    if (shouldAcceptTrade(state, playerId)) {
+      return { type: 'acceptTrade', playerId };
+    }
     return { type: 'cancelTrade', playerId };
   }
 
@@ -78,48 +85,51 @@ export function chooseMainPhaseAction(
     }
   }
 
-  // 4) BUILD ROAD (only if it opens a high-value settlement spot)
+  // 4) BUILD ROAD (only if it opens a high-value settlement spot AND we
+  // don't already have a placement option through our existing roads)
   if (
     canAfford(player.resources, COSTS.road) &&
     player.roads.length < 15
   ) {
-    let bestEid: EdgeId | null = null;
-    let bestVertexScore = -Infinity;
-    for (const eid of state.board.edgeIds) {
-      if (!canConnectRoad(state, playerId, eid)) continue;
-      const edge = state.board.edges[eid]!;
-      // Best follow-up: would either endpoint then be a legal settlement spot?
-      let endpointBest = -Infinity;
-      for (const v of edge.vertices) {
-        // Check distance rule + own vertex
-        // After placing the road, the only constraint relaxed is connectivity.
-        // We approximate: vertex is currently legal-by-distance, just lacking connection.
-        let blocked = false;
-        const vertex = state.board.vertices[v]!;
-        for (const p of state.players) {
-          if (p.settlements.includes(v) || p.cities.includes(v)) {
-            blocked = true;
-            break;
-          }
-          for (const n of vertex.neighborVertices) {
-            if (p.settlements.includes(n) || p.cities.includes(n)) {
+    // If we already have an open vertex reachable through our current roads
+    // where we could put a settlement, don't burn wood/brick on more roads —
+    // wait for sheep+wheat instead. Roads without an unlock don't score VP.
+    const openSpots = countOpenSettlementSpots(state, playerId);
+    if (openSpots === 0) {
+      let bestEid: EdgeId | null = null;
+      let bestVertexScore = -Infinity;
+      for (const eid of state.board.edgeIds) {
+        if (!canConnectRoad(state, playerId, eid)) continue;
+        const edge = state.board.edges[eid]!;
+        let endpointBest = -Infinity;
+        for (const v of edge.vertices) {
+          let blocked = false;
+          const vertex = state.board.vertices[v]!;
+          for (const p of state.players) {
+            if (p.settlements.includes(v) || p.cities.includes(v)) {
               blocked = true;
               break;
             }
+            for (const n of vertex.neighborVertices) {
+              if (p.settlements.includes(n) || p.cities.includes(n)) {
+                blocked = true;
+                break;
+              }
+            }
+            if (blocked) break;
           }
-          if (blocked) break;
+          if (blocked) continue;
+          const s = vertexScore(state, v, playerId);
+          if (s > endpointBest) endpointBest = s;
         }
-        if (blocked) continue;
-        const s = vertexScore(state, v, playerId);
-        if (s > endpointBest) endpointBest = s;
+        if (endpointBest > bestVertexScore) {
+          bestVertexScore = endpointBest;
+          bestEid = eid;
+        }
       }
-      if (endpointBest > bestVertexScore) {
-        bestVertexScore = endpointBest;
-        bestEid = eid;
+      if (bestEid && bestVertexScore >= ROAD_TARGET_THRESHOLD) {
+        return { type: 'buildRoad', playerId, edge: bestEid };
       }
-    }
-    if (bestEid && bestVertexScore >= ROAD_TARGET_THRESHOLD) {
-      return { type: 'buildRoad', playerId, edge: bestEid };
     }
   }
 
@@ -133,6 +143,26 @@ export function chooseMainPhaseAction(
 
   // 7) End turn
   return null;
+}
+
+// Counts vertices reachable through this player's existing road network
+// where they could legally place a settlement *right now*. Used to gate
+// further road-building — if any spot is already available we shouldn't
+// keep spending wood/brick on roads.
+function countOpenSettlementSpots(state: GameState, playerId: PlayerId): number {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return 0;
+  const reachable = new Set<VertexId>();
+  for (const eid of player.roads) {
+    const edge = state.board.edges[eid];
+    if (!edge) continue;
+    for (const v of edge.vertices) reachable.add(v);
+  }
+  let count = 0;
+  for (const v of reachable) {
+    if (canPlaceSettlement(state, playerId, v)) count++;
+  }
+  return count;
 }
 
 function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
