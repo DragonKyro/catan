@@ -4,14 +4,8 @@ import { useLogStore, type LogEntry } from '@/store/logStore';
 import type { Player, PlayerId, Resource, ResourceBank } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { RESOURCE_ICON } from '@/ui/shared/ResourceChip';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import './LogPanel.css';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 interface Props {
   // When embedded inside a tabbed area we drop the heading and outer border.
@@ -65,7 +59,7 @@ function LogLine({
     return (
       <span
         className="log-name"
-        style={{ color: PLAYER_COLOR_CSS[p.color] }}
+        style={{ color: playerColorVar(p.color) }}
       >
         {p.name}
       </span>

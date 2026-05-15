@@ -24,27 +24,32 @@ export function handleBankTrade(state: GameState, action: BankTradeAction): Game
   if (state.phase !== 'main') throw new Error(`Cannot trade in phase ${state.phase}`);
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   if (action.give === action.receive) throw new Error('Cannot trade resource for itself');
+  const count = action.count ?? 1;
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error('Trade count must be a positive integer');
+  }
 
   const player = getPlayer(state, action.playerId);
   const rate = getBankTradeRate(state, action.playerId, action.give);
-  if (player.resources[action.give] < rate) {
-    throw new Error(`Need ${rate} ${action.give} to trade`);
+  const totalGive = rate * count;
+  if (player.resources[action.give] < totalGive) {
+    throw new Error(`Need ${totalGive} ${action.give} to trade for ${count}`);
   }
-  if (state.bank[action.receive] < 1) {
-    throw new Error(`Bank is out of ${action.receive}`);
+  if (state.bank[action.receive] < count) {
+    throw new Error(`Bank does not have ${count} ${action.receive}`);
   }
 
   let next = updatePlayer(state, action.playerId, (p) => ({
     ...p,
     resources: addResources(
-      subtractResources(p.resources, { [action.give]: rate }),
-      { [action.receive]: 1 },
+      subtractResources(p.resources, { [action.give]: totalGive }),
+      { [action.receive]: count },
     ),
   }));
   next = {
     ...next,
-    bank: addResources(subtractResources(next.bank, { [action.receive]: 1 }), {
-      [action.give]: rate,
+    bank: addResources(subtractResources(next.bank, { [action.receive]: count }), {
+      [action.give]: totalGive,
     }),
   };
   return next;

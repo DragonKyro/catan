@@ -89,7 +89,17 @@ export interface BoardState {
 // ============================================================================
 
 export type PlayerId = string;
-export type PlayerColor = 'red' | 'blue' | 'orange' | 'white';
+export type PlayerColor =
+  | 'red'
+  | 'blue'
+  | 'orange'
+  | 'white'
+  | 'purple'
+  | 'pink'
+  | 'teal'
+  | 'gold'
+  | 'lime'
+  | 'brown';
 
 export type DevCardType =
   | 'knight'
@@ -263,6 +273,9 @@ export interface BankTradeAction extends ActionBase {
   type: 'bankTrade';
   give: Resource;
   receive: Resource;
+  // How many `receive` cards to trade for. Player gives `rate * count` of
+  // `give`. Defaults to 1 when omitted (back-compat with single-trade flow).
+  count?: number;
 }
 
 export interface ProposeTradeAction extends ActionBase {

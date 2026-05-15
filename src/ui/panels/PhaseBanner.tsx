@@ -1,13 +1,7 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import type { GameState } from '@/game/types';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import './PhaseBanner.css';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 function instruction(game: GameState, uiModeKind: string): string {
   switch (game.phase) {
@@ -55,7 +49,7 @@ export function PhaseBanner() {
       <div className="banner-player">
         <span
           className="banner-swatch"
-          style={{ background: PLAYER_COLOR_CSS[player.color] }}
+          style={{ background: playerColorVar(player.color) }}
         />
         <span className="banner-name">
           {player.name}

@@ -9,11 +9,18 @@
   --ocean: #3b7ab8;
   --ocean-deep: #2e6398;
 
-  /* Player colors */
+  /* Player colors — picked for maximum hue separation and to avoid clashes
+     with terrain colors (wood/sheep green, brick/orange/gold, ore gray). */
   --player-red: #d94545;
   --player-blue: #3a6ec9;
-  --player-orange: #e08b3c;
-  --player-white: #efefef;
+  --player-orange: #f37025;
+  --player-white: #f0f0f0;
+  --player-purple: #9b59d4;
+  --player-pink: #e85a9c;
+  --player-teal: #1abc9c;
+  --player-gold: #f5b223;
+  --player-lime: #6dc960;
+  --player-brown: #6e4a2c;
 
   /* Number-token rules */
   --token-fill: #f7f1d8;

@@ -48,8 +48,6 @@ export function Board() {
           )}
         </g>
 
-        <PlacementOverlay />
-
         <g className="settlements">
           {game.players.flatMap((player) =>
             player.settlements.map((vid) => (
@@ -65,6 +63,11 @@ export function Board() {
             )),
           )}
         </g>
+
+        {/* Placement ghosts render on top of pieces so the full circle is
+            clickable — especially important for city upgrade, where the
+            settlement icon would otherwise block clicks at the center. */}
+        <PlacementOverlay />
 
         <Robber />
       </svg>

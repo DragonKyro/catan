@@ -1,13 +1,7 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { Button } from '@/ui/shared/Button';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import './PassDeviceScreen.css';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 export function PassDeviceScreen() {
   const game = useGameStore((s) => s.game!);
@@ -21,7 +15,7 @@ export function PassDeviceScreen() {
         <div className="handoff-eyebrow">Pass the device</div>
         <div
           className="handoff-swatch"
-          style={{ background: PLAYER_COLOR_CSS[player.color] }}
+          style={{ background: playerColorVar(player.color) }}
         />
         <h2 className="handoff-name">{player.name}</h2>
         <p className="handoff-instruction">

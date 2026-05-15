@@ -3,14 +3,8 @@ import { useLogStore } from '@/store/logStore';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import { MatchGraph } from './MatchGraph';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 export function GameOverDialog() {
   const { game, resetGame } = useGameStore();
@@ -31,7 +25,7 @@ export function GameOverDialog() {
       footer={<Button variant="primary" onClick={resetGame}>New game</Button>}
     >
       <p style={{ marginTop: 0, fontSize: '1.05em' }}>
-        <strong style={{ color: PLAYER_COLOR_CSS[winner.color] }}>{winner.name}</strong> wins!
+        <strong style={{ color: playerColorVar(winner.color) }}>{winner.name}</strong> wins!
       </p>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
@@ -58,7 +52,7 @@ export function GameOverDialog() {
                       width: 10,
                       height: 10,
                       borderRadius: 2,
-                      background: PLAYER_COLOR_CSS[p.color],
+                      background: playerColorVar(p.color),
                       marginRight: 8,
                     }}
                   />

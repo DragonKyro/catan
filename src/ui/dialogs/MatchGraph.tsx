@@ -1,14 +1,8 @@
 import { useState } from 'react';
 import type { Player } from '@/game/types';
 import type { TimelineSnapshot } from '@/store/logStore';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import './MatchGraph.css';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 type Metric = 'vp' | 'gainedTotal' | 'handTotal';
 
@@ -130,7 +124,7 @@ export function MatchGraph({ players, timeline }: Props) {
           <path
             key={player.id}
             d={d}
-            stroke={PLAYER_COLOR_CSS[player.color]}
+            stroke={playerColorVar(player.color)}
             strokeWidth={2}
             fill="none"
             strokeLinejoin="round"
@@ -142,7 +136,7 @@ export function MatchGraph({ players, timeline }: Props) {
           <span key={p.id} className="mgraph-legend-item">
             <span
               className="mgraph-legend-swatch"
-              style={{ background: PLAYER_COLOR_CSS[p.color] }}
+              style={{ background: playerColorVar(p.color) }}
             />
             {p.name}
           </span>

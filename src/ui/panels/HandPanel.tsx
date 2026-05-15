@@ -109,15 +109,29 @@ export function HandPanel() {
         <div className="hand-section-label">Development cards</div>
         <div className="hand-cards">
           {hideAICards ? (
-            totalDevCards > 0 ? (
-              <span className="hand-facedown">
-                <span className="hand-facedown-icon" aria-hidden>🂡</span>
-                <span className="hand-facedown-count">{totalDevCards}</span>
-                <span className="hand-facedown-label">cards</span>
-              </span>
-            ) : (
-              <span className="hand-empty">No development cards</span>
-            )
+            <>
+              {totalDevCards > 0 ? (
+                <span className="hand-facedown">
+                  <span className="hand-facedown-icon" aria-hidden>🂡</span>
+                  <span className="hand-facedown-count">{totalDevCards}</span>
+                  <span className="hand-facedown-label">in hand</span>
+                </span>
+              ) : (
+                <span className="hand-empty">No development cards</span>
+              )}
+              {player.devCards.playedKnights > 0 && (
+                <span
+                  className="hand-facedown hand-facedown-played"
+                  title="Knights played this game"
+                >
+                  <span className="hand-facedown-icon" aria-hidden>⚔️</span>
+                  <span className="hand-facedown-count">
+                    {player.devCards.playedKnights}
+                  </span>
+                  <span className="hand-facedown-label">knights played</span>
+                </span>
+              )}
+            </>
           ) : (
             <>
               {Object.entries(cardCounts).map(([card, count]) => (

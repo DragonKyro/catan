@@ -2,14 +2,8 @@ import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { totalResources } from '@/game/resources';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import './OpponentPanel.css';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 export function OpponentPanel() {
   const game = useGameStore((s) => s.game!);
@@ -46,7 +40,7 @@ export function OpponentPanel() {
             <div className="opp-head">
               <span
                 className="opp-swatch"
-                style={{ background: PLAYER_COLOR_CSS[p.color] }}
+                style={{ background: playerColorVar(p.color) }}
               />
               <span className="opp-name">
                 {p.name}

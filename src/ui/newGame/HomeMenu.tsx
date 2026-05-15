@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { NewGame } from './NewGame';
 import { OnlineMenu } from './OnlineMenu';
+import { Rulebook } from '@/rulebook/Rulebook';
 import './HomeMenu.css';
 
-type Mode = 'choose' | 'local' | 'online';
+type Mode = 'choose' | 'local' | 'online' | 'rules';
 
 export function HomeMenu() {
   const [mode, setMode] = useState<Mode>('choose');
@@ -14,6 +15,9 @@ export function HomeMenu() {
   }
   if (mode === 'online') {
     return <OnlineMenu onBack={() => setMode('choose')} />;
+  }
+  if (mode === 'rules') {
+    return <Rulebook onClose={() => setMode('choose')} />;
   }
 
   return (
@@ -27,6 +31,9 @@ export function HomeMenu() {
           </Button>
           <Button size="lg" fullWidth onClick={() => setMode('online')}>
             🌐 Play online
+          </Button>
+          <Button variant="ghost" size="lg" fullWidth onClick={() => setMode('rules')}>
+            📖 Rulebook
           </Button>
         </div>
       </div>

@@ -3,14 +3,8 @@ import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
 import { Button } from '@/ui/shared/Button';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import './PendingTradeBanner.css';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 export function PendingTradeBanner() {
   const { game, dispatch, openDialog } = useGameStore();
@@ -21,11 +15,23 @@ export function PendingTradeBanner() {
   const acting = getActingPlayerId(game);
   const currentTurnId = game.playerOrder[game.currentPlayerIndex]!;
 
-  // The viewer is the human seat — solo: rotates to acting player (only
-  // shows for human turns); online: my fixed seat.
-  let viewerId: string | null;
-  if (role === 'solo') viewerId = acting;
-  else viewerId = getMyPlayerId(game);
+  // Who can press the human-facing buttons (accept/counter/reject)?
+  // - solo: when a human is acting it's that human. When an AI is acting (so
+  //   the AI is the proposer or current player), find any non-AI seat and
+  //   let them respond — otherwise the banner is button-less and the player
+  //   has no way to accept the offer.
+  // - online: always our fixed seat.
+  let viewerId: string | null = null;
+  if (role === 'solo') {
+    const actingPlayer = game.players.find((p) => p.id === acting);
+    if (actingPlayer && !actingPlayer.isAI) {
+      viewerId = acting;
+    } else {
+      viewerId = game.players.find((p) => !p.isAI)?.id ?? null;
+    }
+  } else {
+    viewerId = getMyPlayerId(game);
+  }
   const viewer = viewerId ? game.players.find((p) => p.id === viewerId) : null;
 
   const hasResources = (
@@ -61,7 +67,7 @@ export function PendingTradeBanner() {
       <div className="ptbanner-row">
         <span
           className="ptbanner-swatch"
-          style={{ background: PLAYER_COLOR_CSS[proposer.color] }}
+          style={{ background: playerColorVar(proposer.color) }}
         />
         <strong>{proposer.name}</strong>
         <span style={{ color: 'var(--text-soft)' }}>
@@ -101,7 +107,7 @@ export function PendingTradeBanner() {
               >
                 <span
                   className="ptbanner-responder-dot"
-                  style={{ background: PLAYER_COLOR_CSS[p.color] }}
+                  style={{ background: playerColorVar(p.color) }}
                 />
                 <span className="ptbanner-responder-name">{p.name}</span>
                 {rejected && <span className="ptbanner-responder-mark">✗</span>}

@@ -91,7 +91,7 @@
 
 .newgame-player {
   display: grid;
-  grid-template-columns: 24px 1fr auto;
+  grid-template-columns: 28px 1fr auto;
   align-items: center;
   gap: 10px;
 }
@@ -117,8 +117,82 @@
 }
 
 .newgame-swatch {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
   border: 1px solid #00000040;
+}
+
+.newgame-swatch-wrap {
+  position: relative;
+}
+
+.newgame-swatch-btn {
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.newgame-swatch-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.newgame-swatch-btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.newgame-colorpicker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(5, 26px);
+  gap: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.newgame-colorpicker-opt {
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid #00000040;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.newgame-colorpicker-opt:hover,
+.newgame-colorpicker-opt:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.newgame-colorpicker-opt.is-mine {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.newgame-colorpicker-opt.is-taken::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px dashed rgba(0, 0, 0, 0.55);
+  border-radius: 3px;
+}
+
+.newgame-colorpicker-check {
+  color: #1a1a1a;
+  font-weight: 700;
+  font-size: 0.9em;
+  mix-blend-mode: difference;
+  filter: invert(1);
 }

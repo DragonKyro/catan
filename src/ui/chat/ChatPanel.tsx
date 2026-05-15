@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNetworkStore } from '@/store/networkStore';
+import { playerColorVar } from '@/ui/shared/playerColors';
+import type { PlayerColor } from '@/game/types';
 import './ChatPanel.css';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 interface Props {
   compact?: boolean;
@@ -28,7 +23,7 @@ export function ChatPanel({ compact }: Props) {
 
   const colorFor = (uuid: string): string | null => {
     const seat = lobby.seats.find((s) => s.uuid === uuid);
-    return seat ? PLAYER_COLOR_CSS[seat.color] : null;
+    return seat ? playerColorVar(seat.color as PlayerColor) : null;
   };
 
   const submit = (e: React.FormEvent) => {

@@ -2,20 +2,28 @@ import { useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { useGameStore } from '@/store/gameStore';
 import type { PlayerKind } from '@/game/createGame';
+import type { PlayerColor } from '@/game/types';
+import {
+  PLAYER_COLORS,
+  PLAYER_COLOR_HEX,
+  PLAYER_COLOR_LABEL,
+} from '@/ui/shared/playerColors';
 import './NewGame.css';
 
 const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3'];
 const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai'];
-const PLAYER_COLOR_HEX = ['#d94545', '#3a6ec9', '#e08b3c', '#efefef'];
+const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white'];
 
 interface Props {
   onBack?: () => void;
 }
 
 export function NewGame({ onBack }: Props = {}) {
-  const [numPlayers, setNumPlayers] = useState(3);
+  const [numPlayers, setNumPlayers] = useState(4);
   const [names, setNames] = useState(DEFAULT_NAMES);
   const [types, setTypes] = useState<PlayerKind[]>(DEFAULT_TYPES);
+  const [colors, setColors] = useState<PlayerColor[]>(DEFAULT_COLORS);
+  const [openPicker, setOpenPicker] = useState<number | null>(null);
   const [vp, setVp] = useState(10);
   const [seed, setSeed] = useState('');
   const newGame = useGameStore((s) => s.newGame);
@@ -25,6 +33,7 @@ export function NewGame({ onBack }: Props = {}) {
     newGame({
       playerNames: names.slice(0, numPlayers),
       playerTypes: types.slice(0, numPlayers),
+      playerColors: colors.slice(0, numPlayers),
       seed: finalSeed,
       settings: { victoryPointsToWin: vp },
     });
@@ -34,6 +43,16 @@ export function NewGame({ onBack }: Props = {}) {
     const next = [...types];
     next[i] = kind;
     setTypes(next);
+  };
+
+  const setColor = (i: number, color: PlayerColor) => {
+    const next = [...colors];
+    // If another seat already had this color, swap so all seats remain unique.
+    const taker = next.findIndex((c, j) => c === color && j !== i);
+    if (taker !== -1) next[taker] = next[i]!;
+    next[i] = color;
+    setColors(next);
+    setOpenPicker(null);
   };
 
   return (
@@ -50,7 +69,7 @@ export function NewGame({ onBack }: Props = {}) {
         <label className="newgame-field">
           <span>Players</span>
           <div className="newgame-segmented">
-            {[2, 3, 4].map((n) => (
+            {[3, 4].map((n) => (
               <button
                 key={n}
                 type="button"
@@ -64,41 +83,81 @@ export function NewGame({ onBack }: Props = {}) {
         </label>
 
         <div className="newgame-players">
-          {Array.from({ length: numPlayers }).map((_, i) => (
-            <div key={i} className="newgame-player">
-              <span
-                className="newgame-swatch"
-                style={{ background: PLAYER_COLOR_HEX[i] }}
-                aria-hidden
-              />
-              <input
-                type="text"
-                value={names[i] ?? ''}
-                onChange={(e) => {
-                  const next = [...names];
-                  next[i] = e.target.value;
-                  setNames(next);
-                }}
-                maxLength={20}
-              />
-              <div className="newgame-segmented newgame-segmented-sm">
-                <button
-                  type="button"
-                  className={`newgame-seg${types[i] === 'human' ? ' active' : ''}`}
-                  onClick={() => setType(i, 'human')}
-                >
-                  Human
-                </button>
-                <button
-                  type="button"
-                  className={`newgame-seg${types[i] === 'ai' ? ' active' : ''}`}
-                  onClick={() => setType(i, 'ai')}
-                >
-                  AI
-                </button>
+          {Array.from({ length: numPlayers }).map((_, i) => {
+            const color = colors[i] ?? DEFAULT_COLORS[i]!;
+            const isPickerOpen = openPicker === i;
+            return (
+              <div key={i} className="newgame-player">
+                <div className="newgame-swatch-wrap">
+                  <button
+                    type="button"
+                    className="newgame-swatch newgame-swatch-btn"
+                    style={{ background: PLAYER_COLOR_HEX[color] }}
+                    onClick={() =>
+                      setOpenPicker(isPickerOpen ? null : i)
+                    }
+                    aria-label={`Player ${i + 1} color (${PLAYER_COLOR_LABEL[color]})`}
+                    aria-expanded={isPickerOpen}
+                    title={`${PLAYER_COLOR_LABEL[color]} — click to change`}
+                  />
+                  {isPickerOpen && (
+                    <div className="newgame-colorpicker" role="listbox">
+                      {PLAYER_COLORS.map((c) => {
+                        const takenByOther = colors
+                          .slice(0, numPlayers)
+                          .some((cc, j) => cc === c && j !== i);
+                        const isMine = color === c;
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            role="option"
+                            aria-selected={isMine}
+                            className={`newgame-colorpicker-opt${isMine ? ' is-mine' : ''}${takenByOther ? ' is-taken' : ''}`}
+                            style={{ background: PLAYER_COLOR_HEX[c] }}
+                            onClick={() => setColor(i, c)}
+                            title={
+                              takenByOther
+                                ? `${PLAYER_COLOR_LABEL[c]} — taken (will swap)`
+                                : PLAYER_COLOR_LABEL[c]
+                            }
+                          >
+                            {isMine && <span className="newgame-colorpicker-check">✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={names[i] ?? ''}
+                  onChange={(e) => {
+                    const next = [...names];
+                    next[i] = e.target.value;
+                    setNames(next);
+                  }}
+                  maxLength={20}
+                />
+                <div className="newgame-segmented newgame-segmented-sm">
+                  <button
+                    type="button"
+                    className={`newgame-seg${types[i] === 'human' ? ' active' : ''}`}
+                    onClick={() => setType(i, 'human')}
+                  >
+                    Human
+                  </button>
+                  <button
+                    type="button"
+                    className={`newgame-seg${types[i] === 'ai' ? ' active' : ''}`}
+                    onClick={() => setType(i, 'ai')}
+                  >
+                    AI
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <label className="newgame-field">

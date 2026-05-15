@@ -11,12 +11,16 @@ export function BankTradeDialog() {
   const { game, dispatch, closeDialog } = useGameStore();
   const [give, setGive] = useState<Resource>('wood');
   const [receive, setReceive] = useState<Resource>('brick');
+  const [count, setCount] = useState(1);
   if (!game) return null;
   const acting = getActingPlayerId(game);
   const player = game.players.find((p) => p.id === acting)!;
   const rate = getBankTradeRate(game, acting, give);
-  const canSubmit =
-    give !== receive && player.resources[give] >= rate && game.bank[receive] >= 1;
+  const totalGive = rate * count;
+  const maxByPlayer = Math.floor(player.resources[give] / rate);
+  const maxByBank = game.bank[receive];
+  const maxCount = Math.max(0, Math.min(maxByPlayer, maxByBank));
+  const canSubmit = give !== receive && count >= 1 && count <= maxCount;
 
   return (
     <DialogShell
@@ -28,7 +32,9 @@ export function BankTradeDialog() {
           <Button
             variant="primary"
             disabled={!canSubmit}
-            onClick={() => dispatch({ type: 'bankTrade', playerId: acting, give, receive })}
+            onClick={() =>
+              dispatch({ type: 'bankTrade', playerId: acting, give, receive, count })
+            }
           >
             Trade
           </Button>
@@ -70,13 +76,41 @@ export function BankTradeDialog() {
             ))}
           </div>
         </div>
+        <div className="bank-count">
+          <span className="bank-count-label">How many?</span>
+          <button
+            type="button"
+            className="bank-count-btn"
+            onClick={() => setCount(Math.max(1, count - 1))}
+            disabled={count <= 1}
+            aria-label="Decrease count"
+          >
+            −
+          </button>
+          <span className="bank-count-value">{count}</span>
+          <button
+            type="button"
+            className="bank-count-btn"
+            onClick={() => setCount(Math.min(maxCount || 1, count + 1))}
+            disabled={count >= maxCount}
+            aria-label="Increase count"
+          >
+            +
+          </button>
+          <span className="bank-count-summary">
+            give {totalGive} <ResourceChip resource={give} size="sm" />, get {count}{' '}
+            <ResourceChip resource={receive} size="sm" dimmed={give === receive} />
+          </span>
+        </div>
         {!canSubmit && (
           <div style={{ color: 'var(--danger)', fontSize: '0.9em' }}>
             {give === receive
               ? 'Pick a different resource to receive.'
-              : player.resources[give] < rate
-                ? `Need ${rate} ${RESOURCE_LABEL[give]} to trade.`
-                : 'Bank is out of that resource.'}
+              : maxCount === 0
+                ? player.resources[give] < rate
+                  ? `Need at least ${rate} ${RESOURCE_LABEL[give]} to trade.`
+                  : 'Bank is out of that resource.'
+                : `Choose 1–${maxCount}.`}
           </div>
         )}
       </div>

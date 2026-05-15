@@ -1,12 +1,6 @@
 import type { PlayerColor, VertexId } from '@/game/types';
 import { useGameStore } from '@/store/gameStore';
-
-const COLOR_FILL: Record<PlayerColor, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
+import { playerColorVar } from '@/ui/shared/playerColors';
 
 interface Props {
   vertex: VertexId;
@@ -21,7 +15,7 @@ export function City({ vertex, color }: Props) {
     <g transform={`translate(${p.x}, ${p.y})`} className="city">
       <path
         d="M-10,8 L-10,-4 L-3,-4 L-3,-9 L4,-9 L4,-4 L10,-4 L10,8 Z"
-        fill={COLOR_FILL[color]}
+        fill={playerColorVar(color)}
         stroke="#1a1a1a"
         strokeWidth={1.2}
         strokeLinejoin="round"

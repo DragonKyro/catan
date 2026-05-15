@@ -4,8 +4,8 @@
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
-  min-height: 160px;
-  flex: 1;
+  flex: 0 0 240px;
+  min-height: 0;
 }
 
 .log-embedded {

@@ -6,10 +6,12 @@ import { chooseAction, shouldAcceptTrade } from '@/ai';
 import { tryCounterTrade } from '@/ai/trade';
 
 const AI_ACTION_DELAY_MS = 450;
-const AI_TRADE_DELAY_MS = 600;
-// When the AI is the proposer, wait longer before auto-cancelling so the
-// human player has time to consider, reject, or counter.
-const AI_PROPOSER_WAIT_MS = 6000;
+// Stagger between AI responders evaluating a pending trade. Long enough that
+// the player can see each AI's offer/counter unfold and react themselves.
+const AI_TRADE_DELAY_MS = 2200;
+// When the AI is the proposer (or current player on a counter), wait this
+// long before auto-cancelling so the human has time to accept/counter.
+const AI_PROPOSER_WAIT_MS = 10000;
 
 // Drives any AI-controlled acting player by computing their next action
 // and dispatching it. Mounts inside GameView and renders nothing.

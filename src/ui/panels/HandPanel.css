@@ -106,3 +106,8 @@
   font-size: 0.85em;
   color: var(--text-soft);
 }
+
+.hand-facedown-played {
+  margin-left: 6px;
+  border-style: solid;
+}

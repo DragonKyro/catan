@@ -23,13 +23,21 @@ The game runs entirely in the browser as a static site. The engine is a pure
 TypeScript reducer (`applyAction(state, action) => state`) so a game is just
 a sequence of typed actions.
 
-- **Local hot-seat**: any mix of human and AI players on one device. A pass-device screen between human turns hides hidden info (resource hand, unplayed dev cards).
+- **Local hot-seat**: any mix of human and AI players on one device. A pass-device screen between human turns hides hidden info (resource hand, unplayed dev cards). In solo+AI games the AI's hand stays face-down (counts visible, types hidden).
 - **Online multiplayer**: WebRTC peer-to-peer, no backend. Create a room → share a 4-character code → friends join. Host runs any AI seats. Full state replication via action broadcast.
-- **AI**: a fast heuristic player. Plays setup, builds, robs, trades — and can both accept and propose player-to-player trades.
-- **Trading**: bank trades (4:1 / 3:1 / 2:1 by port), and open-broadcast player trades.
+- **AI**: a fast heuristic player. Plays setup, builds, robs, trades — accepts player offers liberally, makes counter-offers within an edit distance of the original ask, and uses bank/port trades aggressively to avoid hoarding.
+- **Trading**: bank trades (4:1 / 3:1 / 2:1 by port, batchable in one action), and open-broadcast player trades with counter/reject/walk-away flow.
+- **Game log**: every dice roll, build, trade, steal (without revealing the stolen resource), and dev-card play streams into a scrollable log shared by all peers (derived independently from received actions).
+- **End-of-game match graph**: line chart of VP / total resources produced / hand size over time for every player.
+- **Customization**: 10 distinct player colors selectable per seat; turn order shuffled at game start so signup order doesn't matter.
+- **Rulebook**: paginated by topic with inline diagrams, reachable from the main menu and from a `?` button on the board.
 - **Rejoin**: drop out and rejoin mid-game with the same room code — your seat is preserved via a `localStorage` UUID.
 - **Spectators**: anyone joining mid-game without a matching saved UUID becomes a read-only spectator (board + chat, no actions).
-- **Chat**: in-game text chat, plus system messages for joins/leaves/game-start.
+- **Chat**: in-game text chat (tabbed alongside the game log), plus system messages for joins/leaves/game-start.
+
+### Testing online multiplayer locally
+
+Two browser windows in the same incognito session share `localStorage`, which gives them the same identity UUID and breaks the seat assignment. Append `?fresh` to the URL of each test window to force a per-tab UUID via `sessionStorage` instead.
 
 ## Local development
 

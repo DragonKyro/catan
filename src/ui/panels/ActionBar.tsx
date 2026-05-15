@@ -33,13 +33,9 @@ export function ActionBar() {
     }
   }
 
-  // AI is acting — show a thinking indicator instead of buttons.
+  // AI is acting — render nothing (no thinking indicator).
   if (player.isAI && phase !== 'gameOver') {
-    return (
-      <div className="actionbar actionbar-thinking">
-        <span className="actionbar-spinner" aria-hidden /> {player.name} is thinking…
-      </div>
-    );
+    return null;
   }
 
   if (phase === 'rollOrPlayKnight') {
@@ -152,6 +148,6 @@ export function ActionBar() {
   }
 
   // Setup, moveRobber, discard, gameOver are handled by other UI elements
-  // (overlay, dialogs) — no action bar buttons needed.
-  return <div className="actionbar actionbar-hint">Follow the highlighted spots on the board.</div>;
+  // (board highlights, dialogs) — no action bar content needed.
+  return null;
 }

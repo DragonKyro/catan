@@ -1,12 +1,6 @@
 import type { EdgeId, PlayerColor } from '@/game/types';
 import { useGameStore } from '@/store/gameStore';
-
-const COLOR_STROKE: Record<PlayerColor, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
+import { playerColorVar } from '@/ui/shared/playerColors';
 
 interface Props {
   edge: EdgeId;
@@ -45,7 +39,7 @@ export function Road({ edge, color }: Props) {
         y1={y1}
         x2={x2}
         y2={y2}
-        stroke={COLOR_STROKE[color]}
+        stroke={playerColorVar(color)}
         strokeWidth={5}
         strokeLinecap="round"
       />

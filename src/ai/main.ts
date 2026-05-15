@@ -168,32 +168,60 @@ function countOpenSettlementSpots(state: GameState, playerId: PlayerId): number 
 function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
   const player = state.players.find((p) => p.id === playerId)!;
   const needs = reportNeeds(state, playerId);
-  if (needs.goal === 'none') return null;
+  let handSize = 0;
+  for (const r of RESOURCES) handSize += player.resources[r];
 
-  // Find a resource we need most
+  // Two triggers for trading at the bank/port:
+  // 1) We have a concrete build goal and are short on a specific resource.
+  // 2) Our hand is near the discard limit — convert excess to anything to
+  //    minimize losses if a 7 is rolled. Hoarding is always bad.
+  const wantingForGoal = needs.goal !== 'none';
+  const wantingForHandSize = handSize >= 7;
+  if (!wantingForGoal && !wantingForHandSize) return null;
+
+  // Pick the resource we'd most like to receive. Prefer concrete goal needs;
+  // otherwise pick the highest-weighted resource we currently have least of.
   let wantRes: Resource | null = null;
-  let wantAmount = 0;
+  let wantScore = -Infinity;
   for (const r of RESOURCES) {
-    if (needs.byResource[r] > wantAmount && player.resources[r] === 0) {
-      wantAmount = needs.byResource[r];
+    let score = (needs.byResource[r] ?? 0) * 1.5; // shortfall weight
+    if (wantingForHandSize && !wantingForGoal) {
+      // No goal — favor scarcity in our hand plus inherent resource value.
+      score += RESOURCE_WEIGHT[r] * (1 / (1 + player.resources[r]));
+    }
+    if (score > wantScore) {
+      wantScore = score;
       wantRes = r;
     }
   }
   if (!wantRes) return null;
 
-  // Find a resource we have enough of to trade away at our best rate
+  // Find the resource we have the most "spare" of (above the goal need) and
+  // can afford at least one bank conversion of.
+  let bestGive: Resource | null = null;
+  let bestSpare = -Infinity;
+  let bestRate = 4;
   for (const r of RESOURCES) {
     if (r === wantRes) continue;
     const rate = getBankTradeRate(state, playerId, r);
-    const have = player.resources[r];
-    const minHave = needs.byResource[r] + rate;
-    if (have < minHave) continue;
-    // Only trade if it leaves us at least as well off (sheep → wheat is fine, wheat → sheep usually not)
-    const delta = RESOURCE_WEIGHT[wantRes] - RESOURCE_WEIGHT[r] * rate;
-    // Very lenient — needs override weight bias
-    if (delta + needs.byResource[wantRes] * 0.5 >= -1) {
-      return { type: 'bankTrade', playerId, give: r, receive: wantRes };
+    const need = needs.byResource[r] ?? 0;
+    const spare = player.resources[r] - need;
+    if (spare < rate) continue;
+    // Score: more spare beats less; lower rate (ports) is a tie-breaker so a
+    // 2:1 trade is preferred over an equivalent 4:1.
+    const score = spare * 10 - rate;
+    if (score > bestSpare * 10 - bestRate) {
+      bestSpare = spare;
+      bestRate = rate;
+      bestGive = r;
     }
   }
-  return null;
+  if (!bestGive) return null;
+  // Avoid pure value-loss trades when we're not pressured: don't give an
+  // 8-pip wheat for sheep just because we technically can.
+  if (!wantingForHandSize) {
+    const delta = RESOURCE_WEIGHT[wantRes] - RESOURCE_WEIGHT[bestGive] * bestRate;
+    if (delta + (needs.byResource[wantRes] ?? 0) * 0.7 < -1.5) return null;
+  }
+  return { type: 'bankTrade', playerId, give: bestGive, receive: wantRes };
 }
