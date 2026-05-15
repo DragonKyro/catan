@@ -173,18 +173,9 @@ export function chooseMainPhaseAction(
     const winPlan = chooseWinPlan(state, playerId);
     const planNeedsSettlements = winPlan.gap.newSettlementsNeeded > 0;
 
-    // Hand pressure: if we're sitting on lots of wood/brick we MUST
-    // spend it (idle road materials = wasted economy, plus 7-out risk).
-    let handSize = 0;
-    for (const r of RESOURCES) handSize += player.resources[r];
-    const spareForRoad =
-      player.resources.wood + player.resources.brick >= 4;
-    const handPressure = handSize >= 7;
-
     // Catch-up boost: if we're significantly behind the leader, we can't
     // afford to be picky. Drop the road threshold an extra notch so we
-    // grab mid-tier expansion opportunities instead of stalling at 3 VP
-    // while others race past. Avoid this for the leader themselves.
+    // grab mid-tier expansion opportunities instead of stalling at 3 VP.
     const myVp = calculateVictoryPoints(state, playerId, false);
     let leaderVp = 0;
     for (const op of state.players) {
@@ -197,21 +188,25 @@ export function chooseMainPhaseAction(
     // Threshold tiers:
     //   - LR pursuit: very low (any extension is worth ~2 VP)
     //   - Plan wants settlements: 3.5 (weed out marginal extensions)
-    //   - Hand pressure / spare materials: 2.5 (be willing to extend even
-    //     toward mid-quality spots — better than hoarding for the 7)
     //   - Otherwise: original strict 4.5
     let threshold = ROAD_TARGET_THRESHOLD;
     if (pursuingLR) threshold = ROAD_TARGET_THRESHOLD_LR;
-    else if (handPressure || spareForRoad) threshold = 2.5;
     else if (planNeedsSettlements) threshold = 3.5;
     if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
 
     // Gate: when do we EVEN look for a road?
-    //   - LR pursuit
+    //   - LR pursuit (road has direct VP value)
     //   - No open settlement spots reachable through current network
-    //   - We have spare wood/brick OR hand pressure (don't sit on it)
-    const willingToBuild =
-      pursuingLR || openSpots === 0 || spareForRoad || handPressure;
+    //     (road is the only way to expand)
+    //
+    // Notably we do NOT build roads just because we have spare wood/brick
+    // OR because handSize is high. If a settle spot is already reachable
+    // (openSpots > 0), we should keep wood+brick for the eventual settle
+    // and trade for the missing sheep/wheat instead. Burning idle road
+    // materials on yet another road usually produced "dead-end" roads
+    // that never got followed up. Trade and bank logic below handles
+    // the 7-out case.
+    const willingToBuild = pursuingLR || openSpots === 0;
 
     if (willingToBuild) {
       let bestEid: EdgeId | null = null;
@@ -377,6 +372,17 @@ function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
   const needs = reportNeeds(state, playerId);
   let handSize = 0;
   for (const r of RESOURCES) handSize += player.resources[r];
+  // Catch-up signal: trailing players need to take worse trades to
+  // accumulate buildable resources, otherwise the value-loss check
+  // below would lock them out of bank trading entirely.
+  const myVp = calculateVictoryPoints(state, playerId, false);
+  let leaderVp = 0;
+  for (const op of state.players) {
+    if (op.id === playerId) continue;
+    const v = calculateVictoryPoints(state, op.id, false);
+    if (v > leaderVp) leaderVp = v;
+  }
+  const fallingBehind = leaderVp - myVp >= 3;
 
   // Bank-trade trigger rules. The OLD rule (handSize >= 5) caused
   // back-and-forth churn: AI with 4 brick would trade for wood, then trade
@@ -444,8 +450,10 @@ function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
   }
   if (!bestGive) return null;
   // Avoid pure value-loss trades when we're not pressured: don't give an
-  // 8-pip wheat for sheep just because we technically can.
-  if (!discardImminent) {
+  // 8-pip wheat for sheep just because we technically can. Trailing
+  // players bypass this guard — the cost of stalling at 3 VP is far
+  // worse than the cost of one bad bank conversion.
+  if (!discardImminent && !fallingBehind) {
     const delta = RESOURCE_WEIGHT[wantRes] - RESOURCE_WEIGHT[bestGive] * bestRate;
     if (delta + (needs.byResource[wantRes] ?? 0) * 0.7 < -1.5) return null;
   }

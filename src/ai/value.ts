@@ -71,6 +71,24 @@ export function pipsByResource(state: GameState, playerId: PlayerId): Record<Res
   return out;
 }
 
+// Per-resource bonus when this vertex would give us a resource we
+// currently produce ZERO of. Encodes the standard setup heuristics:
+//   - "No wheat = defeat" — without wheat you can't build settlements
+//     or cities. Massive bonus.
+//   - "No ore = 7-VP ceiling" — without ore you can't build cities
+//     (capped at 5 settles + LR = 7 VP). Big bonus.
+//   - Wood and brick are equally needed (1 each for road and settle),
+//     so missing either hurts expansion equally.
+//   - Sheep is the most replaceable (used in settles and dev cards but
+//     never load-bearing), so the smallest bonus.
+const MISSING_RESOURCE_BONUS: Record<Resource, number> = {
+  wheat: 3.5,
+  ore: 2.8,
+  wood: 1.8,
+  brick: 1.8,
+  sheep: 1.0,
+};
+
 // Score a vertex as a candidate placement spot for the given player.
 // Higher is better. Considers pips per resource, diversity, ports, and
 // avoids redundancy with the player's existing production.
@@ -86,6 +104,7 @@ export function vertexScore(
   let totalPips = 0;
   let resources = new Set<Resource>();
   let shoreline = 0;
+  let missingBonus = 0;
 
   for (const hexId of vertex.hexes) {
     const hex = state.board.hexes[hexId]!;
@@ -100,6 +119,14 @@ export function vertexScore(
     const diminish = 1 / (1 + existingPips * 0.15);
     totalPips += pips * weight * diminish;
     resources.add(hex.terrain as Resource);
+    // Plug-the-gap bonus: if we currently produce 0 of this resource AND
+    // this hex actually pays out (token isn't null / desert), reward
+    // picking it up. Scaled by the per-resource importance and tempered
+    // by pips so a 2/12 plug counts less than a 6/8 plug.
+    if (existingPips === 0 && hex.numberToken !== null) {
+      const r = hex.terrain as Resource;
+      missingBonus += MISSING_RESOURCE_BONUS[r] * (pips / 5);
+    }
   }
   // Coastal penalty (fewer adjacent hexes than 3)
   shoreline += Math.max(0, 3 - vertex.hexes.length) * 1.5;
@@ -127,7 +154,7 @@ export function vertexScore(
     else portBonus = 1.2;
   }
 
-  return totalPips + diversityBonus + portBonus - shoreline;
+  return totalPips + diversityBonus + portBonus + missingBonus - shoreline;
 }
 
 // "What does this player need most?" — returns weighted shortfall to the

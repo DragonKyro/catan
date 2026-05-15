@@ -1,7 +1,7 @@
 import type { GameState, PlayerId, HexId, Resource } from '@/game/types';
 import { probabilityDots } from './value';
 import { totalResources } from '@/game/resources';
-import { assessThreats, type PlayerThreat } from './threats';
+import { assessThreats, isRival, type PlayerThreat } from './threats';
 
 export interface RobberChoice {
   hex: HexId;
@@ -108,7 +108,10 @@ function pickStealTarget(
     }
   }
   if (candidates.length === 0) return null;
-  // Score: closeToWin >> closeToLA/LR >> largest hand.
+  // Score: closeToWin >> direct rival of ours >> closeToLA/LR >> largest hand.
+  // Direct rival = head-to-head with us in the LA or LR race. Stealing
+  // from a rival both slows them down AND blunts the resource we'd most
+  // hate them spending.
   let bestTarget = candidates[0]!;
   let bestScore = -Infinity;
   for (const pid of candidates) {
@@ -117,6 +120,7 @@ function pickStealTarget(
     const hand = totalResources(p.resources);
     let s = hand;
     if (t?.closeToWin) s += 100;
+    else if (isRival(state, playerId, pid)) s += 50;
     else if (t?.closeToLargestArmy || t?.closeToLongestRoad) s += 30;
     if (s > bestScore) {
       bestScore = s;

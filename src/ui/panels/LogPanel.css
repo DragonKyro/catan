@@ -47,6 +47,15 @@
   border-color: var(--accent);
 }
 
+/* `<input type="search">` renders its own clear-× in some browsers; we
+   already render a custom one. Suppress the native so only one × shows. */
+.log-search-input::-webkit-search-cancel-button,
+.log-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
 .log-search-clear {
   position: absolute;
   right: 12px;

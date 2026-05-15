@@ -23,23 +23,29 @@ export function GameOverDialog() {
   const winner = game.players.find((p) => p.id === game.winner)!;
   const canReplay = initialState !== null && actions.length > 0;
 
-  // When minimized, render only a small floating "results" pill at the
-  // bottom of the screen so the player can keep inspecting the final
-  // board without the modal in the way.
+  // When minimized, render a small floating "results" pill PLUS a
+  // standalone "New game" button so the player can either keep inspecting
+  // the final board, restore the full summary, or jump straight to a new
+  // match without first re-opening the modal.
   if (minimized) {
     return (
-      <button
-        type="button"
-        className="gameover-restore"
-        onClick={() => setMinimized(false)}
-        aria-label="Show game results"
-      >
-        🏆{' '}
-        <strong style={{ color: playerColorVar(winner.color) }}>
-          {winner.name}
-        </strong>{' '}
-        wins · show results
-      </button>
+      <div className="gameover-restore-bar">
+        <button
+          type="button"
+          className="gameover-restore"
+          onClick={() => setMinimized(false)}
+          aria-label="Show game results"
+        >
+          🏆{' '}
+          <strong style={{ color: playerColorVar(winner.color) }}>
+            {winner.name}
+          </strong>{' '}
+          wins · show results
+        </button>
+        <Button variant="primary" onClick={resetGame}>
+          New game
+        </Button>
+      </div>
     );
   }
 

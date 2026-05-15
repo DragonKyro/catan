@@ -1,9 +1,15 @@
-.gameover-restore {
+.gameover-restore-bar {
   position: fixed;
   bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 199;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gameover-restore {
   background: var(--panel);
   border: 1px solid var(--accent);
   color: var(--text);

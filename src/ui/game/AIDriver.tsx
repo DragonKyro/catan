@@ -3,7 +3,7 @@ import { useGameStore } from '@/store/gameStore';
 import { useNetworkStore } from '@/store/networkStore';
 import { getActingPlayerId } from '@/game/helpers';
 import { chooseAction, shouldAcceptTrade } from '@/ai';
-import { tryCounterTrade } from '@/ai/trade';
+import { tryCounterTrade, tryExtractCounter } from '@/ai/trade';
 
 const AI_ACTION_DELAY_MS = 450;
 // Initial pause before any AI evaluates a pending trade — gives the human
@@ -135,6 +135,16 @@ export function AIDriver() {
           latest.playerOrder[latest.currentPlayerIndex] ?? null;
         const liveIsCounter = latest.pendingTrade.proposerId !== liveCurrent;
         if (liveIsCounter && p.id !== liveCurrent) return;
+        // Before plain-accepting, see if we can squeeze one more card
+        // out of a desperate proposer. Only on initial trades (not on
+        // counters, to avoid counter-chain loops).
+        if (!liveIsCounter) {
+          const extract = tryExtractCounter(latest, p.id);
+          if (extract) {
+            dispatch(extract);
+            return;
+          }
+        }
         if (shouldAcceptTrade(latest, p.id)) {
           dispatch({ type: 'acceptTrade', playerId: p.id });
           return;
