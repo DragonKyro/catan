@@ -12,6 +12,10 @@ export function PlacementOverlay() {
   const { game, uiMode, dispatch } = useGameStore();
   if (!game) return null;
   const acting = getActingPlayerId(game);
+  // AI placements don't need ghost markers — the AI makes its own decision
+  // and the human shouldn't see "click here" hints they can't use.
+  const actingPlayer = game.players.find((p) => p.id === acting);
+  if (actingPlayer?.isAI) return null;
 
   if (uiMode.kind === 'buildSettlement' || uiMode.kind === 'placeSetupSettlement') {
     const isSetup = uiMode.kind === 'placeSetupSettlement';

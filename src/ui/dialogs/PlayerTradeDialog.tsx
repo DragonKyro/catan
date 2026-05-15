@@ -117,7 +117,7 @@ export function PlayerTradeDialog() {
                 −
               </button>
               <div className="ptrade-mid">
-                <ResourceChip resource={r} size="md" />
+                <ResourceChip resource={r} size="sm" />
                 <span className="ptrade-name">{RESOURCE_LABEL[r]}</span>
                 <span className="ptrade-have">have {player.resources[r]}</span>
               </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useNetworkStore } from '@/store/networkStore';
+import { DialogShell } from '@/ui/shared/DialogShell';
 import { Board } from './Board';
 import { AIDriver } from './AIDriver';
 import { ConnectionStatusOverlay } from './ConnectionStatusOverlay';
@@ -30,11 +31,19 @@ export function GameView() {
   const error = useGameStore((s) => s.error);
   const dismissError = useGameStore((s) => s.dismissError);
   const pendingRobberHex = useGameStore((s) => s.pendingRobberHex);
+  const resetGame = useGameStore((s) => s.resetGame);
   const role = useNetworkStore((s) => s.role);
+  const leaveRoom = useNetworkStore((s) => s.leaveRoom);
   const isOnline = role !== 'solo';
   const [showRules, setShowRules] = useState(false);
+  const [showQuit, setShowQuit] = useState(false);
 
   const isGameOver = game.phase === 'gameOver';
+
+  const quitToMenu = () => {
+    if (isOnline) leaveRoom();
+    resetGame();
+  };
   // Dialogs that render as overlays above the bottom strip. Kept docked but
   // anchored to the top of the board so they don't fight the hand panel.
   const tradeDialog =
@@ -66,17 +75,32 @@ export function GameView() {
         >
           ?
         </button>
-        {/* Trade UI overlays the top-center of the board so it doesn't fight
-            the hand strip at the bottom or the side panel on the right. */}
-        {(game.pendingTrade || tradeDialog || bankTradeDialog) && (
-          <div className="gameview-trade-overlay">
-            {game.pendingTrade && <PendingTradeBanner />}
+        <button
+          type="button"
+          className="gameview-quit-btn"
+          onClick={() => setShowQuit(true)}
+          aria-label="Quit to main menu"
+          title="Quit to main menu"
+        >
+          ⌂
+        </button>
+        {/* Live trade banner — tucked along the top-right of the board,
+            below the dice display, so it doesn't cover the map center. */}
+        {game.pendingTrade && (
+          <div className="gameview-banner-overlay">
+            <PendingTradeBanner />
+          </div>
+        )}
+        {/* Trade-building dialogs (propose / counter / bank) anchor to the
+            left side of the board — the board middle stays viewable. */}
+        {(tradeDialog || bankTradeDialog) && (
+          <div className="gameview-side-dialog-overlay">
             {tradeDialog}
             {bankTradeDialog}
           </div>
         )}
-        {/* Remaining dialogs dock at the top of the board too — the bottom
-            strip below holds the hand and actions. */}
+        {/* Other prompts (discard, robber, dev-card pick) dock at the
+            bottom-center of the board, above the hand strip. */}
         {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
@@ -107,6 +131,27 @@ export function GameView() {
       {isGameOver && <GameOverDialog />}
       {handoffPending && !isGameOver && <PassDeviceScreen />}
       {isOnline && <ConnectionStatusOverlay />}
+
+      {showQuit && (
+        <DialogShell
+          title="Quit to main menu?"
+          variant="modal"
+          onClose={() => setShowQuit(false)}
+          footer={
+            <>
+              <Button onClick={() => setShowQuit(false)}>Keep playing</Button>
+              <Button variant="danger" onClick={quitToMenu}>
+                Quit
+              </Button>
+            </>
+          }
+        >
+          <p style={{ margin: 0, color: 'var(--text-soft)' }}>
+            This game will end and you'll return to the main menu.
+            {isOnline ? ' You will leave the room.' : ''} Progress is not saved.
+          </p>
+        </DialogShell>
+      )}
 
       {showRules && (
         <div

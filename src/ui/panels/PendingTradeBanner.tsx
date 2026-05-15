@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { RESOURCES } from '@/game/types';
@@ -9,6 +10,38 @@ import './PendingTradeBanner.css';
 export function PendingTradeBanner() {
   const { game, dispatch, openDialog } = useGameStore();
   const role = useNetworkStore((s) => s.role);
+  // Auto-reject for any human seat that can't fulfill the trade's ask.
+  // Cuts down on the AI's wait time on a trade no one can accept anyway,
+  // and removes the "disabled Accept button" confusion.
+  //
+  // Runs as a useLayoutEffect so the rejection is dispatched synchronously
+  // before AIDriver's evaluator useEffect inspects state. That way the
+  // AI's "is any human still a possible responder?" check sees the
+  // post-rejection state and can skip the fairness wait.
+  useLayoutEffect(() => {
+    if (!game?.pendingTrade) return;
+    const t = game.pendingTrade;
+    for (const p of game.players) {
+      if (p.id === t.proposerId) continue;
+      if (p.isAI) continue; // AIs handle themselves
+      if (t.rejectedBy.includes(p.id)) continue;
+      let canAccept = true;
+      for (const r of RESOURCES) {
+        if ((t.receive[r] ?? 0) > p.resources[r]) {
+          canAccept = false;
+          break;
+        }
+      }
+      if (!canAccept) {
+        dispatch({ type: 'rejectTrade', playerId: p.id });
+      }
+    }
+  }, [
+    game?.pendingTrade,
+    game?.players,
+    dispatch,
+  ]);
+
   if (!game?.pendingTrade) return null;
   const trade = game.pendingTrade;
   const proposer = game.players.find((p) => p.id === trade.proposerId)!;

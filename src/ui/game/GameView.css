@@ -56,23 +56,66 @@
   border-color: var(--accent);
 }
 
-/* Trade overlay (PendingTradeBanner + PlayerTradeDialog/BankTradeDialog) is
-   pinned to the top-center of the board so it's never in the right-side
-   pane's way and never collides with the hand strip at the bottom. */
-.gameview-trade-overlay {
+.gameview-quit-btn {
   position: absolute;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 52px;
+  z-index: 5;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1em;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.gameview-quit-btn:hover {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+/* Live pending-trade banner — anchored to the top-right of the board,
+   tucked below the dice display so it sits at the right edge against the
+   side panel without covering the map. */
+.gameview-banner-overlay {
+  position: absolute;
+  top: 72px;
+  right: 12px;
   z-index: 6;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: min(560px, calc(100% - 120px));
+  max-width: 320px;
   pointer-events: none;
 }
 
-.gameview-trade-overlay > * {
+.gameview-banner-overlay > * {
+  pointer-events: auto;
+}
+
+/* Trade-building dialogs (propose / counter / bank trade) anchor to the
+   left side of the board, vertically centered. The board middle stays
+   visible so the player can plan moves while composing an offer. */
+.gameview-side-dialog-overlay {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  pointer-events: none;
+  max-height: calc(100% - 24px);
+}
+
+.gameview-side-dialog-overlay > * {
   pointer-events: auto;
 }
 
@@ -95,7 +138,8 @@
 
 /* Suppress the .dialog-dock positioning when a dialog is rendered inside an
    overlay container — the container does the positioning. */
-.gameview-trade-overlay .dialog-dock,
+.gameview-banner-overlay .dialog-dock,
+.gameview-side-dialog-overlay .dialog-dock,
 .gameview-dialog-overlay .dialog-dock {
   position: static;
   transform: none;
@@ -114,7 +158,10 @@
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
   padding: 10px 12px;
-  min-height: 0;
+  /* Locked height so dice rolls, builds, and AI turns don't reflow the
+     board above. */
+  height: 132px;
+  min-height: 132px;
 }
 
 .gameview-side {

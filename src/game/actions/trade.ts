@@ -161,12 +161,18 @@ export function handleRejectTrade(
     throw new Error("You can't reject your own trade");
   }
   if (state.pendingTrade.rejectedBy.includes(action.playerId)) return state;
+  const newRejected = [...state.pendingTrade.rejectedBy, action.playerId];
+  // Auto-cancel once every non-proposer has rejected — no point keeping the
+  // pending trade alive when nobody can/will accept.
+  const others = state.players.filter(
+    (p) => p.id !== state.pendingTrade!.proposerId,
+  );
+  if (others.every((p) => newRejected.includes(p.id))) {
+    return { ...state, pendingTrade: undefined };
+  }
   return {
     ...state,
-    pendingTrade: {
-      ...state.pendingTrade,
-      rejectedBy: [...state.pendingTrade.rejectedBy, action.playerId],
-    },
+    pendingTrade: { ...state.pendingTrade, rejectedBy: newRejected },
   };
 }
 

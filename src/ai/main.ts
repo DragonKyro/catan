@@ -78,9 +78,15 @@ export function chooseMainPhaseAction(
     canAfford(player.resources, COSTS.devCard) &&
     state.devCardDeck.length > 0
   ) {
-    // Don't buy if we're close to a city (save those ore/wheat)
     const needs = reportNeeds(state, playerId);
-    if (needs.goal !== 'city') {
+    let handSize = 0;
+    for (const r of RESOURCES) handSize += player.resources[r];
+    // Only skip when we're truly conserving for a city and our hand is
+    // small enough that the next 7 wouldn't punish us anyway. Otherwise
+    // dev cards turn idle resources into hidden VP and knight pressure —
+    // strictly better than hoarding.
+    const saveForCity = needs.goal === 'city' && handSize <= 5;
+    if (!saveForCity) {
       return { type: 'buyDevCard', playerId };
     }
   }
@@ -173,10 +179,10 @@ function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
 
   // Two triggers for trading at the bank/port:
   // 1) We have a concrete build goal and are short on a specific resource.
-  // 2) Our hand is near the discard limit — convert excess to anything to
-  //    minimize losses if a 7 is rolled. Hoarding is always bad.
+  // 2) Our hand is getting big — convert excess to anything more useful
+  //    before a 7 rolls and we lose half. Hoarding is always bad.
   const wantingForGoal = needs.goal !== 'none';
-  const wantingForHandSize = handSize >= 7;
+  const wantingForHandSize = handSize >= 5;
   if (!wantingForGoal && !wantingForHandSize) return null;
 
   // Pick the resource we'd most like to receive. Prefer concrete goal needs;

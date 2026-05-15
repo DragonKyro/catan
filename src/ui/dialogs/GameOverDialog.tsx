@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useLogStore } from '@/store/logStore';
 import { calculateVictoryPoints } from '@/game/scoring/points';
@@ -5,13 +6,35 @@ import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { MatchGraph } from './MatchGraph';
+import './GameOverDialog.css';
 
 export function GameOverDialog() {
   const { game, resetGame } = useGameStore();
   const timeline = useLogStore((s) => s.timeline);
   const stats = useLogStore((s) => s.stats);
+  const [minimized, setMinimized] = useState(false);
   if (!game || !game.winner) return null;
   const winner = game.players.find((p) => p.id === game.winner)!;
+
+  // When minimized, render only a small floating "results" pill at the
+  // bottom of the screen so the player can keep inspecting the final
+  // board without the modal in the way.
+  if (minimized) {
+    return (
+      <button
+        type="button"
+        className="gameover-restore"
+        onClick={() => setMinimized(false)}
+        aria-label="Show game results"
+      >
+        🏆{' '}
+        <strong style={{ color: playerColorVar(winner.color) }}>
+          {winner.name}
+        </strong>{' '}
+        wins · show results
+      </button>
+    );
+  }
 
   // Rank players by VP (including hidden, since game is over).
   const ranked = [...game.players]
@@ -23,7 +46,14 @@ export function GameOverDialog() {
       title="🏆 Game over"
       blocking
       variant="modal"
-      footer={<Button variant="primary" onClick={resetGame}>New game</Button>}
+      footer={
+        <>
+          <Button onClick={() => setMinimized(true)}>Inspect board</Button>
+          <Button variant="primary" onClick={resetGame}>
+            New game
+          </Button>
+        </>
+      }
     >
       <p style={{ marginTop: 0, fontSize: '1.05em' }}>
         <strong style={{ color: playerColorVar(winner.color) }}>{winner.name}</strong> wins!

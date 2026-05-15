@@ -43,21 +43,29 @@ export function ActionBar() {
       !game.hasPlayedDevCardThisTurn && player.devCards.unplayed.includes('knight');
     return (
       <div className="actionbar">
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={() => {
-            const d1 = 1 + Math.floor(Math.random() * 6);
-            const d2 = 1 + Math.floor(Math.random() * 6);
-            dispatch({ type: 'rollDice', playerId: acting, dice: [d1, d2] });
-          }}
-        >
-          🎲 Roll dice
-        </Button>
-        {hasKnight && (
-          <Button onClick={() => dispatch({ type: 'playKnight', playerId: acting })}>
-            ⚔️ Play Knight first
+        <div className="actionbar-slot actionbar-slot-wide">
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            onClick={() => {
+              const d1 = 1 + Math.floor(Math.random() * 6);
+              const d2 = 1 + Math.floor(Math.random() * 6);
+              dispatch({ type: 'rollDice', playerId: acting, dice: [d1, d2] });
+            }}
+          >
+            🎲 Roll dice
           </Button>
+        </div>
+        {hasKnight && (
+          <div className="actionbar-slot actionbar-slot-wide">
+            <Button
+              fullWidth
+              onClick={() => dispatch({ type: 'playKnight', playerId: acting })}
+            >
+              ⚔️ Play Knight
+            </Button>
+          </div>
         )}
       </div>
     );
@@ -66,66 +74,74 @@ export function ActionBar() {
   if (phase === 'main') {
     const inMode = uiMode.kind !== 'idle';
     const cancel = () => setMode({ kind: 'idle' });
+    if (inMode) {
+      return (
+        <div className="actionbar">
+          <div className="actionbar-slot actionbar-slot-wide">
+            <Button fullWidth onClick={cancel}>
+              Cancel build
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="actionbar">
-        {inMode ? (
-          <Button onClick={cancel}>Cancel build</Button>
-        ) : (
-          <>
-            <Button
-              disabled={!canAfford(player.resources, COSTS.road)}
-              onClick={() => setMode({ kind: 'buildRoad' })}
-              title="Build Road (1🌲 1🧱)"
-            >
-              🛣 Road
-            </Button>
-            <Button
-              disabled={
-                !canAfford(player.resources, COSTS.settlement) ||
-                player.settlements.length >= 5
-              }
-              onClick={() => setMode({ kind: 'buildSettlement' })}
-              title="Build Settlement (1🌲 1🧱 1🐑 1🌾)"
-            >
-              🏠 Settlement
-            </Button>
-            <Button
-              disabled={
-                !canAfford(player.resources, COSTS.city) ||
-                player.cities.length >= 4 ||
-                player.settlements.length === 0
-              }
-              onClick={() => setMode({ kind: 'buildCity' })}
-              title="Build City (2🌾 3🪨)"
-            >
-              🏛 City
-            </Button>
-            <Button
-              disabled={
-                !canAfford(player.resources, COSTS.devCard) ||
-                game.devCardDeck.length === 0
-              }
-              onClick={() => dispatch({ type: 'buyDevCard', playerId: acting })}
-              title="Buy Dev Card (1🐑 1🌾 1🪨)"
-            >
-              🃏 Dev Card
-            </Button>
-            <Button onClick={() => openDialog('bankTrade')}>🔁 Bank</Button>
-            <Button
-              onClick={() => openDialog('playerTrade')}
-              disabled={!!game.pendingTrade}
-              title="Propose a trade to all opponents"
-            >
-              🤝 Players
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => dispatch({ type: 'endTurn', playerId: acting })}
-            >
-              End turn ▸
-            </Button>
-          </>
-        )}
+        <Button
+          disabled={!canAfford(player.resources, COSTS.road)}
+          onClick={() => setMode({ kind: 'buildRoad' })}
+          title="Build Road (1🌲 1🧱)"
+        >
+          🛣 Road
+        </Button>
+        <Button
+          disabled={
+            !canAfford(player.resources, COSTS.settlement) ||
+            player.settlements.length >= 5
+          }
+          onClick={() => setMode({ kind: 'buildSettlement' })}
+          title="Build Settlement (1🌲 1🧱 1🐑 1🌾)"
+        >
+          🏠 Settlement
+        </Button>
+        <Button
+          disabled={
+            !canAfford(player.resources, COSTS.city) ||
+            player.cities.length >= 4 ||
+            player.settlements.length === 0
+          }
+          onClick={() => setMode({ kind: 'buildCity' })}
+          title="Build City (2🌾 3🪨)"
+        >
+          🏛 City
+        </Button>
+        <Button
+          disabled={
+            !canAfford(player.resources, COSTS.devCard) ||
+            game.devCardDeck.length === 0
+          }
+          onClick={() => dispatch({ type: 'buyDevCard', playerId: acting })}
+          title="Buy Dev Card (1🐑 1🌾 1🪨)"
+        >
+          🃏 Dev Card
+        </Button>
+        <Button onClick={() => openDialog('bankTrade')}>🔁 Bank</Button>
+        <Button
+          onClick={() => openDialog('playerTrade')}
+          disabled={!!game.pendingTrade}
+          title="Propose a trade to all opponents"
+        >
+          🤝 Players
+        </Button>
+        <div className="actionbar-slot actionbar-slot-end">
+          <Button
+            variant="primary"
+            fullWidth
+            onClick={() => dispatch({ type: 'endTurn', playerId: acting })}
+          >
+            End turn ▸
+          </Button>
+        </div>
       </div>
     );
   }

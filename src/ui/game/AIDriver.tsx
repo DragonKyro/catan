@@ -6,9 +6,14 @@ import { chooseAction, shouldAcceptTrade } from '@/ai';
 import { tryCounterTrade } from '@/ai/trade';
 
 const AI_ACTION_DELAY_MS = 450;
-// Stagger between AI responders evaluating a pending trade. Long enough that
-// the player can see each AI's offer/counter unfold and react themselves.
-const AI_TRADE_DELAY_MS = 2200;
+// Initial pause before any AI evaluates a pending trade — gives the human
+// time to see the offer.
+const AI_TRADE_INITIAL_WAIT_MS = 1800;
+// After the initial wait, each AI evaluator fires within this jitter window
+// so they decide roughly in parallel (not sequentially). Randomizing the
+// individual offsets prevents the same AI always winning a race for the
+// same trade.
+const AI_TRADE_JITTER_MS = 700;
 // When the AI is the proposer (or current player on a counter), wait this
 // long before auto-cancelling so the human has time to accept/counter.
 const AI_PROPOSER_WAIT_MS = 10000;
@@ -62,52 +67,83 @@ export function AIDriver() {
     return () => clearTimeout(t);
   }, [game, handoffPending, dialog, pendingRobberHex, dispatch, canDriveAI]);
 
-  // Trade-evaluator driver: when a trade is open, each AI opponent fires
-  // after a short stagger and decides accept / counter / reject. First
-  // accept or counter wins (the other AIs' timers will see a different
-  // pendingTrade at fire time and bail).
+  // Trade-evaluator driver: when a NEW trade (or counter) appears, schedule
+  // every eligible AI responder ONCE — all firing roughly in parallel after
+  // a fairness wait so the human can react. The first accept or counter
+  // wins; later timers see a different pendingTrade and bail.
+  //
+  // The effect is keyed on a stable trade identity (proposer + give +
+  // receive) so a rejection mutating `rejectedBy` doesn't tear down and
+  // recreate the timers — that was making rejections look sequential, each
+  // paying the initial-wait again.
+  const tradeKey = game?.pendingTrade
+    ? `${game.pendingTrade.proposerId}|${JSON.stringify(game.pendingTrade.give)}|${JSON.stringify(game.pendingTrade.receive)}`
+    : null;
   useEffect(() => {
     if (!canDriveAI) return;
-    if (!game?.pendingTrade) return;
-    const trade = game.pendingTrade;
+    if (!tradeKey) return;
+    const initial = useGameStore.getState().game;
+    if (!initial?.pendingTrade) return;
+    const trade = initial.pendingTrade;
     const currentTurnPlayerId =
-      game.playerOrder[game.currentPlayerIndex] ?? null;
-    // True when the current pendingTrade was placed by someone other than
-    // the active turn player — i.e., it's already a counter. We don't
-    // re-counter to avoid infinite ping-pong.
+      initial.playerOrder[initial.currentPlayerIndex] ?? null;
+    // True when the pendingTrade's proposer isn't the active turn player —
+    // i.e., it's a counter. In that state only the original turn player is
+    // involved in the negotiation; other AIs sit out.
     const isCounter = trade.proposerId !== currentTurnPlayerId;
-    const aiOpponents = game.players.filter(
-      (p) => p.id !== trade.proposerId && p.isAI && !trade.rejectedBy.includes(p.id),
-    );
-    if (aiOpponents.length === 0) return;
+    const eligibleAIs = initial.players.filter((p) => {
+      if (!p.isAI) return false;
+      if (p.id === trade.proposerId) return false;
+      if (trade.rejectedBy.includes(p.id)) return false;
+      if (isCounter && p.id !== currentTurnPlayerId) return false;
+      return true;
+    });
+    if (eligibleAIs.length === 0) return;
+    // Is any human still a possible responder? If so we wait the full
+    // fairness pause so they can see the offer. Otherwise (e.g., the only
+    // human already auto-rejected for lack of resources) the AIs can fire
+    // immediately — no one's waiting on them.
+    const humanCanRespond = initial.players.some((p) => {
+      if (p.isAI) return false;
+      if (p.id === trade.proposerId) return false;
+      if (trade.rejectedBy.includes(p.id)) return false;
+      if (isCounter && p.id !== currentTurnPlayerId) return false;
+      return true;
+    });
+    const baseWait = humanCanRespond ? AI_TRADE_INITIAL_WAIT_MS : 0;
+    // Shuffle so contested trades aren't always won by the lowest-seat AI.
+    const shuffled = [...eligibleAIs].sort(() => Math.random() - 0.5);
     const timeouts: number[] = [];
-    for (let i = 0; i < aiOpponents.length; i++) {
-      const p = aiOpponents[i]!;
-      const delay = AI_TRADE_DELAY_MS * (i + 1);
+    for (const p of shuffled) {
+      const delay = baseWait + Math.random() * AI_TRADE_JITTER_MS;
       const id = window.setTimeout(() => {
         const latest = useGameStore.getState().game;
         if (!latest?.pendingTrade) return;
         if (latest.pendingTrade.proposerId === p.id) return;
         if (latest.pendingTrade.rejectedBy.includes(p.id)) return;
+        const liveCurrent =
+          latest.playerOrder[latest.currentPlayerIndex] ?? null;
+        const liveIsCounter = latest.pendingTrade.proposerId !== liveCurrent;
+        if (liveIsCounter && p.id !== liveCurrent) return;
         if (shouldAcceptTrade(latest, p.id)) {
           dispatch({ type: 'acceptTrade', playerId: p.id });
           return;
         }
-        // Try a counter — but only if this isn't already a counter.
-        if (!isCounter) {
-          const counter = tryCounterTrade(latest, p.id);
-          if (counter) {
-            dispatch(counter);
-            return;
-          }
+        if (liveIsCounter) {
+          dispatch({ type: 'cancelTrade', playerId: p.id });
+          return;
         }
-        // Otherwise, register a rejection so the proposer sees it.
+        const counter = tryCounterTrade(latest, p.id);
+        if (counter) {
+          dispatch(counter);
+          return;
+        }
         dispatch({ type: 'rejectTrade', playerId: p.id });
       }, delay);
       timeouts.push(id);
     }
     return () => timeouts.forEach((t) => window.clearTimeout(t));
-  }, [game?.pendingTrade, dispatch, canDriveAI, game?.players, game?.playerOrder, game?.currentPlayerIndex]);
+  }, [tradeKey, dispatch, canDriveAI]);
 
   return null;
 }

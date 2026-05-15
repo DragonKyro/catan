@@ -21,7 +21,35 @@ export function Board() {
         viewBox={`${vb.x} ${vb.y} ${vb.width} ${vb.height}`}
         preserveAspectRatio="xMidYMid meet"
       >
-        <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill="var(--ocean)" />
+        <defs>
+          {/* Subtle wave pattern for the ocean. Two-row offset crests at
+              low opacity so the board doesn't compete with the hexes. */}
+          <pattern
+            id="ocean-waves"
+            x={0}
+            y={0}
+            width={28}
+            height={20}
+            patternUnits="userSpaceOnUse"
+          >
+            <rect width={28} height={20} fill="var(--ocean)" />
+            <path
+              d="M0,8 q3,-3 6,0 t6,0 t6,0 t6,0"
+              fill="none"
+              stroke="rgba(255,255,255,0.07)"
+              strokeWidth={1}
+              strokeLinecap="round"
+            />
+            <path
+              d="M-14,18 q3,-3 6,0 t6,0 t6,0 t6,0 t6,0 t6,0"
+              fill="none"
+              stroke="rgba(255,255,255,0.05)"
+              strokeWidth={1}
+              strokeLinecap="round"
+            />
+          </pattern>
+        </defs>
+        <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill="url(#ocean-waves)" />
 
         <g className="hexes">
           {board.hexIds.map((hid) => (

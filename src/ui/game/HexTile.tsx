@@ -1,6 +1,7 @@
 import type { Hex } from '@/game/types';
 import { hexPolygonPoints, probabilityDots } from './boardLayout';
 import { useGameStore } from '@/store/gameStore';
+import { HexTexture } from './HexTexture';
 
 interface Props {
   hex: Hex;
@@ -35,6 +36,7 @@ export function HexTile({ hex, isRobberOnHex, clickable, onClick }: Props) {
         stroke="#1a1a1a40"
         strokeWidth={1.5}
       />
+      <HexTexture hex={hex} />
       {hex.numberToken !== null && !isRobberOnHex && (
         <g transform={`translate(${hex.center.x}, ${hex.center.y})`}>
           <circle r={17} fill="var(--token-fill)" stroke="var(--token-edge)" strokeWidth={1.5} />

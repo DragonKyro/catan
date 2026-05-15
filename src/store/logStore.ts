@@ -324,7 +324,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         // Cancellations aren't logged — only completed trades.
         break;
       case 'endTurn':
-        append.push({ id: stamp(), kind: 'endTurn', player: action.playerId });
+        // Turn boundaries aren't logged — too noisy.
         break;
       case 'rejectTrade':
         // Rejections aren't logged.

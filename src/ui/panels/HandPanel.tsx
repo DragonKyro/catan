@@ -131,8 +131,8 @@ export function HandPanel() {
             <DevCardChip
               key={`bt-${i}`}
               card={c}
-              faceDown
-              title="Bought this turn — playable next turn"
+              disabled
+              title={`Just bought — playable next turn`}
             />
           ))}
           {player.devCards.victoryPoints > 0 && (
