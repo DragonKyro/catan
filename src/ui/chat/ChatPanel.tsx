@@ -14,12 +14,24 @@ export function ChatPanel({ compact }: Props) {
   const lobby = useNetworkStore((s) => s.lobby);
   const [text, setText] = useState('');
   const logRef = useRef<HTMLDivElement>(null);
+  // Auto-scroll only when the user is already pinned to the bottom; if
+  // they scrolled up to re-read, new chat won't yank them down.
+  const wasAtBottomRef = useRef(true);
 
-  // Auto-scroll on new message
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    if (wasAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [chat.length]);
+
+  const onScroll = () => {
+    const el = logRef.current;
+    if (!el) return;
+    wasAtBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 6;
+  };
 
   const colorFor = (uuid: string): string | null => {
     const seat = lobby.seats.find((s) => s.uuid === uuid);
@@ -36,7 +48,7 @@ export function ChatPanel({ compact }: Props) {
 
   return (
     <section className={`chat ${compact ? 'chat-compact' : ''}`}>
-      <div className="chat-log" ref={logRef}>
+      <div className="chat-log" ref={logRef} onScroll={onScroll}>
         {chat.length === 0 && (
           <div className="chat-empty">No messages yet — say hi!</div>
         )}

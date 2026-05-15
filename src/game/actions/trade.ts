@@ -6,6 +6,7 @@ import type {
   CancelTradeAction,
   CounterTradeAction,
   RejectTradeAction,
+  PlayerId,
   Resource,
   ResourceBank,
 } from '../types';
@@ -54,7 +55,31 @@ export function handleBankTrade(state: GameState, action: BankTradeAction): Game
       [action.give]: totalGive,
     }),
   };
+  next = recordTradeResources(next, action.playerId, [action.give], [action.receive]);
   return next;
+}
+
+// Add `given` and `received` resources to the actor's per-turn trade log,
+// deduping so we keep these as set-like arrays. The AI uses this to skip
+// reverse trades (don't give what you just received).
+function recordTradeResources(
+  state: GameState,
+  playerId: PlayerId,
+  given: Resource[],
+  received: Resource[],
+): GameState {
+  const log = { ...(state.tradeResourcesThisTurn ?? {}) };
+  const existing = log[playerId] ?? { given: [], received: [] };
+  const mergedGiven = [...existing.given];
+  for (const r of given) {
+    if (!mergedGiven.includes(r)) mergedGiven.push(r);
+  }
+  const mergedReceived = [...existing.received];
+  for (const r of received) {
+    if (!mergedReceived.includes(r)) mergedReceived.push(r);
+  }
+  log[playerId] = { given: mergedGiven, received: mergedReceived };
+  return { ...state, tradeResourcesThisTurn: log };
 }
 
 // === Player-to-player trade ===
@@ -134,6 +159,17 @@ export function handleAcceptTrade(
       state.pendingTrade!.give,
     ),
   }));
+  // Record resources moved for both sides so the AI can detect (and avoid)
+  // reverse / roundabout trades on its next move.
+  const trade = state.pendingTrade;
+  const proposerGave = (Object.keys(trade.give) as Resource[]).filter(
+    (r) => (trade.give[r] ?? 0) > 0,
+  );
+  const proposerGot = (Object.keys(trade.receive) as Resource[]).filter(
+    (r) => (trade.receive[r] ?? 0) > 0,
+  );
+  next = recordTradeResources(next, proposer.id, proposerGave, proposerGot);
+  next = recordTradeResources(next, acceptor.id, proposerGot, proposerGave);
   return { ...next, pendingTrade: undefined };
 }
 

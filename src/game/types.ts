@@ -222,6 +222,16 @@ export interface GameState {
   // `sbpQueue`. Win-checks key off this so an SBP-builder can't win
   // mid-build (official rule: you can only win on your own turn).
   turnHolderIndex?: number;
+  // Per-player log of which resources they've given/received via TRADES
+  // (bank trades + accepted player trades) during the current real turn.
+  // Used by the AI to skip reverse / roundabout trade proposals — if you
+  // just RECEIVED ore, you shouldn't immediately propose to GIVE ore. Cleared
+  // when the turn-holder advances; entries are arrays-as-sets for wire
+  // serialization (Sets don't survive JSON round-trips).
+  tradeResourcesThisTurn?: Record<
+    PlayerId,
+    { given: Resource[]; received: Resource[] }
+  >;
   // Seafarers extension. All optional, only populated when expansion is active.
   pendingPirateMove?: RobberMoveContext;
   goldChoiceState?: { pending: Record<PlayerId, number> };

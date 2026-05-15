@@ -16,11 +16,26 @@ export function LogPanel({ embedded }: Props) {
   const entries = useLogStore((s) => s.entries);
   const game = useGameStore((s) => s.game);
   const logRef = useRef<HTMLDivElement>(null);
+  // Auto-scroll only when the user is already pinned to the bottom.
+  // If they scrolled up to read history, new entries won't yank them down.
+  const wasAtBottomRef = useRef(true);
 
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    if (wasAtBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [entries.length]);
+
+  // Track user's scroll position so we know whether to snap on the next
+  // entry. ~6px tolerance covers fractional scroll on zoom etc.
+  const onScroll = () => {
+    const el = logRef.current;
+    if (!el) return;
+    wasAtBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 6;
+  };
 
   if (!game) return null;
   const playerById = new Map<PlayerId, Player>(
@@ -34,7 +49,7 @@ export function LogPanel({ embedded }: Props) {
           <h3>Game log</h3>
         </header>
       )}
-      <div className="log-list" ref={logRef}>
+      <div className="log-list" ref={logRef} onScroll={onScroll}>
         {entries.length === 0 && (
           <div className="log-empty">Nothing has happened yet.</div>
         )}
@@ -184,6 +199,12 @@ function LogLine({
     case 'endTurn':
       return (
         <div className="log-line log-soft">{pname(entry.player)} ended turn</div>
+      );
+    case 'turnBegins':
+      return (
+        <div className="log-line log-line-turn">
+          ── Turn {entry.turnNumber} ──
+        </div>
       );
     case 'win':
       return (

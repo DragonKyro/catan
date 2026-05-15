@@ -66,6 +66,16 @@
   padding: 6px 4px;
 }
 
+.log-line-turn {
+  color: var(--accent);
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 4px;
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+  font-size: 0.85em;
+}
+
 .log-soft {
   color: var(--text-soft);
 }

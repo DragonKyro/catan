@@ -39,12 +39,43 @@
   font-weight: 600;
 }
 
+.mgraph-svg-wrap {
+  position: relative;
+}
+
 .mgraph-svg {
   width: 100%;
   height: auto;
   background: var(--panel-soft);
   border-radius: 8px;
   border: 1px solid var(--panel-border);
+}
+
+.mgraph-crosshair {
+  stroke: var(--text);
+  stroke-opacity: 0.4;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+.mgraph-tooltip-bg {
+  fill: var(--panel);
+  stroke: var(--panel-border);
+  stroke-width: 1;
+  fill-opacity: 0.95;
+}
+
+.mgraph-tooltip-head {
+  fill: var(--text-soft);
+  font-size: 9px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.mgraph-tooltip-row {
+  fill: var(--text);
+  font-size: 9px;
+  font-family: inherit;
 }
 
 .mgraph-grid {

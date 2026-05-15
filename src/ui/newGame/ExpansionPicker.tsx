@@ -37,9 +37,12 @@ export function ExpansionPicker({ value, onChange }: Props) {
             value={value.scenarioId}
             onChange={(e) => onChange({ ...value, scenarioId: e.target.value })}
           >
-            {SEAFARERS_SCENARIOS.map((s) => (
+            {/* Numbered by canonical rulebook order, which is roughly
+                introductory → advanced. Helps players pick a "next
+                hardest" scenario without reading them all. */}
+            {SEAFARERS_SCENARIOS.map((s, i) => (
               <option key={s.id} value={s.id}>
-                {s.label}
+                {i + 1}. {s.label}
               </option>
             ))}
           </select>

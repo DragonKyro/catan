@@ -17,19 +17,52 @@ const SPEED_PRESETS: Array<{ label: string; ms: number }> = [
   { label: '4×', ms: 180 },
 ];
 
-// Step + slider + auto-play replay. Renders the board at any historical
-// step by re-applying actions[0..step] from the initial state.
+// Actions whose effects are visible on the board (or in dev-card play).
+// Trades, rolls, and turn ends don't change board appearance, so we skip
+// them when stepping. State is still reconstructed from ALL actions so
+// resources/VPs/turn-state stay correct.
+const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
+  'placeInitialSettlement',
+  'placeInitialRoad',
+  'buildRoad',
+  'buildSettlement',
+  'buildCity',
+  'buildShip',
+  'moveShip',
+  'moveRobber',
+  'movePirate',
+  'playKnight',
+  'playRoadBuilding',
+  'playYearOfPlenty',
+  'playMonopoly',
+]);
+
+// Step + slider + auto-play replay. The slider/buttons step through a
+// FILTERED list of board-changing actions; state is still computed by
+// applying all prior actions from the initial state so non-board side
+// effects (resources, VPs, etc.) stay correct.
 export function Replay({ initialState, actions }: Props) {
+  // Map of "step index" → raw index into `actions`. step 0 = initial state.
+  // step N (1-indexed for users) = state after applying actions[0..rawIdx+1].
+  const stepRawIndices = useMemo(() => {
+    const out: number[] = [];
+    for (let i = 0; i < actions.length; i++) {
+      if (BOARD_CHANGING_ACTIONS.has(actions[i]!.type)) out.push(i);
+    }
+    return out;
+  }, [actions]);
+
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speedMs, setSpeedMs] = useState(SPEED_PRESETS[1]!.ms);
 
-  // Recompute the historical game state at `step`. For typical games
-  // (a few hundred actions) this is sub-millisecond per step, so we don't
-  // bother with memoized incremental application.
+  // Recompute the historical game state at `step`. Apply actions[0..rawCut]
+  // where rawCut is one past the most recent included action.
   const replayState = useMemo(() => {
     let s = initialState;
-    for (let i = 0; i < step && i < actions.length; i++) {
+    const rawCut =
+      step <= 0 ? 0 : (stepRawIndices[step - 1] ?? -1) + 1;
+    for (let i = 0; i < rawCut && i < actions.length; i++) {
       try {
         s = applyAction(s, actions[i]!);
       } catch {
@@ -39,22 +72,25 @@ export function Replay({ initialState, actions }: Props) {
       }
     }
     return s;
-  }, [initialState, actions, step]);
+  }, [initialState, actions, step, stepRawIndices]);
 
   // Auto-advance step while playing.
   useEffect(() => {
     if (!playing) return;
-    if (step >= actions.length) {
+    if (step >= stepRawIndices.length) {
       setPlaying(false);
       return;
     }
     const id = window.setTimeout(() => setStep((s) => s + 1), speedMs);
     return () => window.clearTimeout(id);
-  }, [playing, step, actions.length, speedMs]);
+  }, [playing, step, stepRawIndices.length, speedMs]);
 
-  const maxStep = actions.length;
+  const maxStep = stepRawIndices.length;
   const atEnd = step >= maxStep;
-  const currentAction = step > 0 ? actions[step - 1] : null;
+  const currentAction =
+    step > 0 && stepRawIndices[step - 1] != null
+      ? actions[stepRawIndices[step - 1]!]
+      : null;
 
   return (
     <div className="replay">

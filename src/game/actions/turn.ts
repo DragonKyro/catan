@@ -90,6 +90,10 @@ function advanceToNextRealTurn(state: GameState): GameState {
     lastRoll: null,
     pendingTrade: undefined,
     sbpQueue: undefined,
+    // Fresh turn → fresh trade history. The AI uses this to detect
+    // reverse trades within a turn; resetting at the turn boundary is
+    // the right semantics.
+    tradeResourcesThisTurn: undefined,
   };
 }
 

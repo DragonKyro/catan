@@ -94,6 +94,17 @@ export type LogEntry =
       receive: Partial<ResourceBank>;
     }
   | { id: number; kind: 'endTurn'; player: PlayerId }
+  | {
+      id: number;
+      kind: 'turnBegins';
+      // Player whose main turn just started. SBP mini-turns (5-6p
+      // expansion) are intentionally NOT logged here — only revolutions
+      // of true turn-holders.
+      player: PlayerId;
+      // 1-based turn number across the whole game (every player change
+      // increments). Useful for "Turn 4: Alice" framing.
+      turnNumber: number;
+    }
   | { id: number; kind: 'win'; player: PlayerId };
 
 // Tracks per-player aggregates over time, snapshotted after each action.
@@ -102,6 +113,10 @@ export interface TimelineSnapshot {
   step: number;
   // Wall-clock since game start, ms.
   t: number;
+  // Current revolution-based turn number at the time of this snapshot
+  // (matches logStore.turnNumber). Used by the match graph to label
+  // the x-axis in turn units rather than just step indices.
+  turnNumber: number;
   perPlayer: Record<
     PlayerId,
     {
@@ -116,6 +131,15 @@ export interface TimelineSnapshot {
       knightsPlayed: number;
       // Current longest contiguous road length (drives Longest Road race chart).
       longestRoadLength: number;
+      // Cumulative count of trades the player participated in (bank
+      // trades count for the actor; accepted player trades count for both
+      // proposer and acceptor).
+      tradesCount: number;
+      // Cumulative resource cards given away / received via trades.
+      // Efficiency = received / given (1.0 = breakeven, >1.0 = favorable;
+      // bank trades always favor the bank so are always < 1.0).
+      tradesGiven: number;
+      tradesReceived: number;
     }
   >;
 }
@@ -141,6 +165,11 @@ export interface LogStoreSnapshot {
   stats: MatchStats;
   nextId: number;
   actions: Action[];
+  turnNumber: number;
+  tradeStatsTotals: Record<
+    PlayerId,
+    { tradesCount: number; tradesGiven: number; tradesReceived: number }
+  >;
 }
 
 interface LogStore {
@@ -161,6 +190,16 @@ interface LogStore {
   // Every action successfully dispatched, in order. Append-only during a
   // game; cleared on reset.
   actions: Action[];
+  // 1-based count of real turns logged. Incremented each time `record`
+  // detects a transition into the rollOrPlayKnight phase. SBP mini-turns
+  // don't enter rollOrPlayKnight, so they're correctly excluded.
+  turnNumber: number;
+  // Per-player cumulative trade stats — paired with timeline snapshots so
+  // the end-game graph can show trade count and net resource flow over time.
+  tradeStatsTotals: Record<
+    PlayerId,
+    { tradesCount: number; tradesGiven: number; tradesReceived: number }
+  >;
 
   reset: (initial?: GameState) => void;
   record: (before: GameState, action: Action, after: GameState) => void;
@@ -229,14 +268,18 @@ export const useLogStore = create<LogStore>((set, get) => ({
   nextId: 1,
   initialState: null,
   actions: [],
+  turnNumber: 0,
+  tradeStatsTotals: {},
 
   reset: (initial) => {
     const gained: Record<PlayerId, number> = {};
     const gainedByResource: Record<PlayerId, Record<Resource, number>> = {};
+    const tradeStats: LogStore['tradeStatsTotals'] = {};
     if (initial) {
       for (const p of initial.players) {
         gained[p.id] = 0;
         gainedByResource[p.id] = emptyResourceBank();
+        tradeStats[p.id] = { tradesCount: 0, tradesGiven: 0, tradesReceived: 0 };
       }
     }
     set({
@@ -249,6 +292,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       nextId: 1,
       initialState: initial ?? null,
       actions: [],
+      turnNumber: 0,
+      tradeStatsTotals: tradeStats,
     });
   },
 
@@ -262,6 +307,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       stats: s.stats,
       nextId: s.nextId,
       actions: s.actions,
+      turnNumber: s.turnNumber,
+      tradeStatsTotals: s.tradeStatsTotals,
     };
   },
 
@@ -274,6 +321,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       stats: snap.stats,
       nextId: snap.nextId,
       actions: snap.actions,
+      turnNumber: snap.turnNumber,
+      tradeStatsTotals: snap.tradeStatsTotals,
     });
   },
 
@@ -413,6 +462,30 @@ export const useLogStore = create<LogStore>((set, get) => ({
         break;
     }
 
+    // Turn detection: one "turn" = one full revolution of the table.
+    // We bump the turn counter only when the active turn-holder wraps
+    // back to playerOrder[0] (or on the very first rollOrPlayKnight,
+    // which kicks off turn 1). SBP mini-turns never enter
+    // rollOrPlayKnight, so they don't trigger this either way.
+    let newTurnNumber: number | null = null;
+    if (
+      after.phase === 'rollOrPlayKnight' &&
+      before.phase !== 'rollOrPlayKnight'
+    ) {
+      const turnHolderIdx = after.turnHolderIndex ?? after.currentPlayerIndex;
+      const isRevolutionStart =
+        turnHolderIdx === 0 && (get().turnNumber === 0 || before.phase === 'main' || before.phase === 'specialBuildPhase' || before.phase === 'setupRound2');
+      if (isRevolutionStart) {
+        newTurnNumber = get().turnNumber + 1;
+        append.push({
+          id: stamp(),
+          kind: 'turnBegins',
+          player: after.playerOrder[turnHolderIdx]!,
+          turnNumber: newTurnNumber,
+        });
+      }
+    }
+
     // Win check: detect transition into gameOver.
     if (after.phase === 'gameOver' && before.phase !== 'gameOver' && after.winner) {
       append.push({ id: stamp(), kind: 'win', player: after.winner });
@@ -438,10 +511,51 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }
     }
 
+    // Trade-stats: track resources given/received per player when the
+    // action is a trade. For bankTrade only the actor moves resources;
+    // for acceptTrade both proposer and acceptor swap (their diffs cancel
+    // out across the table but each individually has give/receive sides).
+    const prevTradeStats = get().tradeStatsTotals;
+    const newTradeStats: typeof prevTradeStats = {};
+    for (const pid of Object.keys(prevTradeStats)) {
+      newTradeStats[pid] = { ...prevTradeStats[pid]! };
+    }
+    // Make sure every current player has an entry (handles snapshot-rejoin).
+    for (const p of after.players) {
+      if (!newTradeStats[p.id]) {
+        newTradeStats[p.id] = { tradesCount: 0, tradesGiven: 0, tradesReceived: 0 };
+      }
+    }
+    if (action.type === 'bankTrade' || action.type === 'acceptTrade') {
+      // Trades involve players whose resource counts changed. Identify
+      // them via the diff (production-on-roll wouldn't be running on these
+      // action types, so changes ARE the trade move).
+      for (const p of after.players) {
+        const diff = diffPlayerResources(before, after, p.id);
+        let given = 0;
+        let received = 0;
+        for (const r of RESOURCES) {
+          const d = diff[r] ?? 0;
+          if (d > 0) received += d;
+          else if (d < 0) given += -d;
+        }
+        if (given === 0 && received === 0) continue;
+        const t = newTradeStats[p.id]!;
+        t.tradesCount += 1;
+        t.tradesGiven += given;
+        t.tradesReceived += received;
+      }
+    }
+
     if (append.length === 0) {
       // Even when nothing was logged (proposeTrade etc.), capture the action
       // for replay — the engine still consumed it.
-      set((s) => ({ stats: newStats, actions: [...s.actions, action] }));
+      set((s) => ({
+        stats: newStats,
+        actions: [...s.actions, action],
+        turnNumber: newTurnNumber ?? s.turnNumber,
+        tradeStatsTotals: newTradeStats,
+      }));
       return;
     }
 
@@ -467,6 +581,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // Build a fresh timeline snapshot.
     const perPlayer: TimelineSnapshot['perPlayer'] = {};
     for (const p of after.players) {
+      const ts = newTradeStats[p.id] ?? { tradesCount: 0, tradesGiven: 0, tradesReceived: 0 };
       perPlayer[p.id] = {
         vp: calculateVictoryPoints(after, p.id, false),
         handTotal: handTotal(after, p.id),
@@ -474,12 +589,16 @@ export const useLogStore = create<LogStore>((set, get) => ({
         gainedByResource: { ...(newGainedByResource[p.id] ?? emptyResourceBank()) },
         knightsPlayed: p.devCards.playedKnights,
         longestRoadLength: calculateLongestRoad(after, p.id),
+        tradesCount: ts.tradesCount,
+        tradesGiven: ts.tradesGiven,
+        tradesReceived: ts.tradesReceived,
       };
     }
     const newStep = get().entries.length + append.length;
     const snapshot: TimelineSnapshot = {
       step: newStep,
       t: Date.now() - get().startTime,
+      turnNumber: newTurnNumber ?? get().turnNumber,
       perPlayer,
     };
 
@@ -491,6 +610,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       stats: newStats,
       nextId: s.nextId + append.length,
       actions: [...s.actions, action],
+      turnNumber: newTurnNumber ?? s.turnNumber,
+      tradeStatsTotals: newTradeStats,
     }));
   },
 }));

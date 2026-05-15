@@ -14,7 +14,11 @@ export function OpponentPanel() {
   // The right-panel player list shows EVERY player so the active-turn
   // highlight has a place to land (the local player's full hand still lives
   // in the bottom strip — this is just a status row).
-  const opponents = game.players;
+  // Order by `playerOrder` (turn order) so adjacent rows match adjacent
+  // turns — more useful than seat-creation order for "who goes after me?".
+  const opponents = game.playerOrder
+    .map((id) => game.players.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => Boolean(p));
   const actingId = getActingPlayerId(game);
 
   // Mark "you" so the player can find themselves quickly. In solo mode we

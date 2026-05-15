@@ -23,6 +23,28 @@ const DANGEROUS_RESOURCE_PENALTY = 2.5;
 // the trade.
 const WIN_THREAT_MULTIPLIER = 3;
 
+// "Did this player already touch any of these resources via trade THIS
+// turn?" — used to reject reverse/roundabout trades. If player just
+// received ore, don't propose giving ore back. If player just gave ore,
+// don't propose receiving ore (the trade should have been done as a
+// direct A→C instead of A→B then B→C).
+function tradeWouldReverse(
+  state: GameState,
+  playerId: PlayerId,
+  give: Partial<ResourceBank>,
+  receive: Partial<ResourceBank>,
+): boolean {
+  const log = state.tradeResourcesThisTurn?.[playerId];
+  if (!log) return false;
+  const givenBefore = new Set(log.given);
+  const receivedBefore = new Set(log.received);
+  for (const r of RESOURCES) {
+    if ((give[r] ?? 0) > 0 && receivedBefore.has(r)) return true;
+    if ((receive[r] ?? 0) > 0 && givenBefore.has(r)) return true;
+  }
+  return false;
+}
+
 // Score a trade from the perspective of the player who'd receive `give`
 // in exchange for losing `receive`. Positive = beneficial.
 function tradeScore(
@@ -85,6 +107,9 @@ export function shouldAcceptTrade(state: GameState, playerId: PlayerId): boolean
   const trade = state.pendingTrade;
   if (!trade) return false;
   if (trade.proposerId === playerId) return false;
+  // From acceptor's perspective: we'd GIVE trade.receive, RECEIVE trade.give.
+  // Refuse if accepting would reverse our own earlier trades this turn.
+  if (tradeWouldReverse(state, playerId, trade.receive, trade.give)) return false;
   // Standard "is this swap valuable to me" score.
   const score = tradeScore(state, playerId, trade.give, trade.receive);
   // Threat penalty: accepting means we GIVE `trade.receive` to the proposer.
@@ -167,6 +192,8 @@ export function tryCounterTrade(
       }
     }
     if (!theyHave) continue;
+    // Skip counters that would reverse our own earlier trades this turn.
+    if (tradeWouldReverse(state, playerId, give, recv)) continue;
     // Would this be acceptable to us? (Includes threat penalty: we don't
     // want to counter into a deal that hands a leader the win.)
     const proposerPenalty = threatPenaltyForGiving(state, proposer.id, give);
@@ -252,79 +279,145 @@ function tryProposeTradeInternal(
   };
   let best: Candidate | null = null;
 
-  // Try 1-for-1 and 2-for-1 offers. 2:1 is preferred because it's clearly
-  // beneficial to both sides (better than bank trade) and tends to close
-  // without counter-offer back-and-forth. In `onlyFavorable` mode (called
-  // BEFORE bank trade), restrict to 2:1 only — that's the bar for "skip
-  // the bank, this player trade is obviously better."
-  const offers: Array<{ giveAmt: 1 | 2; recvAmt: 1 }> = opts.onlyFavorable
+  const threats = assessThreats(state);
+
+  // Evaluate a candidate (give, receive). Updates `best` if it's the new
+  // top-ranked offer. Returns void; the only mutation is `best`.
+  const evalCandidate = (give: Partial<ResourceBank>, receive: Partial<ResourceBank>): void => {
+    // Skip reverse / roundabout trades within the same turn.
+    if (tradeWouldReverse(state, playerId, give, receive)) return;
+    // We must have what we'd give.
+    for (const r of RESOURCES) {
+      if ((give[r] ?? 0) > player.resources[r]) return;
+      // Don't propose giving away a resource we actually need for our goal.
+      if ((give[r] ?? 0) > 0 && (needs.byResource[r] ?? 0) > 0) return;
+    }
+    const ourScore = tradeScore(state, playerId, receive, give);
+    if (ourScore <= 0) return;
+    // Find the BEST non-threat opponent who'd plausibly accept.
+    let theirBest = -Infinity;
+    for (const op of state.players) {
+      if (op.id === playerId) continue;
+      // They must have what we're asking for.
+      let canFulfill = true;
+      for (const r of RESOURCES) {
+        if ((receive[r] ?? 0) > op.resources[r]) {
+          canFulfill = false;
+          break;
+        }
+      }
+      if (!canFulfill) continue;
+      let s = tradeScore(state, op.id, give, receive);
+      // Threat penalty.
+      const t = threats[op.id];
+      if (t) {
+        let dangerCount = 0;
+        for (const r of RESOURCES) {
+          if ((give[r] ?? 0) > 0 && t.dangerousResources.has(r)) {
+            dangerCount += give[r] ?? 0;
+          }
+        }
+        if (dangerCount > 0) {
+          const mult = t.closeToWin ? WIN_THREAT_MULTIPLIER : 1;
+          s -= dangerCount * DANGEROUS_RESOURCE_PENALTY * mult;
+        }
+      }
+      if (s > theirBest) theirBest = s;
+    }
+    if (theirBest < -0.2) return;
+    if (opts.onlyFavorable && theirBest < 0.5) return;
+    const totalGive = totalOf(give);
+    const totalRecv = totalOf(receive);
+    const ratio = totalGive / Math.max(1, totalRecv);
+    // Strong bias for >=2:1 ratios — clearly fair-to-both, less back-and-forth.
+    const ratioBonus = ratio >= 2 ? 1.5 : 0;
+    const total = ourScore + Math.max(0, theirBest) + ratioBonus;
+    const incumbentBonus = best ? (best.ratio >= 2 ? 1.5 : 0) : 0;
+    const incumbentTotal = best
+      ? best.ourScore + Math.max(0, best.theirBestScore) + incumbentBonus
+      : -Infinity;
+    if (total > incumbentTotal) {
+      best = { give, receive, ourScore, theirBestScore: theirBest, ratio };
+    }
+  };
+
+  // === Single-resource offers ===
+  // 1:1 and 2:1 — the bread and butter. `onlyFavorable` mode restricts
+  // to 2:1 (called BEFORE bank trade as a "clearly mutually good" filter).
+  const singleOffers: Array<{ giveAmt: 1 | 2; recvAmt: 1 }> = opts.onlyFavorable
     ? [{ giveAmt: 2, recvAmt: 1 }]
     : [
         { giveAmt: 1, recvAmt: 1 },
         { giveAmt: 2, recvAmt: 1 },
       ];
 
-  const threats = assessThreats(state);
-
   for (const want of wantList) {
     for (const g of giveList) {
       if (g.res === want) continue;
-      for (const o of offers) {
+      for (const o of singleOffers) {
         if (g.available < o.giveAmt) continue;
-        const give: Partial<ResourceBank> = { [g.res]: o.giveAmt } as Partial<ResourceBank>;
-        const receive: Partial<ResourceBank> = { [want]: o.recvAmt } as Partial<ResourceBank>;
-        const ourScore = tradeScore(state, playerId, receive, give);
-        if (ourScore <= 0) continue;
-        // Find the BEST non-threat opponent who'd plausibly accept. Threats
-        // get penalized by the giving cost; if all viable acceptors are
-        // threats, we'd rather skip the proposal entirely.
-        let theirBest = -Infinity;
-        for (const op of state.players) {
-          if (op.id === playerId) continue;
-          if (op.resources[want] < o.recvAmt) continue;
-          let s = tradeScore(state, op.id, give, receive);
-          // Penalize "good for them" if they're a threat — we'd rather not
-          // hand a leader the win.
-          const t = threats[op.id];
-          if (t) {
-            let dangerCount = 0;
-            for (const r of RESOURCES) {
-              if ((give[r] ?? 0) > 0 && t.dangerousResources.has(r)) {
-                dangerCount += give[r] ?? 0;
-              }
-            }
-            if (dangerCount > 0) {
-              const mult = t.closeToWin ? WIN_THREAT_MULTIPLIER : 1;
-              s -= dangerCount * DANGEROUS_RESOURCE_PENALTY * mult;
-            }
-          }
-          if (s > theirBest) theirBest = s;
+        evalCandidate(
+          { [g.res]: o.giveAmt } as Partial<ResourceBank>,
+          { [want]: o.recvAmt } as Partial<ResourceBank>,
+        );
+      }
+    }
+  }
+
+  // === Creative multi-resource offers ===
+  // Only outside `onlyFavorable` mode (creative trades are less obviously
+  // good for the acceptor, so we don't use them as the "skip the bank"
+  // signal). Tried only when we have enough surplus to make them work.
+  if (!opts.onlyFavorable) {
+    for (const want of wantList) {
+      // 3-of-same → 1 (basically a bank-style trade with a player)
+      for (const g of giveList) {
+        if (g.res === want) continue;
+        if (g.available < 3) continue;
+        evalCandidate(
+          { [g.res]: 3 } as Partial<ResourceBank>,
+          { [want]: 1 } as Partial<ResourceBank>,
+        );
+      }
+      // 2-of-different → 1 (offload two different surplus resources)
+      for (let i = 0; i < giveList.length; i++) {
+        for (let j = i + 1; j < giveList.length; j++) {
+          const g1 = giveList[i]!;
+          const g2 = giveList[j]!;
+          if (g1.res === want || g2.res === want) continue;
+          if (g1.available < 1 || g2.available < 1) continue;
+          evalCandidate(
+            { [g1.res]: 1, [g2.res]: 1 } as Partial<ResourceBank>,
+            { [want]: 1 } as Partial<ResourceBank>,
+          );
         }
-        if (theirBest < -0.2) continue;
-        // Favorable mode requires the acceptor to clearly benefit — not
-        // just tolerate the trade. Filters out marginal swaps that an
-        // opponent would have to be talked into.
-        if (opts.onlyFavorable && theirBest < 0.5) continue;
-        // Strong bias for 2:1 ratio: it converges trades faster and is the
-        // "fair to both" sweet spot. Bonus added to ranking score only.
-        const ratio = o.giveAmt / o.recvAmt;
-        const ratioBonus = ratio >= 2 ? 1.5 : 0;
-        const total = ourScore + Math.max(0, theirBest) + ratioBonus;
-        if (
-          !best ||
-          total >
-            best.ourScore + Math.max(0, best.theirBestScore) + (best.ratio >= 2 ? 1.5 : 0)
-        ) {
-          best = { give, receive, ourScore, theirBestScore: theirBest, ratio };
+      }
+      // 3-of-different → 1 (clear out a wide surplus for the one resource
+      // we really need — very generous to the acceptor)
+      for (let i = 0; i < giveList.length; i++) {
+        for (let j = i + 1; j < giveList.length; j++) {
+          for (let k = j + 1; k < giveList.length; k++) {
+            const g1 = giveList[i]!;
+            const g2 = giveList[j]!;
+            const g3 = giveList[k]!;
+            if (g1.res === want || g2.res === want || g3.res === want) continue;
+            if (g1.available < 1 || g2.available < 1 || g3.available < 1) continue;
+            evalCandidate(
+              { [g1.res]: 1, [g2.res]: 1, [g3.res]: 1 } as Partial<ResourceBank>,
+              { [want]: 1 } as Partial<ResourceBank>,
+            );
+          }
         }
       }
     }
   }
+
   if (!best) return null;
+  const winner = best as Candidate;
   return {
     type: 'proposeTrade',
     playerId,
-    give: best.give,
-    receive: best.receive,
+    give: winner.give,
+    receive: winner.receive,
   };
 }

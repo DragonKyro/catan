@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Player, Resource } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import type { MatchStats, TimelineSnapshot } from '@/store/logStore';
@@ -7,7 +7,14 @@ import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 import './MatchGraph.css';
 
 // Tabs whose data is one number-per-player over time (line charts).
-type PerPlayerMetric = 'vp' | 'gainedTotal' | 'handTotal' | 'knights' | 'longestRoad';
+type PerPlayerMetric =
+  | 'vp'
+  | 'gainedTotal'
+  | 'handTotal'
+  | 'knights'
+  | 'longestRoad'
+  | 'tradesCount'
+  | 'tradeEfficiency';
 
 type Tab =
   | PerPlayerMetric
@@ -22,6 +29,8 @@ const TAB_LABEL: Record<Tab, string> = {
   handTotal: 'Resources in hand',
   knights: 'Knights played',
   longestRoad: 'Longest road',
+  tradesCount: 'Trades',
+  tradeEfficiency: 'Trade efficiency',
   byPlayer: 'By player',
   byResource: 'By resource',
   rolls: 'Dice frequency',
@@ -69,6 +78,8 @@ export function MatchGraph({ players, timeline, stats }: Props) {
     'byResource',
     'knights',
     'longestRoad',
+    'tradesCount',
+    'tradeEfficiency',
     'rolls',
     'circulation',
   ];
@@ -114,6 +125,34 @@ export function MatchGraph({ players, timeline, stats }: Props) {
         series={series}
         timeline={timeline}
         label={TAB_LABEL.longestRoad}
+      />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'tradesCount') {
+    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.tradesCount ?? 0);
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={TAB_LABEL.tradesCount}
+      />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'tradeEfficiency') {
+    // Trade efficiency = received / given. 1.0 = breakeven; >1.0 = the
+    // player got more cards out than they put in (typical for accepted
+    // player trades that match values); <1.0 = bank-trade heavy.
+    const series = perPlayerSeries((s, pid) => {
+      const tp = s.perPlayer[pid];
+      if (!tp) return 0;
+      if (tp.tradesGiven <= 0) return 0;
+      return tp.tradesReceived / tp.tradesGiven;
+    });
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={TAB_LABEL.tradeEfficiency}
       />
     );
     legend = <SeriesLegend series={series} />;
@@ -225,6 +264,34 @@ function SeriesLegend({ series }: { series: Series[] }) {
   );
 }
 
+// Snap yMax up to a round number and produce tick values that are all
+// distinct. Tries to land on a stride of 1/2/5/10/20/25/50/100/...
+function niceYTicks(yMaxRaw: number): { yMax: number; yTicks: number[] } {
+  if (yMaxRaw <= 0) return { yMax: 1, yTicks: [0, 1] };
+  // Pick a stride from a nice-number sequence, then round yMax up to a
+  // multiple of stride * 4 (so we get ~5 ticks total).
+  const niceStrides = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+  let stride = 1;
+  for (const s of niceStrides) {
+    if (yMaxRaw / s <= 5) {
+      stride = s;
+      break;
+    }
+    stride = s;
+  }
+  // For small ratios (e.g. tradeEfficiency), allow fractional strides.
+  if (yMaxRaw < 1) {
+    return {
+      yMax: 1,
+      yTicks: [0, 0.25, 0.5, 0.75, 1],
+    };
+  }
+  const yMax = Math.ceil(yMaxRaw / stride) * stride;
+  const ticks: number[] = [];
+  for (let v = 0; v <= yMax; v += stride) ticks.push(v);
+  return { yMax, yTicks: ticks };
+}
+
 function MultiLineChart({
   series,
   timeline,
@@ -234,18 +301,26 @@ function MultiLineChart({
   timeline: TimelineSnapshot[];
   label: string;
 }) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
   if (timeline.length === 0) {
     return <div className="mgraph-empty">No game data to graph.</div>;
   }
 
-  let yMax = 1;
+  let yMaxRaw = 1;
   for (const snap of timeline) {
     for (const s of series) {
       const v = s.valueAt(snap);
-      if (v > yMax) yMax = v;
+      if (v > yMaxRaw) yMaxRaw = v;
     }
   }
-  yMax = Math.ceil(yMax * 1.1);
+  // Snap yMax up to a "nice" round number so y-axis ticks are clean
+  // integers (e.g. yMax=4 → ticks [0,1,2,3,4]; yMax=14 → ticks [0,5,10,15]).
+  // This also prevents the "duplicate tick labels" effect we'd get when
+  // Math.round((yMax * i) / 4) collapses two adjacent ticks to the same
+  // integer (e.g. yMax=3 → ticks [0,1,2,2,3]).
+  const { yMax, yTicks } = niceYTicks(yMaxRaw);
 
   const xMax = timeline[timeline.length - 1]!.step;
   const xOf = (step: number) =>
@@ -261,56 +336,195 @@ function MultiLineChart({
     return { series: s, d: pts.join(' ') };
   });
 
-  const yTicks: number[] = [];
-  for (let i = 0; i <= 4; i++) yTicks.push(Math.round((yMax * i) / 4));
+  // X-axis turn labels: tick the timeline indices where turnNumber
+  // changes. With many turns we'd overlap labels, so thin out evenly.
+  const turnTicks: Array<{ step: number; turn: number }> = [];
+  let lastTurn = -1;
+  for (const snap of timeline) {
+    if (snap.turnNumber !== lastTurn && snap.turnNumber > 0) {
+      turnTicks.push({ step: snap.step, turn: snap.turnNumber });
+      lastTurn = snap.turnNumber;
+    }
+  }
+  // Aim for ~10 visible turn labels max.
+  const turnStride = Math.max(1, Math.ceil(turnTicks.length / 10));
+  const visibleTurnTicks = turnTicks.filter((_, i) => i % turnStride === 0);
+
+  // Convert a screen-space mouse event to the closest timeline index by
+  // translating into viewBox coordinates and snapping to the nearest step.
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const vbX = (e.clientX - rect.left) * scaleX;
+    if (vbX < PAD_L || vbX > W - PAD_R) {
+      setHoverIdx(null);
+      return;
+    }
+    // step ≈ ((vbX - PAD_L) / chartWidth) * xMax; then snap to nearest timeline index
+    const stepGuess = ((vbX - PAD_L) / (W - PAD_L - PAD_R)) * xMax;
+    let nearest = 0;
+    let nearestDist = Infinity;
+    for (let i = 0; i < timeline.length; i++) {
+      const d = Math.abs(timeline[i]!.step - stepGuess);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = i;
+      }
+    }
+    setHoverIdx(nearest);
+  };
+  const onLeave = () => setHoverIdx(null);
+
+  const hovered = hoverIdx != null ? timeline[hoverIdx] : null;
+  const hoverX = hovered ? xOf(hovered.step) : 0;
+  // Tooltip anchored at the crosshair; flip to left of the line if near
+  // the right edge so it doesn't get clipped. Width slightly wider now
+  // that the header is "Turn N · step M" instead of just "step M".
+  const TOOLTIP_W = 150;
+  const tooltipOnRight = hoverX < W - TOOLTIP_W - 10;
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="mgraph-svg"
-      preserveAspectRatio="xMidYMid meet"
-      aria-label={label}
-    >
-      {yTicks.map((tv) => (
-        <g key={tv}>
-          <line
-            x1={PAD_L}
-            x2={W - PAD_R}
-            y1={yOf(tv)}
-            y2={yOf(tv)}
-            className="mgraph-grid"
-          />
-          <text
-            x={PAD_L - 4}
-            y={yOf(tv) + 3}
-            textAnchor="end"
-            className="mgraph-tick"
-          >
-            {tv}
-          </text>
-        </g>
-      ))}
-      <line
-        x1={PAD_L}
-        x2={W - PAD_R}
-        y1={H - PAD_B}
-        y2={H - PAD_B}
-        className="mgraph-axis"
-      />
-      <text x={W / 2} y={H - 6} textAnchor="middle" className="mgraph-axislabel">
-        turns →
-      </text>
-      {lines.map(({ series: s, d }) => (
-        <path
-          key={s.id}
-          d={d}
-          stroke={s.color}
-          strokeWidth={2}
-          fill="none"
-          strokeLinejoin="round"
+    <div className="mgraph-svg-wrap">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className="mgraph-svg"
+        preserveAspectRatio="xMidYMid meet"
+        aria-label={label}
+        onMouseMove={onMove}
+        onMouseLeave={onLeave}
+      >
+        {yTicks.map((tv) => (
+          <g key={tv}>
+            <line
+              x1={PAD_L}
+              x2={W - PAD_R}
+              y1={yOf(tv)}
+              y2={yOf(tv)}
+              className="mgraph-grid"
+            />
+            <text
+              x={PAD_L - 4}
+              y={yOf(tv) + 3}
+              textAnchor="end"
+              className="mgraph-tick"
+            >
+              {tv}
+            </text>
+          </g>
+        ))}
+        <line
+          x1={PAD_L}
+          x2={W - PAD_R}
+          y1={H - PAD_B}
+          y2={H - PAD_B}
+          className="mgraph-axis"
         />
-      ))}
-    </svg>
+        {/* Turn-number ticks along the x-axis. */}
+        {visibleTurnTicks.map((tt) => (
+          <g key={`turn-${tt.turn}`}>
+            <line
+              x1={xOf(tt.step)}
+              x2={xOf(tt.step)}
+              y1={H - PAD_B}
+              y2={H - PAD_B + 3}
+              className="mgraph-axis"
+            />
+            <text
+              x={xOf(tt.step)}
+              y={H - PAD_B + 12}
+              textAnchor="middle"
+              className="mgraph-tick"
+            >
+              {tt.turn}
+            </text>
+          </g>
+        ))}
+        <text x={W / 2} y={H - 4} textAnchor="middle" className="mgraph-axislabel">
+          turn →
+        </text>
+        {lines.map(({ series: s, d }) => (
+          <path
+            key={s.id}
+            d={d}
+            stroke={s.color}
+            strokeWidth={2}
+            fill="none"
+            strokeLinejoin="round"
+          />
+        ))}
+        {/* Crosshair + per-series markers at the hovered step */}
+        {hovered && (
+          <g pointerEvents="none">
+            <line
+              x1={hoverX}
+              x2={hoverX}
+              y1={PAD_T}
+              y2={H - PAD_B}
+              className="mgraph-crosshair"
+            />
+            {series.map((s) => {
+              const v = s.valueAt(hovered);
+              return (
+                <circle
+                  key={s.id}
+                  cx={hoverX}
+                  cy={yOf(v)}
+                  r={3.5}
+                  fill={s.color}
+                  stroke="#1a1a1a"
+                  strokeWidth={1}
+                />
+              );
+            })}
+            <g
+              transform={`translate(${
+                tooltipOnRight ? hoverX + 8 : hoverX - 8
+              }, ${PAD_T + 4})`}
+            >
+              <rect
+                x={tooltipOnRight ? 0 : -TOOLTIP_W}
+                y={0}
+                width={TOOLTIP_W}
+                height={Math.max(28, 14 + series.length * 12)}
+                className="mgraph-tooltip-bg"
+                rx={4}
+              />
+              <text
+                x={tooltipOnRight ? 6 : -(TOOLTIP_W - 6)}
+                y={12}
+                className="mgraph-tooltip-head"
+              >
+                Turn {hovered.turnNumber || '—'} · step {hovered.step}
+              </text>
+              {series.map((s, i) => {
+                const v = s.valueAt(hovered);
+                return (
+                  <g key={s.id}>
+                    <rect
+                      x={tooltipOnRight ? 6 : -(TOOLTIP_W - 6)}
+                      y={18 + i * 12}
+                      width={6}
+                      height={6}
+                      fill={s.color}
+                    />
+                    <text
+                      x={tooltipOnRight ? 16 : -(TOOLTIP_W - 16)}
+                      y={24 + i * 12}
+                      className="mgraph-tooltip-row"
+                    >
+                      {s.label}: {Number.isInteger(v) ? v : v.toFixed(2)}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          </g>
+        )}
+      </svg>
+    </div>
   );
 }
 
@@ -336,8 +550,9 @@ function RollFrequencyChart({
   };
 
   const barW = (W - PAD_L - PAD_R) / totals.length;
+  const { yMax: niceMax, yTicks: niceTicks } = niceYTicks(max);
   const yOf = (v: number) =>
-    H - PAD_B - ((v / max) * (H - PAD_T - PAD_B));
+    H - PAD_B - ((v / niceMax) * (H - PAD_T - PAD_B));
 
   return (
     <svg
@@ -347,28 +562,25 @@ function RollFrequencyChart({
       aria-label="Dice roll frequency"
     >
       {/* Grid */}
-      {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
-        const tv = Math.round(max * f);
-        return (
-          <g key={i}>
-            <line
-              x1={PAD_L}
-              x2={W - PAD_R}
-              y1={yOf(tv)}
-              y2={yOf(tv)}
-              className="mgraph-grid"
-            />
-            <text
-              x={PAD_L - 4}
-              y={yOf(tv) + 3}
-              textAnchor="end"
-              className="mgraph-tick"
-            >
-              {tv}
-            </text>
-          </g>
-        );
-      })}
+      {niceTicks.map((tv) => (
+        <g key={tv}>
+          <line
+            x1={PAD_L}
+            x2={W - PAD_R}
+            y1={yOf(tv)}
+            y2={yOf(tv)}
+            className="mgraph-grid"
+          />
+          <text
+            x={PAD_L - 4}
+            y={yOf(tv) + 3}
+            textAnchor="end"
+            className="mgraph-tick"
+          >
+            {tv}
+          </text>
+        </g>
+      ))}
       {/* Bars */}
       {totals.map((n, i) => {
         const c = rollCounts[n] ?? 0;
@@ -439,8 +651,9 @@ function CirculationChart({
     );
   }
   const barW = (W - PAD_L - PAD_R) / resources.length;
+  const { yMax: niceMax, yTicks: niceTicks } = niceYTicks(max);
   const yOf = (v: number) =>
-    H - PAD_B - ((v / max) * (H - PAD_T - PAD_B));
+    H - PAD_B - ((v / niceMax) * (H - PAD_T - PAD_B));
 
   return (
     <svg
@@ -449,28 +662,25 @@ function CirculationChart({
       preserveAspectRatio="xMidYMid meet"
       aria-label="Cumulative resources in circulation"
     >
-      {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
-        const tv = Math.round(max * f);
-        return (
-          <g key={i}>
-            <line
-              x1={PAD_L}
-              x2={W - PAD_R}
-              y1={yOf(tv)}
-              y2={yOf(tv)}
-              className="mgraph-grid"
-            />
-            <text
-              x={PAD_L - 4}
-              y={yOf(tv) + 3}
-              textAnchor="end"
-              className="mgraph-tick"
-            >
-              {tv}
-            </text>
-          </g>
-        );
-      })}
+      {niceTicks.map((tv) => (
+        <g key={tv}>
+          <line
+            x1={PAD_L}
+            x2={W - PAD_R}
+            y1={yOf(tv)}
+            y2={yOf(tv)}
+            className="mgraph-grid"
+          />
+          <text
+            x={PAD_L - 4}
+            y={yOf(tv) + 3}
+            textAnchor="end"
+            className="mgraph-tick"
+          >
+            {tv}
+          </text>
+        </g>
+      ))}
       {resources.map((r, i) => {
         const c = circulation[r] ?? 0;
         const x = PAD_L + i * barW + 6;

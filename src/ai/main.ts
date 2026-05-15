@@ -13,8 +13,14 @@ import { getBankTradeRate } from '@/game/actions/trade';
 import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
 import { tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
 import { chooseDevCardPlay } from './devcard';
+import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { chooseWinPlan } from './winPaths';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
+// Threshold dropped sharply when we're chasing Longest Road OR have nowhere
+// else to score VP — late-game we need ANY road, not a perfect one.
+const ROAD_TARGET_THRESHOLD_LR = 1.5;
+const LR_CLAIM_LENGTH = 5;
 
 export interface MainPhaseOptions {
   // Whether the AI may play a dev card this step. Off during SBP.
@@ -85,7 +91,20 @@ export function chooseMainPhaseAction(
     if (bestVid) return { type: 'buildSettlement', playerId, vertex: bestVid };
   }
 
-  // 3) BUY DEV CARD when not strapped for resources
+  // 3) BUY DEV CARD — but only once we're not actively expanding.
+  //    Watching AI games it became clear they were buying dev cards
+  //    while sitting on settle-able vertices and unbuilt roads. That's
+  //    bad strategy: dev cards are slow VP (no production), expansion
+  //    compounds. Gates, in order:
+  //      a) saveForCity: hand small AND city is the active goal — wait
+  //         to convert wheat/ore into actual VP first.
+  //      b) earlyGame: turn < 5 with fewer than 2 settlements placed
+  //         (i.e. just past initial placement). Building > dev card.
+  //      c) hasOpenSettleSpot: already-reachable open spot AND we have
+  //         most of a settlement (≥3/4 of cost) — finish the settle.
+  //      d) couldRoadToSettleSpot: no reachable spot, but a single
+  //         road would unlock one AND we have wood+brick. Build that
+  //         road first instead of spending sheep/wheat/ore on a card.
   if (
     canAfford(player.resources, COSTS.devCard) &&
     state.devCardDeck.length > 0
@@ -93,33 +112,82 @@ export function chooseMainPhaseAction(
     const needs = reportNeeds(state, playerId);
     let handSize = 0;
     for (const r of RESOURCES) handSize += player.resources[r];
-    // Only skip when we're truly conserving for a city and our hand is
-    // small enough that the next 7 wouldn't punish us anyway. Otherwise
-    // dev cards turn idle resources into hidden VP and knight pressure —
-    // strictly better than hoarding.
     const saveForCity = needs.goal === 'city' && handSize <= 5;
-    if (!saveForCity) {
+    const placedSettlesAndCities = player.settlements.length + player.cities.length;
+    const earlyGame = placedSettlesAndCities < 2;
+    const settleCostHave =
+      Math.min(1, player.resources.wood) +
+      Math.min(1, player.resources.brick) +
+      Math.min(1, player.resources.sheep) +
+      Math.min(1, player.resources.wheat);
+    const openSpots = countOpenSettlementSpots(state, playerId);
+    const hasOpenSettleSpot = openSpots > 0 && settleCostHave >= 3;
+    const couldRoadToSettleSpot =
+      openSpots === 0 &&
+      player.resources.wood >= 1 &&
+      player.resources.brick >= 1 &&
+      countOneRoadSettleSpots(state, playerId) > 0;
+    if (
+      !saveForCity &&
+      !earlyGame &&
+      !hasOpenSettleSpot &&
+      !couldRoadToSettleSpot
+    ) {
       return { type: 'buyDevCard', playerId };
     }
   }
 
-  // 4) BUILD ROAD (only if it opens a high-value settlement spot AND we
-  // don't already have a placement option through our existing roads)
+  // 4) BUILD ROAD
+  //    Two reasons to build:
+  //      (a) Unlock a new high-value settlement spot we can't currently reach.
+  //      (b) Pursue Longest Road (+2 VP). Reachable when:
+  //          - no current LR holder AND our chain is within 1-2 of length 5
+  //          - someone else holds, and our chain is within 1-2 of theirs
+  //    When (b) applies we drop the "must unlock a great vertex" threshold
+  //    sharply — any extension that grows our chain has direct VP value.
   if (
     canAfford(player.resources, COSTS.road) &&
     player.roads.length < 15
   ) {
-    // If we already have an open vertex reachable through our current roads
-    // where we could put a settlement, don't burn wood/brick on more roads —
-    // wait for sheep+wheat instead. Roads without an unlock don't score VP.
     const openSpots = countOpenSettlementSpots(state, playerId);
-    if (openSpots === 0) {
+    const myRoadLen = calculateLongestRoad(state, playerId);
+    const lrHolder = state.longestRoad?.holder ?? null;
+    const lrLength = state.longestRoad?.length ?? 0;
+    // Length at which we'd CLAIM Longest Road: 5 if no one has it, else
+    // current holder's length + 1.
+    let lrClaimTarget = 0;
+    if (lrHolder === null) lrClaimTarget = LR_CLAIM_LENGTH;
+    else if (lrHolder !== playerId) lrClaimTarget = lrLength + 1;
+    // Within 2 of claiming → pursue. Defending (already hold) doesn't fire
+    // here because we'd need a separate "extend our lead" branch; that's a
+    // smaller win and saved for future tuning.
+    const pursuingLR = lrClaimTarget > 0 && myRoadLen + 2 >= lrClaimTarget;
+
+    // Consult the win plan: if it says we need more settlements, we're
+    // willing to accept a lower-quality unlock to keep progressing
+    // (avoids the "stuck at 9 VP, can't reach any new vertex" failure mode).
+    const winPlan = chooseWinPlan(state, playerId);
+    const planNeedsSettlements = winPlan.gap.newSettlementsNeeded > 0;
+
+    // Threshold tiers:
+    //   - LR pursuit: very low (any extension scores ~2 VP value)
+    //   - Plan wants more settlements: stricter than before to stop
+    //     "useless roads toward each other" — was 2.5, now 3.5. A
+    //     2.5-pip endpoint is barely worth the road; 3.5 weeds out the
+    //     marginal extensions while still letting good plans through.
+    //   - Otherwise: original strict threshold
+    let threshold = ROAD_TARGET_THRESHOLD;
+    if (pursuingLR) threshold = ROAD_TARGET_THRESHOLD_LR;
+    else if (planNeedsSettlements) threshold = 3.5;
+
+    if (openSpots === 0 || pursuingLR) {
       let bestEid: EdgeId | null = null;
       let bestVertexScore = -Infinity;
       for (const eid of state.board.edgeIds) {
         if (!canConnectRoad(state, playerId, eid)) continue;
         const edge = state.board.edges[eid]!;
         let endpointBest = -Infinity;
+        let endpointBestVid: VertexId | null = null;
         for (const v of edge.vertices) {
           let blocked = false;
           const vertex = state.board.vertices[v]!;
@@ -138,14 +206,39 @@ export function chooseMainPhaseAction(
           }
           if (blocked) continue;
           const s = vertexScore(state, v, playerId);
-          if (s > endpointBest) endpointBest = s;
+          if (s > endpointBest) {
+            endpointBest = s;
+            endpointBestVid = v;
+          }
         }
-        if (endpointBest > bestVertexScore) {
-          bestVertexScore = endpointBest;
+        // Contested-endpoint penalty: if an enemy road already touches
+        // the new endpoint, the spot is contested — they can settle it
+        // (cutting us off) before we can. Skip these unless we're LR-
+        // pursuing (where the road has direct VP value regardless).
+        let contestedPenalty = 0;
+        if (!pursuingLR && endpointBestVid !== null) {
+          const ev = state.board.vertices[endpointBestVid]!;
+          let enemyRoadsAtEndpoint = 0;
+          for (const neid of ev.edges) {
+            if (neid === eid) continue;
+            for (const p of state.players) {
+              if (p.id === playerId) continue;
+              if (p.roads.includes(neid)) enemyRoadsAtEndpoint++;
+            }
+          }
+          if (enemyRoadsAtEndpoint > 0) contestedPenalty = 2 * enemyRoadsAtEndpoint;
+        }
+        // LR-pursuit bias: any road extension is worth ~LR's 2 VP, so
+        // floor the score at a moderate value when LR is the target.
+        const finalScore = pursuingLR
+          ? Math.max(endpointBest, ROAD_TARGET_THRESHOLD_LR + 0.5)
+          : endpointBest - contestedPenalty;
+        if (finalScore > bestVertexScore) {
+          bestVertexScore = finalScore;
           bestEid = eid;
         }
       }
-      if (bestEid && bestVertexScore >= ROAD_TARGET_THRESHOLD) {
+      if (bestEid && bestVertexScore >= threshold) {
         return { type: 'buildRoad', playerId, edge: bestEid };
       }
     }
@@ -194,46 +287,83 @@ function countOpenSettlementSpots(state: GameState, playerId: PlayerId): number 
   return count;
 }
 
+// Vertices one road-extension away from our current network where a
+// settlement could legally be placed. Used to know "should I save sheep/
+// wheat/ore to push for a settle, instead of spending them on a dev card?"
+function countOneRoadSettleSpots(state: GameState, playerId: PlayerId): number {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return 0;
+  let count = 0;
+  const seen = new Set<VertexId>();
+  for (const eid of state.board.edgeIds) {
+    if (!canConnectRoad(state, playerId, eid)) continue;
+    const edge = state.board.edges[eid]!;
+    for (const v of edge.vertices) {
+      if (seen.has(v)) continue;
+      seen.add(v);
+      if (canPlaceSettlement(state, playerId, v)) count++;
+    }
+  }
+  return count;
+}
+
 function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
   const player = state.players.find((p) => p.id === playerId)!;
   const needs = reportNeeds(state, playerId);
   let handSize = 0;
   for (const r of RESOURCES) handSize += player.resources[r];
 
-  // Two triggers for trading at the bank/port:
-  // 1) We have a concrete build goal and are short on a specific resource.
-  // 2) Our hand is getting big — convert excess to anything more useful
-  //    before a 7 rolls and we lose half. Hoarding is always bad.
+  // Bank-trade trigger rules. The OLD rule (handSize >= 5) caused
+  // back-and-forth churn: AI with 4 brick would trade for wood, then trade
+  // back to brick the next turn. Now:
+  //  1) Goal-driven: we have a concrete build goal AND a specific shortfall.
+  //  2) Discard-imminent: handSize >= 8 (next 7 would force a discard).
+  // The "general balance" trigger is gone — every trade must clearly help.
   const wantingForGoal = needs.goal !== 'none';
-  const wantingForHandSize = handSize >= 5;
-  if (!wantingForGoal && !wantingForHandSize) return null;
+  const discardImminent = handSize >= 8;
+  if (!wantingForGoal && !discardImminent) return null;
 
-  // Pick the resource we'd most like to receive. Prefer concrete goal needs;
-  // otherwise pick the highest-weighted resource we currently have least of.
-  // Skip resources the bank is out of — the engine would reject the trade.
+  // Pick the resource we want most. Goal mode targets the needed resource;
+  // discard mode targets a resource we have *very few* of (diversifying,
+  // not re-shuffling). Skip resources the bank can't supply.
   let wantRes: Resource | null = null;
   let wantScore = -Infinity;
   for (const r of RESOURCES) {
     if (state.bank[r] <= 0) continue;
-    let score = (needs.byResource[r] ?? 0) * 1.5; // shortfall weight
-    if (wantingForHandSize && !wantingForGoal) {
-      // No goal — favor scarcity in our hand plus inherent resource value.
-      score += RESOURCE_WEIGHT[r] * (1 / (1 + player.resources[r]));
-    }
-    if (score > wantScore) {
-      wantScore = score;
-      wantRes = r;
+    if (wantingForGoal) {
+      // Only consider resources that are actually short for our goal.
+      const shortfall = needs.byResource[r] ?? 0;
+      if (shortfall <= 0) continue;
+      const score = shortfall * 1.5;
+      if (score > wantScore) {
+        wantScore = score;
+        wantRes = r;
+      }
+    } else {
+      // Discard-imminent fallback: receive a resource we have <= 1 of.
+      // This way we genuinely diversify rather than swap back the same
+      // way we swapped last time.
+      if (player.resources[r] > 1) continue;
+      const score = RESOURCE_WEIGHT[r] * (1 / (1 + player.resources[r]));
+      if (score > wantScore) {
+        wantScore = score;
+        wantRes = r;
+      }
     }
   }
   if (!wantRes) return null;
 
   // Find the resource we have the most "spare" of (above the goal need) and
-  // can afford at least one bank conversion of.
+  // can afford at least one bank conversion of. Never give up a resource
+  // we have a shortfall for in our active goal.
   let bestGive: Resource | null = null;
   let bestSpare = -Infinity;
   let bestRate = 4;
   for (const r of RESOURCES) {
     if (r === wantRes) continue;
+    // Don't burn a resource we need for our current goal — that would
+    // undo progress.
+    if ((needs.byResource[r] ?? 0) > 0) continue;
     const rate = getBankTradeRate(state, playerId, r);
     const need = needs.byResource[r] ?? 0;
     const spare = player.resources[r] - need;
@@ -250,7 +380,7 @@ function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
   if (!bestGive) return null;
   // Avoid pure value-loss trades when we're not pressured: don't give an
   // 8-pip wheat for sheep just because we technically can.
-  if (!wantingForHandSize) {
+  if (!discardImminent) {
     const delta = RESOURCE_WEIGHT[wantRes] - RESOURCE_WEIGHT[bestGive] * bestRate;
     if (delta + (needs.byResource[wantRes] ?? 0) * 0.7 < -1.5) return null;
   }
