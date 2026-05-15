@@ -430,11 +430,38 @@ function tryProposeTradeInternal(
 
   const threats = assessThreats(state);
 
+  // Already-proposed shapes this turn (whether accepted, rejected, or
+  // cancelled). We won't re-propose the same shape — opponents' hands
+  // didn't change, so the second attempt would just stall the game.
+  const priorShapes = state.proposedTradesThisTurn?.[playerId] ?? [];
+  const sameShape = (
+    give: Partial<ResourceBank>,
+    receive: Partial<ResourceBank>,
+  ): boolean => {
+    for (const shape of priorShapes) {
+      let match = true;
+      for (const r of RESOURCES) {
+        if ((shape.give[r] ?? 0) !== (give[r] ?? 0)) {
+          match = false;
+          break;
+        }
+        if ((shape.receive[r] ?? 0) !== (receive[r] ?? 0)) {
+          match = false;
+          break;
+        }
+      }
+      if (match) return true;
+    }
+    return false;
+  };
+
   // Evaluate a candidate (give, receive). Updates `best` if it's the new
   // top-ranked offer. Returns void; the only mutation is `best`.
   const evalCandidate = (give: Partial<ResourceBank>, receive: Partial<ResourceBank>): void => {
     // Skip reverse / roundabout trades within the same turn.
     if (tradeWouldReverse(state, playerId, give, receive)) return;
+    // Skip re-proposing the exact same shape we already tried this turn.
+    if (sameShape(give, receive)) return;
     // We must have what we'd give.
     for (const r of RESOURCES) {
       if ((give[r] ?? 0) > player.resources[r]) return;

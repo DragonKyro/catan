@@ -94,6 +94,7 @@ function advanceToNextRealTurn(state: GameState): GameState {
     // reverse trades within a turn; resetting at the turn boundary is
     // the right semantics.
     tradeResourcesThisTurn: undefined,
+    proposedTradesThisTurn: undefined,
   };
 }
 

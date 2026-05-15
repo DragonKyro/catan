@@ -152,6 +152,10 @@ export interface TimelineSnapshot {
       blockedByRobber: number;
       // Cumulative dev cards purchased (across the game).
       devCardsBought: number;
+      // Cumulative wall-clock time (ms) attributed to this player.
+      // Each action's preceding gap is credited to the action's actor —
+      // a rough but consistent measure of "who took how long."
+      playerTimeMs: number;
       // Expected production "pips" per resource at this point in time.
       // Pip = probabilityDots(token); a settle adjacent to a 6-token
       // hex contributes 5 pips of that hex's resource. Cities count
@@ -195,6 +199,11 @@ export interface LogStoreSnapshot {
   blockedByRobberTotals: Record<PlayerId, number>;
   // Cumulative dev cards purchased per player.
   devCardsBoughtTotals: Record<PlayerId, number>;
+  // Per-player cumulative wall-clock time attributed to that player.
+  playerTimeTotals: Record<PlayerId, number>;
+  // Timestamp (Date.now()) of the most recent recorded action. Used to
+  // compute per-action gaps and credit them to the next actor.
+  lastActionT: number;
 }
 
 interface LogStore {
@@ -235,6 +244,12 @@ interface LogStore {
   blockedByRobberTotals: Record<PlayerId, number>;
   // Per-player cumulative dev cards bought.
   devCardsBoughtTotals: Record<PlayerId, number>;
+  // Per-player cumulative time spent (ms). Each action's preceding gap
+  // is credited to the action's actor.
+  playerTimeTotals: Record<PlayerId, number>;
+  // Timestamp of most recent recorded action (for computing the next
+  // action's gap). Initialised to startTime on reset.
+  lastActionT: number;
 
   reset: (initial?: GameState) => void;
   record: (before: GameState, action: Action, after: GameState) => void;
@@ -309,6 +324,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
   stealBalanceTotals: {},
   blockedByRobberTotals: {},
   devCardsBoughtTotals: {},
+  playerTimeTotals: {},
+  lastActionT: Date.now(),
 
   reset: (initial) => {
     const gained: Record<PlayerId, number> = {};
@@ -318,6 +335,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const steals: Record<PlayerId, number> = {};
     const blocked: Record<PlayerId, number> = {};
     const devBought: Record<PlayerId, number> = {};
+    const playerTime: Record<PlayerId, number> = {};
     if (initial) {
       for (const p of initial.players) {
         gained[p.id] = 0;
@@ -327,15 +345,17 @@ export const useLogStore = create<LogStore>((set, get) => ({
         steals[p.id] = 0;
         blocked[p.id] = 0;
         devBought[p.id] = 0;
+        playerTime[p.id] = 0;
       }
     }
+    const now = Date.now();
     set({
       entries: [],
       timeline: [],
       gainedTotals: gained,
       gainedByResourceTotals: gainedByResource,
       stats: emptyStats(),
-      startTime: Date.now(),
+      startTime: now,
       nextId: 1,
       initialState: initial ?? null,
       actions: [],
@@ -345,6 +365,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       stealBalanceTotals: steals,
       blockedByRobberTotals: blocked,
       devCardsBoughtTotals: devBought,
+      playerTimeTotals: playerTime,
+      lastActionT: now,
     });
   },
 
@@ -364,6 +386,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       stealBalanceTotals: s.stealBalanceTotals,
       blockedByRobberTotals: s.blockedByRobberTotals,
       devCardsBoughtTotals: s.devCardsBoughtTotals,
+      playerTimeTotals: s.playerTimeTotals,
+      lastActionT: s.lastActionT,
     };
   },
 
@@ -382,6 +406,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       stealBalanceTotals: snap.stealBalanceTotals,
       blockedByRobberTotals: snap.blockedByRobberTotals,
       devCardsBoughtTotals: snap.devCardsBoughtTotals,
+      playerTimeTotals: snap.playerTimeTotals,
+      lastActionT: snap.lastActionT,
     });
   },
 
@@ -613,11 +639,25 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const newSteals: Record<PlayerId, number> = { ...get().stealBalanceTotals };
     const newBlocked: Record<PlayerId, number> = { ...get().blockedByRobberTotals };
     const newDevBought: Record<PlayerId, number> = { ...get().devCardsBoughtTotals };
+    const newPlayerTime: Record<PlayerId, number> = { ...get().playerTimeTotals };
     for (const p of after.players) {
       if (newDiscards[p.id] === undefined) newDiscards[p.id] = 0;
       if (newSteals[p.id] === undefined) newSteals[p.id] = 0;
       if (newBlocked[p.id] === undefined) newBlocked[p.id] = 0;
       if (newDevBought[p.id] === undefined) newDevBought[p.id] = 0;
+      if (newPlayerTime[p.id] === undefined) newPlayerTime[p.id] = 0;
+    }
+
+    // Credit the gap since the previous action to the actor of THIS one.
+    // First action's gap is measured from game-start, so it'll be small
+    // unless a human took a while to place the very first settlement.
+    const now = Date.now();
+    const gap = Math.max(0, now - get().lastActionT);
+    // Identify the actor — every action variant has a `playerId`. Cap the
+    // gap at 5 minutes to keep an idle-window from skewing totals.
+    const actorId = (action as { playerId?: PlayerId }).playerId;
+    if (actorId && newPlayerTime[actorId] !== undefined) {
+      newPlayerTime[actorId] += Math.min(gap, 300_000);
     }
     if (action.type === 'buyDevCard') {
       newDevBought[action.playerId] = (newDevBought[action.playerId] ?? 0) + 1;
@@ -674,6 +714,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         stealBalanceTotals: newSteals,
         blockedByRobberTotals: newBlocked,
         devCardsBoughtTotals: newDevBought,
+        playerTimeTotals: newPlayerTime,
+        lastActionT: now,
       }));
       return;
     }
@@ -715,6 +757,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         stealBalance: newSteals[p.id] ?? 0,
         blockedByRobber: newBlocked[p.id] ?? 0,
         devCardsBought: newDevBought[p.id] ?? 0,
+        playerTimeMs: newPlayerTime[p.id] ?? 0,
         // Snapshot of expected production at this moment (cities count 2×).
         expectedPipsByResource: pipsByResource(after, p.id),
       };
@@ -741,6 +784,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       stealBalanceTotals: newSteals,
       blockedByRobberTotals: newBlocked,
       devCardsBoughtTotals: newDevBought,
+      playerTimeTotals: newPlayerTime,
+      lastActionT: now,
     }));
   },
 }));

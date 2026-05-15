@@ -17,8 +17,8 @@ type Tab =
   | 'bonus'
   | 'trades'
   | 'robber'
-  | 'rolls'
-  | 'circulation';
+  | 'time'
+  | 'gameStats';
 
 const TAB_LABEL: Record<Tab, string> = {
   vp: 'Victory points',
@@ -29,15 +29,18 @@ const TAB_LABEL: Record<Tab, string> = {
   bonus: 'Bonus race',
   trades: 'Trades',
   robber: 'Robber',
-  rolls: 'Dice frequency',
-  circulation: 'Resource circulation',
+  time: 'Player time',
+  gameStats: 'Game stats',
 };
 
 type ResourcesSub = 'earned' | 'hand';
-type ProductionSub = 'total' | 'byResource';
+// Production: a single dropdown — 'all' shows the total; any Resource shows
+// that resource's production line per player.
+type ProductionSub = 'all' | Resource;
 type BonusSub = 'knights' | 'longestRoad' | 'devCardsBought';
 type TradesSub = 'count' | 'efficiency';
 type RobberSub = 'discards' | 'stealBalance' | 'blockedByRobber';
+type GameStatsSub = 'rolls' | 'circulation';
 
 interface Props {
   players: Player[];
@@ -72,10 +75,11 @@ export function MatchGraph({ players, timeline, stats }: Props) {
   const [byPlayerId, setByPlayerId] = useState<string>(players[0]?.id ?? '');
   const [byResource, setByResource] = useState<Resource>('wood');
   const [resourcesSub, setResourcesSub] = useState<ResourcesSub>('earned');
-  const [productionSub, setProductionSub] = useState<ProductionSub>('total');
+  const [productionSub, setProductionSub] = useState<ProductionSub>('all');
   const [bonusSub, setBonusSub] = useState<BonusSub>('knights');
   const [tradesSub, setTradesSub] = useState<TradesSub>('count');
   const [robberSub, setRobberSub] = useState<RobberSub>('discards');
+  const [gameStatsSub, setGameStatsSub] = useState<GameStatsSub>('rolls');
 
   const tabs: Tab[] = [
     'vp',
@@ -86,8 +90,8 @@ export function MatchGraph({ players, timeline, stats }: Props) {
     'bonus',
     'trades',
     'robber',
-    'rolls',
-    'circulation',
+    'time',
+    'gameStats',
   ];
 
   const perPlayerSeries = (extract: (snap: TimelineSnapshot, pid: string) => number): Series[] =>
@@ -192,7 +196,7 @@ export function MatchGraph({ players, timeline, stats }: Props) {
       </div>
     );
   } else if (tab === 'production') {
-    if (productionSub === 'total') {
+    if (productionSub === 'all') {
       const series = perPlayerSeries((s, pid) => {
         const m = s.perPlayer[pid]?.expectedPipsByResource;
         if (!m) return 0;
@@ -205,45 +209,32 @@ export function MatchGraph({ players, timeline, stats }: Props) {
       );
       legend = <SeriesLegend series={series} />;
     } else {
+      const r = productionSub;
       const series = perPlayerSeries(
-        (s, pid) => s.perPlayer[pid]?.expectedPipsByResource?.[byResource] ?? 0,
+        (s, pid) => s.perPlayer[pid]?.expectedPipsByResource?.[r] ?? 0,
       );
       chart = (
         <MultiLineChart
           series={series}
           timeline={timeline}
-          label={`Expected ${RESOURCE_LABEL[byResource]} production`}
+          label={`Expected ${RESOURCE_LABEL[r]} production`}
         />
       );
       legend = <SeriesLegend series={series} />;
     }
     subSelector = (
-      <div className="mgraph-subselector">
-        <SubSelectorInline
-          label="View"
-          value={productionSub}
-          onChange={(v) => setProductionSub(v as ProductionSub)}
-          options={[
-            { value: 'total', label: 'All' },
-            { value: 'byResource', label: 'By resource' },
-          ]}
-        />
-        {productionSub === 'byResource' && (
-          <label>
-            Resource:&nbsp;
-            <select
-              value={byResource}
-              onChange={(e) => setByResource(e.target.value as Resource)}
-            >
-              {RESOURCES.map((r) => (
-                <option key={r} value={r}>
-                  {RESOURCE_ICON[r]} {RESOURCE_LABEL[r]}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
+      <SubSelector
+        label="Resource"
+        value={productionSub}
+        onChange={(v) => setProductionSub(v as ProductionSub)}
+        options={[
+          { value: 'all', label: 'All' },
+          ...RESOURCES.map((r) => ({
+            value: r,
+            label: `${RESOURCE_ICON[r]} ${RESOURCE_LABEL[r]}`,
+          })),
+        ]}
+      />
     );
   } else if (tab === 'bonus') {
     const extract: (snap: TimelineSnapshot, pid: string) => number =
@@ -325,10 +316,34 @@ export function MatchGraph({ players, timeline, stats }: Props) {
         ]}
       />
     );
-  } else if (tab === 'rolls') {
-    chart = <RollFrequencyChart rollCounts={stats.rollCounts} />;
-  } else if (tab === 'circulation') {
-    chart = <CirculationChart circulation={stats.resourcesInCirculation} />;
+  } else if (tab === 'time') {
+    // Cumulative time per player in seconds. Y-axis units are seconds so
+    // the numbers stay readable for typical game lengths.
+    const series = perPlayerSeries(
+      (s, pid) => (s.perPlayer[pid]?.playerTimeMs ?? 0) / 1000,
+    );
+    chart = (
+      <MultiLineChart series={series} timeline={timeline} label="Cumulative time per player (s)" />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'gameStats') {
+    chart =
+      gameStatsSub === 'rolls' ? (
+        <RollFrequencyChart rollCounts={stats.rollCounts} />
+      ) : (
+        <CirculationChart circulation={stats.resourcesInCirculation} />
+      );
+    subSelector = (
+      <SubSelector
+        label="View"
+        value={gameStatsSub}
+        onChange={(v) => setGameStatsSub(v as GameStatsSub)}
+        options={[
+          { value: 'rolls', label: 'Dice frequency' },
+          { value: 'circulation', label: 'Resource circulation' },
+        ]}
+      />
+    );
   }
 
   return (

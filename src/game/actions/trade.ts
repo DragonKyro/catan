@@ -117,6 +117,18 @@ export function handleProposeTrade(
   if (!hasAll(player.resources, action.give)) {
     throw new Error("You don't have the resources you're offering");
   }
+  // Record the trade shape in proposedTradesThisTurn so the AI doesn't
+  // re-propose the same {give, receive} after a rejection — opponents'
+  // hands didn't change, so the second attempt would just stall the turn.
+  const priorProposed = state.proposedTradesThisTurn?.[action.playerId] ?? [];
+  const nextProposed: Record<
+    PlayerId,
+    Array<{ give: Partial<ResourceBank>; receive: Partial<ResourceBank> }>
+  > = { ...(state.proposedTradesThisTurn ?? {}) };
+  nextProposed[action.playerId] = [
+    ...priorProposed,
+    { give: { ...action.give }, receive: { ...action.receive } },
+  ];
   return {
     ...state,
     pendingTrade: {
@@ -126,6 +138,7 @@ export function handleProposeTrade(
       rejectedBy: [],
     },
     tradesProposedThisTurn: state.tradesProposedThisTurn + 1,
+    proposedTradesThisTurn: nextProposed,
   };
 }
 

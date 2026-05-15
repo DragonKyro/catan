@@ -238,6 +238,15 @@ export interface GameState {
     PlayerId,
     { given: Resource[]; received: Resource[] }
   >;
+  // Per-player log of trade SHAPES already proposed this turn (whether
+  // they were accepted, cancelled, or rejected). The AI consults this to
+  // avoid re-proposing the exact same {give, receive} when opponents'
+  // hands haven't changed since the last attempt — that's the loop that
+  // drags games out. Cleared on real turn advance.
+  proposedTradesThisTurn?: Record<
+    PlayerId,
+    Array<{ give: Partial<ResourceBank>; receive: Partial<ResourceBank> }>
+  >;
   // Seafarers extension. All optional, only populated when expansion is active.
   pendingPirateMove?: RobberMoveContext;
   goldChoiceState?: { pending: Record<PlayerId, number> };

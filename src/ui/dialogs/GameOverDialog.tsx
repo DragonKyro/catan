@@ -22,6 +22,8 @@ export function GameOverDialog() {
   const stats = useLogStore((s) => s.stats);
   const initialState = useLogStore((s) => s.initialState);
   const actions = useLogStore((s) => s.actions);
+  const startTime = useLogStore((s) => s.startTime);
+  const lastActionT = useLogStore((s) => s.lastActionT);
   const [minimized, setMinimized] = useState(false);
   const [tab] = useState<Tab>('summary');
   const loadReplay = useReplayStore((s) => s.load);
@@ -68,6 +70,11 @@ export function GameOverDialog() {
           </strong>{' '}
           wins · show results
         </button>
+        {canReplay && (
+          <Button onClick={onWatchReplay} title="Open the full-screen replay viewer">
+            ▶ Watch replay
+          </Button>
+        )}
         <Button variant="primary" onClick={resetGame}>
           New game
         </Button>
@@ -108,6 +115,9 @@ export function GameOverDialog() {
     >
       <p style={{ marginTop: 0, fontSize: '1.05em' }}>
         <strong style={{ color: playerColorVar(winner.color) }}>{winner.name}</strong> wins!
+        <span style={{ color: 'var(--text-soft)', marginLeft: 12, fontSize: '0.9em' }}>
+          Total game time: {formatDurationMs(Math.max(0, lastActionT - startTime))}
+        </span>
       </p>
 
       {tab === 'summary' && (
@@ -157,4 +167,15 @@ export function GameOverDialog() {
       )}
     </DialogShell>
   );
+}
+
+// Format an elapsed-time value as "Xm Ys" or "Hh Mm" for long games.
+function formatDurationMs(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }

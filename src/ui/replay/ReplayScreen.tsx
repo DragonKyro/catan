@@ -173,14 +173,17 @@ function ReplayBody({
       </div>
 
       <div className="rscreen-players">
-        {replayState.players.map((p) => (
-          <PlayerCard
-            key={p.id}
-            player={p}
-            game={replayState}
-            isActing={getActingPlayerId(replayState) === p.id}
-          />
-        ))}
+        {replayState.playerOrder
+          .map((pid) => replayState.players.find((p) => p.id === pid))
+          .filter((p): p is NonNullable<typeof p> => !!p)
+          .map((p) => (
+            <PlayerCard
+              key={p.id}
+              player={p}
+              game={replayState}
+              isActing={getActingPlayerId(replayState) === p.id}
+            />
+          ))}
       </div>
 
       <div className="rscreen-status">
