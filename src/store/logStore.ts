@@ -9,6 +9,7 @@ import type {
 import { RESOURCES } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { pipsByResource } from '@/ai/value';
 
 // =======================================================================
 // Log entries — derived from action dispatches by comparing before/after.
@@ -140,6 +141,21 @@ export interface TimelineSnapshot {
       // bank trades always favor the bank so are always < 1.0).
       tradesGiven: number;
       tradesReceived: number;
+      // Cumulative cards discarded due to a 7-roll. Higher = worse
+      // hand management (or just unlucky 7s landing on big hands).
+      discardedTo7: number;
+      // Net steal balance: +N stolen FROM others (via robber move /
+      // knight play), -N stolen FROM us by others. Sums to 0 game-wide.
+      stealBalance: number;
+      // Cumulative times a dice roll hit one of this player's hexes
+      // while the robber was sitting on it (production blocked).
+      blockedByRobber: number;
+      // Expected production "pips" per resource at this point in time.
+      // Pip = probabilityDots(token); a settle adjacent to a 6-token
+      // hex contributes 5 pips of that hex's resource. Cities count
+      // 2× (they pay double on the roll). Snapshot of current state,
+      // not a running cumulative.
+      expectedPipsByResource: Record<Resource, number>;
     }
   >;
 }
@@ -170,6 +186,11 @@ export interface LogStoreSnapshot {
     PlayerId,
     { tradesCount: number; tradesGiven: number; tradesReceived: number }
   >;
+  discardTotals: Record<PlayerId, number>;
+  stealBalanceTotals: Record<PlayerId, number>;
+  // Cumulative times one of the player's producing hexes had its token
+  // rolled while the robber was sitting on it (so they got nothing).
+  blockedByRobberTotals: Record<PlayerId, number>;
 }
 
 interface LogStore {
@@ -200,6 +221,14 @@ interface LogStore {
     PlayerId,
     { tradesCount: number; tradesGiven: number; tradesReceived: number }
   >;
+  // Per-player cumulative cards lost to forced discards on a 7-roll.
+  discardTotals: Record<PlayerId, number>;
+  // Per-player net steal balance (cards taken FROM opponents via robber
+  // / knight, minus cards taken FROM us). Sums to 0 across the table.
+  stealBalanceTotals: Record<PlayerId, number>;
+  // Per-player cumulative times a dice roll hit one of their hexes
+  // while the robber was sitting on it (production blocked).
+  blockedByRobberTotals: Record<PlayerId, number>;
 
   reset: (initial?: GameState) => void;
   record: (before: GameState, action: Action, after: GameState) => void;
@@ -270,16 +299,25 @@ export const useLogStore = create<LogStore>((set, get) => ({
   actions: [],
   turnNumber: 0,
   tradeStatsTotals: {},
+  discardTotals: {},
+  stealBalanceTotals: {},
+  blockedByRobberTotals: {},
 
   reset: (initial) => {
     const gained: Record<PlayerId, number> = {};
     const gainedByResource: Record<PlayerId, Record<Resource, number>> = {};
     const tradeStats: LogStore['tradeStatsTotals'] = {};
+    const discards: Record<PlayerId, number> = {};
+    const steals: Record<PlayerId, number> = {};
+    const blocked: Record<PlayerId, number> = {};
     if (initial) {
       for (const p of initial.players) {
         gained[p.id] = 0;
         gainedByResource[p.id] = emptyResourceBank();
         tradeStats[p.id] = { tradesCount: 0, tradesGiven: 0, tradesReceived: 0 };
+        discards[p.id] = 0;
+        steals[p.id] = 0;
+        blocked[p.id] = 0;
       }
     }
     set({
@@ -294,6 +332,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
       actions: [],
       turnNumber: 0,
       tradeStatsTotals: tradeStats,
+      discardTotals: discards,
+      stealBalanceTotals: steals,
+      blockedByRobberTotals: blocked,
     });
   },
 
@@ -309,6 +350,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
       actions: s.actions,
       turnNumber: s.turnNumber,
       tradeStatsTotals: s.tradeStatsTotals,
+      discardTotals: s.discardTotals,
+      stealBalanceTotals: s.stealBalanceTotals,
+      blockedByRobberTotals: s.blockedByRobberTotals,
     };
   },
 
@@ -323,6 +367,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
       actions: snap.actions,
       turnNumber: snap.turnNumber,
       tradeStatsTotals: snap.tradeStatsTotals,
+      discardTotals: snap.discardTotals,
+      stealBalanceTotals: snap.stealBalanceTotals,
+      blockedByRobberTotals: snap.blockedByRobberTotals,
     });
   },
 
@@ -547,6 +594,57 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }
     }
 
+    // Per-player discard / steal-balance / blocked-by-robber stats.
+    // Carried in a parallel structure so the timeline snapshot can pick
+    // them up at the bottom of record(). All keyed by playerId.
+    const newDiscards: Record<PlayerId, number> = { ...get().discardTotals };
+    const newSteals: Record<PlayerId, number> = { ...get().stealBalanceTotals };
+    const newBlocked: Record<PlayerId, number> = { ...get().blockedByRobberTotals };
+    for (const p of after.players) {
+      if (newDiscards[p.id] === undefined) newDiscards[p.id] = 0;
+      if (newSteals[p.id] === undefined) newSteals[p.id] = 0;
+      if (newBlocked[p.id] === undefined) newBlocked[p.id] = 0;
+    }
+    if (action.type === 'discard') {
+      let total = 0;
+      for (const r of RESOURCES) total += action.resources[r] ?? 0;
+      newDiscards[action.playerId] = (newDiscards[action.playerId] ?? 0) + total;
+    }
+    if (
+      (action.type === 'moveRobber' || action.type === 'movePirate') &&
+      action.stealFrom
+    ) {
+      newSteals[action.playerId] = (newSteals[action.playerId] ?? 0) + 1;
+      newSteals[action.stealFrom] = (newSteals[action.stealFrom] ?? 0) - 1;
+    }
+    if (action.type === 'rollDice') {
+      const total = action.dice[0] + action.dice[1];
+      if (total !== 7) {
+        // For each producing hex matching the rolled token whose robber
+        // is currently sitting on it, tally one "blocked" event per
+        // owning player. Settlements and cities both count once each
+        // (the user just wants the *count* of blocks).
+        const robberHex = before.board.robberHex;
+        for (const hexId of before.board.hexIds) {
+          const hex = before.board.hexes[hexId]!;
+          if (hex.numberToken !== total) continue;
+          if (hexId !== robberHex) continue;
+          // Identify each player with a settle/city on this hex.
+          const blockedHere = new Set<PlayerId>();
+          for (const vid of hex.corners) {
+            for (const p of before.players) {
+              if (p.settlements.includes(vid) || p.cities.includes(vid)) {
+                blockedHere.add(p.id);
+              }
+            }
+          }
+          for (const pid of blockedHere) {
+            newBlocked[pid] = (newBlocked[pid] ?? 0) + 1;
+          }
+        }
+      }
+    }
+
     if (append.length === 0) {
       // Even when nothing was logged (proposeTrade etc.), capture the action
       // for replay — the engine still consumed it.
@@ -555,6 +653,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
         actions: [...s.actions, action],
         turnNumber: newTurnNumber ?? s.turnNumber,
         tradeStatsTotals: newTradeStats,
+        discardTotals: newDiscards,
+        stealBalanceTotals: newSteals,
+        blockedByRobberTotals: newBlocked,
       }));
       return;
     }
@@ -592,6 +693,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
         tradesCount: ts.tradesCount,
         tradesGiven: ts.tradesGiven,
         tradesReceived: ts.tradesReceived,
+        discardedTo7: newDiscards[p.id] ?? 0,
+        stealBalance: newSteals[p.id] ?? 0,
+        blockedByRobber: newBlocked[p.id] ?? 0,
+        // Snapshot of expected production at this moment (cities count 2×).
+        expectedPipsByResource: pipsByResource(after, p.id),
       };
     }
     const newStep = get().entries.length + append.length;
@@ -612,6 +718,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
       actions: [...s.actions, action],
       turnNumber: newTurnNumber ?? s.turnNumber,
       tradeStatsTotals: newTradeStats,
+      discardTotals: newDiscards,
+      stealBalanceTotals: newSteals,
+      blockedByRobberTotals: newBlocked,
     }));
   },
 }));

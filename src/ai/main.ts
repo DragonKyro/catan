@@ -92,69 +92,17 @@ export function chooseMainPhaseAction(
     if (bestVid) return { type: 'buildSettlement', playerId, vertex: bestVid };
   }
 
-  // 3) BUY DEV CARD — but only once we're not actively expanding.
-  //    Dev cards are slow VP (no production); expansion compounds.
-  //    Gates that SKIP the dev card purchase:
-  //      a) saveForCity: we're close to a city (1-2 cards away). Buying
-  //         a card now would spend wheat+ore that we need for the city,
-  //         setting us back 1-2 turns. Wait. (Even at handSize 7 — the
-  //         city gives us 2 VP and demolishes a settle, freeing tokens;
-  //         dev cards usually do neither.)
-  //      b) earlyGame: just past initial placement (<2 placed). Build first.
-  //      c) hasOpenSettleSpot: a reachable open spot AND we already have
-  //         most of a settlement's materials.
-  //      d) couldRoadToSettleSpot: no reachable spot, but a single road
-  //         would unlock one AND we have wood+brick. Build that road.
-  if (
-    canAfford(player.resources, COSTS.devCard) &&
-    state.devCardDeck.length > 0
-  ) {
-    const needs = reportNeeds(state, playerId);
-    let handSize = 0;
-    for (const r of RESOURCES) handSize += player.resources[r];
-    const cityShortfall =
-      (needs.byResource.wheat ?? 0) + (needs.byResource.ore ?? 0);
-    const saveForCity =
-      needs.goal === 'city' &&
-      player.settlements.length > 0 &&
-      // 1-2 cards from a city. Card cost (sheep+wheat+ore) directly
-      // overlaps with city cost (2 wheat+3 ore) — buying now would set
-      // us back. Allow handSize up to 8 here because a city upgrade
-      // converts a settle into a city (net hand change: 2W+3O→0, plus
-      // we gain VP), which is more 7-out relief than a dev card buy.
-      cityShortfall <= 2 &&
-      handSize <= 8;
-    const placedSettlesAndCities = player.settlements.length + player.cities.length;
-    const earlyGame = placedSettlesAndCities < 2;
-    const settleCostHave =
-      Math.min(1, player.resources.wood) +
-      Math.min(1, player.resources.brick) +
-      Math.min(1, player.resources.sheep) +
-      Math.min(1, player.resources.wheat);
-    const openSpots = countOpenSettlementSpots(state, playerId);
-    const hasOpenSettleSpot = openSpots > 0 && settleCostHave >= 3;
-    const couldRoadToSettleSpot =
-      openSpots === 0 &&
-      player.resources.wood >= 1 &&
-      player.resources.brick >= 1 &&
-      countOneRoadSettleSpots(state, playerId) > 0;
-    if (
-      !saveForCity &&
-      !earlyGame &&
-      !hasOpenSettleSpot &&
-      !couldRoadToSettleSpot
-    ) {
-      return { type: 'buyDevCard', playerId };
-    }
-  }
-
-  // 4) BUILD ROAD
-  //    Score each candidate road by its NEW endpoint (the vertex not
-  //    already in our network). Reasons to build:
-  //      (a) Unlock a new high-value settlement spot we can't currently reach.
-  //      (b) Pursue Longest Road (+2 VP) when within 1-2 of claim length.
-  //      (c) Spend down spare wood/brick to avoid hoarding — every turn
-  //          we hold idle road materials is a turn we don't expand.
+  // 3) BUILD ROAD
+  //    Roads come BEFORE dev cards. Resource-efficiency principle: if we
+  //    have road materials AND the road would extend our settle-network,
+  //    that's a path toward direct VP (settle → 1 VP + production). A
+  //    dev card is expected ~0.2 VP (5 VP cards / 25-card deck) and
+  //    consumes scarcer resources (sheep+wheat+ore). Always cheaper to
+  //    spend idle wood+brick on roads than to fish for VP cards.
+  //
+  //    Quality threshold + station-skip + contested-endpoint filters
+  //    below ensure we only build roads that actually contribute — if
+  //    nothing meets the bar, we fall through to dev card / trade.
   if (
     canAfford(player.resources, COSTS.road) &&
     player.roads.length < 15
@@ -167,6 +115,13 @@ export function chooseMainPhaseAction(
     if (lrHolder === null) lrClaimTarget = LR_CLAIM_LENGTH;
     else if (lrHolder !== playerId) lrClaimTarget = lrLength + 1;
     const pursuingLR = lrClaimTarget > 0 && myRoadLen + 2 >= lrClaimTarget;
+    // Station roads (toward an unsettle-able vertex) are only allowed
+    // when LR claim is imminent — within 1 of the target length. At 2+
+    // away, a station road doesn't reliably extend our chain to claim,
+    // so it's likely a useless build. (Earlier rule allowed stations
+    // throughout LR pursuit; that produced the dead-end roads we kept
+    // seeing in screenshots.)
+    const stationAllowed = lrClaimTarget > 0 && myRoadLen + 1 >= lrClaimTarget;
 
     // Consult the win plan: if it says we need more settlements, we're
     // willing to accept a lower-quality unlock.
@@ -193,93 +148,108 @@ export function chooseMainPhaseAction(
     if (pursuingLR) threshold = ROAD_TARGET_THRESHOLD_LR;
     else if (planNeedsSettlements) threshold = 3.5;
     if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
+    // `openSpots` no longer gates whether we try at all — we always
+    // evaluate candidates and let the quality threshold filter. That
+    // way idle wood/brick gets spent on the best available road if
+    // one is worth building.
+    void openSpots;
 
-    // Gate: when do we EVEN look for a road?
-    //   - LR pursuit (road has direct VP value)
-    //   - No open settlement spots reachable through current network
-    //     (road is the only way to expand)
-    //
-    // Notably we do NOT build roads just because we have spare wood/brick
-    // OR because handSize is high. If a settle spot is already reachable
-    // (openSpots > 0), we should keep wood+brick for the eventual settle
-    // and trade for the missing sheep/wheat instead. Burning idle road
-    // materials on yet another road usually produced "dead-end" roads
-    // that never got followed up. Trade and bank logic below handles
-    // the 7-out case.
-    const willingToBuild = pursuingLR || openSpots === 0;
+    let bestEid: EdgeId | null = null;
+    let bestScore = -Infinity;
 
-    if (willingToBuild) {
-      let bestEid: EdgeId | null = null;
-      let bestScore = -Infinity;
-
-      for (const eid of state.board.edgeIds) {
-        if (!canConnectRoad(state, playerId, eid)) continue;
-        const edge = state.board.edges[eid]!;
-        // Identify the NEW endpoint — the one not already in our network.
-        // If BOTH endpoints are in our network the road just closes a
-        // loop (no expansion value, ~0 LR value). Skip.
-        let newVid: VertexId | null = null;
-        for (const v of edge.vertices) {
-          if (!isOurVertex(state, playerId, v, eid)) {
-            newVid = v;
+    for (const eid of state.board.edgeIds) {
+      if (!canConnectRoad(state, playerId, eid)) continue;
+      const edge = state.board.edges[eid]!;
+      // Identify the NEW endpoint — the one not already in our network.
+      // If BOTH endpoints are in our network the road just closes a
+      // loop (no expansion value, ~0 LR value). Skip.
+      let newVid: VertexId | null = null;
+      for (const v of edge.vertices) {
+        if (!isOurVertex(state, playerId, v, eid)) {
+          newVid = v;
+          break;
+        }
+      }
+      if (newVid === null) continue;
+      // If the new endpoint is already settled (by us or anyone), this
+      // road plugs into a dead-end: no settle target, and an opponent's
+      // settle on it also BREAKS any longest-road chain we'd hope to
+      // extend through it. Pure waste.
+      const newVertex = state.board.vertices[newVid]!;
+      const settledHere = state.players.some(
+        (p) => p.settlements.includes(newVid!) || p.cities.includes(newVid!),
+      );
+      if (settledHere) continue;
+      // Settlement-eligibility at the new endpoint. If we can't settle
+      // here (adjacent to someone else's settle), the road is a way-
+      // station — only useful if we're imminently claiming LR. Otherwise
+      // it's the "roads in all directions" failure mode. `stationAllowed`
+      // requires us to be within 1 of LR claim length, NOT just within
+      // 2 (which had been letting station roads through too early).
+      let blockedAdjacent = false;
+      for (const n of newVertex.neighborVertices) {
+        for (const p of state.players) {
+          if (p.settlements.includes(n) || p.cities.includes(n)) {
+            blockedAdjacent = true;
             break;
           }
         }
-        if (newVid === null) continue;
-        // If the new endpoint is already settled (by us or anyone), this
-        // road plugs into a dead-end: no settle target, and an opponent's
-        // settle on it also BREAKS any longest-road chain we'd hope to
-        // extend through it. Pure waste.
-        const newVertex = state.board.vertices[newVid]!;
-        const settledHere = state.players.some(
-          (p) => p.settlements.includes(newVid!) || p.cities.includes(newVid!),
-        );
-        if (settledHere) continue;
-        // Settlement-eligibility at the new endpoint. If we can't settle
-        // here (adjacent to someone else's settle), the road is at best
-        // a way-station toward something further. Outside of LR pursuit,
-        // skip these entirely — pointing roads at unsettle-able spots is
-        // exactly the "roads in all directions" failure mode we're trying
-        // to avoid. For LR pursuit a way-station road still extends our
-        // chain, so it's allowed there.
-        let blockedAdjacent = false;
-        for (const n of newVertex.neighborVertices) {
-          for (const p of state.players) {
-            if (p.settlements.includes(n) || p.cities.includes(n)) {
-              blockedAdjacent = true;
-              break;
-            }
-          }
-          if (blockedAdjacent) break;
-        }
-        if (blockedAdjacent && !pursuingLR) continue;
+        if (blockedAdjacent) break;
+      }
+      if (blockedAdjacent && !stationAllowed) continue;
 
-        const base = vertexScore(state, newVid, playerId);
-        // Contested-endpoint penalty: enemy roads at the new endpoint
-        // mean an opponent could settle here before we can.
-        let contestedPenalty = 0;
-        if (!pursuingLR) {
-          let enemyRoadsAtNew = 0;
-          for (const ne of newVertex.edges) {
-            if (ne === eid) continue;
-            for (const p of state.players) {
-              if (p.id === playerId) continue;
-              if (p.roads.includes(ne)) enemyRoadsAtNew++;
-            }
+      const base = vertexScore(state, newVid, playerId);
+      // Contested-endpoint penalty: enemy roads at the new endpoint
+      // mean an opponent could settle here before we can.
+      let contestedPenalty = 0;
+      if (!pursuingLR) {
+        let enemyRoadsAtNew = 0;
+        for (const ne of newVertex.edges) {
+          if (ne === eid) continue;
+          for (const p of state.players) {
+            if (p.id === playerId) continue;
+            if (p.roads.includes(ne)) enemyRoadsAtNew++;
           }
-          if (enemyRoadsAtNew > 0) contestedPenalty = 2 * enemyRoadsAtNew;
         }
-        const finalScore = pursuingLR
-          ? Math.max(base - (blockedAdjacent ? 2.5 : 0), ROAD_TARGET_THRESHOLD_LR + 0.5)
-          : base - contestedPenalty;
-        if (finalScore > bestScore) {
-          bestScore = finalScore;
-          bestEid = eid;
-        }
+        if (enemyRoadsAtNew > 0) contestedPenalty = 2 * enemyRoadsAtNew;
       }
-      if (bestEid && bestScore >= threshold) {
-        return { type: 'buildRoad', playerId, edge: bestEid };
+      const finalScore = pursuingLR
+        ? Math.max(base - (blockedAdjacent ? 2.5 : 0), ROAD_TARGET_THRESHOLD_LR + 0.5)
+        : base - contestedPenalty;
+      if (finalScore > bestScore) {
+        bestScore = finalScore;
+        bestEid = eid;
       }
+    }
+    if (bestEid && bestScore >= threshold) {
+      return { type: 'buildRoad', playerId, edge: bestEid };
+    }
+  }
+
+  // 4) BUY DEV CARD — fallback when no quality road was buildable AND
+  //    we're not actively expanding via settle/city. Dev cards are
+  //    slow VP (no production); we only reach them when the direct-VP
+  //    paths (city / settle / road→settle) have been exhausted this
+  //    turn. Still gate against the "1 card from a city" trap: buying
+  //    a dev card now would spend wheat+ore we need for that city.
+  if (
+    canAfford(player.resources, COSTS.devCard) &&
+    state.devCardDeck.length > 0
+  ) {
+    const needs = reportNeeds(state, playerId);
+    let handSize = 0;
+    for (const r of RESOURCES) handSize += player.resources[r];
+    const cityShortfall =
+      (needs.byResource.wheat ?? 0) + (needs.byResource.ore ?? 0);
+    const saveForCity =
+      needs.goal === 'city' &&
+      player.settlements.length > 0 &&
+      cityShortfall <= 2 &&
+      handSize <= 8;
+    const placedSettlesAndCities = player.settlements.length + player.cities.length;
+    const earlyGame = placedSettlesAndCities < 2;
+    if (!saveForCity && !earlyGame) {
+      return { type: 'buyDevCard', playerId };
     }
   }
 
@@ -343,26 +313,6 @@ function countOpenSettlementSpots(state: GameState, playerId: PlayerId): number 
   let count = 0;
   for (const v of reachable) {
     if (canPlaceSettlement(state, playerId, v)) count++;
-  }
-  return count;
-}
-
-// Vertices one road-extension away from our current network where a
-// settlement could legally be placed. Used to know "should I save sheep/
-// wheat/ore to push for a settle, instead of spending them on a dev card?"
-function countOneRoadSettleSpots(state: GameState, playerId: PlayerId): number {
-  const player = state.players.find((p) => p.id === playerId);
-  if (!player) return 0;
-  let count = 0;
-  const seen = new Set<VertexId>();
-  for (const eid of state.board.edgeIds) {
-    if (!canConnectRoad(state, playerId, eid)) continue;
-    const edge = state.board.edges[eid]!;
-    for (const v of edge.vertices) {
-      if (seen.has(v)) continue;
-      seen.add(v);
-      if (canPlaceSettlement(state, playerId, v)) count++;
-    }
   }
   return count;
 }

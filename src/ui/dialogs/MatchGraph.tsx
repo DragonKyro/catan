@@ -14,12 +14,17 @@ type PerPlayerMetric =
   | 'knights'
   | 'longestRoad'
   | 'tradesCount'
-  | 'tradeEfficiency';
+  | 'tradeEfficiency'
+  | 'discards'
+  | 'stealBalance'
+  | 'blockedByRobber'
+  | 'expectedPipsTotal';
 
 type Tab =
   | PerPlayerMetric
   | 'byPlayer'
   | 'byResource'
+  | 'expectedPipsByResource'
   | 'rolls'
   | 'circulation';
 
@@ -31,8 +36,13 @@ const TAB_LABEL: Record<Tab, string> = {
   longestRoad: 'Longest road',
   tradesCount: 'Trades',
   tradeEfficiency: 'Trade efficiency',
+  discards: 'Cards discarded (7s)',
+  stealBalance: 'Net steal balance',
+  blockedByRobber: 'Blocked by robber',
+  expectedPipsTotal: 'Expected production',
   byPlayer: 'By player',
   byResource: 'By resource',
+  expectedPipsByResource: 'Production by resource',
   rolls: 'Dice frequency',
   circulation: 'Resource circulation',
 };
@@ -76,10 +86,15 @@ export function MatchGraph({ players, timeline, stats }: Props) {
     'handTotal',
     'byPlayer',
     'byResource',
+    'expectedPipsTotal',
+    'expectedPipsByResource',
     'knights',
     'longestRoad',
     'tradesCount',
     'tradeEfficiency',
+    'discards',
+    'stealBalance',
+    'blockedByRobber',
     'rolls',
     'circulation',
   ];
@@ -202,6 +217,85 @@ export function MatchGraph({ players, timeline, stats }: Props) {
         series={series}
         timeline={timeline}
         label={`${RESOURCE_LABEL[byResource]} earned per player`}
+      />
+    );
+    legend = <SeriesLegend series={series} />;
+    subSelector = (
+      <div className="mgraph-subselector">
+        <label>
+          Resource:&nbsp;
+          <select
+            value={byResource}
+            onChange={(e) => setByResource(e.target.value as Resource)}
+          >
+            {RESOURCES.map((r) => (
+              <option key={r} value={r}>
+                {RESOURCE_ICON[r]} {RESOURCE_LABEL[r]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    );
+  } else if (tab === 'discards') {
+    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.discardedTo7 ?? 0);
+    chart = (
+      <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.discards} />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'stealBalance') {
+    // Net cards stolen FROM others minus stolen BY others. Positive = thief,
+    // negative = victim. Sums to zero across all players in the game.
+    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.stealBalance ?? 0);
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={TAB_LABEL.stealBalance}
+      />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'blockedByRobber') {
+    const series = perPlayerSeries(
+      (s, pid) => s.perPlayer[pid]?.blockedByRobber ?? 0,
+    );
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={TAB_LABEL.blockedByRobber}
+      />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'expectedPipsTotal') {
+    // Sum across all resources — total expected production per dice
+    // roll. Cities count 2× (already baked into expectedPipsByResource).
+    const series = perPlayerSeries((s, pid) => {
+      const m = s.perPlayer[pid]?.expectedPipsByResource;
+      if (!m) return 0;
+      let total = 0;
+      for (const r of RESOURCES) total += m[r] ?? 0;
+      return total;
+    });
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={TAB_LABEL.expectedPipsTotal}
+      />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'expectedPipsByResource') {
+    // Pivot by resource: how much of resource X does each player produce
+    // (in pip-equivalents) at each step.
+    const series = perPlayerSeries(
+      (s, pid) => s.perPlayer[pid]?.expectedPipsByResource?.[byResource] ?? 0,
+    );
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={`Expected ${RESOURCE_LABEL[byResource]} production per player`}
       />
     );
     legend = <SeriesLegend series={series} />;
