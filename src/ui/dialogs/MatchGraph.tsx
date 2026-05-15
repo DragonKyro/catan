@@ -425,32 +425,42 @@ function SeriesLegend({ series }: { series: Series[] }) {
   );
 }
 
-// Snap yMax up to a round number and produce tick values that are all
-// distinct. Tries to land on a stride of 1/2/5/10/20/25/50/100/...
-function niceYTicks(yMaxRaw: number): { yMax: number; yTicks: number[] } {
-  if (yMaxRaw <= 0) return { yMax: 1, yTicks: [0, 1] };
-  // Pick a stride from a nice-number sequence, then round yMax up to a
-  // multiple of stride * 4 (so we get ~5 ticks total).
+// Snap a [yMinRaw, yMaxRaw] range up/down to nice round endpoints and
+// produce ~5 evenly-spaced tick values. Supports negative minima for
+// metrics like net steal balance where the chart needs to extend below
+// zero. Stride is picked from a nice-number sequence based on the total
+// range; ticks always include 0 when the range crosses it.
+function niceYTicks(
+  yMaxRaw: number,
+  yMinRaw: number = 0,
+): { yMin: number; yMax: number; yTicks: number[] } {
+  // Fractional-only range (e.g. tradeEfficiency near 0..1). Same shortcut
+  // as before — but with a yMin so the renderer doesn't have to special
+  // case the old single-value API.
+  if (yMinRaw >= 0 && yMaxRaw < 1) {
+    return { yMin: 0, yMax: 1, yTicks: [0, 0.25, 0.5, 0.75, 1] };
+  }
+  // Empty / degenerate range.
+  if (yMaxRaw <= 0 && yMinRaw >= 0) {
+    return { yMin: 0, yMax: 1, yTicks: [0, 1] };
+  }
+  // Pick a stride large enough that we'll get ~5 ticks across the span.
+  // Symmetric search: consider the absolute span yMaxRaw - yMinRaw.
+  const span = Math.max(1, yMaxRaw - yMinRaw);
   const niceStrides = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
   let stride = 1;
   for (const s of niceStrides) {
-    if (yMaxRaw / s <= 5) {
+    if (span / s <= 5) {
       stride = s;
       break;
     }
     stride = s;
   }
-  // For small ratios (e.g. tradeEfficiency), allow fractional strides.
-  if (yMaxRaw < 1) {
-    return {
-      yMax: 1,
-      yTicks: [0, 0.25, 0.5, 0.75, 1],
-    };
-  }
+  const yMin = Math.floor(yMinRaw / stride) * stride;
   const yMax = Math.ceil(yMaxRaw / stride) * stride;
   const ticks: number[] = [];
-  for (let v = 0; v <= yMax; v += stride) ticks.push(v);
-  return { yMax, yTicks: ticks };
+  for (let v = yMin; v <= yMax; v += stride) ticks.push(v);
+  return { yMin, yMax, yTicks: ticks };
 }
 
 function MultiLineChart({
@@ -470,27 +480,32 @@ function MultiLineChart({
   }
 
   let yMaxRaw = 1;
+  let yMinRaw = 0;
   for (const snap of timeline) {
     for (const s of series) {
       const v = s.valueAt(snap);
       if (v > yMaxRaw) yMaxRaw = v;
+      if (v < yMinRaw) yMinRaw = v;
     }
   }
-  // Snap yMax up to a "nice" round number so y-axis ticks are clean
-  // integers (e.g. yMax=4 → ticks [0,1,2,3,4]; yMax=14 → ticks [0,5,10,15]).
-  // This also prevents the "duplicate tick labels" effect we'd get when
-  // Math.round((yMax * i) / 4) collapses two adjacent ticks to the same
-  // integer (e.g. yMax=3 → ticks [0,1,2,2,3]).
-  const { yMax, yTicks } = niceYTicks(yMaxRaw);
+  // Snap range to "nice" round endpoints. yMin is non-zero only when
+  // the data goes negative (e.g. net steal balance) — then the chart
+  // spans across zero with a dedicated baseline.
+  const { yMin, yMax, yTicks } = niceYTicks(yMaxRaw, yMinRaw);
 
   const xMax = timeline[timeline.length - 1]!.step;
   const xOf = (step: number) =>
     PAD_L + (step / Math.max(1, xMax)) * (W - PAD_L - PAD_R);
-  const yOf = (v: number) => H - PAD_B - (v / yMax) * (H - PAD_T - PAD_B);
+  const yOf = (v: number) =>
+    H - PAD_B - ((v - yMin) / (yMax - yMin)) * (H - PAD_T - PAD_B);
 
   const lines = series.map((s) => {
     const pts: string[] = [];
-    pts.push(`M ${xOf(0)} ${yOf(0)}`);
+    // Start path at the leftmost x, anchored at zero (or yMin if zero isn't
+    // in the visible range). This makes the very first segment line up
+    // with the y=0 grid line on positive-only charts.
+    const anchorY = yMin <= 0 && yMax >= 0 ? 0 : yMin;
+    pts.push(`M ${xOf(0)} ${yOf(anchorY)}`);
     for (const snap of timeline) {
       pts.push(`L ${xOf(snap.step)} ${yOf(s.valueAt(snap))}`);
     }

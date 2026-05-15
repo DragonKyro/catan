@@ -10,6 +10,7 @@ import { HandPanel } from '@/ui/panels/HandPanel';
 import { OpponentPanel } from '@/ui/panels/OpponentPanel';
 import { ActionBar } from '@/ui/panels/ActionBar';
 import { DiceDisplay } from '@/ui/panels/DiceDisplay';
+import { GameClock } from '@/ui/panels/GameClock';
 import { BankPanel } from '@/ui/panels/BankPanel';
 import { PendingTradeBanner } from '@/ui/panels/PendingTradeBanner';
 import { SidePanelTabs } from '@/ui/panels/SidePanelTabs';
@@ -75,6 +76,7 @@ export function GameView() {
       <main className="gameview-board">
         <Board />
         <div className="gameview-dice-overlay">
+          <GameClock />
           <DiceDisplay />
           <TurnTimer />
         </div>
