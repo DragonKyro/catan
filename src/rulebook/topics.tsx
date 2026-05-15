@@ -7,11 +7,15 @@ import {
   PortDiagram,
   RobberDiagram,
 } from './diagrams';
+import { SEAFARERS_TOPICS } from './seafarers/topics';
 
 export interface Topic {
   id: string;
   title: string;
   body: ReactNode;
+  // Optional grouping label rendered before this topic in the TOC. Used
+  // to separate base-game topics from expansion sections.
+  section?: string;
 }
 
 export const TOPICS: Topic[] = [
@@ -288,4 +292,7 @@ export const TOPICS: Topic[] = [
       </>
     ),
   },
+  // Seafarers expansion topics — rendered with a section header so they're
+  // visually separated from the base-game topics.
+  ...SEAFARERS_TOPICS.map((t, i) => (i === 0 ? { ...t, section: 'Seafarers' } : t)),
 ];

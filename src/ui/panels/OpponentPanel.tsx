@@ -62,6 +62,7 @@ export function OpponentPanel() {
               <span title="Dev cards (face down)">🂡 {cards}</span>
               <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
               <span title="Roads">🛣️ {p.roads.length}</span>
+              {p.ships.length > 0 && <span title="Ships">⛵ {p.ships.length}</span>}
               {p.hasLongestRoad && <span title="Longest Road">★ Road</span>}
               {p.hasLargestArmy && <span title="Largest Army">★ Army</span>}
             </div>

@@ -20,9 +20,9 @@ import {
   useGameStore,
 } from './gameStore';
 
-const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white'];
+const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink'];
 const DEFAULT_VP = 10;
-const MAX_SEATS = 4;
+const MAX_SEATS = 6;
 const MIN_SEATS = 3;
 const SYSTEM_NAME = 'System';
 

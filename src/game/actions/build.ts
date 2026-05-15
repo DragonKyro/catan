@@ -15,10 +15,17 @@ const MAX_CITIES = 4;
 const MAX_ROADS = 15;
 
 export function handleBuildRoad(state: GameState, action: BuildRoadAction): GameState {
-  if (state.phase !== 'main') throw new Error(`Cannot build road in phase ${state.phase}`);
+  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+    throw new Error(`Cannot build road in phase ${state.phase}`);
+  }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   const player = getPlayer(state, action.playerId);
   if (player.roads.length >= MAX_ROADS) throw new Error('No road tokens left');
+  const edgeDef = state.board.edges[action.edge];
+  if (edgeDef) {
+    const allSea = edgeDef.hexes.every((h) => state.board.hexes[h]!.terrain === 'sea');
+    if (allSea) throw new Error('Cannot place a road on a sea edge');
+  }
   if (!canConnectRoad(state, action.playerId, action.edge)) {
     throw new Error('Invalid road placement');
   }
@@ -37,7 +44,7 @@ export function handleBuildSettlement(
   state: GameState,
   action: BuildSettlementAction,
 ): GameState {
-  if (state.phase !== 'main') {
+  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
     throw new Error(`Cannot build settlement in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
@@ -65,7 +72,9 @@ export function handleBuildSettlement(
 }
 
 export function handleBuildCity(state: GameState, action: BuildCityAction): GameState {
-  if (state.phase !== 'main') throw new Error(`Cannot build city in phase ${state.phase}`);
+  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+    throw new Error(`Cannot build city in phase ${state.phase}`);
+  }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   const player = getPlayer(state, action.playerId);
   if (player.cities.length >= MAX_CITIES) throw new Error('No city tokens left');

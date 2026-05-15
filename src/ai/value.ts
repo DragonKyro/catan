@@ -26,7 +26,13 @@ export function probabilityDots(token: number | null): number {
 }
 
 export function terrainWeight(t: Terrain): number {
-  if (t === 'desert') return 0;
+  if (t === 'desert' || t === 'sea') return 0;
+  // Gold hexes pay any resource on roll — average across the weights.
+  if (t === 'gold') {
+    let sum = 0;
+    for (const r of RESOURCES) sum += RESOURCE_WEIGHT[r];
+    return sum / RESOURCES.length;
+  }
   return RESOURCE_WEIGHT[t];
 }
 

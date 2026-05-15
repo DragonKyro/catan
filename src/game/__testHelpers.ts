@@ -14,6 +14,8 @@ import { addResources } from './resources';
 export function findValidSettlementSpot(state: GameState): VertexId {
   for (const vid of state.board.vertexIds) {
     const v = state.board.vertices[vid]!;
+    // Skip vertices that touch no land hex (Seafarers scenarios have these).
+    if (!v.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea')) continue;
     let ok = true;
     for (const p of state.players) {
       if (p.settlements.includes(vid) || p.cities.includes(vid)) {
@@ -36,6 +38,9 @@ export function findValidSettlementSpot(state: GameState): VertexId {
 export function findValidRoadFromVertex(state: GameState, vid: VertexId): EdgeId {
   const v = state.board.vertices[vid]!;
   for (const eid of v.edges) {
+    const edge = state.board.edges[eid]!;
+    // Skip sea-only edges (those are ship-only).
+    if (edge.hexes.every((h) => state.board.hexes[h]!.terrain === 'sea')) continue;
     let used = false;
     for (const p of state.players) {
       if (p.roads.includes(eid)) {

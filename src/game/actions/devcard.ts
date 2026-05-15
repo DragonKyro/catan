@@ -17,12 +17,15 @@ import {
   canAfford,
 } from '../resources';
 import { canConnectRoad } from '../placement';
+import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
 
 export function handleBuyDevCard(
   state: GameState,
   action: BuyDevCardAction,
 ): GameState {
-  if (state.phase !== 'main') throw new Error(`Cannot buy dev card in phase ${state.phase}`);
+  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+    throw new Error(`Cannot buy dev card in phase ${state.phase}`);
+  }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   if (state.devCardDeck.length === 0) throw new Error('Dev card deck is empty');
 
@@ -104,7 +107,7 @@ export function handlePlayKnight(
   }));
   return {
     ...next,
-    phase: 'moveRobber',
+    phase: robberOrPirateChoicePhase(next),
     pendingRobberMove: { reason: 'knight', returnTo: state.phase as 'main' | 'rollOrPlayKnight' },
     hasPlayedDevCardThisTurn: true,
   };

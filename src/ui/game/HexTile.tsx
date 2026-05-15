@@ -1,9 +1,9 @@
-import type { Hex } from '@/game/types';
+import type { BoardState, Hex } from '@/game/types';
 import { hexPolygonPoints, probabilityDots } from './boardLayout';
-import { useGameStore } from '@/store/gameStore';
 import { HexTexture } from './HexTexture';
 
 interface Props {
+  board: BoardState;
   hex: Hex;
   isRobberOnHex: boolean;
   clickable: boolean;
@@ -17,11 +17,12 @@ const TERRAIN_FILL: Record<string, string> = {
   wheat: 'var(--terrain-wheat)',
   ore: 'var(--terrain-ore)',
   desert: 'var(--terrain-desert)',
+  sea: 'var(--terrain-sea)',
+  gold: 'var(--terrain-gold)',
 };
 
-export function HexTile({ hex, isRobberOnHex, clickable, onClick }: Props) {
-  const game = useGameStore((s) => s.game!);
-  const points = hexPolygonPoints(game.board, hex.id);
+export function HexTile({ board, hex, isRobberOnHex, clickable, onClick }: Props) {
+  const points = hexPolygonPoints(board, hex.id);
   const isHot = hex.numberToken === 6 || hex.numberToken === 8;
   const pips = probabilityDots(hex.numberToken);
 

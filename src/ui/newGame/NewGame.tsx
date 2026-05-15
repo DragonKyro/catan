@@ -8,11 +8,17 @@ import {
   PLAYER_COLOR_HEX,
   PLAYER_COLOR_LABEL,
 } from '@/ui/shared/playerColors';
+import {
+  ExpansionPicker,
+  DEFAULT_EXPANSIONS,
+  expansionListFrom,
+  type ExpansionPickerValue,
+} from './ExpansionPicker';
 import './NewGame.css';
 
-const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3'];
-const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai'];
-const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white'];
+const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3', 'AI 4', 'AI 5'];
+const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai', 'ai', 'ai'];
+const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink'];
 
 interface Props {
   onBack?: () => void;
@@ -26,6 +32,7 @@ export function NewGame({ onBack }: Props = {}) {
   const [openPicker, setOpenPicker] = useState<number | null>(null);
   const [vp, setVp] = useState(10);
   const [seed, setSeed] = useState('');
+  const [expansions, setExpansions] = useState<ExpansionPickerValue>(DEFAULT_EXPANSIONS);
   const newGame = useGameStore((s) => s.newGame);
 
   const start = () => {
@@ -35,7 +42,11 @@ export function NewGame({ onBack }: Props = {}) {
       playerTypes: types.slice(0, numPlayers),
       playerColors: colors.slice(0, numPlayers),
       seed: finalSeed,
-      settings: { victoryPointsToWin: vp },
+      settings: {
+        victoryPointsToWin: vp,
+        expansions: expansionListFrom(expansions),
+        scenarioId: expansions.seafarers ? expansions.scenarioId : undefined,
+      },
     });
   };
 
@@ -69,7 +80,7 @@ export function NewGame({ onBack }: Props = {}) {
         <label className="newgame-field">
           <span>Players</span>
           <div className="newgame-segmented">
-            {[3, 4].map((n) => (
+            {[3, 4, 5, 6].map((n) => (
               <button
                 key={n}
                 type="button"
@@ -170,6 +181,8 @@ export function NewGame({ onBack }: Props = {}) {
             onChange={(e) => setVp(Math.max(3, Math.min(20, Number(e.target.value) || 10)))}
           />
         </label>
+
+        <ExpansionPicker value={expansions} onChange={setExpansions} />
 
         <label className="newgame-field">
           <span>Seed (optional)</span>

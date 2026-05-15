@@ -1,9 +1,11 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip } from './types';
 import { generateBoard } from './board/generator';
+import { generateSeafarersBoard } from './modules/seafarers/board/generator';
+import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
 import { shuffle } from './rng';
 import { emptyBank, bankFull } from './resources';
 
-const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white'];
+const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink'];
 
 const ALL_PLAYER_COLORS: PlayerColor[] = [
   'red',
@@ -41,10 +43,11 @@ export interface CreateGameOptions {
 
 export function createGame(opts: CreateGameOptions): GameState {
   const numPlayers = opts.playerNames.length;
-  if (numPlayers < 2 || numPlayers > 4) {
+  if (numPlayers < 2 || numPlayers > 6) {
     // The engine still tolerates 2 players (used by tests and edge cases),
-    // but the official rules and the standard new-game flow require 3 or 4.
-    throw new Error(`Catan supports 2-4 players, got ${numPlayers}`);
+    // but the official rules and the standard new-game flow require 3-6
+    // (with 5-6 using the larger expansion map + Special Build Phase).
+    throw new Error(`Catan supports 2-6 players, got ${numPlayers}`);
   }
   if (opts.playerTypes && opts.playerTypes.length !== numPlayers) {
     throw new Error('playerTypes length must match playerNames');
@@ -68,11 +71,23 @@ export function createGame(opts: CreateGameOptions): GameState {
     numPlayers,
     victoryPointsToWin: opts.settings?.victoryPointsToWin ?? 10,
     expansions: opts.settings?.expansions ?? [],
+    scenarioId: opts.settings?.scenarioId,
   };
 
   let rng = opts.seed >>> 0;
-  const boardResult = generateBoard(rng);
-  rng = boardResult.rngState;
+  let board: BoardState;
+  let islandChips: IslandChip[] | undefined;
+  const boardVariant: '3-4' | '5-6' = numPlayers >= 5 ? '5-6' : '3-4';
+  if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
+    board = result.board;
+    rng = result.rngState;
+    islandChips = result.islandChips;
+  } else {
+    const baseResult = generateBoard(rng, boardVariant);
+    board = baseResult.board;
+    rng = baseResult.rngState;
+  }
 
   let devCardDeck: DevCardType[];
   [devCardDeck, rng] = shuffle(rng, DEV_DECK);
@@ -95,6 +110,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     ports: [],
     hasLongestRoad: false,
     hasLargestArmy: false,
+    ships: [],
   }));
 
   // Determine turn order. By default we shuffle so signup order doesn't
@@ -113,7 +129,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   return {
     settings,
     rngState: rng,
-    board: boardResult.board,
+    board,
     players,
     playerOrder,
     currentPlayerIndex: 0,
@@ -128,5 +144,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     longestRoad: null,
     lastRoll: null,
     winner: null,
+    boardVariant,
+    turnHolderIndex: 0,
+    islandChips,
   };
 }

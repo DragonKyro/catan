@@ -18,7 +18,7 @@ export type ResourceBank = Record<Resource, number>;
 // Terrain & hexes
 // ============================================================================
 
-export type Terrain = Resource | 'desert';
+export type Terrain = Resource | 'desert' | 'sea' | 'gold';
 
 export interface HexCoord {
   q: number;
@@ -82,6 +82,9 @@ export interface BoardState {
   hexIds: HexId[];
   vertexIds: VertexId[];
   edgeIds: EdgeId[];
+  // Seafarers extension: present when the 'seafarers' expansion is active.
+  pirateHex?: HexId;
+  islandOfHex?: Record<HexId, string>;
 }
 
 // ============================================================================
@@ -128,6 +131,10 @@ export interface Player {
   ports: PortType[];
   hasLongestRoad: boolean;
   hasLargestArmy: boolean;
+  // Seafarers extension. `ships` is always initialised to []; only ever
+  // non-empty when the 'seafarers' expansion is active.
+  ships: EdgeId[];
+  movedShipThisTurn?: boolean;
 }
 
 // ============================================================================
@@ -137,11 +144,16 @@ export interface Player {
 export type GamePhase =
   | 'setupRound1'
   | 'setupRound2'
+  | 'specialBuildPhase'
   | 'rollOrPlayKnight'
   | 'discard'
   | 'moveRobber'
   | 'main'
-  | 'gameOver';
+  | 'gameOver'
+  // Seafarers extension phases.
+  | 'chooseRobberOrPirate'
+  | 'movePirate'
+  | 'chooseGoldResource';
 
 export interface SetupState {
   step: 'settlement' | 'road';
@@ -161,6 +173,9 @@ export interface GameSettings {
   numPlayers: number;
   victoryPointsToWin: number;
   expansions: string[];
+  // Optional scenario identifier. Currently used by the Seafarers expansion
+  // to pick between 'headingForNewShores' / 'fourIslands' / 'fogIsland'.
+  scenarioId?: string;
 }
 
 export interface PendingTrade {
@@ -194,6 +209,29 @@ export interface GameState {
   longestRoad: { holder: PlayerId; length: number } | null;
   lastRoll: { dice: [number, number]; total: number; player: PlayerId } | null;
   winner: PlayerId | null;
+  // Which board layout this game uses. '5-6' = 5-6 player expansion (30 hexes,
+  // 11 ports, 28 number tokens, plus Special Build Phase between turns).
+  // Optional for backwards-compat with snapshots from before the expansion.
+  boardVariant?: '3-4' | '5-6';
+  // Set during the Special Build Phase: players queued to take their SBP
+  // mini-turn before the next real turn begins. Pinned in player-order
+  // starting from the player after `turnHolderIndex`.
+  sbpQueue?: PlayerId[];
+  // Index into `playerOrder` of the player whose main turn this is.
+  // During SBP this stays pinned while `currentPlayerIndex` rotates through
+  // `sbpQueue`. Win-checks key off this so an SBP-builder can't win
+  // mid-build (official rule: you can only win on your own turn).
+  turnHolderIndex?: number;
+  // Seafarers extension. All optional, only populated when expansion is active.
+  pendingPirateMove?: RobberMoveContext;
+  goldChoiceState?: { pending: Record<PlayerId, number> };
+  islandChips?: IslandChip[];
+}
+
+export interface IslandChip {
+  islandId: string;
+  vp: number;
+  firstSettler: PlayerId | null;
 }
 
 // ============================================================================
@@ -306,6 +344,40 @@ export interface EndTurnAction extends ActionBase {
   type: 'endTurn';
 }
 
+// ----------------------------------------------------------------------------
+// Seafarers expansion actions
+// ----------------------------------------------------------------------------
+
+export interface BuildShipAction extends ActionBase {
+  type: 'buildShip';
+  edge: EdgeId;
+}
+
+export interface MoveShipAction extends ActionBase {
+  type: 'moveShip';
+  from: EdgeId;
+  to: EdgeId;
+}
+
+export interface ChooseRobberAction extends ActionBase {
+  type: 'chooseRobber';
+}
+
+export interface ChoosePirateAction extends ActionBase {
+  type: 'choosePirate';
+}
+
+export interface MovePirateAction extends ActionBase {
+  type: 'movePirate';
+  hex: HexId;
+  stealFrom: PlayerId | null;
+}
+
+export interface ChooseGoldResourceAction extends ActionBase {
+  type: 'chooseGoldResource';
+  resources: Resource[];
+}
+
 export type Action =
   | PlaceInitialSettlementAction
   | PlaceInitialRoadAction
@@ -326,7 +398,13 @@ export type Action =
   | CancelTradeAction
   | RejectTradeAction
   | CounterTradeAction
-  | EndTurnAction;
+  | EndTurnAction
+  | BuildShipAction
+  | MoveShipAction
+  | ChooseRobberAction
+  | ChoosePirateAction
+  | MovePirateAction
+  | ChooseGoldResourceAction;
 
 export type ActionType = Action['type'];
 

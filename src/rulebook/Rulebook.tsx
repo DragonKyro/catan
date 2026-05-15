@@ -20,15 +20,21 @@ export function Rulebook({ variant = 'page', onClose }: Props) {
     <div className="rb">
       <nav className="rb-toc" aria-label="Rulebook topics">
         {TOPICS.map((t, i) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`rb-toc-item ${i === index ? 'is-active' : ''}`}
-            onClick={() => setIndex(i)}
-          >
-            <span className="rb-toc-num">{i + 1}</span>
-            <span className="rb-toc-title">{t.title}</span>
-          </button>
+          <div key={t.id}>
+            {t.section && (
+              <div className="rb-toc-section" aria-hidden>
+                {t.section}
+              </div>
+            )}
+            <button
+              type="button"
+              className={`rb-toc-item ${i === index ? 'is-active' : ''}`}
+              onClick={() => setIndex(i)}
+            >
+              <span className="rb-toc-num">{i + 1}</span>
+              <span className="rb-toc-title">{t.title}</span>
+            </button>
+          </div>
         ))}
       </nav>
       <article className="rb-article">

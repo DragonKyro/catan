@@ -1,15 +1,14 @@
-import type { PlayerColor, VertexId } from '@/game/types';
-import { useGameStore } from '@/store/gameStore';
+import type { BoardState, PlayerColor, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 
 interface Props {
+  board: BoardState;
   vertex: VertexId;
   color: PlayerColor;
 }
 
-export function Settlement({ vertex, color }: Props) {
-  const game = useGameStore((s) => s.game!);
-  const p = game.board.vertices[vertex]!.position;
+export function Settlement({ board, vertex, color }: Props) {
+  const p = board.vertices[vertex]!.position;
   return (
     <g transform={`translate(${p.x}, ${p.y})`} className="settlement">
       <path

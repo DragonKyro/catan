@@ -86,4 +86,51 @@ describe('generateBoard', () => {
     expect(a.ports).toEqual(b.ports);
     expect(a.robberHex).toBe(b.robberHex);
   });
+
+  describe("5-6 player variant", () => {
+    it('produces 30 hexes with correct terrain distribution', () => {
+      const { board } = generateBoard(42, '5-6');
+      expect(Object.keys(board.hexes)).toHaveLength(30);
+      const terrainCounts: Record<string, number> = {};
+      for (const h of Object.values(board.hexes)) {
+        terrainCounts[h.terrain] = (terrainCounts[h.terrain] ?? 0) + 1;
+      }
+      expect(terrainCounts).toEqual({
+        wood: 6,
+        brick: 5,
+        sheep: 6,
+        wheat: 6,
+        ore: 5,
+        desert: 2,
+      });
+    });
+
+    it('places 28 number tokens, none on the 2 deserts', () => {
+      const { board } = generateBoard(42, '5-6');
+      let nonDesertTokens = 0;
+      for (const h of Object.values(board.hexes)) {
+        if (h.terrain === 'desert') {
+          expect(h.numberToken).toBeNull();
+        } else {
+          expect(h.numberToken).not.toBeNull();
+          nonDesertTokens++;
+        }
+      }
+      expect(nonDesertTokens).toBe(28);
+    });
+
+    it('places 11 ports', () => {
+      const { board } = generateBoard(42, '5-6');
+      expect(board.ports).toHaveLength(11);
+      // All ports still on coastal (single-hex) edges
+      for (const port of board.ports) {
+        expect(board.edges[port.edge]!.hexes).toHaveLength(1);
+      }
+    });
+
+    it('places robber on a desert hex', () => {
+      const { board } = generateBoard(42, '5-6');
+      expect(board.hexes[board.robberHex]!.terrain).toBe('desert');
+    });
+  });
 });

@@ -8,6 +8,7 @@ import type {
 } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
+import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 
 // =======================================================================
 // Log entries — derived from action dispatches by comparing before/after.
@@ -109,6 +110,12 @@ export interface TimelineSnapshot {
       handTotal: number;
       // Cumulative resources gained over the whole game (production-ish).
       gainedTotal: number;
+      // Same as gainedTotal but broken down per resource.
+      gainedByResource: Record<Resource, number>;
+      // Cumulative knight cards played (drives Largest Army race chart).
+      knightsPlayed: number;
+      // Current longest contiguous road length (drives Longest Road race chart).
+      longestRoadLength: number;
     }
   >;
 }
@@ -124,17 +131,49 @@ export interface MatchStats {
   resourcesInCirculation: Record<Resource, number>;
 }
 
+// Subset of the logStore that gameStore captures for undo. Excludes
+// startTime + initialState (both stable across an undo) and the methods.
+export interface LogStoreSnapshot {
+  entries: LogEntry[];
+  timeline: TimelineSnapshot[];
+  gainedTotals: Record<PlayerId, number>;
+  gainedByResourceTotals: Record<PlayerId, Record<Resource, number>>;
+  stats: MatchStats;
+  nextId: number;
+  actions: Action[];
+}
+
 interface LogStore {
   entries: LogEntry[];
   timeline: TimelineSnapshot[];
   // Cumulative resources gained per player (for production totals).
   gainedTotals: Record<PlayerId, number>;
+  // Same as gainedTotals but per-resource. Parallel structure so the
+  // existing total-only chart code keeps working unchanged.
+  gainedByResourceTotals: Record<PlayerId, Record<Resource, number>>;
   stats: MatchStats;
   startTime: number;
   nextId: number;
+  // Captured at reset() — the very first GameState. Combined with `actions`
+  // this lets the end-game replay reconstruct any historical step by
+  // re-applying actions[0..step] through the engine.
+  initialState: GameState | null;
+  // Every action successfully dispatched, in order. Append-only during a
+  // game; cleared on reset.
+  actions: Action[];
 
   reset: (initial?: GameState) => void;
   record: (before: GameState, action: Action, after: GameState) => void;
+  // Capture the current data fields (excluding methods + startTime) so the
+  // gameStore can pair this with a GameState snapshot for undo.
+  snapshot: () => LogStoreSnapshot;
+  // Restore from a snapshot. Each field is overwritten by reference; safe
+  // because record() always builds new arrays/objects via spread.
+  restore: (snap: LogStoreSnapshot) => void;
+}
+
+function emptyResourceBank(): Record<Resource, number> {
+  return { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
 }
 
 function diffPlayerResources(
@@ -184,20 +223,57 @@ export const useLogStore = create<LogStore>((set, get) => ({
   entries: [],
   timeline: [],
   gainedTotals: {},
+  gainedByResourceTotals: {},
   stats: emptyStats(),
   startTime: Date.now(),
   nextId: 1,
+  initialState: null,
+  actions: [],
 
   reset: (initial) => {
     const gained: Record<PlayerId, number> = {};
-    if (initial) for (const p of initial.players) gained[p.id] = 0;
+    const gainedByResource: Record<PlayerId, Record<Resource, number>> = {};
+    if (initial) {
+      for (const p of initial.players) {
+        gained[p.id] = 0;
+        gainedByResource[p.id] = emptyResourceBank();
+      }
+    }
     set({
       entries: [],
       timeline: [],
       gainedTotals: gained,
+      gainedByResourceTotals: gainedByResource,
       stats: emptyStats(),
       startTime: Date.now(),
       nextId: 1,
+      initialState: initial ?? null,
+      actions: [],
+    });
+  },
+
+  snapshot: () => {
+    const s = get();
+    return {
+      entries: s.entries,
+      timeline: s.timeline,
+      gainedTotals: s.gainedTotals,
+      gainedByResourceTotals: s.gainedByResourceTotals,
+      stats: s.stats,
+      nextId: s.nextId,
+      actions: s.actions,
+    };
+  },
+
+  restore: (snap) => {
+    set({
+      entries: snap.entries,
+      timeline: snap.timeline,
+      gainedTotals: snap.gainedTotals,
+      gainedByResourceTotals: snap.gainedByResourceTotals,
+      stats: snap.stats,
+      nextId: snap.nextId,
+      actions: snap.actions,
     });
   },
 
@@ -363,17 +439,29 @@ export const useLogStore = create<LogStore>((set, get) => ({
     }
 
     if (append.length === 0) {
-      set({ stats: newStats });
+      // Even when nothing was logged (proposeTrade etc.), capture the action
+      // for replay — the engine still consumed it.
+      set((s) => ({ stats: newStats, actions: [...s.actions, action] }));
       return;
     }
 
     // Update gain totals based on this transition (for the timeline).
     const newGained: Record<PlayerId, number> = { ...get().gainedTotals };
+    const newGainedByResource: Record<PlayerId, Record<Resource, number>> = {};
+    const prevGainedByResource = get().gainedByResourceTotals;
+    for (const pid of Object.keys(prevGainedByResource)) {
+      newGainedByResource[pid] = { ...prevGainedByResource[pid]! };
+    }
     for (const p of after.players) {
       if (newGained[p.id] === undefined) newGained[p.id] = 0;
+      if (!newGainedByResource[p.id]) newGainedByResource[p.id] = emptyResourceBank();
       const diff = diffPlayerResources(before, after, p.id);
       const positive = totalGainAmount(diff);
       newGained[p.id] = (newGained[p.id] ?? 0) + positive;
+      for (const r of RESOURCES) {
+        const d = diff[r] ?? 0;
+        if (d > 0) newGainedByResource[p.id]![r] += d;
+      }
     }
 
     // Build a fresh timeline snapshot.
@@ -383,6 +471,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
         vp: calculateVictoryPoints(after, p.id, false),
         handTotal: handTotal(after, p.id),
         gainedTotal: newGained[p.id] ?? 0,
+        gainedByResource: { ...(newGainedByResource[p.id] ?? emptyResourceBank()) },
+        knightsPlayed: p.devCards.playedKnights,
+        longestRoadLength: calculateLongestRoad(after, p.id),
       };
     }
     const newStep = get().entries.length + append.length;
@@ -396,8 +487,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
       entries: [...s.entries, ...append],
       timeline: [...s.timeline, snapshot],
       gainedTotals: newGained,
+      gainedByResourceTotals: newGainedByResource,
       stats: newStats,
       nextId: s.nextId + append.length,
+      actions: [...s.actions, action],
     }));
   },
 }));

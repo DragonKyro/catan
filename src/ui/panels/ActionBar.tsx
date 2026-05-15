@@ -1,17 +1,52 @@
+import { useState, type ReactNode } from 'react';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { Button } from '@/ui/shared/Button';
 import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
+import { SHIP_COST, MAX_SHIPS } from '@/game/modules/seafarers/constants';
+import { CostCheatsheet } from './CostCheatsheet';
 import './ActionBar.css';
 
 export function ActionBar() {
   const { game, dispatch, setMode, openDialog, uiMode } = useGameStore();
+  const undo = useGameStore((s) => s.undo);
+  const canUndo = useGameStore((s) => s.lastActionSnapshot != null);
   const role = useNetworkStore((s) => s.role);
+  const [showCosts, setShowCosts] = useState(false);
   if (!game) return null;
   const acting = getActingPlayerId(game);
   const player = game.players.find((p) => p.id === acting)!;
   const phase = game.phase;
+  const showUndo = canUndo && role === 'solo';
+
+  const wrap = (content: ReactNode) => (
+    <div className="actionbar-wrap">
+      <button
+        type="button"
+        className={`actionbar-costs-btn${showCosts ? ' is-active' : ''}`}
+        onClick={() => setShowCosts((s) => !s)}
+        aria-label="Show building costs"
+        aria-expanded={showCosts}
+        title="Building costs"
+      >
+        💰
+      </button>
+      {showUndo && (
+        <button
+          type="button"
+          className="actionbar-undo-btn"
+          onClick={() => undo()}
+          aria-label="Undo last action"
+          title="Undo last build/trade (this turn only)"
+        >
+          ↶
+        </button>
+      )}
+      {content}
+      {showCosts && <CostCheatsheet onClose={() => setShowCosts(false)} />}
+    </div>
+  );
 
   if (role === 'spectator') {
     return (
@@ -41,7 +76,7 @@ export function ActionBar() {
   if (phase === 'rollOrPlayKnight') {
     const hasKnight =
       !game.hasPlayedDevCardThisTurn && player.devCards.unplayed.includes('knight');
-    return (
+    return wrap(
       <div className="actionbar">
         <div className="actionbar-slot actionbar-slot-wide">
           <Button
@@ -67,25 +102,26 @@ export function ActionBar() {
             </Button>
           </div>
         )}
-      </div>
+      </div>,
     );
   }
 
-  if (phase === 'main') {
+  if (phase === 'main' || phase === 'specialBuildPhase') {
     const inMode = uiMode.kind !== 'idle';
     const cancel = () => setMode({ kind: 'idle' });
     if (inMode) {
-      return (
+      return wrap(
         <div className="actionbar">
           <div className="actionbar-slot actionbar-slot-wide">
             <Button fullWidth onClick={cancel}>
               Cancel build
             </Button>
           </div>
-        </div>
+        </div>,
       );
     }
-    return (
+    const sbp = phase === 'specialBuildPhase';
+    return wrap(
       <div className="actionbar">
         <Button
           disabled={!canAfford(player.resources, COSTS.road)}
@@ -94,6 +130,18 @@ export function ActionBar() {
         >
           🛣 Road
         </Button>
+        {game.settings.expansions.includes('seafarers') && (
+          <Button
+            disabled={
+              !canAfford(player.resources, SHIP_COST) ||
+              player.ships.length >= MAX_SHIPS
+            }
+            onClick={() => setMode({ kind: 'buildShip' })}
+            title="Build Ship (1🌲 1🐑)"
+          >
+            ⛵ Ship
+          </Button>
+        )}
         <Button
           disabled={
             !canAfford(player.resources, COSTS.settlement) ||
@@ -126,23 +174,29 @@ export function ActionBar() {
           🃏 Dev Card
         </Button>
         <Button onClick={() => openDialog('bankTrade')}>🔁 Bank</Button>
-        <Button
-          onClick={() => openDialog('playerTrade')}
-          disabled={!!game.pendingTrade}
-          title="Propose a trade to all opponents"
-        >
-          🤝 Players
-        </Button>
+        {sbp ? (
+          <div className="actionbar-slot actionbar-sbp-tag" title="Special Build Phase — build between turns. No player trades or dev card plays.">
+            🛠 Build
+          </div>
+        ) : (
+          <Button
+            onClick={() => openDialog('playerTrade')}
+            disabled={!!game.pendingTrade}
+            title="Propose a trade to all opponents"
+          >
+            🤝 Players
+          </Button>
+        )}
         <div className="actionbar-slot actionbar-slot-end">
           <Button
             variant="primary"
             fullWidth
             onClick={() => dispatch({ type: 'endTurn', playerId: acting })}
           >
-            End turn ▸
+            {sbp ? 'End build ▸' : 'End turn ▸'}
           </Button>
         </div>
-      </div>
+      </div>,
     );
   }
 

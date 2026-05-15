@@ -72,6 +72,18 @@
   padding-left: 7px;
 }
 
+/* Section header in the TOC — separates base game from Seafarers etc. */
+.rb-toc-section {
+  margin: 12px 8px 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-border);
+  color: var(--text-soft);
+  font-size: 0.7em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
 .rb-toc-num {
   display: inline-flex;
   align-items: center;

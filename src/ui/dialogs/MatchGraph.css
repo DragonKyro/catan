@@ -108,3 +108,18 @@
   stroke-width: 1.5;
   stroke-dasharray: 3 2;
 }
+
+.mgraph-subselector {
+  font-size: 0.85em;
+  color: var(--text-soft);
+}
+
+.mgraph-subselector select {
+  background: var(--panel-soft);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: inherit;
+}

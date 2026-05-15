@@ -16,10 +16,20 @@ import { chooseDevCardPlay } from './devcard';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
 
+export interface MainPhaseOptions {
+  // Whether the AI may play a dev card this step. Off during SBP.
+  allowDevCardPlay?: boolean;
+  // Whether the AI may propose a player-to-player trade. Off during SBP.
+  allowPlayerTrade?: boolean;
+}
+
 export function chooseMainPhaseAction(
   state: GameState,
   playerId: PlayerId,
+  opts: MainPhaseOptions = {},
 ): Action | null {
+  const allowDevCardPlay = opts.allowDevCardPlay ?? true;
+  const allowPlayerTrade = opts.allowPlayerTrade ?? true;
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return null;
 
@@ -38,8 +48,10 @@ export function chooseMainPhaseAction(
   }
 
   // 0) Play a dev card if it would clearly help (knight to clear robber etc.)
-  const cardPlay = chooseDevCardPlay(state, playerId);
-  if (cardPlay) return cardPlay;
+  if (allowDevCardPlay) {
+    const cardPlay = chooseDevCardPlay(state, playerId);
+    if (cardPlay) return cardPlay;
+  }
 
   // 1) BUILD CITY
   if (canAfford(player.resources, COSTS.city) && player.cities.length < 4) {
@@ -144,8 +156,10 @@ export function chooseMainPhaseAction(
   if (tradeAction) return tradeAction;
 
   // 6) PROPOSE TRADE to other players
-  const proposal = tryProposeTrade(state, playerId);
-  if (proposal) return proposal;
+  if (allowPlayerTrade) {
+    const proposal = tryProposeTrade(state, playerId);
+    if (proposal) return proposal;
+  }
 
   // 7) End turn
   return null;

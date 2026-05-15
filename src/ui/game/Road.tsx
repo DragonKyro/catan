@@ -1,17 +1,16 @@
-import type { EdgeId, PlayerColor } from '@/game/types';
-import { useGameStore } from '@/store/gameStore';
+import type { BoardState, EdgeId, PlayerColor } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 
 interface Props {
+  board: BoardState;
   edge: EdgeId;
   color: PlayerColor;
 }
 
-export function Road({ edge, color }: Props) {
-  const game = useGameStore((s) => s.game!);
-  const e = game.board.edges[edge]!;
-  const p1 = game.board.vertices[e.vertices[0]]!.position;
-  const p2 = game.board.vertices[e.vertices[1]]!.position;
+export function Road({ board, edge, color }: Props) {
+  const e = board.edges[edge]!;
+  const p1 = board.vertices[e.vertices[0]]!.position;
+  const p2 = board.vertices[e.vertices[1]]!.position;
   // Foreshorten endpoints slightly so roads don't overlap vertex markers.
   const dx = p2.x - p1.x;
   const dy = p2.y - p1.y;

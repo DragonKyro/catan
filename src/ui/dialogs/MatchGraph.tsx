@@ -6,20 +6,24 @@ import { playerColorVar } from '@/ui/shared/playerColors';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 import './MatchGraph.css';
 
-type Metric = 'vp' | 'gainedTotal' | 'handTotal';
+// Tabs whose data is one number-per-player over time (line charts).
+type PerPlayerMetric = 'vp' | 'gainedTotal' | 'handTotal' | 'knights' | 'longestRoad';
 
-const PLAYER_METRIC_LABEL: Record<Metric, string> = {
-  vp: 'Victory points',
-  gainedTotal: 'Resources earned',
-  handTotal: 'Resources in hand',
-};
-
-type Tab = Metric | 'rolls' | 'circulation';
+type Tab =
+  | PerPlayerMetric
+  | 'byPlayer'
+  | 'byResource'
+  | 'rolls'
+  | 'circulation';
 
 const TAB_LABEL: Record<Tab, string> = {
   vp: 'Victory points',
   gainedTotal: 'Resources earned',
   handTotal: 'Resources in hand',
+  knights: 'Knights played',
+  longestRoad: 'Longest road',
+  byPlayer: 'By player',
+  byResource: 'By resource',
   rolls: 'Dice frequency',
   circulation: 'Resource circulation',
 };
@@ -37,10 +41,153 @@ const PAD_R = 12;
 const PAD_T = 12;
 const PAD_B = 22;
 
+const RESOURCE_COLOR: Record<Resource, string> = {
+  wood: 'var(--terrain-wood)',
+  brick: 'var(--terrain-brick)',
+  sheep: 'var(--terrain-sheep)',
+  wheat: 'var(--terrain-wheat)',
+  ore: 'var(--terrain-ore)',
+};
+
+interface Series {
+  id: string;
+  label: string;
+  color: string;
+  valueAt: (snap: TimelineSnapshot) => number;
+}
+
 export function MatchGraph({ players, timeline, stats }: Props) {
   const [tab, setTab] = useState<Tab>('vp');
+  const [byPlayerId, setByPlayerId] = useState<string>(players[0]?.id ?? '');
+  const [byResource, setByResource] = useState<Resource>('wood');
 
-  const tabs: Tab[] = ['vp', 'gainedTotal', 'handTotal', 'rolls', 'circulation'];
+  const tabs: Tab[] = [
+    'vp',
+    'gainedTotal',
+    'handTotal',
+    'byPlayer',
+    'byResource',
+    'knights',
+    'longestRoad',
+    'rolls',
+    'circulation',
+  ];
+
+  const perPlayerSeries = (extract: (snap: TimelineSnapshot, pid: string) => number): Series[] =>
+    players.map((p) => ({
+      id: p.id,
+      label: p.name,
+      color: playerColorVar(p.color),
+      valueAt: (snap) => extract(snap, p.id),
+    }));
+
+  let chart: React.ReactNode = null;
+  let legend: React.ReactNode = null;
+  let subSelector: React.ReactNode = null;
+
+  if (tab === 'vp') {
+    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.vp ?? 0);
+    chart = <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.vp} />;
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'gainedTotal') {
+    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.gainedTotal ?? 0);
+    chart = (
+      <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.gainedTotal} />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'handTotal') {
+    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.handTotal ?? 0);
+    chart = (
+      <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.handTotal} />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'knights') {
+    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.knightsPlayed ?? 0);
+    chart = (
+      <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.knights} />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'longestRoad') {
+    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.longestRoadLength ?? 0);
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={TAB_LABEL.longestRoad}
+      />
+    );
+    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'byPlayer') {
+    const series: Series[] = RESOURCES.map((r) => ({
+      id: r,
+      label: RESOURCE_LABEL[r],
+      color: RESOURCE_COLOR[r],
+      valueAt: (snap) => snap.perPlayer[byPlayerId]?.gainedByResource?.[r] ?? 0,
+    }));
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={`Resources earned by ${players.find((p) => p.id === byPlayerId)?.name ?? '?'}`}
+      />
+    );
+    legend = (
+      <SeriesLegend
+        series={series.map((s, i) => ({
+          ...s,
+          // Prefix the resource icon for the legend.
+          label: `${RESOURCE_ICON[RESOURCES[i]!]} ${s.label}`,
+        }))}
+      />
+    );
+    subSelector = (
+      <div className="mgraph-subselector">
+        <label>
+          Player:&nbsp;
+          <select value={byPlayerId} onChange={(e) => setByPlayerId(e.target.value)}>
+            {players.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    );
+  } else if (tab === 'byResource') {
+    const series = perPlayerSeries(
+      (s, pid) => s.perPlayer[pid]?.gainedByResource?.[byResource] ?? 0,
+    );
+    chart = (
+      <MultiLineChart
+        series={series}
+        timeline={timeline}
+        label={`${RESOURCE_LABEL[byResource]} earned per player`}
+      />
+    );
+    legend = <SeriesLegend series={series} />;
+    subSelector = (
+      <div className="mgraph-subselector">
+        <label>
+          Resource:&nbsp;
+          <select
+            value={byResource}
+            onChange={(e) => setByResource(e.target.value as Resource)}
+          >
+            {RESOURCES.map((r) => (
+              <option key={r} value={r}>
+                {RESOURCE_ICON[r]} {RESOURCE_LABEL[r]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    );
+  } else if (tab === 'rolls') {
+    chart = <RollFrequencyChart rollCounts={stats.rollCounts} />;
+  } else if (tab === 'circulation') {
+    chart = <CirculationChart circulation={stats.resourcesInCirculation} />;
+  }
 
   return (
     <div className="mgraph">
@@ -58,46 +205,33 @@ export function MatchGraph({ players, timeline, stats }: Props) {
           </button>
         ))}
       </div>
-
-      {(tab === 'vp' || tab === 'gainedTotal' || tab === 'handTotal') && (
-        <LineChart
-          players={players}
-          timeline={timeline}
-          metric={tab}
-          label={PLAYER_METRIC_LABEL[tab]}
-        />
-      )}
-      {tab === 'rolls' && <RollFrequencyChart rollCounts={stats.rollCounts} />}
-      {tab === 'circulation' && (
-        <CirculationChart circulation={stats.resourcesInCirculation} />
-      )}
-
-      {(tab === 'vp' || tab === 'gainedTotal' || tab === 'handTotal') && (
-        <div className="mgraph-legend">
-          {players.map((p) => (
-            <span key={p.id} className="mgraph-legend-item">
-              <span
-                className="mgraph-legend-swatch"
-                style={{ background: playerColorVar(p.color) }}
-              />
-              {p.name}
-            </span>
-          ))}
-        </div>
-      )}
+      {subSelector}
+      {chart}
+      {legend}
     </div>
   );
 }
 
-function LineChart({
-  players,
+function SeriesLegend({ series }: { series: Series[] }) {
+  return (
+    <div className="mgraph-legend">
+      {series.map((s) => (
+        <span key={s.id} className="mgraph-legend-item">
+          <span className="mgraph-legend-swatch" style={{ background: s.color }} />
+          {s.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function MultiLineChart({
+  series,
   timeline,
-  metric,
   label,
 }: {
-  players: Player[];
+  series: Series[];
   timeline: TimelineSnapshot[];
-  metric: Metric;
   label: string;
 }) {
   if (timeline.length === 0) {
@@ -106,8 +240,8 @@ function LineChart({
 
   let yMax = 1;
   for (const snap of timeline) {
-    for (const p of players) {
-      const v = snap.perPlayer[p.id]?.[metric] ?? 0;
+    for (const s of series) {
+      const v = s.valueAt(snap);
       if (v > yMax) yMax = v;
     }
   }
@@ -115,18 +249,16 @@ function LineChart({
 
   const xMax = timeline[timeline.length - 1]!.step;
   const xOf = (step: number) =>
-    PAD_L + ((step / Math.max(1, xMax)) * (W - PAD_L - PAD_R));
-  const yOf = (v: number) =>
-    H - PAD_B - ((v / yMax) * (H - PAD_T - PAD_B));
+    PAD_L + (step / Math.max(1, xMax)) * (W - PAD_L - PAD_R);
+  const yOf = (v: number) => H - PAD_B - (v / yMax) * (H - PAD_T - PAD_B);
 
-  const lines = players.map((p) => {
+  const lines = series.map((s) => {
     const pts: string[] = [];
     pts.push(`M ${xOf(0)} ${yOf(0)}`);
     for (const snap of timeline) {
-      const v = snap.perPlayer[p.id]?.[metric] ?? 0;
-      pts.push(`L ${xOf(snap.step)} ${yOf(v)}`);
+      pts.push(`L ${xOf(snap.step)} ${yOf(s.valueAt(snap))}`);
     }
-    return { player: p, d: pts.join(' ') };
+    return { series: s, d: pts.join(' ') };
   });
 
   const yTicks: number[] = [];
@@ -168,11 +300,11 @@ function LineChart({
       <text x={W / 2} y={H - 6} textAnchor="middle" className="mgraph-axislabel">
         turns →
       </text>
-      {lines.map(({ player, d }) => (
+      {lines.map(({ series: s, d }) => (
         <path
-          key={player.id}
+          key={s.id}
           d={d}
-          stroke={playerColorVar(player.color)}
+          stroke={s.color}
           strokeWidth={2}
           fill="none"
           strokeLinejoin="round"
@@ -310,14 +442,6 @@ function CirculationChart({
   const yOf = (v: number) =>
     H - PAD_B - ((v / max) * (H - PAD_T - PAD_B));
 
-  const colorFor: Record<Resource, string> = {
-    wood: 'var(--terrain-wood)',
-    brick: 'var(--terrain-brick)',
-    sheep: 'var(--terrain-sheep)',
-    wheat: 'var(--terrain-wheat)',
-    ore: 'var(--terrain-ore)',
-  };
-
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
@@ -360,7 +484,7 @@ function CirculationChart({
               y={y}
               width={w}
               height={Math.max(0, h)}
-              fill={colorFor[r]}
+              fill={RESOURCE_COLOR[r]}
               stroke="#1a1a1a"
               strokeWidth={1}
               rx={2}

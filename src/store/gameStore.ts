@@ -4,7 +4,7 @@ import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
 import type { GameState } from '@/game/types';
-import { useLogStore } from './logStore';
+import { useLogStore, type LogStoreSnapshot } from './logStore';
 
 // Re-export the pure helper for callers used to importing it from the store.
 export { getActingPlayerId };
@@ -29,9 +29,11 @@ export type UIMode =
   | { kind: 'buildSettlement' }
   | { kind: 'buildCity' }
   | { kind: 'buildRoad' }
+  | { kind: 'buildShip' }
   | { kind: 'placeSetupSettlement' }
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }
+  | { kind: 'movePirate' }
   | { kind: 'roadBuilding'; remaining: 1 | 2 };
 
 export type DialogName =
@@ -51,12 +53,18 @@ interface AppStore {
   // candidates, this holds the chosen hex until the steal-target dialog
   // resolves and dispatches the actual moveRobber action.
   pendingRobberHex: HexId | null;
+  // Pre-action snapshot for solo/hot-seat undo. Set after a successful
+  // dispatch of one of UNDOABLE_ACTION_TYPES; cleared by any non-undoable
+  // action, by undo, or by starting/resetting a game.
+  // Bundles game state + log-store state so undo rewinds both together.
+  lastActionSnapshot: { game: GameState; log: LogStoreSnapshot } | null;
 
   newGame: (opts: CreateGameOptions) => void;
   setGameState: (state: GameState) => void;
   resetGame: () => void;
   dispatch: (action: Action) => void;
   applyLocal: (action: Action) => void;
+  undo: () => void;
   setMode: (mode: UIMode) => void;
   openDialog: (d: DialogName) => void;
   closeDialog: () => void;
@@ -65,6 +73,17 @@ interface AppStore {
   setPendingRobberHex: (hex: HexId | null) => void;
 }
 
+// Actions whose effects are local + reversible (no hidden info revealed, no
+// turn boundary crossed). Only these create an undo snapshot. Undo is
+// solo/hot-seat only — broadcasting an undo would require a wire protocol.
+const UNDOABLE_ACTION_TYPES = new Set<Action['type']>([
+  'buildRoad',
+  'buildSettlement',
+  'buildCity',
+  'buyDevCard',
+  'bankTrade',
+]);
+
 const phaseToMode = (state: GameState): UIMode => {
   if (state.phase === 'setupRound1' || state.phase === 'setupRound2') {
     return state.setupState?.step === 'settlement'
@@ -72,6 +91,7 @@ const phaseToMode = (state: GameState): UIMode => {
       : { kind: 'placeSetupRoad' };
   }
   if (state.phase === 'moveRobber') return { kind: 'moveRobber' };
+  if (state.phase === 'movePirate') return { kind: 'movePirate' };
   return { kind: 'idle' };
 };
 
@@ -126,6 +146,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
   handoffAcknowledgedForPlayer: null,
   error: null,
   pendingRobberHex: null,
+  lastActionSnapshot: null,
 
   newGame: (opts) => {
     const game = createGame(opts);
@@ -138,6 +159,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       handoffAcknowledgedForPlayer: getActingPlayerId(game),
       error: null,
       pendingRobberHex: null,
+      lastActionSnapshot: null,
     });
   },
 
@@ -151,18 +173,29 @@ export const useGameStore = create<AppStore>((set, get) => ({
       handoffAcknowledgedForPlayer: null,
       error: null,
       pendingRobberHex: null,
+      lastActionSnapshot: null,
     });
   },
 
   dispatch: (action) => {
     const before = get().game;
     if (!before) return;
+    // Capture log snapshot BEFORE record(), so undo can rewind both stores.
+    // Only matters for undoable actions — cheap enough to always do.
+    const logBefore = useLogStore.getState().snapshot();
     try {
       const next = applyAction(before, action);
       useLogStore.getState().record(before, action, next);
       applyTransition(set, get, before, next);
       // Broadcast to peers only after local apply succeeds.
       if (broadcastHandler) broadcastHandler(action);
+      // Update snapshot bookkeeping for undo (solo/hot-seat only).
+      const solo = !isOnlinePredicate();
+      if (solo && UNDOABLE_ACTION_TYPES.has(action.type)) {
+        set({ lastActionSnapshot: { game: before, log: logBefore } });
+      } else {
+        set({ lastActionSnapshot: null });
+      }
     } catch (e) {
       set({ error: (e as Error).message });
     }
@@ -175,10 +208,26 @@ export const useGameStore = create<AppStore>((set, get) => ({
       const next = applyAction(before, action);
       useLogStore.getState().record(before, action, next);
       applyTransition(set, get, before, next);
+      // Remote actions never produce an undo snapshot — clear any stale one.
+      set({ lastActionSnapshot: null });
     } catch (e) {
       // Remote action failed locally — log but don't surface as user error.
       console.warn('[gameStore] applyLocal rejected action:', (e as Error).message);
     }
+  },
+
+  undo: () => {
+    const snap = get().lastActionSnapshot;
+    if (!snap) return;
+    useLogStore.getState().restore(snap.log);
+    set({
+      game: snap.game,
+      uiMode: phaseToMode(snap.game),
+      dialog: null,
+      error: null,
+      pendingRobberHex: null,
+      lastActionSnapshot: null,
+    });
   },
 
   setGameState: (state) => {
@@ -193,6 +242,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       handoffAcknowledgedForPlayer: getActingPlayerId(state),
       error: null,
       pendingRobberHex: null,
+      lastActionSnapshot: null,
     });
   },
 

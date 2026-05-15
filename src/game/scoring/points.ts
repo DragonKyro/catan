@@ -19,6 +19,12 @@ export function calculateVictoryPoints(
   if (player.hasLongestRoad) vp += 2;
   if (player.hasLargestArmy) vp += 2;
   if (includeHidden) vp += player.devCards.victoryPoints;
+  // Seafarers: bonus VP from outer-island settlement chips.
+  if (state.islandChips) {
+    for (const chip of state.islandChips) {
+      if (chip.firstSettler === playerId) vp += chip.vp;
+    }
+  }
   return vp;
 }
 

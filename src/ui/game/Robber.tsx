@@ -1,8 +1,11 @@
-import { useGameStore } from '@/store/gameStore';
+import type { BoardState } from '@/game/types';
 
-export function Robber() {
-  const game = useGameStore((s) => s.game!);
-  const hex = game.board.hexes[game.board.robberHex]!;
+interface Props {
+  board: BoardState;
+}
+
+export function Robber({ board }: Props) {
+  const hex = board.hexes[board.robberHex]!;
   const { x, y } = hex.center;
   return (
     <g className="robber" transform={`translate(${x}, ${y - 4})`}>

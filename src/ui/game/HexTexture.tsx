@@ -159,6 +159,32 @@ function Glyph({ terrain }: { terrain: string }) {
           />
         </g>
       );
+    case 'sea':
+      // Wave glyph.
+      return (
+        <g
+          opacity={0.45}
+          stroke="#cfe5ff"
+          strokeWidth={0.55}
+          strokeLinecap="round"
+          fill="none"
+        >
+          <path d="M-3,0 Q-1.5,-1.4 0,0 T3,0" />
+          <path d="M-3,2 Q-1.5,0.6 0,2 T3,2" opacity={0.6} />
+        </g>
+      );
+    case 'gold':
+      // Sparkle / coin glyph.
+      return (
+        <g opacity={0.55}>
+          <circle r={1.6} fill="#fff3a8" stroke="#a07a14" strokeWidth={0.4} />
+          <path
+            d="M0,-2.4 L0.5,-0.5 L2.4,0 L0.5,0.5 L0,2.4 L-0.5,0.5 L-2.4,0 L-0.5,-0.5 Z"
+            fill="#fff0b0"
+            opacity={0.55}
+          />
+        </g>
+      );
     default:
       return null;
   }

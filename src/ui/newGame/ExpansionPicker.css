@@ -1,0 +1,54 @@
+.expansion-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9em;
+  color: var(--text-soft);
+}
+
+.expansion-picker-label {
+  display: block;
+}
+
+.expansion-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.expansion-picker-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.expansion-picker-scenario {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 26px;
+  font-size: 0.85em;
+}
+
+.expansion-picker-scenario select {
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 1em;
+  font-family: inherit;
+}
+
+.expansion-picker-scenario select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
