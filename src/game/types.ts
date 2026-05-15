@@ -176,6 +176,12 @@ export interface GameSettings {
   // Optional scenario identifier. Currently used by the Seafarers expansion
   // to pick between 'headingForNewShores' / 'fourIslands' / 'fogIsland'.
   scenarioId?: string;
+  // Per-turn time limit for human players, in seconds. 0/undefined = no
+  // limit. Resets on every turn change. When the timer hits zero the UI
+  // auto-finishes any committed sub-phase (discard / robber / etc.) using
+  // AI defaults, then ends the turn. AI seats ignore this — they pace
+  // themselves via AIDriver.
+  turnTimerSec?: number;
 }
 
 export interface PendingTrade {

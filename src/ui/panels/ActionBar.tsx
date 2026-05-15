@@ -1,11 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { Button } from '@/ui/shared/Button';
 import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import { SHIP_COST, MAX_SHIPS } from '@/game/modules/seafarers/constants';
-import { CostCheatsheet } from './CostCheatsheet';
 import './ActionBar.css';
 
 export function ActionBar() {
@@ -13,7 +12,6 @@ export function ActionBar() {
   const undo = useGameStore((s) => s.undo);
   const canUndo = useGameStore((s) => s.lastActionSnapshot != null);
   const role = useNetworkStore((s) => s.role);
-  const [showCosts, setShowCosts] = useState(false);
   if (!game) return null;
   const acting = getActingPlayerId(game);
   const player = game.players.find((p) => p.id === acting)!;
@@ -22,16 +20,6 @@ export function ActionBar() {
 
   const wrap = (content: ReactNode) => (
     <div className="actionbar-wrap">
-      <button
-        type="button"
-        className={`actionbar-costs-btn${showCosts ? ' is-active' : ''}`}
-        onClick={() => setShowCosts((s) => !s)}
-        aria-label="Show building costs"
-        aria-expanded={showCosts}
-        title="Building costs"
-      >
-        💰
-      </button>
       {showUndo && (
         <button
           type="button"
@@ -44,7 +32,6 @@ export function ActionBar() {
         </button>
       )}
       {content}
-      {showCosts && <CostCheatsheet onClose={() => setShowCosts(false)} />}
     </div>
   );
 
@@ -173,7 +160,6 @@ export function ActionBar() {
         >
           🃏 Dev Card
         </Button>
-        <Button onClick={() => openDialog('bankTrade')}>🔁 Bank</Button>
         {sbp ? (
           <div className="actionbar-slot actionbar-sbp-tag" title="Special Build Phase — build between turns. No player trades or dev card plays.">
             🛠 Build
@@ -182,9 +168,9 @@ export function ActionBar() {
           <Button
             onClick={() => openDialog('playerTrade')}
             disabled={!!game.pendingTrade}
-            title="Propose a trade to all opponents"
+            title="Trade — single-resource swaps the bank can match are auto-routed; everything else is offered to other players"
           >
-            🤝 Players
+            🤝 Trade
           </Button>
         )}
         <div className="actionbar-slot actionbar-slot-end">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Resource, ResourceBank } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
+import { getBankTradeRate } from '@/game/actions/trade';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
 import { ResourceChip, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
@@ -66,6 +67,30 @@ export function PlayerTradeDialog() {
     setValues({ ...values, [r]: next });
   };
 
+  // Detect a single-give-resource → single-receive-resource trade that the
+  // bank could complete EXACTLY at the player's current rate. e.g. 4 wheat →
+  // 1 ore at a 4:1 rate, or 6 wheat → 3 ore at a 2:1 port. In that case we
+  // auto-route through the bank so the user never broadcasts a trade no
+  // opponent would ever beat anyway. Multi-resource trades, or lopsided
+  // single-resource trades, fall through to a player proposal as normal.
+  const bankRoute = (() => {
+    if (isCounter) return null;
+    const giveEntries: Array<[Resource, number]> = [];
+    const recvEntries: Array<[Resource, number]> = [];
+    for (const r of RESOURCES) {
+      if (values[r] < 0) giveEntries.push([r, -values[r]]);
+      else if (values[r] > 0) recvEntries.push([r, values[r]]);
+    }
+    if (giveEntries.length !== 1 || recvEntries.length !== 1) return null;
+    const [gRes, gCount] = giveEntries[0]!;
+    const [rRes, rCount] = recvEntries[0]!;
+    const rate = getBankTradeRate(game, acting, gRes);
+    if (gCount === rate * rCount && game.bank[rRes] >= rCount) {
+      return { give: gRes, receive: rRes, count: rCount, rate };
+    }
+    return null;
+  })();
+
   const submit = () => {
     const give: Partial<ResourceBank> = {};
     const receive: Partial<ResourceBank> = {};
@@ -75,6 +100,14 @@ export function PlayerTradeDialog() {
     }
     if (isCounter) {
       dispatch({ type: 'counterTrade', playerId: acting, give, receive });
+    } else if (bankRoute) {
+      dispatch({
+        type: 'bankTrade',
+        playerId: acting,
+        give: bankRoute.give,
+        receive: bankRoute.receive,
+        count: bankRoute.count,
+      });
     } else {
       dispatch({ type: 'proposeTrade', playerId: acting, give, receive });
     }
@@ -89,7 +122,7 @@ export function PlayerTradeDialog() {
         <>
           <Button onClick={closeDialog}>Cancel</Button>
           <Button variant="primary" disabled={!canSubmit} onClick={submit}>
-            {isCounter ? 'Send counter' : 'Propose'}
+            {isCounter ? 'Send counter' : bankRoute ? `Trade with bank (${bankRoute.rate}:1)` : 'Propose'}
           </Button>
         </>
       }

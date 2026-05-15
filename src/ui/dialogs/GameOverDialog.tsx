@@ -1,15 +1,20 @@
 import { useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useLogStore } from '@/store/logStore';
+import {
+  useReplayStore,
+  downloadReplay,
+  REPLAY_FILE_VERSION,
+  type ReplayData,
+} from '@/store/replayStore';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { MatchGraph } from './MatchGraph';
-import { Replay } from './Replay';
 import './GameOverDialog.css';
 
-type Tab = 'summary' | 'replay';
+type Tab = 'summary';
 
 export function GameOverDialog() {
   const { game, resetGame } = useGameStore();
@@ -18,10 +23,31 @@ export function GameOverDialog() {
   const initialState = useLogStore((s) => s.initialState);
   const actions = useLogStore((s) => s.actions);
   const [minimized, setMinimized] = useState(false);
-  const [tab, setTab] = useState<Tab>('summary');
+  const [tab] = useState<Tab>('summary');
+  const loadReplay = useReplayStore((s) => s.load);
   if (!game || !game.winner) return null;
   const winner = game.players.find((p) => p.id === game.winner)!;
   const canReplay = initialState !== null && actions.length > 0;
+
+  const buildReplay = (): ReplayData | null => {
+    if (!initialState) return null;
+    return {
+      version: REPLAY_FILE_VERSION,
+      savedAt: new Date().toISOString(),
+      label: `${winner.name}-wins-${actions.length}actions`,
+      winner: winner.id,
+      initialState,
+      actions,
+    };
+  };
+  const onWatchReplay = () => {
+    const data = buildReplay();
+    if (data) loadReplay(data);
+  };
+  const onDownloadReplay = () => {
+    const data = buildReplay();
+    if (data) downloadReplay(data);
+  };
 
   // When minimized, render a small floating "results" pill PLUS a
   // standalone "New game" button so the player can either keep inspecting
@@ -63,37 +89,26 @@ export function GameOverDialog() {
       // the final board without dismissing the results entirely.
       onClose={() => setMinimized(true)}
       footer={
-        <Button variant="primary" onClick={resetGame}>
-          New game
-        </Button>
+        <>
+          {canReplay && (
+            <>
+              <Button onClick={onDownloadReplay} title="Download a .json file you can share or reload">
+                💾 Save replay
+              </Button>
+              <Button onClick={onWatchReplay} title="Open the full-screen replay viewer">
+                ▶ Watch replay
+              </Button>
+            </>
+          )}
+          <Button variant="primary" onClick={resetGame}>
+            New game
+          </Button>
+        </>
       }
     >
       <p style={{ marginTop: 0, fontSize: '1.05em' }}>
         <strong style={{ color: playerColorVar(winner.color) }}>{winner.name}</strong> wins!
       </p>
-
-      <div className="gameover-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'summary'}
-          className={`gameover-tab${tab === 'summary' ? ' is-active' : ''}`}
-          onClick={() => setTab('summary')}
-        >
-          Summary
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'replay'}
-          className={`gameover-tab${tab === 'replay' ? ' is-active' : ''}`}
-          onClick={() => setTab('replay')}
-          disabled={!canReplay}
-          title={canReplay ? 'Step through the game' : 'No actions recorded'}
-        >
-          Replay
-        </button>
-      </div>
 
       {tab === 'summary' && (
         <>
@@ -139,10 +154,6 @@ export function GameOverDialog() {
           </table>
           <MatchGraph players={game.players} timeline={timeline} stats={stats} />
         </>
-      )}
-
-      {tab === 'replay' && canReplay && (
-        <Replay initialState={initialState} actions={actions} />
       )}
     </DialogShell>
   );

@@ -4,6 +4,7 @@ import { useNetworkStore } from '@/store/networkStore';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Board } from './Board';
 import { AIDriver } from './AIDriver';
+import { TurnTimer } from './TurnTimer';
 import { ConnectionStatusOverlay } from './ConnectionStatusOverlay';
 import { HandPanel } from '@/ui/panels/HandPanel';
 import { OpponentPanel } from '@/ui/panels/OpponentPanel';
@@ -24,6 +25,8 @@ import { GameOverDialog } from '@/ui/dialogs/GameOverDialog';
 import { PassDeviceScreen } from '@/ui/handoff/PassDeviceScreen';
 import { Rulebook } from '@/rulebook/Rulebook';
 import { Button } from '@/ui/shared/Button';
+import { CostCheatsheet } from '@/ui/panels/CostCheatsheet';
+import { DevCardCheatsheet } from '@/ui/panels/DevCardCheatsheet';
 import './GameView.css';
 
 export function GameView() {
@@ -39,6 +42,8 @@ export function GameView() {
   const isOnline = role !== 'solo';
   const [showRules, setShowRules] = useState(false);
   const [showQuit, setShowQuit] = useState(false);
+  const [showCosts, setShowCosts] = useState(false);
+  const [showDevCards, setShowDevCards] = useState(false);
 
   const isGameOver = game.phase === 'gameOver';
 
@@ -71,25 +76,62 @@ export function GameView() {
         <Board />
         <div className="gameview-dice-overlay">
           <DiceDisplay />
+          <TurnTimer />
         </div>
-        <button
-          type="button"
-          className="gameview-help-btn"
-          onClick={() => setShowRules(true)}
-          aria-label="Open rulebook"
-          title="Rulebook"
-        >
-          ?
-        </button>
-        <button
-          type="button"
-          className="gameview-quit-btn"
-          onClick={() => setShowQuit(true)}
-          aria-label="Quit to main menu"
-          title="Quit to main menu"
-        >
-          ⌂
-        </button>
+        <div className="gameview-topctrls">
+          <button
+            type="button"
+            className="gameview-topctrl-btn"
+            onClick={() => setShowRules(true)}
+            aria-label="Open rulebook"
+            title="Rulebook"
+          >
+            ?
+          </button>
+          <button
+            type="button"
+            className="gameview-topctrl-btn"
+            onClick={() => setShowQuit(true)}
+            aria-label="Quit to main menu"
+            title="Quit to main menu"
+          >
+            ⌂
+          </button>
+          <div className="gameview-topctrl-pop">
+            <button
+              type="button"
+              className={`gameview-topctrl-btn${showCosts ? ' is-active' : ''}`}
+              onClick={() => {
+                setShowCosts((s) => !s);
+                setShowDevCards(false);
+              }}
+              aria-label="Show building costs"
+              aria-expanded={showCosts}
+              title="Building costs"
+            >
+              💰
+            </button>
+            {showCosts && <CostCheatsheet onClose={() => setShowCosts(false)} />}
+          </div>
+          <div className="gameview-topctrl-pop">
+            <button
+              type="button"
+              className={`gameview-topctrl-btn${showDevCards ? ' is-active' : ''}`}
+              onClick={() => {
+                setShowDevCards((s) => !s);
+                setShowCosts(false);
+              }}
+              aria-label="Show dev cards"
+              aria-expanded={showDevCards}
+              title="Dev cards: effects & deck counts"
+            >
+              🃏
+            </button>
+            {showDevCards && (
+              <DevCardCheatsheet game={game} onClose={() => setShowDevCards(false)} />
+            )}
+          </div>
+        </div>
         {/* Live trade banner — tucked along the top-right of the board,
             below the dice display, so it doesn't cover the map center. */}
         {game.pendingTrade && (

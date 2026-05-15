@@ -6,46 +6,38 @@ import { playerColorVar } from '@/ui/shared/playerColors';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 import './MatchGraph.css';
 
-// Tabs whose data is one number-per-player over time (line charts).
-type PerPlayerMetric =
-  | 'vp'
-  | 'gainedTotal'
-  | 'handTotal'
-  | 'knights'
-  | 'longestRoad'
-  | 'tradesCount'
-  | 'tradeEfficiency'
-  | 'discards'
-  | 'stealBalance'
-  | 'blockedByRobber'
-  | 'expectedPipsTotal';
-
+// Top-level tabs. Compound tabs (resources / production / bonus / trades /
+// robber) carry a sub-selector that picks between the metrics inside them.
 type Tab =
-  | PerPlayerMetric
+  | 'vp'
+  | 'resources'
   | 'byPlayer'
   | 'byResource'
-  | 'expectedPipsByResource'
+  | 'production'
+  | 'bonus'
+  | 'trades'
+  | 'robber'
   | 'rolls'
   | 'circulation';
 
 const TAB_LABEL: Record<Tab, string> = {
   vp: 'Victory points',
-  gainedTotal: 'Resources earned',
-  handTotal: 'Resources in hand',
-  knights: 'Knights played',
-  longestRoad: 'Longest road',
-  tradesCount: 'Trades',
-  tradeEfficiency: 'Trade efficiency',
-  discards: 'Cards discarded (7s)',
-  stealBalance: 'Net steal balance',
-  blockedByRobber: 'Blocked by robber',
-  expectedPipsTotal: 'Expected production',
+  resources: 'Resources',
   byPlayer: 'By player',
   byResource: 'By resource',
-  expectedPipsByResource: 'Production by resource',
+  production: 'Production',
+  bonus: 'Bonus race',
+  trades: 'Trades',
+  robber: 'Robber',
   rolls: 'Dice frequency',
   circulation: 'Resource circulation',
 };
+
+type ResourcesSub = 'earned' | 'hand';
+type ProductionSub = 'total' | 'byResource';
+type BonusSub = 'knights' | 'longestRoad' | 'devCardsBought';
+type TradesSub = 'count' | 'efficiency';
+type RobberSub = 'discards' | 'stealBalance' | 'blockedByRobber';
 
 interface Props {
   players: Player[];
@@ -79,22 +71,21 @@ export function MatchGraph({ players, timeline, stats }: Props) {
   const [tab, setTab] = useState<Tab>('vp');
   const [byPlayerId, setByPlayerId] = useState<string>(players[0]?.id ?? '');
   const [byResource, setByResource] = useState<Resource>('wood');
+  const [resourcesSub, setResourcesSub] = useState<ResourcesSub>('earned');
+  const [productionSub, setProductionSub] = useState<ProductionSub>('total');
+  const [bonusSub, setBonusSub] = useState<BonusSub>('knights');
+  const [tradesSub, setTradesSub] = useState<TradesSub>('count');
+  const [robberSub, setRobberSub] = useState<RobberSub>('discards');
 
   const tabs: Tab[] = [
     'vp',
-    'gainedTotal',
-    'handTotal',
+    'resources',
     'byPlayer',
     'byResource',
-    'expectedPipsTotal',
-    'expectedPipsByResource',
-    'knights',
-    'longestRoad',
-    'tradesCount',
-    'tradeEfficiency',
-    'discards',
-    'stealBalance',
-    'blockedByRobber',
+    'production',
+    'bonus',
+    'trades',
+    'robber',
     'rolls',
     'circulation',
   ];
@@ -115,62 +106,26 @@ export function MatchGraph({ players, timeline, stats }: Props) {
     const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.vp ?? 0);
     chart = <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.vp} />;
     legend = <SeriesLegend series={series} />;
-  } else if (tab === 'gainedTotal') {
-    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.gainedTotal ?? 0);
-    chart = (
-      <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.gainedTotal} />
-    );
+  } else if (tab === 'resources') {
+    const extract: (snap: TimelineSnapshot, pid: string) => number =
+      resourcesSub === 'earned'
+        ? (s, pid) => s.perPlayer[pid]?.gainedTotal ?? 0
+        : (s, pid) => s.perPlayer[pid]?.handTotal ?? 0;
+    const label = resourcesSub === 'earned' ? 'Resources earned' : 'Resources in hand';
+    const series = perPlayerSeries(extract);
+    chart = <MultiLineChart series={series} timeline={timeline} label={label} />;
     legend = <SeriesLegend series={series} />;
-  } else if (tab === 'handTotal') {
-    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.handTotal ?? 0);
-    chart = (
-      <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.handTotal} />
-    );
-    legend = <SeriesLegend series={series} />;
-  } else if (tab === 'knights') {
-    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.knightsPlayed ?? 0);
-    chart = (
-      <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.knights} />
-    );
-    legend = <SeriesLegend series={series} />;
-  } else if (tab === 'longestRoad') {
-    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.longestRoadLength ?? 0);
-    chart = (
-      <MultiLineChart
-        series={series}
-        timeline={timeline}
-        label={TAB_LABEL.longestRoad}
+    subSelector = (
+      <SubSelector
+        label="View"
+        value={resourcesSub}
+        onChange={(v) => setResourcesSub(v as ResourcesSub)}
+        options={[
+          { value: 'earned', label: 'Earned' },
+          { value: 'hand', label: 'In hand' },
+        ]}
       />
     );
-    legend = <SeriesLegend series={series} />;
-  } else if (tab === 'tradesCount') {
-    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.tradesCount ?? 0);
-    chart = (
-      <MultiLineChart
-        series={series}
-        timeline={timeline}
-        label={TAB_LABEL.tradesCount}
-      />
-    );
-    legend = <SeriesLegend series={series} />;
-  } else if (tab === 'tradeEfficiency') {
-    // Trade efficiency = received / given. 1.0 = breakeven; >1.0 = the
-    // player got more cards out than they put in (typical for accepted
-    // player trades that match values); <1.0 = bank-trade heavy.
-    const series = perPlayerSeries((s, pid) => {
-      const tp = s.perPlayer[pid];
-      if (!tp) return 0;
-      if (tp.tradesGiven <= 0) return 0;
-      return tp.tradesReceived / tp.tradesGiven;
-    });
-    chart = (
-      <MultiLineChart
-        series={series}
-        timeline={timeline}
-        label={TAB_LABEL.tradeEfficiency}
-      />
-    );
-    legend = <SeriesLegend series={series} />;
   } else if (tab === 'byPlayer') {
     const series: Series[] = RESOURCES.map((r) => ({
       id: r,
@@ -189,7 +144,6 @@ export function MatchGraph({ players, timeline, stats }: Props) {
       <SeriesLegend
         series={series.map((s, i) => ({
           ...s,
-          // Prefix the resource icon for the legend.
           label: `${RESOURCE_ICON[RESOURCES[i]!]} ${s.label}`,
         }))}
       />
@@ -237,84 +191,139 @@ export function MatchGraph({ players, timeline, stats }: Props) {
         </label>
       </div>
     );
-  } else if (tab === 'discards') {
-    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.discardedTo7 ?? 0);
-    chart = (
-      <MultiLineChart series={series} timeline={timeline} label={TAB_LABEL.discards} />
-    );
-    legend = <SeriesLegend series={series} />;
-  } else if (tab === 'stealBalance') {
-    // Net cards stolen FROM others minus stolen BY others. Positive = thief,
-    // negative = victim. Sums to zero across all players in the game.
-    const series = perPlayerSeries((s, pid) => s.perPlayer[pid]?.stealBalance ?? 0);
-    chart = (
-      <MultiLineChart
-        series={series}
-        timeline={timeline}
-        label={TAB_LABEL.stealBalance}
-      />
-    );
-    legend = <SeriesLegend series={series} />;
-  } else if (tab === 'blockedByRobber') {
-    const series = perPlayerSeries(
-      (s, pid) => s.perPlayer[pid]?.blockedByRobber ?? 0,
-    );
-    chart = (
-      <MultiLineChart
-        series={series}
-        timeline={timeline}
-        label={TAB_LABEL.blockedByRobber}
-      />
-    );
-    legend = <SeriesLegend series={series} />;
-  } else if (tab === 'expectedPipsTotal') {
-    // Sum across all resources — total expected production per dice
-    // roll. Cities count 2× (already baked into expectedPipsByResource).
-    const series = perPlayerSeries((s, pid) => {
-      const m = s.perPlayer[pid]?.expectedPipsByResource;
-      if (!m) return 0;
-      let total = 0;
-      for (const r of RESOURCES) total += m[r] ?? 0;
-      return total;
-    });
-    chart = (
-      <MultiLineChart
-        series={series}
-        timeline={timeline}
-        label={TAB_LABEL.expectedPipsTotal}
-      />
-    );
-    legend = <SeriesLegend series={series} />;
-  } else if (tab === 'expectedPipsByResource') {
-    // Pivot by resource: how much of resource X does each player produce
-    // (in pip-equivalents) at each step.
-    const series = perPlayerSeries(
-      (s, pid) => s.perPlayer[pid]?.expectedPipsByResource?.[byResource] ?? 0,
-    );
-    chart = (
-      <MultiLineChart
-        series={series}
-        timeline={timeline}
-        label={`Expected ${RESOURCE_LABEL[byResource]} production per player`}
-      />
-    );
-    legend = <SeriesLegend series={series} />;
+  } else if (tab === 'production') {
+    if (productionSub === 'total') {
+      const series = perPlayerSeries((s, pid) => {
+        const m = s.perPlayer[pid]?.expectedPipsByResource;
+        if (!m) return 0;
+        let total = 0;
+        for (const r of RESOURCES) total += m[r] ?? 0;
+        return total;
+      });
+      chart = (
+        <MultiLineChart series={series} timeline={timeline} label="Expected production (total)" />
+      );
+      legend = <SeriesLegend series={series} />;
+    } else {
+      const series = perPlayerSeries(
+        (s, pid) => s.perPlayer[pid]?.expectedPipsByResource?.[byResource] ?? 0,
+      );
+      chart = (
+        <MultiLineChart
+          series={series}
+          timeline={timeline}
+          label={`Expected ${RESOURCE_LABEL[byResource]} production`}
+        />
+      );
+      legend = <SeriesLegend series={series} />;
+    }
     subSelector = (
       <div className="mgraph-subselector">
-        <label>
-          Resource:&nbsp;
-          <select
-            value={byResource}
-            onChange={(e) => setByResource(e.target.value as Resource)}
-          >
-            {RESOURCES.map((r) => (
-              <option key={r} value={r}>
-                {RESOURCE_ICON[r]} {RESOURCE_LABEL[r]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SubSelectorInline
+          label="View"
+          value={productionSub}
+          onChange={(v) => setProductionSub(v as ProductionSub)}
+          options={[
+            { value: 'total', label: 'All' },
+            { value: 'byResource', label: 'By resource' },
+          ]}
+        />
+        {productionSub === 'byResource' && (
+          <label>
+            Resource:&nbsp;
+            <select
+              value={byResource}
+              onChange={(e) => setByResource(e.target.value as Resource)}
+            >
+              {RESOURCES.map((r) => (
+                <option key={r} value={r}>
+                  {RESOURCE_ICON[r]} {RESOURCE_LABEL[r]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
+    );
+  } else if (tab === 'bonus') {
+    const extract: (snap: TimelineSnapshot, pid: string) => number =
+      bonusSub === 'knights'
+        ? (s, pid) => s.perPlayer[pid]?.knightsPlayed ?? 0
+        : bonusSub === 'longestRoad'
+          ? (s, pid) => s.perPlayer[pid]?.longestRoadLength ?? 0
+          : (s, pid) => s.perPlayer[pid]?.devCardsBought ?? 0;
+    const label =
+      bonusSub === 'knights'
+        ? 'Knights played'
+        : bonusSub === 'longestRoad'
+          ? 'Longest road'
+          : 'Dev cards bought';
+    const series = perPlayerSeries(extract);
+    chart = <MultiLineChart series={series} timeline={timeline} label={label} />;
+    legend = <SeriesLegend series={series} />;
+    subSelector = (
+      <SubSelector
+        label="Metric"
+        value={bonusSub}
+        onChange={(v) => setBonusSub(v as BonusSub)}
+        options={[
+          { value: 'knights', label: 'Knights played' },
+          { value: 'longestRoad', label: 'Longest road' },
+          { value: 'devCardsBought', label: 'Dev cards bought' },
+        ]}
+      />
+    );
+  } else if (tab === 'trades') {
+    const extract: (snap: TimelineSnapshot, pid: string) => number =
+      tradesSub === 'count'
+        ? (s, pid) => s.perPlayer[pid]?.tradesCount ?? 0
+        : (s, pid) => {
+            const tp = s.perPlayer[pid];
+            if (!tp || tp.tradesGiven <= 0) return 0;
+            return tp.tradesReceived / tp.tradesGiven;
+          };
+    const label = tradesSub === 'count' ? 'Trades' : 'Trade efficiency';
+    const series = perPlayerSeries(extract);
+    chart = <MultiLineChart series={series} timeline={timeline} label={label} />;
+    legend = <SeriesLegend series={series} />;
+    subSelector = (
+      <SubSelector
+        label="Metric"
+        value={tradesSub}
+        onChange={(v) => setTradesSub(v as TradesSub)}
+        options={[
+          { value: 'count', label: 'Count' },
+          { value: 'efficiency', label: 'Efficiency' },
+        ]}
+      />
+    );
+  } else if (tab === 'robber') {
+    const extract: (snap: TimelineSnapshot, pid: string) => number =
+      robberSub === 'discards'
+        ? (s, pid) => s.perPlayer[pid]?.discardedTo7 ?? 0
+        : robberSub === 'stealBalance'
+          ? (s, pid) => s.perPlayer[pid]?.stealBalance ?? 0
+          : (s, pid) => s.perPlayer[pid]?.blockedByRobber ?? 0;
+    const label =
+      robberSub === 'discards'
+        ? 'Cards discarded (7s)'
+        : robberSub === 'stealBalance'
+          ? 'Net steal balance'
+          : 'Blocked by robber';
+    const series = perPlayerSeries(extract);
+    chart = <MultiLineChart series={series} timeline={timeline} label={label} />;
+    legend = <SeriesLegend series={series} />;
+    subSelector = (
+      <SubSelector
+        label="Metric"
+        value={robberSub}
+        onChange={(v) => setRobberSub(v as RobberSub)}
+        options={[
+          { value: 'discards', label: 'Cards discarded (7s)' },
+          { value: 'stealBalance', label: 'Net steal balance' },
+          { value: 'blockedByRobber', label: 'Blocked by robber' },
+        ]}
+      />
     );
   } else if (tab === 'rolls') {
     chart = <RollFrequencyChart rollCounts={stats.rollCounts} />;
@@ -342,6 +351,49 @@ export function MatchGraph({ players, timeline, stats }: Props) {
       {chart}
       {legend}
     </div>
+  );
+}
+
+function SubSelector({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="mgraph-subselector">
+      <SubSelectorInline label={label} value={value} onChange={onChange} options={options} />
+    </div>
+  );
+}
+
+function SubSelectorInline({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <label>
+      {label}:&nbsp;
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

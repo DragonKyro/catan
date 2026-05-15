@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Action, HexId, PlayerId } from '@/game/types';
+import type { Action, EdgeId, HexId, PlayerId } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
@@ -34,7 +34,12 @@ export type UIMode =
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }
   | { kind: 'movePirate' }
-  | { kind: 'roadBuilding'; remaining: 1 | 2 };
+  // While the user is placing the 2 free roads from a roadBuilding dev card,
+  // the FIRST click is buffered in `firstEdge` and the action is dispatched
+  // only on the SECOND click (with both edges). This is required because
+  // the engine consumes the card up front — splitting the placement across
+  // two playRoadBuilding actions would try to consume the card twice.
+  | { kind: 'roadBuilding'; remaining: 1 | 2; firstEdge?: EdgeId };
 
 export type DialogName =
   | 'bankTrade'
@@ -58,6 +63,11 @@ interface AppStore {
   // action, by undo, or by starting/resetting a game.
   // Bundles game state + log-store state so undo rewinds both together.
   lastActionSnapshot: { game: GameState; log: LogStoreSnapshot } | null;
+  // The most-recent dice token to highlight on the board (production
+  // pulse). null when nothing should pulse. Cleared by a timeout in
+  // BoardSVG ~1.5s after a roll. Excluded from network sync — each
+  // peer sets it locally when it sees the rollDice action.
+  lastRolledHighlight: number | null;
 
   newGame: (opts: CreateGameOptions) => void;
   setGameState: (state: GameState) => void;
@@ -71,6 +81,7 @@ interface AppStore {
   acknowledgeHandoff: () => void;
   dismissError: () => void;
   setPendingRobberHex: (hex: HexId | null) => void;
+  setLastRolledHighlight: (token: number | null) => void;
 }
 
 // Actions whose effects are local + reversible (no hidden info revealed, no
@@ -147,6 +158,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
   error: null,
   pendingRobberHex: null,
   lastActionSnapshot: null,
+  lastRolledHighlight: null,
 
   newGame: (opts) => {
     const game = createGame(opts);
@@ -187,6 +199,12 @@ export const useGameStore = create<AppStore>((set, get) => ({
       const next = applyAction(before, action);
       useLogStore.getState().record(before, action, next);
       applyTransition(set, get, before, next);
+      // Production-pulse highlight: only on real production rolls (not 7).
+      // Cleared by the BoardSVG effect ~1.5s later.
+      if (action.type === 'rollDice') {
+        const total = action.dice[0] + action.dice[1];
+        set({ lastRolledHighlight: total !== 7 ? total : null });
+      }
       // Broadcast to peers only after local apply succeeds.
       if (broadcastHandler) broadcastHandler(action);
       // Update snapshot bookkeeping for undo (solo/hot-seat only).
@@ -208,6 +226,10 @@ export const useGameStore = create<AppStore>((set, get) => ({
       const next = applyAction(before, action);
       useLogStore.getState().record(before, action, next);
       applyTransition(set, get, before, next);
+      if (action.type === 'rollDice') {
+        const total = action.dice[0] + action.dice[1];
+        set({ lastRolledHighlight: total !== 7 ? total : null });
+      }
       // Remote actions never produce an undo snapshot — clear any stale one.
       set({ lastActionSnapshot: null });
     } catch (e) {
@@ -259,4 +281,5 @@ export const useGameStore = create<AppStore>((set, get) => ({
   },
   dismissError: () => set({ error: null }),
   setPendingRobberHex: (hex) => set({ pendingRobberHex: hex }),
+  setLastRolledHighlight: (token) => set({ lastRolledHighlight: token }),
 }));

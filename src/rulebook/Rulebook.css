@@ -85,6 +85,64 @@
   letter-spacing: 0.1em;
 }
 
+.rb-toc-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rb-toc-group + .rb-toc-group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.rb-toc-section-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.72em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: left;
+}
+
+.rb-toc-section-btn:hover {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.rb-toc-section-chevron {
+  display: inline-block;
+  width: 12px;
+  font-size: 0.8em;
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+
+.rb-toc-section-name {
+  flex: 1;
+}
+
+.rb-toc-section-count {
+  background: var(--panel-soft);
+  color: var(--text-soft);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
 .rb-toc-num {
   display: inline-flex;
   align-items: center;

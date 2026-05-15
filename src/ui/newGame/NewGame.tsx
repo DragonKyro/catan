@@ -31,6 +31,7 @@ export function NewGame({ onBack }: Props = {}) {
   const [colors, setColors] = useState<PlayerColor[]>(DEFAULT_COLORS);
   const [openPicker, setOpenPicker] = useState<number | null>(null);
   const [vp, setVp] = useState(10);
+  const [turnTimer, setTurnTimer] = useState(0); // seconds; 0 = off
   const [seed, setSeed] = useState('');
   const [expansions, setExpansions] = useState<ExpansionPickerValue>(DEFAULT_EXPANSIONS);
   const newGame = useGameStore((s) => s.newGame);
@@ -46,6 +47,7 @@ export function NewGame({ onBack }: Props = {}) {
         victoryPointsToWin: vp,
         expansions: expansionListFrom(expansions),
         scenarioId: expansions.seafarers ? expansions.scenarioId : undefined,
+        turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
       },
     });
   };
@@ -183,6 +185,28 @@ export function NewGame({ onBack }: Props = {}) {
         </label>
 
         <ExpansionPicker value={expansions} onChange={setExpansions} />
+
+        <label className="newgame-field">
+          <span>Turn timer</span>
+          <div className="newgame-segmented">
+            {[
+              { v: 0, label: 'Off' },
+              { v: 30, label: '30s' },
+              { v: 60, label: '1m' },
+              { v: 90, label: '90s' },
+              { v: 180, label: '3m' },
+            ].map((opt) => (
+              <button
+                key={opt.v}
+                type="button"
+                className={`newgame-seg${turnTimer === opt.v ? ' active' : ''}`}
+                onClick={() => setTurnTimer(opt.v)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </label>
 
         <label className="newgame-field">
           <span>Seed (optional)</span>

@@ -12,7 +12,7 @@ import type { EdgeId, PlayerColor, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 
 export function PlacementOverlay() {
-  const { game, uiMode, dispatch } = useGameStore();
+  const { game, uiMode, dispatch, setMode } = useGameStore();
   const [hoveredVid, setHoveredVid] = useState<VertexId | null>(null);
   const [hoveredEid, setHoveredEid] = useState<EdgeId | null>(null);
   if (!game) return null;
@@ -83,6 +83,20 @@ export function PlacementOverlay() {
     uiMode.kind === 'roadBuilding'
   ) {
     const isSetup = uiMode.kind === 'placeSetupRoad';
+    // For step 2 of road-building, include the buffered first edge in the
+    // acting player's road set so canConnectRoad recognises the new chain
+    // tip. Mirrors what the engine will see when both edges dispatch.
+    const stagedGame =
+      uiMode.kind === 'roadBuilding' && uiMode.firstEdge
+        ? {
+            ...game,
+            players: game.players.map((p) =>
+              p.id === acting
+                ? { ...p, roads: [...p.roads, uiMode.firstEdge!] }
+                : p,
+            ),
+          }
+        : game;
     return (
       <g className="overlay overlay-edges">
         {game.board.edgeIds.map((eid) => {
@@ -91,8 +105,13 @@ export function PlacementOverlay() {
             const placed = game.setupState?.lastPlacedSettlement;
             if (!placed) return null;
             ok = canPlaceInitialRoad(game, placed, eid);
+          } else if (uiMode.kind === 'roadBuilding' && uiMode.firstEdge === eid) {
+            // The buffered first edge isn't a valid spot for the second road,
+            // but we DO want to render it (as a preview) so the user sees
+            // what they already picked. Handled below the map.
+            ok = false;
           } else {
-            ok = canConnectRoad(game, acting, eid);
+            ok = canConnectRoad(stagedGame, acting, eid);
           }
           if (!ok) return null;
           return (
@@ -107,15 +126,22 @@ export function PlacementOverlay() {
                 if (isSetup) {
                   dispatch({ type: 'placeInitialRoad', playerId: acting, edge: eid });
                 } else if (uiMode.kind === 'roadBuilding') {
-                  // For roadBuilding dev card, we dispatch a single-edge action
-                  // (engine accepts 1 or 2). The store will keep mode if more
-                  // roads to place; we use a simpler one-shot for now and
-                  // upgrade to 2-shot later if needed.
-                  dispatch({
-                    type: 'playRoadBuilding',
-                    playerId: acting,
-                    edges: [eid],
-                  });
+                  // 2-road dev card flow:
+                  //   - remaining=2 with no first edge: buffer it, wait for click 2.
+                  //   - remaining=1 (already chose one, OR only 1 road left in
+                  //     supply): dispatch with [firstEdge?, eid].
+                  if (uiMode.remaining === 2 && !uiMode.firstEdge) {
+                    setMode({ kind: 'roadBuilding', remaining: 1, firstEdge: eid });
+                  } else {
+                    const edges: [EdgeId] | [EdgeId, EdgeId] = uiMode.firstEdge
+                      ? [uiMode.firstEdge, eid]
+                      : [eid];
+                    dispatch({
+                      type: 'playRoadBuilding',
+                      playerId: acting,
+                      edges,
+                    });
+                  }
                 } else {
                   dispatch({ type: 'buildRoad', playerId: acting, edge: eid });
                 }
@@ -123,6 +149,9 @@ export function PlacementOverlay() {
             />
           );
         })}
+        {uiMode.kind === 'roadBuilding' && uiMode.firstEdge && (
+          <FirstRoadPreview eid={uiMode.firstEdge} color={previewColor} />
+        )}
       </g>
     );
   }
@@ -384,6 +413,34 @@ function EdgeGhost({
         strokeLinecap="round"
       />
     </g>
+  );
+}
+
+// First road of a Road Building dev card — rendered in the actor's color
+// at full opacity so the user sees their committed first pick while
+// choosing the second.
+function FirstRoadPreview({ eid, color }: { eid: EdgeId; color: PlayerColor }) {
+  const game = useGameStore((s) => s.game!);
+  const e = game.board.edges[eid]!;
+  const p1 = game.board.vertices[e.vertices[0]]!.position;
+  const p2 = game.board.vertices[e.vertices[1]]!.position;
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const shrink = 6;
+  const ux = dx / len;
+  const uy = dy / len;
+  return (
+    <line
+      x1={p1.x + ux * shrink}
+      y1={p1.y + uy * shrink}
+      x2={p2.x - ux * shrink}
+      y2={p2.y - uy * shrink}
+      stroke={playerColorVar(color)}
+      strokeOpacity={0.85}
+      strokeWidth={5}
+      strokeLinecap="round"
+    />
   );
 }
 

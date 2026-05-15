@@ -40,3 +40,13 @@
   flex-direction: column;
   gap: 10px;
 }
+
+.home-replay-error {
+  background: rgba(220, 80, 80, 0.12);
+  border: 1px solid rgba(220, 80, 80, 0.5);
+  color: #e88;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  margin-top: 4px;
+}

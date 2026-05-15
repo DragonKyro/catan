@@ -140,6 +140,15 @@ export function chooseMainPhaseAction(
     }
     const fallingBehind = leaderVp - myVp >= 3;
 
+    // Hand-burn signal: discard at 8, force-burn threshold at 6 so the
+    // AI spends idle wood+brick on a road instead of fishing for dev
+    // cards / risking a 7. Requires actual road materials (>=1 wood,
+    // >=1 brick) AND a fat hand — otherwise we'd lower the bar even
+    // when we couldn't follow through.
+    let handSize = 0;
+    for (const r of RESOURCES) handSize += player.resources[r];
+    const burnHand = handSize >= 6 && player.resources.wood >= 1 && player.resources.brick >= 1;
+
     // Threshold tiers:
     //   - LR pursuit: very low (any extension is worth ~2 VP)
     //   - Plan wants settlements: 3.5 (weed out marginal extensions)
@@ -148,6 +157,7 @@ export function chooseMainPhaseAction(
     if (pursuingLR) threshold = ROAD_TARGET_THRESHOLD_LR;
     else if (planNeedsSettlements) threshold = 3.5;
     if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
+    if (burnHand) threshold = Math.max(1.5, threshold - 1.5);
     // `openSpots` no longer gates whether we try at all — we always
     // evaluate candidates and let the quality threshold filter. That
     // way idle wood/brick gets spent on the best available road if
@@ -198,21 +208,50 @@ export function chooseMainPhaseAction(
       }
       if (blockedAdjacent && !stationAllowed) continue;
 
-      const base = vertexScore(state, newVid, playerId);
-      // Contested-endpoint penalty: enemy roads at the new endpoint
-      // mean an opponent could settle here before we can.
-      let contestedPenalty = 0;
+      // Count enemy roads on this vertex's OTHER edges. Heavy enemy
+      // presence here means (a) opponents are racing for the same
+      // settle spot, and (b) extending further would only deepen the
+      // contested area. Hard skip when 2+ enemy roads (unless we're
+      // pursuing LR — there the road itself, not the future settle,
+      // is the reward).
+      let enemyRoadsAtNew = 0;
+      for (const ne of newVertex.edges) {
+        if (ne === eid) continue;
+        for (const p of state.players) {
+          if (p.id === playerId) continue;
+          if (p.roads.includes(ne)) enemyRoadsAtNew++;
+        }
+      }
+      if (!pursuingLR && enemyRoadsAtNew >= 2) continue;
+
+      // Dead-end check: if every OTHER edge of newVid leads to an
+      // already-settled vertex, then even with another road we can't
+      // unlock anything. That makes this road a true dead-end. (We
+      // still allow it during LR pursuit since chain length itself is
+      // valuable.)
       if (!pursuingLR) {
-        let enemyRoadsAtNew = 0;
+        let hasFutureExit = false;
         for (const ne of newVertex.edges) {
           if (ne === eid) continue;
-          for (const p of state.players) {
-            if (p.id === playerId) continue;
-            if (p.roads.includes(ne)) enemyRoadsAtNew++;
+          const nextEdge = state.board.edges[ne];
+          if (!nextEdge) continue;
+          for (const nv of nextEdge.vertices) {
+            if (nv === newVid) continue;
+            const farSettled = state.players.some(
+              (p) => p.settlements.includes(nv) || p.cities.includes(nv),
+            );
+            if (!farSettled) {
+              hasFutureExit = true;
+              break;
+            }
           }
+          if (hasFutureExit) break;
         }
-        if (enemyRoadsAtNew > 0) contestedPenalty = 2 * enemyRoadsAtNew;
+        if (!hasFutureExit) continue;
       }
+
+      const base = vertexScore(state, newVid, playerId);
+      const contestedPenalty = pursuingLR ? 0 : 2 * enemyRoadsAtNew;
       const finalScore = pursuingLR
         ? Math.max(base - (blockedAdjacent ? 2.5 : 0), ROAD_TARGET_THRESHOLD_LR + 0.5)
         : base - contestedPenalty;

@@ -1,0 +1,39 @@
+.turn-timer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  pointer-events: none;
+}
+
+.turn-timer-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, rgba(120, 200, 120, 0.55), rgba(120, 200, 120, 0.85));
+  transition: width 800ms linear;
+}
+
+.turn-timer.is-warn .turn-timer-bar {
+  background: linear-gradient(90deg, rgba(230, 80, 80, 0.7), rgba(230, 80, 80, 0.95));
+}
+
+.turn-timer-label {
+  position: relative;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.03em;
+  z-index: 1;
+}
+
+.turn-timer.is-warn .turn-timer-label {
+  color: #fff;
+}

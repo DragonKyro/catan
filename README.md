@@ -4,6 +4,13 @@ A web-based clone of *Settlers of Catan* with expansion support, built for priva
 
 The popular online version (colonist.io) paywalls the expansions; this is a free reimplementation hosted on GitHub Pages.
 
+**🎲 Play it:** https://dragonkyro.github.io/catan/
+
+### Planned
+
+- Post-game AI analysis: highlight likely misplays from the action log (held wood+brick instead of building; bank-traded into a 7-out; settled on a sub-optimal vertex)
+- 7-8 player Catan support (expansion beyond the official 5–6 player board)
+
 ## Status
 
 Fully playable: local hot-seat against AI **and** online multiplayer over WebRTC, with in-game chat. Base game (3–6 players) complete. Seafarers expansion playable with 9 official scenarios. Other expansions are next.

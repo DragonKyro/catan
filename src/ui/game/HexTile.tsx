@@ -8,6 +8,10 @@ interface Props {
   isRobberOnHex: boolean;
   clickable: boolean;
   onClick?: () => void;
+  // True when this hex's token matches the most recent dice roll AND the
+  // hex isn't currently robbed — used to play a brief production-pulse
+  // animation when the dice land.
+  pulse?: boolean;
 }
 
 const TERRAIN_FILL: Record<string, string> = {
@@ -21,14 +25,14 @@ const TERRAIN_FILL: Record<string, string> = {
   gold: 'var(--terrain-gold)',
 };
 
-export function HexTile({ board, hex, isRobberOnHex, clickable, onClick }: Props) {
+export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse }: Props) {
   const points = hexPolygonPoints(board, hex.id);
   const isHot = hex.numberToken === 6 || hex.numberToken === 8;
   const pips = probabilityDots(hex.numberToken);
 
   return (
     <g
-      className={`hex hex-${hex.terrain}${clickable ? ' hex-clickable' : ''}`}
+      className={`hex hex-${hex.terrain}${clickable ? ' hex-clickable' : ''}${pulse ? ' hex-pulse' : ''}`}
       onClick={clickable ? onClick : undefined}
     >
       <polygon

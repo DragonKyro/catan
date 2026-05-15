@@ -29,38 +29,17 @@
   z-index: 5;
 }
 
-.gameview-help-btn {
+.gameview-topctrls {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 5;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 1.05em;
-  font-weight: 700;
-  cursor: pointer;
-  display: inline-flex;
+  display: flex;
+  gap: 8px;
   align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
-.gameview-help-btn:hover {
-  background: var(--accent);
-  color: #1a1a1a;
-  border-color: var(--accent);
-}
-
-.gameview-quit-btn {
-  position: absolute;
-  top: 12px;
-  left: 52px;
-  z-index: 5;
+.gameview-topctrl-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -75,12 +54,37 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  padding: 0;
+  line-height: 1;
 }
 
-.gameview-quit-btn:hover {
-  background: var(--danger);
-  color: #fff;
-  border-color: var(--danger);
+.gameview-topctrl-btn:hover {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+}
+
+.gameview-topctrl-btn.is-active {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+}
+
+/* Wrapper around a top-control button + its popover. Lets the popover
+   anchor relative to the button itself (below) instead of relative to
+   the whole topctrls row. */
+.gameview-topctrl-pop {
+  position: relative;
+  display: inline-flex;
+}
+
+/* When cheatsheets are rendered inside the top-control row, override
+   the original bottom-anchored position so they drop down beneath the
+   button instead of above. */
+.gameview-topctrl-pop .cost-cheatsheet {
+  bottom: auto;
+  top: calc(100% + 8px);
+  left: 0;
 }
 
 /* Live pending-trade banner — anchored to the top-right of the board,
