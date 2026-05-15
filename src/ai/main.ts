@@ -11,7 +11,7 @@ import { canPlaceSettlement, canConnectRoad } from '@/game/placement';
 import { canAfford } from '@/game/resources';
 import { getBankTradeRate } from '@/game/actions/trade';
 import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
-import { tryProposeTrade, shouldAcceptTrade } from './trade';
+import { tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
 import { chooseDevCardPlay } from './devcard';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
@@ -151,11 +151,20 @@ export function chooseMainPhaseAction(
     }
   }
 
-  // 5) BANK TRADE to enable an unlock
+  // 5a) FAVORABLE PLAYER TRADE — only fires when a clearly mutually-good
+  //     2:1 swap exists with a non-threat opponent. Preferred over bank
+  //     trade because it's higher value (2:1 player vs 4:1/3:1 bank) and
+  //     reduces "AI just bank-trades constantly" feel.
+  if (allowPlayerTrade) {
+    const favorable = tryProposeFavorableTrade(state, playerId);
+    if (favorable) return favorable;
+  }
+
+  // 5b) BANK TRADE to enable an unlock
   const tradeAction = tryBankTrade(state, playerId);
   if (tradeAction) return tradeAction;
 
-  // 6) PROPOSE TRADE to other players
+  // 6) PROPOSE TRADE to other players — broader search (1:1 included).
   if (allowPlayerTrade) {
     const proposal = tryProposeTrade(state, playerId);
     if (proposal) return proposal;
@@ -201,9 +210,11 @@ function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
 
   // Pick the resource we'd most like to receive. Prefer concrete goal needs;
   // otherwise pick the highest-weighted resource we currently have least of.
+  // Skip resources the bank is out of — the engine would reject the trade.
   let wantRes: Resource | null = null;
   let wantScore = -Infinity;
   for (const r of RESOURCES) {
+    if (state.bank[r] <= 0) continue;
     let score = (needs.byResource[r] ?? 0) * 1.5; // shortfall weight
     if (wantingForHandSize && !wantingForGoal) {
       // No goal — favor scarcity in our hand plus inherent resource value.

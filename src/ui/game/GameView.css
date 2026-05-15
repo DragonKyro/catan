@@ -207,7 +207,10 @@
   border-radius: 12px;
   width: 100%;
   max-width: 1000px;
-  max-height: 90vh;
+  /* Fixed height (not max-height) so the inner grid + overflow:auto panes
+     have a concrete bound to clip against. With max-height the dialog can
+     shrink to content height and the inner scrollers never trigger. */
+  height: 90vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
@@ -233,6 +236,7 @@
   overflow: hidden;
   padding: 12px 16px;
   display: flex;
+  flex-direction: column;
 }
 
 .gameview-rulebook-body .rb {

@@ -40,7 +40,8 @@
   border: 1px solid var(--panel-border);
   border-radius: 12px;
   padding: 8px;
-  align-self: start;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .rb-toc-item {

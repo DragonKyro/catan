@@ -55,18 +55,20 @@ const PORT_TYPES_5_6: PortType[] = [
 
 const NUM_PORTS_5_6 = 11;
 
-// 30-hex elongated layout: rows of 3-4-5-6-5-4-3. Standard 19-hex board
-// extended by 1 hex on the right of rows r=-2..r=1 plus two new edge rows.
+// 30-hex symmetric hexagon: rows 3-4-5-6-5-4-3 = 30. Each row's q-range
+// is chosen so the row's cartesian center sits at the same x as every
+// other row (x_center ∝ q_center + r/2 = -0.5 here), giving the board
+// horizontal mirror symmetry across r=0.
 function buildCoords5_6(): HexCoord[] {
   const out: HexCoord[] = [];
   const rows: Array<[number, number, number]> = [
     [-3, 0, 2],
     [-2, -1, 2],
     [-1, -2, 2],
-    [0, -2, 3],
-    [1, -2, 2],
-    [2, -2, 1],
-    [3, -2, 0],
+    [0, -3, 2],
+    [1, -3, 1],
+    [2, -3, 0],
+    [3, -3, -1],
   ];
   for (const [r, qMin, qMax] of rows) {
     for (let q = qMin; q <= qMax; q++) out.push({ q, r });

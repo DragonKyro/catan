@@ -8,10 +8,20 @@ import type {
 } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { handValue, partialValue, reportNeeds } from './value';
+import { assessThreats } from './threats';
 
 // Threshold for accepting a trade as-is. Lower than before so AI doesn't
 // stonewall reasonable swaps — colonist.io's AI accepts pretty liberally.
 const ACCEPT_THRESHOLD = 0.0;
+// Per-resource penalty when handing a "dangerous" resource to a threatening
+// opponent. Set high enough that a normal 1:1 swap becomes unattractive
+// (typical trade-score deltas are 1-3); doesn't make us paranoid, but
+// flat-out refuses near-win trades.
+const DANGEROUS_RESOURCE_PENALTY = 2.5;
+// Multiplier applied to that penalty when the opponent is on the brink of
+// winning the game (within 2 VP of the target). This effectively vetoes
+// the trade.
+const WIN_THREAT_MULTIPLIER = 3;
 
 // Score a trade from the perspective of the player who'd receive `give`
 // in exchange for losing `receive`. Positive = beneficial.
@@ -48,11 +58,39 @@ function tradeScore(
   return after + needBonus - needPenalty - before;
 }
 
+// Penalty for giving `resources` to a known-threatening opponent. Bigger
+// for win-threats; bonus-race threats still earn a meaningful penalty.
+// `resources` is what WE would be giving up (which they would receive).
+function threatPenaltyForGiving(
+  state: GameState,
+  recipientId: PlayerId,
+  resources: Partial<ResourceBank>,
+): number {
+  const threats = assessThreats(state);
+  const t = threats[recipientId];
+  if (!t) return 0;
+  if (t.dangerousResources.size === 0) return 0;
+  let penalty = 0;
+  const mult = t.closeToWin ? WIN_THREAT_MULTIPLIER : 1;
+  for (const r of RESOURCES) {
+    const amt = resources[r] ?? 0;
+    if (amt > 0 && t.dangerousResources.has(r)) {
+      penalty += amt * DANGEROUS_RESOURCE_PENALTY * mult;
+    }
+  }
+  return penalty;
+}
+
 export function shouldAcceptTrade(state: GameState, playerId: PlayerId): boolean {
   const trade = state.pendingTrade;
   if (!trade) return false;
   if (trade.proposerId === playerId) return false;
-  return tradeScore(state, playerId, trade.give, trade.receive) >= ACCEPT_THRESHOLD;
+  // Standard "is this swap valuable to me" score.
+  const score = tradeScore(state, playerId, trade.give, trade.receive);
+  // Threat penalty: accepting means we GIVE `trade.receive` to the proposer.
+  // If giving them those resources advances their win, refuse the trade.
+  const penalty = threatPenaltyForGiving(state, trade.proposerId, trade.receive);
+  return score - penalty >= ACCEPT_THRESHOLD;
 }
 
 // If the trade isn't acceptable as-is, try small edits (±1 to one resource on
@@ -129,8 +167,10 @@ export function tryCounterTrade(
       }
     }
     if (!theyHave) continue;
-    // Would this be acceptable to us?
-    const myScore = tradeScore(state, playerId, recv, give);
+    // Would this be acceptable to us? (Includes threat penalty: we don't
+    // want to counter into a deal that hands a leader the win.)
+    const proposerPenalty = threatPenaltyForGiving(state, proposer.id, give);
+    const myScore = tradeScore(state, playerId, recv, give) - proposerPenalty;
     if (myScore < ACCEPT_THRESHOLD) continue;
     // Would proposer plausibly accept? Use their own perspective.
     const theirScore = tradeScore(state, proposer.id, give, recv);
@@ -158,9 +198,28 @@ function totalOf(b: Partial<ResourceBank>): number {
 // compelling offer exists or if no opponent would rationally accept.
 const MAX_AI_PROPOSALS_PER_TURN = 2;
 
+// Convenience: a *favorable* trade is one where (a) the ratio is 2:1
+// (clearly beneficial to both parties), and (b) the best plausible
+// acceptor isn't a threat. Used to prefer player trades over bank trades
+// when one is obviously good; reduces "AI just bank-trades constantly."
+export function tryProposeFavorableTrade(
+  state: GameState,
+  playerId: PlayerId,
+): ProposeTradeAction | null {
+  return tryProposeTradeInternal(state, playerId, { onlyFavorable: true });
+}
+
 export function tryProposeTrade(
   state: GameState,
   playerId: PlayerId,
+): ProposeTradeAction | null {
+  return tryProposeTradeInternal(state, playerId, { onlyFavorable: false });
+}
+
+function tryProposeTradeInternal(
+  state: GameState,
+  playerId: PlayerId,
+  opts: { onlyFavorable: boolean },
 ): ProposeTradeAction | null {
   if (state.pendingTrade) return null; // can't propose if one is already open
   if (state.tradesProposedThisTurn >= MAX_AI_PROPOSALS_PER_TURN) return null;
@@ -189,14 +248,23 @@ export function tryProposeTrade(
     receive: Partial<ResourceBank>;
     ourScore: number;
     theirBestScore: number;
+    ratio: number; // give/receive count ratio — 2.0 = 2:1, 1.0 = 1:1
   };
   let best: Candidate | null = null;
 
-  // Try 1-for-1 and 2-for-1 offers.
-  const offers: Array<{ giveAmt: 1 | 2; recvAmt: 1 }> = [
-    { giveAmt: 1, recvAmt: 1 },
-    { giveAmt: 2, recvAmt: 1 },
-  ];
+  // Try 1-for-1 and 2-for-1 offers. 2:1 is preferred because it's clearly
+  // beneficial to both sides (better than bank trade) and tends to close
+  // without counter-offer back-and-forth. In `onlyFavorable` mode (called
+  // BEFORE bank trade), restrict to 2:1 only — that's the bar for "skip
+  // the bank, this player trade is obviously better."
+  const offers: Array<{ giveAmt: 1 | 2; recvAmt: 1 }> = opts.onlyFavorable
+    ? [{ giveAmt: 2, recvAmt: 1 }]
+    : [
+        { giveAmt: 1, recvAmt: 1 },
+        { giveAmt: 2, recvAmt: 1 },
+      ];
+
+  const threats = assessThreats(state);
 
   for (const want of wantList) {
     for (const g of giveList) {
@@ -207,24 +275,52 @@ export function tryProposeTrade(
         const receive: Partial<ResourceBank> = { [want]: o.recvAmt } as Partial<ResourceBank>;
         const ourScore = tradeScore(state, playerId, receive, give);
         if (ourScore <= 0) continue;
-        // Is there any opponent who plausibly accepts? Use their actual hand.
+        // Find the BEST non-threat opponent who'd plausibly accept. Threats
+        // get penalized by the giving cost; if all viable acceptors are
+        // threats, we'd rather skip the proposal entirely.
         let theirBest = -Infinity;
         for (const op of state.players) {
           if (op.id === playerId) continue;
           if (op.resources[want] < o.recvAmt) continue;
-          const s = tradeScore(state, op.id, give, receive);
+          let s = tradeScore(state, op.id, give, receive);
+          // Penalize "good for them" if they're a threat — we'd rather not
+          // hand a leader the win.
+          const t = threats[op.id];
+          if (t) {
+            let dangerCount = 0;
+            for (const r of RESOURCES) {
+              if ((give[r] ?? 0) > 0 && t.dangerousResources.has(r)) {
+                dangerCount += give[r] ?? 0;
+              }
+            }
+            if (dangerCount > 0) {
+              const mult = t.closeToWin ? WIN_THREAT_MULTIPLIER : 1;
+              s -= dangerCount * DANGEROUS_RESOURCE_PENALTY * mult;
+            }
+          }
           if (s > theirBest) theirBest = s;
         }
         if (theirBest < -0.2) continue;
-        const total = ourScore + Math.max(0, theirBest);
-        if (!best || total > best.ourScore + Math.max(0, best.theirBestScore)) {
-          best = { give, receive, ourScore, theirBestScore: theirBest };
+        // Favorable mode requires the acceptor to clearly benefit — not
+        // just tolerate the trade. Filters out marginal swaps that an
+        // opponent would have to be talked into.
+        if (opts.onlyFavorable && theirBest < 0.5) continue;
+        // Strong bias for 2:1 ratio: it converges trades faster and is the
+        // "fair to both" sweet spot. Bonus added to ranking score only.
+        const ratio = o.giveAmt / o.recvAmt;
+        const ratioBonus = ratio >= 2 ? 1.5 : 0;
+        const total = ourScore + Math.max(0, theirBest) + ratioBonus;
+        if (
+          !best ||
+          total >
+            best.ourScore + Math.max(0, best.theirBestScore) + (best.ratio >= 2 ? 1.5 : 0)
+        ) {
+          best = { give, receive, ourScore, theirBestScore: theirBest, ratio };
         }
       }
     }
   }
   if (!best) return null;
-  // Prefer cheaper trades when scores are close (avoid offering 2 when 1 works).
   return {
     type: 'proposeTrade',
     playerId,

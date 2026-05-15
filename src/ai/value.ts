@@ -107,13 +107,24 @@ export function vertexScore(
   // Diversity bonus
   const diversityBonus = resources.size * 0.8;
 
-  // Port bonus — bigger if a specific port and we have production of that resource
+  // Port bonus — ports are quite valuable (2:1 = halves the cost of trading
+  // for that resource; 3:1 = 25% better than the default 4:1). Previous
+  // weights undervalued them; bumped here based on play feedback.
+  // - generic 3:1: useful for everyone, broadly applicable.
+  // - specific 2:1, this vertex produces the resource: immediately useful,
+  //   you'll have surplus to trade away here.
+  // - specific 2:1, you produce it elsewhere: still strong, connects your
+  //   surplus to a cheap conversion.
+  // - specific 2:1, you don't produce it at all: latent value (future
+  //   expansion / monopoly soak / opportunistic acceptance).
   const port = getPortAtVertex(state.board, vertexId);
   let portBonus = 0;
-  if (port === 'generic') portBonus = 1.0;
-  else if (port) {
-    const have = existing[port] > 0 || resources.has(port);
-    portBonus = have ? 2.0 : 0.4;
+  if (port === 'generic') {
+    portBonus = 1.5;
+  } else if (port) {
+    if (resources.has(port)) portBonus = 3.5;
+    else if (existing[port] > 0) portBonus = 2.5;
+    else portBonus = 1.2;
   }
 
   return totalPips + diversityBonus + portBonus - shoreline;

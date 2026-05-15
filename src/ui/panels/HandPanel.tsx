@@ -31,15 +31,24 @@ export function HandPanel() {
     );
   }
 
+  // All-AI solo games have no human-bound seat — there's no info to leak, so
+  // show the currently-acting player's hand (so a human spectating the AI
+  // self-play sees actual game state).
+  const hasHuman = game.players.some((p) => !p.isAI);
+
   let viewedId: string | null;
   if (role === 'solo') {
-    const acked = handoffAcknowledgedForPlayer
-      ? game.players.find((p) => p.id === handoffAcknowledgedForPlayer)
-      : null;
-    if (acked && !acked.isAI) {
-      viewedId = acked.id;
+    if (!hasHuman) {
+      viewedId = getActingPlayerId(game);
     } else {
-      viewedId = game.players.find((p) => !p.isAI)?.id ?? game.players[0]!.id;
+      const acked = handoffAcknowledgedForPlayer
+        ? game.players.find((p) => p.id === handoffAcknowledgedForPlayer)
+        : null;
+      if (acked && !acked.isAI) {
+        viewedId = acked.id;
+      } else {
+        viewedId = game.players.find((p) => !p.isAI)?.id ?? game.players[0]!.id;
+      }
     }
   } else {
     const myPid = getMyPlayerId(game);
