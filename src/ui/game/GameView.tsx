@@ -4,7 +4,6 @@ import { useNetworkStore } from '@/store/networkStore';
 import { Board } from './Board';
 import { AIDriver } from './AIDriver';
 import { ConnectionStatusOverlay } from './ConnectionStatusOverlay';
-import { PhaseBanner } from '@/ui/panels/PhaseBanner';
 import { HandPanel } from '@/ui/panels/HandPanel';
 import { OpponentPanel } from '@/ui/panels/OpponentPanel';
 import { ActionBar } from '@/ui/panels/ActionBar';
@@ -36,6 +35,18 @@ export function GameView() {
   const [showRules, setShowRules] = useState(false);
 
   const isGameOver = game.phase === 'gameOver';
+  // Dialogs that render as overlays above the bottom strip. Kept docked but
+  // anchored to the top of the board so they don't fight the hand panel.
+  const tradeDialog =
+    dialog === 'playerTrade' ? <PlayerTradeDialog /> : null;
+  const bankTradeDialog =
+    dialog === 'bankTrade' ? <BankTradeDialog /> : null;
+  const yearOfPlentyDialog =
+    dialog === 'yearOfPlenty' ? <YearOfPlentyDialog /> : null;
+  const monopolyDialog = dialog === 'monopoly' ? <MonopolyDialog /> : null;
+  const discardDialog =
+    game.phase === 'discard' && !handoffPending ? <DiscardDialog /> : null;
+  const robberDialog = pendingRobberHex ? <RobberStealDialog /> : null;
 
   return (
     <div className="gameview">
@@ -55,22 +66,34 @@ export function GameView() {
         >
           ?
         </button>
-        {/* Docked dialogs render inside the board column so they sit at the
-            bottom of the board without covering the side panel. */}
-        {dialog === 'bankTrade' && <BankTradeDialog />}
-        {dialog === 'playerTrade' && <PlayerTradeDialog />}
-        {dialog === 'yearOfPlenty' && <YearOfPlentyDialog />}
-        {dialog === 'monopoly' && <MonopolyDialog />}
-        {game.phase === 'discard' && !handoffPending && <DiscardDialog />}
-        {pendingRobberHex && <RobberStealDialog />}
+        {/* Trade UI overlays the top-center of the board so it doesn't fight
+            the hand strip at the bottom or the side panel on the right. */}
+        {(game.pendingTrade || tradeDialog || bankTradeDialog) && (
+          <div className="gameview-trade-overlay">
+            {game.pendingTrade && <PendingTradeBanner />}
+            {tradeDialog}
+            {bankTradeDialog}
+          </div>
+        )}
+        {/* Remaining dialogs dock at the top of the board too — the bottom
+            strip below holds the hand and actions. */}
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog) && (
+          <div className="gameview-dialog-overlay">
+            {yearOfPlentyDialog}
+            {monopolyDialog}
+            {discardDialog}
+            {robberDialog}
+          </div>
+        )}
       </main>
 
-      <aside className="gameview-side">
-        <PhaseBanner />
-        {game.pendingTrade && <PendingTradeBanner />}
-        <SidePanelTabs showChat={isOnline} />
+      <section className="gameview-bottom">
         <HandPanel />
         <ActionBar />
+      </section>
+
+      <aside className="gameview-side">
+        <SidePanelTabs showChat={isOnline} />
         <OpponentPanel />
         <BankPanel />
       </aside>

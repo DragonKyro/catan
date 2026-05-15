@@ -32,7 +32,7 @@ export function HomeMenu() {
           <Button size="lg" fullWidth onClick={() => setMode('online')}>
             🌐 Play online
           </Button>
-          <Button variant="ghost" size="lg" fullWidth onClick={() => setMode('rules')}>
+          <Button size="lg" fullWidth onClick={() => setMode('rules')}>
             📖 Rulebook
           </Button>
         </div>

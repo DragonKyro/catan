@@ -33,7 +33,7 @@ export function ActionBar() {
     }
   }
 
-  // AI is acting — render nothing (no thinking indicator).
+  // AI is acting — render nothing.
   if (player.isAI && phase !== 'gameOver') {
     return null;
   }
@@ -46,24 +46,16 @@ export function ActionBar() {
         <Button
           variant="primary"
           size="lg"
-          fullWidth
           onClick={() => {
             const d1 = 1 + Math.floor(Math.random() * 6);
             const d2 = 1 + Math.floor(Math.random() * 6);
-            dispatch({
-              type: 'rollDice',
-              playerId: acting,
-              dice: [d1, d2],
-            });
+            dispatch({ type: 'rollDice', playerId: acting, dice: [d1, d2] });
           }}
         >
           🎲 Roll dice
         </Button>
         {hasKnight && (
-          <Button
-            onClick={() => dispatch({ type: 'playKnight', playerId: acting })}
-            fullWidth
-          >
+          <Button onClick={() => dispatch({ type: 'playKnight', playerId: acting })}>
             ⚔️ Play Knight first
           </Button>
         )}
@@ -77,66 +69,57 @@ export function ActionBar() {
     return (
       <div className="actionbar">
         {inMode ? (
-          <Button fullWidth onClick={cancel}>
-            Cancel
-          </Button>
+          <Button onClick={cancel}>Cancel build</Button>
         ) : (
           <>
-            <div className="actionbar-row">
-              <Button
-                disabled={!canAfford(player.resources, COSTS.road)}
-                onClick={() => setMode({ kind: 'buildRoad' })}
-                title="Build Road (1🌲 1🧱)"
-              >
-                🛣 Road
-              </Button>
-              <Button
-                disabled={
-                  !canAfford(player.resources, COSTS.settlement) ||
-                  player.settlements.length >= 5
-                }
-                onClick={() => setMode({ kind: 'buildSettlement' })}
-                title="Build Settlement (1🌲 1🧱 1🐑 1🌾)"
-              >
-                🏠 Settlement
-              </Button>
-              <Button
-                disabled={
-                  !canAfford(player.resources, COSTS.city) ||
-                  player.cities.length >= 4 ||
-                  player.settlements.length === 0
-                }
-                onClick={() => setMode({ kind: 'buildCity' })}
-                title="Build City (2🌾 3🪨)"
-              >
-                🏛 City
-              </Button>
-            </div>
-            <div className="actionbar-row">
-              <Button
-                disabled={
-                  !canAfford(player.resources, COSTS.devCard) ||
-                  game.devCardDeck.length === 0
-                }
-                onClick={() =>
-                  dispatch({ type: 'buyDevCard', playerId: acting })
-                }
-                title="Buy Dev Card (1🐑 1🌾 1🪨)"
-              >
-                🃏 Buy Dev Card
-              </Button>
-              <Button onClick={() => openDialog('bankTrade')}>🔁 Bank</Button>
-              <Button
-                onClick={() => openDialog('playerTrade')}
-                disabled={!!game.pendingTrade}
-                title="Propose a trade to all opponents"
-              >
-                🤝 Players
-              </Button>
-            </div>
+            <Button
+              disabled={!canAfford(player.resources, COSTS.road)}
+              onClick={() => setMode({ kind: 'buildRoad' })}
+              title="Build Road (1🌲 1🧱)"
+            >
+              🛣 Road
+            </Button>
+            <Button
+              disabled={
+                !canAfford(player.resources, COSTS.settlement) ||
+                player.settlements.length >= 5
+              }
+              onClick={() => setMode({ kind: 'buildSettlement' })}
+              title="Build Settlement (1🌲 1🧱 1🐑 1🌾)"
+            >
+              🏠 Settlement
+            </Button>
+            <Button
+              disabled={
+                !canAfford(player.resources, COSTS.city) ||
+                player.cities.length >= 4 ||
+                player.settlements.length === 0
+              }
+              onClick={() => setMode({ kind: 'buildCity' })}
+              title="Build City (2🌾 3🪨)"
+            >
+              🏛 City
+            </Button>
+            <Button
+              disabled={
+                !canAfford(player.resources, COSTS.devCard) ||
+                game.devCardDeck.length === 0
+              }
+              onClick={() => dispatch({ type: 'buyDevCard', playerId: acting })}
+              title="Buy Dev Card (1🐑 1🌾 1🪨)"
+            >
+              🃏 Dev Card
+            </Button>
+            <Button onClick={() => openDialog('bankTrade')}>🔁 Bank</Button>
+            <Button
+              onClick={() => openDialog('playerTrade')}
+              disabled={!!game.pendingTrade}
+              title="Propose a trade to all opponents"
+            >
+              🤝 Players
+            </Button>
             <Button
               variant="primary"
-              fullWidth
               onClick={() => dispatch({ type: 'endTurn', playerId: acting })}
             >
               End turn ▸

@@ -66,11 +66,17 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 
 ## UI conventions
 
-- **Docked dialogs (`DialogShell variant="docked"`)** are the default for action prompts (trade, discard, year-of-plenty, monopoly, robber steal). They render inside the `gameview-board` column with no backdrop so the board stays fully visible/interactive. Use `variant="modal"` for screens that should block (GameOver, rulebook overlay).
+- **Layout**: GameView is a CSS grid — board (top-left), bottom strip (bottom-left, holds `HandPanel` + `ActionBar`), side panel (right, full height, holds `SidePanelTabs` + `OpponentPanel` + `BankPanel`). The right pane's shape is intentionally stable across turns so attention stays on the board.
+- **HandPanel viewing rule**: always shows the device-bound human's hand, not the acting player's. In solo this is the last-acknowledged handoff player (falling back to the first non-AI seat); in online it's the local seat. AI hands are never shown — opponents' info lives in `OpponentPanel`.
+- **Active turn indicator**: there is no PhaseBanner. Whose turn it is is conveyed by (a) the highlighted row in `OpponentPanel` (`.opp-acting`) when an opponent is acting, and (b) the presence of action buttons in `ActionBar` at the bottom when it's your turn.
+- **Docked dialogs (`DialogShell variant="docked"`)** are the default for action prompts (trade, discard, year-of-plenty, monopoly, robber steal). They render in overlay containers inside the board:
+  - **Trade overlay (`.gameview-trade-overlay`)** at top-center of the board holds `PendingTradeBanner`, `PlayerTradeDialog`, and `BankTradeDialog`.
+  - **Dialog overlay (`.gameview-dialog-overlay`)** at bottom-center of the board (just above the bottom strip) holds the other one-off dialogs.
+  - Each container neutralizes the `.dialog-dock` absolute positioning so its child renders in place.
+- Use `variant="modal"` for screens that should block (GameOver, rulebook overlay).
 - **Player colors** come from `src/ui/shared/playerColors.ts` — `PLAYER_COLORS`, `PLAYER_COLOR_HEX`, `playerColorVar(c)`. Don't duplicate the `PLAYER_COLOR_CSS` map inline; reuse the helper.
-- **Hidden-info hand panel**: in solo mode when the acting player is AI, `HandPanel` collapses resources and unplayed dev cards to face-down counts. Knights played stays visible (public info).
-- **Game log**: `LogPanel` reads from `logStore.entries`. Steal entries deliberately omit the stolen resource (private info).
-- **Match graph**: `MatchGraph` renders from `logStore.timeline` (per-step snapshots) and is embedded in `GameOverDialog`.
+- **Game log**: `LogPanel` reads from `logStore.entries`. Steal entries deliberately omit the stolen resource (private info). Trade offers, rejections, cancellations, and per-roll resource gains are NOT logged — only completed trades and the roll itself. This keeps the log focused on outcomes.
+- **Match graph**: `MatchGraph` reads `logStore.timeline` (per-step VP / hand size / cumulative resources earned) and `logStore.stats` (dice roll counts, cumulative resources put into circulation by the bank). Tabbed: per-player line charts plus two game-wide bar charts. Embedded in `GameOverDialog`.
 
 ## Non-goals (do not implement)
 

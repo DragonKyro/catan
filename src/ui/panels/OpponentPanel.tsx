@@ -11,16 +11,21 @@ export function OpponentPanel() {
   const onlineUuids = useNetworkStore((s) => s.onlineUuids);
   const uuidForPlayer = useNetworkStore((s) => s.uuidForPlayer);
 
-  // Choose which players to show as "opponents" (i.e., not in HandPanel).
-  // - solo: everyone except the acting player.
-  // - online player: everyone except me.
-  // - spectator: everyone.
-  let hiddenId: string | null = null;
-  if (role === 'solo') hiddenId = getActingPlayerId(game);
-  else if (role === 'guest' || role === 'host') hiddenId = getMyPlayerId(game);
-
-  const opponents = game.players.filter((p) => p.id !== hiddenId);
+  // The right-panel player list shows EVERY player so the active-turn
+  // highlight has a place to land (the local player's full hand still lives
+  // in the bottom strip — this is just a status row).
+  const opponents = game.players;
   const actingId = getActingPlayerId(game);
+
+  // Mark "you" so the player can find themselves quickly. In solo mode we
+  // call out the device-bound human; online uses the local seat.
+  let localId: string | null = null;
+  if (role === 'solo') {
+    localId =
+      game.players.find((p) => !p.isAI)?.id ?? null;
+  } else if (role === 'guest' || role === 'host') {
+    localId = getMyPlayerId(game);
+  }
 
   return (
     <section className="opps">
@@ -44,6 +49,7 @@ export function OpponentPanel() {
               />
               <span className="opp-name">
                 {p.name}
+                {p.id === localId && <span className="opp-tag">YOU</span>}
                 {p.isAI && <span className="opp-tag">AI</span>}
                 {onlineStatus !== 'na' && (
                   <span className={`opp-dot ${onlineStatus}`} />

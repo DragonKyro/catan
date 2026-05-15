@@ -9,6 +9,7 @@ import { MatchGraph } from './MatchGraph';
 export function GameOverDialog() {
   const { game, resetGame } = useGameStore();
   const timeline = useLogStore((s) => s.timeline);
+  const stats = useLogStore((s) => s.stats);
   if (!game || !game.winner) return null;
   const winner = game.players.find((p) => p.id === game.winner)!;
 
@@ -67,7 +68,7 @@ export function GameOverDialog() {
           })}
         </tbody>
       </table>
-      <MatchGraph players={game.players} timeline={timeline} />
+      <MatchGraph players={game.players} timeline={timeline} stats={stats} />
     </DialogShell>
   );
 }

@@ -47,6 +47,24 @@
 
 .opp-acting {
   border-color: var(--accent);
+  border-width: 2px;
+  padding: 7px 9px; /* compensate so layout doesn't jump on the +1px border */
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--accent) 18%, transparent),
+    var(--panel) 55%
+  );
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.opp-acting .opp-name::after {
+  content: '· turn';
+  margin-left: 8px;
+  font-weight: 600;
+  font-size: 0.78em;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .opp-tag {

@@ -1,7 +1,11 @@
 .gameview {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "board side"
+    "bottom side";
   gap: 12px;
   padding: 12px;
   min-height: 100vh;
@@ -9,11 +13,13 @@
 }
 
 .gameview-board {
+  grid-area: board;
   position: relative;
   background: var(--ocean-deep);
   border-radius: var(--radius);
   overflow: hidden;
   display: flex;
+  min-height: 0;
 }
 
 .gameview-dice-overlay {
@@ -48,6 +54,93 @@
   background: var(--accent);
   color: #1a1a1a;
   border-color: var(--accent);
+}
+
+/* Trade overlay (PendingTradeBanner + PlayerTradeDialog/BankTradeDialog) is
+   pinned to the top-center of the board so it's never in the right-side
+   pane's way and never collides with the hand strip at the bottom. */
+.gameview-trade-overlay {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(560px, calc(100% - 120px));
+  pointer-events: none;
+}
+
+.gameview-trade-overlay > * {
+  pointer-events: auto;
+}
+
+/* Other prompt dialogs (discard, robber steal, year of plenty, monopoly)
+   dock at the bottom-center of the BOARD (above the hand strip). */
+.gameview-dialog-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  pointer-events: none;
+}
+
+.gameview-dialog-overlay > * {
+  pointer-events: auto;
+}
+
+/* Suppress the .dialog-dock positioning when a dialog is rendered inside an
+   overlay container — the container does the positioning. */
+.gameview-trade-overlay .dialog-dock,
+.gameview-dialog-overlay .dialog-dock {
+  position: static;
+  transform: none;
+  pointer-events: auto;
+  max-width: none;
+  width: auto;
+}
+
+.gameview-bottom {
+  grid-area: bottom;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: stretch;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  min-height: 0;
+}
+
+.gameview-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.gameview-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--danger);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  z-index: 150;
+  max-width: 600px;
+  text-align: center;
+  font-size: 0.95em;
 }
 
 .gameview-rulebook-overlay {
@@ -92,41 +185,22 @@
   min-height: 0;
   overflow: hidden;
   padding: 12px 16px;
+  display: flex;
 }
 
 .gameview-rulebook-body .rb {
+  flex: 1;
   height: 100%;
-}
-
-.gameview-side {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.gameview-toast {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--danger);
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  cursor: pointer;
-  z-index: 150;
-  max-width: 600px;
-  text-align: center;
-  font-size: 0.95em;
 }
 
 @media (max-width: 900px) {
   .gameview {
     grid-template-columns: 1fr;
-    grid-template-rows: 60vh 1fr;
+    grid-template-rows: minmax(50vh, 1fr) auto auto;
+    grid-template-areas:
+      "board"
+      "bottom"
+      "side";
     max-height: none;
   }
 }

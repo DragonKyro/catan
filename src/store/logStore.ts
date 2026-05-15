@@ -113,11 +113,23 @@ export interface TimelineSnapshot {
   >;
 }
 
+// Cumulative game-wide stats useful for the end-of-game charts.
+export interface MatchStats {
+  // Count of dice rolls per total (2..12).
+  rollCounts: Record<number, number>;
+  // Cumulative resources put into circulation (gained by any player) over
+  // the whole game, broken down by resource type. Includes production rolls,
+  // year-of-plenty grants, robber steals (net 0 across players, so this
+  // counts production only when paired with a corresponding bank decrease).
+  resourcesInCirculation: Record<Resource, number>;
+}
+
 interface LogStore {
   entries: LogEntry[];
   timeline: TimelineSnapshot[];
   // Cumulative resources gained per player (for production totals).
   gainedTotals: Record<PlayerId, number>;
+  stats: MatchStats;
   startTime: number;
   nextId: number;
 
@@ -141,14 +153,6 @@ function diffPlayerResources(
   return out;
 }
 
-function positiveGain(diff: Partial<ResourceBank>): Partial<ResourceBank> {
-  const out: Partial<ResourceBank> = {};
-  for (const r of RESOURCES) {
-    if ((diff[r] ?? 0) > 0) out[r] = diff[r];
-  }
-  return out;
-}
-
 function totalGainAmount(diff: Partial<ResourceBank>): number {
   let t = 0;
   for (const r of RESOURCES) t += Math.max(0, diff[r] ?? 0);
@@ -163,10 +167,24 @@ function handTotal(state: GameState, playerId: PlayerId): number {
   return n;
 }
 
+function emptyStats(): MatchStats {
+  const rollCounts: Record<number, number> = {};
+  for (let i = 2; i <= 12; i++) rollCounts[i] = 0;
+  const resourcesInCirculation: Record<Resource, number> = {
+    wood: 0,
+    brick: 0,
+    sheep: 0,
+    wheat: 0,
+    ore: 0,
+  };
+  return { rollCounts, resourcesInCirculation };
+}
+
 export const useLogStore = create<LogStore>((set, get) => ({
   entries: [],
   timeline: [],
   gainedTotals: {},
+  stats: emptyStats(),
   startTime: Date.now(),
   nextId: 1,
 
@@ -177,6 +195,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       entries: [],
       timeline: [],
       gainedTotals: gained,
+      stats: emptyStats(),
       startTime: Date.now(),
       nextId: 1,
     });
@@ -191,29 +210,14 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
     switch (action.type) {
       case 'rollDice': {
+        // Log the roll itself only — per-player resource gains are derivable
+        // from the board, so the log stays uncluttered.
         append.push({
           id: stamp(),
           kind: 'roll',
           player: action.playerId,
           dice: action.dice,
         });
-        // Production gains for each player from this roll.
-        const total = action.dice[0] + action.dice[1];
-        if (total !== 7) {
-          for (const p of after.players) {
-            const diff = diffPlayerResources(before, after, p.id);
-            const gained = positiveGain(diff);
-            if (totalGainAmount(gained) > 0) {
-              append.push({
-                id: stamp(),
-                kind: 'gain',
-                player: p.id,
-                gained,
-                fromRoll: true,
-              });
-            }
-          }
-        }
         break;
       }
       case 'buildSettlement':
@@ -299,13 +303,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
         break;
       }
       case 'proposeTrade':
-        append.push({
-          id: stamp(),
-          kind: 'tradeProposed',
-          proposer: action.playerId,
-          give: action.give,
-          receive: action.receive,
-        });
+        // Offers themselves aren't logged — only trades that actually go
+        // through. The pending-trade UI carries the live offer.
         break;
       case 'acceptTrade': {
         const trade = before.pendingTrade;
@@ -321,41 +320,17 @@ export const useLogStore = create<LogStore>((set, get) => ({
         }
         break;
       }
-      case 'cancelTrade': {
-        const trade = before.pendingTrade;
-        if (trade) {
-          append.push({
-            id: stamp(),
-            kind: 'tradeCancelled',
-            proposer: trade.proposerId,
-          });
-        }
+      case 'cancelTrade':
+        // Cancellations aren't logged — only completed trades.
         break;
-      }
       case 'endTurn':
         append.push({ id: stamp(), kind: 'endTurn', player: action.playerId });
         break;
-      case 'rejectTrade': {
-        if (before.pendingTrade) {
-          append.push({
-            id: stamp(),
-            kind: 'tradeRejected',
-            proposer: before.pendingTrade.proposerId,
-            rejector: action.playerId,
-          });
-        }
+      case 'rejectTrade':
+        // Rejections aren't logged.
         break;
-      }
       case 'counterTrade':
-        append.push({
-          id: stamp(),
-          kind: 'tradeCountered',
-          counterer: action.playerId,
-          originalProposer:
-            before.pendingTrade?.proposerId ?? action.playerId,
-          give: action.give,
-          receive: action.receive,
-        });
+        // The counter is an offer in flight, not a completed trade — skip.
         break;
       default:
         // Setup placements etc. — no log entry.
@@ -367,7 +342,30 @@ export const useLogStore = create<LogStore>((set, get) => ({
       append.push({ id: stamp(), kind: 'win', player: after.winner });
     }
 
-    if (append.length === 0) return;
+    // Update cumulative stats. Always recompute, even when nothing was
+    // appended to the log (e.g., a proposeTrade), because dice rolls and
+    // bank diffs are part of the long-running match stats independent of
+    // log entries. We DO want this to fire for every action.
+    const newStats: MatchStats = {
+      rollCounts: { ...get().stats.rollCounts },
+      resourcesInCirculation: { ...get().stats.resourcesInCirculation },
+    };
+    if (action.type === 'rollDice') {
+      const total = action.dice[0] + action.dice[1];
+      newStats.rollCounts[total] = (newStats.rollCounts[total] ?? 0) + 1;
+    }
+    for (const r of RESOURCES) {
+      const bankDelta = before.bank[r] - after.bank[r];
+      if (bankDelta > 0) {
+        // Bank gave out `bankDelta` of `r` — that many entered circulation.
+        newStats.resourcesInCirculation[r] += bankDelta;
+      }
+    }
+
+    if (append.length === 0) {
+      set({ stats: newStats });
+      return;
+    }
 
     // Update gain totals based on this transition (for the timeline).
     const newGained: Record<PlayerId, number> = { ...get().gainedTotals };
@@ -398,6 +396,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
       entries: [...s.entries, ...append],
       timeline: [...s.timeline, snapshot],
       gainedTotals: newGained,
+      stats: newStats,
       nextId: s.nextId + append.length,
     }));
   },
