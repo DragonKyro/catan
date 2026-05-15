@@ -86,6 +86,12 @@ export function OnlineMenu({ onBack }: Props) {
             </div>
           </>
         )}
+
+        <p className="online-testnote">
+          Testing with two browser windows on one machine? Append{' '}
+          <code>?fresh</code> to the URL of each window so they get separate
+          identities.
+        </p>
       </div>
     </div>
   );

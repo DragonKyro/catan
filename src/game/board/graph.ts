@@ -1,5 +1,5 @@
 import { defineHex, Grid, Orientation, spiral } from 'honeycomb-grid';
-import type { Vertex, Edge, VertexId, EdgeId, HexId } from '../types';
+import type { Vertex, Edge, VertexId, EdgeId, HexId, HexCoord } from '../types';
 import { vertexKey, edgeKey } from './coords';
 
 const HEX_SIZE = 50;
@@ -20,11 +20,22 @@ export interface BaseGraph {
   edgeIds: EdgeId[];
 }
 
+// Build a hex graph from an explicit list of axial coordinates. Used by
+// scenario boards (Seafarers etc.) that need non-spiral layouts.
+export function buildGraphFromCoords(coords: HexCoord[]): BaseGraph {
+  const grid = new Grid(HexClass, coords.map((c) => ({ q: c.q, r: c.r })));
+  return buildGraphFromGrid(grid);
+}
+
 // Build the 19-hex (spiral radius 2) board graph: hexes, vertices (deduped
 // from hex corners), and edges (between consecutive corners), with full
 // cross-adjacency populated.
 export function buildBaseGraph(): BaseGraph {
   const grid = new Grid(HexClass, spiral({ radius: 2 }));
+  return buildGraphFromGrid(grid);
+}
+
+function buildGraphFromGrid(grid: Grid<InstanceType<typeof HexClass>>): BaseGraph {
 
   const hexIds: HexId[] = [];
   const hexCoords = new Map<HexId, { q: number; r: number }>();

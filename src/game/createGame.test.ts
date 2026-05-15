@@ -6,8 +6,30 @@ describe('createGame', () => {
     expect(() => createGame({ playerNames: ['Alice'], seed: 1 })).toThrow();
   });
 
-  it('rejects more than 4 players', () => {
-    expect(() => createGame({ playerNames: ['A', 'B', 'C', 'D', 'E'], seed: 1 })).toThrow();
+  it('rejects more than 6 players', () => {
+    expect(() =>
+      createGame({ playerNames: ['A', 'B', 'C', 'D', 'E', 'F', 'G'], seed: 1 }),
+    ).toThrow();
+  });
+
+  it('creates a 5-player game', () => {
+    const state = createGame({
+      playerNames: ['A', 'B', 'C', 'D', 'E'],
+      seed: 1,
+    });
+    expect(state.players).toHaveLength(5);
+    const uniqueColors = new Set(state.players.map((p) => p.color));
+    expect(uniqueColors.size).toBe(5);
+  });
+
+  it('creates a 6-player game', () => {
+    const state = createGame({
+      playerNames: ['A', 'B', 'C', 'D', 'E', 'F'],
+      seed: 1,
+    });
+    expect(state.players).toHaveLength(6);
+    const uniqueColors = new Set(state.players.map((p) => p.color));
+    expect(uniqueColors.size).toBe(6);
   });
 
   it('creates a game with valid initial state', () => {

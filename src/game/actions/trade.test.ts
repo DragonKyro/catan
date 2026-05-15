@@ -5,7 +5,7 @@ import { runSetupPhase, giveResources } from '../__testHelpers';
 import { getBankTradeRate } from './trade';
 
 function setupGame() {
-  return runSetupPhase(createGame({ playerNames: ['A', 'B'], seed: 42 }));
+  return runSetupPhase(createGame({ playerNames: ['A', 'B'], seed: 42, randomizeTurnOrder: false }));
 }
 
 function reachMainPhase() {

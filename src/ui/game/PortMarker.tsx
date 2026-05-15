@@ -1,9 +1,9 @@
-import type { Port } from '@/game/types';
+import type { BoardState, Port } from '@/game/types';
 import { getEdgeMidpoint, getPortMarkerPosition } from './boardLayout';
-import { useGameStore } from '@/store/gameStore';
 import { RESOURCE_ICON } from '@/ui/shared/ResourceChip';
 
 interface Props {
+  board: BoardState;
   port: Port;
 }
 
@@ -16,9 +16,7 @@ const PORT_FILL: Record<string, string> = {
   ore: 'var(--terrain-ore)',
 };
 
-export function PortMarker({ port }: Props) {
-  const game = useGameStore((s) => s.game!);
-  const board = game.board;
+export function PortMarker({ board, port }: Props) {
   const mid = getEdgeMidpoint(board, port.edge);
   const marker = getPortMarkerPosition(board, port.edge, 26);
   const ratio = port.type === 'generic' ? '3:1' : '2:1';

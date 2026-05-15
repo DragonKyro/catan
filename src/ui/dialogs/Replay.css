@@ -1,0 +1,91 @@
+.replay {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.replay-board {
+  display: flex;
+  justify-content: center;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 6px;
+  /* Keep the board area bounded so the dialog stays a sensible size. */
+  max-height: 360px;
+}
+
+.replay-boardwrap {
+  width: 100%;
+  max-width: 520px;
+}
+
+/* The board-wrap's own .board-svg fills its container width, which is fine. */
+.replay-boardwrap .board-svg {
+  max-height: 340px;
+}
+
+.replay-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9em;
+  color: var(--text);
+}
+
+.replay-stepcount {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.replay-actionlabel {
+  flex: 1 1 auto;
+  text-align: right;
+  font-style: italic;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replay-slider {
+  width: 100%;
+}
+
+.replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.replay-speedgroup {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.replay-speedbtn {
+  background: var(--panel-soft);
+  color: var(--text-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.8em;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.replay-speedbtn:hover {
+  color: var(--text);
+}
+
+.replay-speedbtn.is-active {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+  font-weight: 600;
+}

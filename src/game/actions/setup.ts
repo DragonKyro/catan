@@ -25,6 +25,12 @@ export function handlePlaceInitialSettlement(
   const vertex = state.board.vertices[action.vertex];
   if (!vertex) throw new Error(`Unknown vertex: ${action.vertex}`);
 
+  // Settlements require at least one adjacent land hex (any non-sea).
+  // Trivially true on the base board (no sea hexes exist), but enforced
+  // for scenarios that do have water.
+  const hasLand = vertex.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea');
+  if (!hasLand) throw new Error('Settlement must touch at least one land hex');
+
   // Distance rule and occupancy
   for (const p of state.players) {
     if (p.settlements.includes(action.vertex) || p.cities.includes(action.vertex)) {
@@ -45,14 +51,16 @@ export function handlePlaceInitialSettlement(
     ports: port && !p.ports.includes(port) ? [...p.ports, port] : p.ports,
   }));
 
-  // Round 2: grant one resource per adjacent non-desert hex
+  // Round 2: grant one resource per adjacent producing hex. Sea/gold hexes
+  // skip the grant (Seafarers expansion rule: gold yields are chosen on rolls,
+  // not auto-granted at setup).
   if (state.phase === 'setupRound2') {
     const grants: Partial<ResourceBank> = {};
     for (const hexId of vertex.hexes) {
       const hex = state.board.hexes[hexId]!;
-      if (hex.terrain !== 'desert') {
-        grants[hex.terrain] = (grants[hex.terrain] ?? 0) + 1;
-      }
+      const t = hex.terrain;
+      if (t === 'desert' || t === 'sea' || t === 'gold') continue;
+      grants[t] = (grants[t] ?? 0) + 1;
     }
     next = updatePlayer(next, action.playerId, (p) => ({
       ...p,
@@ -83,6 +91,12 @@ export function handlePlaceInitialRoad(
 
   const edge = state.board.edges[action.edge];
   if (!edge) throw new Error(`Unknown edge: ${action.edge}`);
+
+  // Initial roads cannot be placed on pure-sea edges (those are ship-only).
+  // Coastal edges are still allowed in setup so the player has a place to
+  // anchor their first road on a coastal settlement.
+  const allSea = edge.hexes.every((h) => state.board.hexes[h]!.terrain === 'sea');
+  if (allSea) throw new Error('Cannot place a road on a sea edge');
 
   const placed = state.setupState.lastPlacedSettlement;
   if (!placed) throw new Error('No settlement to anchor the road to');

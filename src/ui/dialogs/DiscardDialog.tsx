@@ -14,6 +14,9 @@ export function DiscardDialog() {
   const required = game.discardState.required[acting];
   if (required === undefined) return null;
   const player = game.players.find((p) => p.id === acting)!;
+  // AI players discard themselves via the AIDriver — no dialog needed for
+  // them (and we don't want to flash their hand to the human).
+  if (player.isAI) return null;
 
   let total = 0;
   for (const r of RESOURCES) total += picked[r] ?? 0;

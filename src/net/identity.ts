@@ -1,24 +1,55 @@
 // Persistent player identity. The UUID lives in localStorage and is reused
 // forever for this browser profile so a player can rejoin a game with the
 // same seat after refresh / network drop.
+//
+// For local testing with two browser windows that share localStorage
+// (e.g. two tabs in the same incognito session), append `?fresh` to the URL
+// to force a per-tab UUID via sessionStorage. This avoids both windows
+// claiming the same seat.
 
 const UUID_KEY = 'catan.uuid';
 const NAME_KEY = 'catan.displayName';
 
-export function getOrCreateUuid(): string {
+function freshTabMode(): boolean {
   try {
-    const existing = localStorage.getItem(UUID_KEY);
+    if (typeof window === 'undefined') return false;
+    const q = new URLSearchParams(window.location.search);
+    return q.has('fresh');
+  } catch {
+    return false;
+  }
+}
+
+export function getOrCreateUuid(): string {
+  const fresh = freshTabMode();
+  try {
+    const storage = fresh ? sessionStorage : localStorage;
+    const existing = storage.getItem(UUID_KEY);
     if (existing) return existing;
-    const fresh =
+    const next =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : fallbackUuid();
-    localStorage.setItem(UUID_KEY, fresh);
-    return fresh;
+    storage.setItem(UUID_KEY, next);
+    return next;
   } catch {
-    // localStorage unavailable (SSR, restricted iframe). Generate ephemeral.
     return fallbackUuid();
   }
+}
+
+// Useful from a settings/debug screen to recover from a UUID collision.
+export function regenerateUuid(): string {
+  const fresh =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : fallbackUuid();
+  try {
+    const storage = freshTabMode() ? sessionStorage : localStorage;
+    storage.setItem(UUID_KEY, fresh);
+  } catch {
+    /* ignore */
+  }
+  return fresh;
 }
 
 export function getSavedDisplayName(): string {

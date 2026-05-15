@@ -59,3 +59,29 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Docked variant: anchored to the bottom-center of the board area, no
+   backdrop. The board stays fully interactive behind the dialog. */
+.dialog-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 90;
+  pointer-events: none;
+  width: max-content;
+  max-width: calc(100% - 24px);
+}
+
+.dialog-docked {
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  min-width: 320px;
+  max-width: min(640px, 92vw);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+}

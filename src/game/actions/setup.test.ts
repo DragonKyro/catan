@@ -5,7 +5,7 @@ import { findValidSettlementSpot, findValidRoadFromVertex, runSetupPhase } from 
 
 function newGame(numPlayers = 3) {
   const names = ['A', 'B', 'C', 'D'].slice(0, numPlayers);
-  return createGame({ playerNames: names, seed: 42 });
+  return createGame({ playerNames: names, seed: 42, randomizeTurnOrder: false });
 }
 
 describe('setup phase', () => {

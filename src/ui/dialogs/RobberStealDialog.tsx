@@ -2,13 +2,7 @@ import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
 import { totalResources } from '@/game/resources';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
+import { playerColorVar } from '@/ui/shared/playerColors';
 
 export function RobberStealDialog() {
   const { game, dispatch, pendingRobberHex, setPendingRobberHex } = useGameStore();
@@ -58,7 +52,7 @@ export function RobberStealDialog() {
                   width: 12,
                   height: 12,
                   borderRadius: 3,
-                  background: PLAYER_COLOR_CSS[p.color],
+                  background: playerColorVar(p.color),
                   marginRight: 8,
                   border: '1px solid #00000040',
                 }}

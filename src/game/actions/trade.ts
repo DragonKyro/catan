@@ -4,6 +4,9 @@ import type {
   ProposeTradeAction,
   AcceptTradeAction,
   CancelTradeAction,
+  CounterTradeAction,
+  RejectTradeAction,
+  PlayerId,
   Resource,
   ResourceBank,
 } from '../types';
@@ -19,33 +22,64 @@ export function getBankTradeRate(state: GameState, playerId: string, give: Resou
 }
 
 export function handleBankTrade(state: GameState, action: BankTradeAction): GameState {
-  if (state.phase !== 'main') throw new Error(`Cannot trade in phase ${state.phase}`);
+  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+    throw new Error(`Cannot trade in phase ${state.phase}`);
+  }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   if (action.give === action.receive) throw new Error('Cannot trade resource for itself');
+  const count = action.count ?? 1;
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error('Trade count must be a positive integer');
+  }
 
   const player = getPlayer(state, action.playerId);
   const rate = getBankTradeRate(state, action.playerId, action.give);
-  if (player.resources[action.give] < rate) {
-    throw new Error(`Need ${rate} ${action.give} to trade`);
+  const totalGive = rate * count;
+  if (player.resources[action.give] < totalGive) {
+    throw new Error(`Need ${totalGive} ${action.give} to trade for ${count}`);
   }
-  if (state.bank[action.receive] < 1) {
-    throw new Error(`Bank is out of ${action.receive}`);
+  if (state.bank[action.receive] < count) {
+    throw new Error(`Bank does not have ${count} ${action.receive}`);
   }
 
   let next = updatePlayer(state, action.playerId, (p) => ({
     ...p,
     resources: addResources(
-      subtractResources(p.resources, { [action.give]: rate }),
-      { [action.receive]: 1 },
+      subtractResources(p.resources, { [action.give]: totalGive }),
+      { [action.receive]: count },
     ),
   }));
   next = {
     ...next,
-    bank: addResources(subtractResources(next.bank, { [action.receive]: 1 }), {
-      [action.give]: rate,
+    bank: addResources(subtractResources(next.bank, { [action.receive]: count }), {
+      [action.give]: totalGive,
     }),
   };
+  next = recordTradeResources(next, action.playerId, [action.give], [action.receive]);
   return next;
+}
+
+// Add `given` and `received` resources to the actor's per-turn trade log,
+// deduping so we keep these as set-like arrays. The AI uses this to skip
+// reverse trades (don't give what you just received).
+function recordTradeResources(
+  state: GameState,
+  playerId: PlayerId,
+  given: Resource[],
+  received: Resource[],
+): GameState {
+  const log = { ...(state.tradeResourcesThisTurn ?? {}) };
+  const existing = log[playerId] ?? { given: [], received: [] };
+  const mergedGiven = [...existing.given];
+  for (const r of given) {
+    if (!mergedGiven.includes(r)) mergedGiven.push(r);
+  }
+  const mergedReceived = [...existing.received];
+  for (const r of received) {
+    if (!mergedReceived.includes(r)) mergedReceived.push(r);
+  }
+  log[playerId] = { given: mergedGiven, received: mergedReceived };
+  return { ...state, tradeResourcesThisTurn: log };
 }
 
 // === Player-to-player trade ===
@@ -83,14 +117,28 @@ export function handleProposeTrade(
   if (!hasAll(player.resources, action.give)) {
     throw new Error("You don't have the resources you're offering");
   }
+  // Record the trade shape in proposedTradesThisTurn so the AI doesn't
+  // re-propose the same {give, receive} after a rejection — opponents'
+  // hands didn't change, so the second attempt would just stall the turn.
+  const priorProposed = state.proposedTradesThisTurn?.[action.playerId] ?? [];
+  const nextProposed: Record<
+    PlayerId,
+    Array<{ give: Partial<ResourceBank>; receive: Partial<ResourceBank> }>
+  > = { ...(state.proposedTradesThisTurn ?? {}) };
+  nextProposed[action.playerId] = [
+    ...priorProposed,
+    { give: { ...action.give }, receive: { ...action.receive } },
+  ];
   return {
     ...state,
     pendingTrade: {
       proposerId: action.playerId,
       give: { ...action.give },
       receive: { ...action.receive },
+      rejectedBy: [],
     },
     tradesProposedThisTurn: state.tradesProposedThisTurn + 1,
+    proposedTradesThisTurn: nextProposed,
   };
 }
 
@@ -124,6 +172,17 @@ export function handleAcceptTrade(
       state.pendingTrade!.give,
     ),
   }));
+  // Record resources moved for both sides so the AI can detect (and avoid)
+  // reverse / roundabout trades on its next move.
+  const trade = state.pendingTrade;
+  const proposerGave = (Object.keys(trade.give) as Resource[]).filter(
+    (r) => (trade.give[r] ?? 0) > 0,
+  );
+  const proposerGot = (Object.keys(trade.receive) as Resource[]).filter(
+    (r) => (trade.receive[r] ?? 0) > 0,
+  );
+  next = recordTradeResources(next, proposer.id, proposerGave, proposerGot);
+  next = recordTradeResources(next, acceptor.id, proposerGot, proposerGave);
   return { ...next, pendingTrade: undefined };
 }
 
@@ -132,8 +191,69 @@ export function handleCancelTrade(
   action: CancelTradeAction,
 ): GameState {
   if (!state.pendingTrade) throw new Error('No trade to cancel');
-  if (action.playerId !== state.pendingTrade.proposerId) {
-    throw new Error('Only the proposer can cancel');
+  const isProposer = action.playerId === state.pendingTrade.proposerId;
+  const isCurrent = action.playerId === currentPlayerId(state);
+  // Either the proposer of the current pending trade or the active turn
+  // player may cancel. The latter matters after a counter: the original
+  // proposer is no longer `proposerId`, but they should still be able to
+  // walk away from the negotiation.
+  if (!isProposer && !isCurrent) {
+    throw new Error('Only the proposer or current player can cancel');
   }
   return { ...state, pendingTrade: undefined };
+}
+
+export function handleRejectTrade(
+  state: GameState,
+  action: RejectTradeAction,
+): GameState {
+  if (!state.pendingTrade) throw new Error('No trade to reject');
+  if (action.playerId === state.pendingTrade.proposerId) {
+    throw new Error("You can't reject your own trade");
+  }
+  if (state.pendingTrade.rejectedBy.includes(action.playerId)) return state;
+  const newRejected = [...state.pendingTrade.rejectedBy, action.playerId];
+  // Auto-cancel once every non-proposer has rejected — no point keeping the
+  // pending trade alive when nobody can/will accept.
+  const others = state.players.filter(
+    (p) => p.id !== state.pendingTrade!.proposerId,
+  );
+  if (others.every((p) => newRejected.includes(p.id))) {
+    return { ...state, pendingTrade: undefined };
+  }
+  return {
+    ...state,
+    pendingTrade: { ...state.pendingTrade, rejectedBy: newRejected },
+  };
+}
+
+export function handleCounterTrade(
+  state: GameState,
+  action: CounterTradeAction,
+): GameState {
+  if (state.phase !== 'main') {
+    throw new Error(`Cannot counter in phase ${state.phase}`);
+  }
+  if (!state.pendingTrade) throw new Error('No trade to counter');
+  if (action.playerId === state.pendingTrade.proposerId) {
+    throw new Error("You can't counter your own trade");
+  }
+  if (totalOf(action.give) === 0 || totalOf(action.receive) === 0) {
+    throw new Error('Counter must have something on both sides');
+  }
+  const counterer = getPlayer(state, action.playerId);
+  if (!hasAll(counterer.resources, action.give)) {
+    throw new Error("You don't have the resources you're offering");
+  }
+  // Replace the pending trade. The counterer becomes the new proposer; the
+  // original proposer is implicit (still the current player) and can accept.
+  return {
+    ...state,
+    pendingTrade: {
+      proposerId: action.playerId,
+      give: { ...action.give },
+      receive: { ...action.receive },
+      rejectedBy: [],
+    },
+  };
 }

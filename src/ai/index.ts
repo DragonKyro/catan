@@ -4,6 +4,8 @@ import { chooseRobberMove } from './robber';
 import { chooseDiscard } from './discard';
 import { chooseMainPhaseAction } from './main';
 import { chooseDevCardPlay } from './devcard';
+import { chooseGoldResourcePicks } from './seafarers/gold';
+import { choosePirateMove, preferPirate } from './seafarers/pirate';
 
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
@@ -23,6 +25,44 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
   if (state.phase === 'moveRobber') {
     const { hex, stealFrom } = chooseRobberMove(state, playerId);
     return { type: 'moveRobber', playerId, hex, stealFrom };
+  }
+
+  // Seafarers: robber-vs-pirate choice on 7s / knights.
+  if (state.phase === 'chooseRobberOrPirate') {
+    if (preferPirate(state, playerId)) {
+      return { type: 'choosePirate', playerId };
+    }
+    return { type: 'chooseRobber', playerId };
+  }
+
+  // Seafarers: pirate move sub-phase.
+  if (state.phase === 'movePirate') {
+    const choice = choosePirateMove(state, playerId);
+    if (!choice) {
+      // No legal sea hex (extreme corner case). Fall back to first sea hex
+      // that's not the pirate's current location.
+      const fallback = state.board.hexIds.find(
+        (h) =>
+          state.board.hexes[h]!.terrain === 'sea' && h !== state.board.pirateHex,
+      );
+      if (!fallback) return null;
+      return { type: 'movePirate', playerId, hex: fallback, stealFrom: null };
+    }
+    return { type: 'movePirate', playerId, hex: choice.hex, stealFrom: choice.stealFrom };
+  }
+
+  // Seafarers: gold-hex resource choice. Only fires when this AI has a
+  // pending pick; the phase loops through all owed players.
+  if (state.phase === 'chooseGoldResource') {
+    const pending = state.goldChoiceState?.pending[playerId];
+    if (pending && pending > 0) {
+      return {
+        type: 'chooseGoldResource',
+        playerId,
+        resources: chooseGoldResourcePicks(state, playerId, pending),
+      };
+    }
+    return null;
   }
 
   // Setup
@@ -48,6 +88,15 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
 
   if (state.phase === 'main') {
     return chooseMainPhaseAction(state, playerId);
+  }
+
+  if (state.phase === 'specialBuildPhase') {
+    // SBP allows build / buy dev card / bank trade only — no dev card play,
+    // no player-to-player trades.
+    return chooseMainPhaseAction(state, playerId, {
+      allowDevCardPlay: false,
+      allowPlayerTrade: false,
+    });
   }
 
   return null;

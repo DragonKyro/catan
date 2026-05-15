@@ -1,15 +1,18 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints } from '@/game/scoring/points';
+import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { totalResources } from '@/game/resources';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import './OpponentPanel.css';
 
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
+// Base game piece limits per player. Engine already enforces these via the
+// `length < N` checks in build handlers; surfaced here so players can see at
+// a glance how much expansion runway each opponent has left.
+const MAX_SETTLEMENTS = 5;
+const MAX_CITIES = 4;
+const MAX_ROADS = 15;
+const MAX_SHIPS = 15;
 
 export function OpponentPanel() {
   const game = useGameStore((s) => s.game!);
@@ -17,16 +20,25 @@ export function OpponentPanel() {
   const onlineUuids = useNetworkStore((s) => s.onlineUuids);
   const uuidForPlayer = useNetworkStore((s) => s.uuidForPlayer);
 
-  // Choose which players to show as "opponents" (i.e., not in HandPanel).
-  // - solo: everyone except the acting player.
-  // - online player: everyone except me.
-  // - spectator: everyone.
-  let hiddenId: string | null = null;
-  if (role === 'solo') hiddenId = getActingPlayerId(game);
-  else if (role === 'guest' || role === 'host') hiddenId = getMyPlayerId(game);
-
-  const opponents = game.players.filter((p) => p.id !== hiddenId);
+  // The right-panel player list shows EVERY player so the active-turn
+  // highlight has a place to land (the local player's full hand still lives
+  // in the bottom strip — this is just a status row).
+  // Order by `playerOrder` (turn order) so adjacent rows match adjacent
+  // turns — more useful than seat-creation order for "who goes after me?".
+  const opponents = game.playerOrder
+    .map((id) => game.players.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => Boolean(p));
   const actingId = getActingPlayerId(game);
+
+  // Mark "you" so the player can find themselves quickly. In solo mode we
+  // call out the device-bound human; online uses the local seat.
+  let localId: string | null = null;
+  if (role === 'solo') {
+    localId =
+      game.players.find((p) => !p.isAI)?.id ?? null;
+  } else if (role === 'guest' || role === 'host') {
+    localId = getMyPlayerId(game);
+  }
 
   return (
     <section className="opps">
@@ -46,10 +58,11 @@ export function OpponentPanel() {
             <div className="opp-head">
               <span
                 className="opp-swatch"
-                style={{ background: PLAYER_COLOR_CSS[p.color] }}
+                style={{ background: playerColorVar(p.color) }}
               />
               <span className="opp-name">
                 {p.name}
+                {p.id === localId && <span className="opp-tag">YOU</span>}
                 {p.isAI && <span className="opp-tag">AI</span>}
                 {onlineStatus !== 'na' && (
                   <span className={`opp-dot ${onlineStatus}`} />
@@ -61,9 +74,27 @@ export function OpponentPanel() {
               <span title="Resource cards">🂠 {totalResources(p.resources)}</span>
               <span title="Dev cards (face down)">🂡 {cards}</span>
               <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
-              <span title="Roads">🛣️ {p.roads.length}</span>
-              {p.hasLongestRoad && <span title="Longest Road">★ Road</span>}
-              {p.hasLargestArmy && <span title="Largest Army">★ Army</span>}
+              <span title="Longest contiguous road">
+                📏 {calculateLongestRoad(game, p.id)}
+              </span>
+              {p.hasLongestRoad && <span title="Longest Road bonus">★ Road</span>}
+              {p.hasLargestArmy && <span title="Largest Army bonus">★ Army</span>}
+            </div>
+            <div className="opp-pieces" title="Pieces remaining (built / cap)">
+              <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>
+                🏠 {MAX_SETTLEMENTS - p.settlements.length}
+              </span>
+              <span title={`Cities: ${p.cities.length}/${MAX_CITIES}`}>
+                🏛️ {MAX_CITIES - p.cities.length}
+              </span>
+              <span title={`Roads: ${p.roads.length}/${MAX_ROADS}`}>
+                🛣️ {MAX_ROADS - p.roads.length}
+              </span>
+              {p.ships.length > 0 && (
+                <span title={`Ships: ${p.ships.length}/${MAX_SHIPS}`}>
+                  ⛵ {MAX_SHIPS - p.ships.length}
+                </span>
+              )}
             </div>
           </div>
         );

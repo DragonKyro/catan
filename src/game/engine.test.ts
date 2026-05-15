@@ -6,7 +6,7 @@ import { calculateVictoryPoints } from './scoring/points';
 
 describe('engine integration', () => {
   it('runs setup through a roll, build, and end-turn cleanly', () => {
-    let s = createGame({ playerNames: ['A', 'B'], seed: 42 });
+    let s = createGame({ playerNames: ['A', 'B'], seed: 42, randomizeTurnOrder: false });
     s = runSetupPhase(s);
     expect(s.phase).toBe('rollOrPlayKnight');
     expect(s.currentPlayerIndex).toBe(0);
@@ -28,6 +28,7 @@ describe('engine integration', () => {
       playerNames: ['A', 'B'],
       seed: 42,
       settings: { victoryPointsToWin: 4 },
+      randomizeTurnOrder: false,
     });
     s = runSetupPhase(s);
     // After setup, each player has 2 settlements = 2 VP.
@@ -52,6 +53,7 @@ describe('engine integration', () => {
       playerNames: ['A', 'B'],
       seed: 42,
       settings: { victoryPointsToWin: 4 },
+      randomizeTurnOrder: false,
     });
     s = runSetupPhase(s);
     s = applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 3] });

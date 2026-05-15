@@ -1,7 +1,11 @@
 .gameview {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "board side"
+    "bottom side";
   gap: 12px;
   padding: 12px;
   min-height: 100vh;
@@ -9,11 +13,13 @@
 }
 
 .gameview-board {
+  grid-area: board;
   position: relative;
   background: var(--ocean-deep);
   border-radius: var(--radius);
   overflow: hidden;
   display: flex;
+  min-height: 0;
 }
 
 .gameview-dice-overlay {
@@ -21,9 +27,153 @@
   top: 12px;
   right: 12px;
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.gameview-topctrls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.gameview-topctrl-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1em;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  padding: 0;
+  line-height: 1;
+}
+
+.gameview-topctrl-btn:hover {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+}
+
+.gameview-topctrl-btn.is-active {
+  background: var(--accent);
+  color: #1a1a1a;
+  border-color: var(--accent);
+}
+
+/* Wrapper around a top-control button + its popover. Lets the popover
+   anchor relative to the button itself (below) instead of relative to
+   the whole topctrls row. */
+.gameview-topctrl-pop {
+  position: relative;
+  display: inline-flex;
+}
+
+/* When cheatsheets are rendered inside the top-control row, override
+   the original bottom-anchored position so they drop down beneath the
+   button instead of above. */
+.gameview-topctrl-pop .cost-cheatsheet {
+  bottom: auto;
+  top: calc(100% + 8px);
+  left: 0;
+}
+
+/* Live pending-trade banner — anchored to the top-right of the board,
+   tucked below the dice display so it sits at the right edge against the
+   side panel without covering the map. */
+.gameview-banner-overlay {
+  position: absolute;
+  top: 72px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+  pointer-events: none;
+}
+
+.gameview-banner-overlay > * {
+  pointer-events: auto;
+}
+
+/* Trade-building dialogs (propose / counter / bank trade) anchor to the
+   left side of the board, vertically centered. The board middle stays
+   visible so the player can plan moves while composing an offer. */
+.gameview-side-dialog-overlay {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  pointer-events: none;
+  max-height: calc(100% - 24px);
+}
+
+.gameview-side-dialog-overlay > * {
+  pointer-events: auto;
+}
+
+/* Other prompt dialogs (discard, robber steal, year of plenty, monopoly)
+   dock at the bottom-center of the BOARD (above the hand strip). */
+.gameview-dialog-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  pointer-events: none;
+}
+
+.gameview-dialog-overlay > * {
+  pointer-events: auto;
+}
+
+/* Suppress the .dialog-dock positioning when a dialog is rendered inside an
+   overlay container — the container does the positioning. */
+.gameview-banner-overlay .dialog-dock,
+.gameview-side-dialog-overlay .dialog-dock,
+.gameview-dialog-overlay .dialog-dock {
+  position: static;
+  transform: none;
+  pointer-events: auto;
+  max-width: none;
+  width: auto;
+}
+
+.gameview-bottom {
+  grid-area: bottom;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: stretch;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  /* Locked height so dice rolls, builds, and AI turns don't reflow the
+     board above. */
+  height: 132px;
+  min-height: 132px;
 }
 
 .gameview-side {
+  grid-area: side;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -48,10 +198,68 @@
   font-size: 0.95em;
 }
 
+.gameview-rulebook-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 24px;
+}
+
+.gameview-rulebook {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 1000px;
+  /* Fixed height (not max-height) so the inner grid + overflow:auto panes
+     have a concrete bound to clip against. With max-height the dialog can
+     shrink to content height and the inner scrollers never trigger. */
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.gameview-rulebook-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.gameview-rulebook-head h2 {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+.gameview-rulebook-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.gameview-rulebook-body .rb {
+  flex: 1;
+  height: 100%;
+}
+
 @media (max-width: 900px) {
   .gameview {
     grid-template-columns: 1fr;
-    grid-template-rows: 60vh 1fr;
+    grid-template-rows: minmax(50vh, 1fr) auto auto;
+    grid-template-areas:
+      "board"
+      "bottom"
+      "side";
     max-height: none;
   }
 }

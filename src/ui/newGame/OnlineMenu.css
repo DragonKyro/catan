@@ -93,3 +93,18 @@
   padding: 0 8px;
   position: relative;
 }
+
+.online-testnote {
+  margin: 4px 0 0;
+  font-size: 0.78em;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.online-testnote code {
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 0.95em;
+}

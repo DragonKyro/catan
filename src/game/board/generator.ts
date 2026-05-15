@@ -2,16 +2,19 @@ import type {
   BoardState,
   Hex,
   HexId,
+  HexCoord,
   Port,
   PortType,
   Terrain,
   EdgeId,
   Vertex,
 } from '../types';
-import { buildBaseGraph, type BaseGraph } from './graph';
+import { buildBaseGraph, buildGraphFromCoords, type BaseGraph } from './graph';
 import { shuffle } from '../rng';
 
-const TERRAIN_DISTRIBUTION: Terrain[] = [
+export type BoardVariant = '3-4' | '5-6';
+
+const TERRAIN_DISTRIBUTION_BASE: Terrain[] = [
   'wood', 'wood', 'wood', 'wood',
   'brick', 'brick', 'brick',
   'sheep', 'sheep', 'sheep', 'sheep',
@@ -20,23 +23,79 @@ const TERRAIN_DISTRIBUTION: Terrain[] = [
   'desert',
 ];
 
-const NUMBER_TOKENS = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
+const NUMBER_TOKENS_BASE = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
 
-const PORT_TYPES: PortType[] = [
+const PORT_TYPES_BASE: PortType[] = [
   'generic', 'generic', 'generic', 'generic',
   'wood', 'brick', 'sheep', 'wheat', 'ore',
 ];
 
-const NUM_PORTS = 9;
+const NUM_PORTS_BASE = 9;
+
+// 5-6 player expansion: 30 hexes (vs 19), 28 number tokens, 11 ports.
+// Terrain: 6 wood, 5 brick, 6 sheep, 6 wheat, 5 ore, 2 desert.
+const TERRAIN_DISTRIBUTION_5_6: Terrain[] = [
+  'wood', 'wood', 'wood', 'wood', 'wood', 'wood',
+  'brick', 'brick', 'brick', 'brick', 'brick',
+  'sheep', 'sheep', 'sheep', 'sheep', 'sheep', 'sheep',
+  'wheat', 'wheat', 'wheat', 'wheat', 'wheat', 'wheat',
+  'ore', 'ore', 'ore', 'ore', 'ore',
+  'desert', 'desert',
+];
+
+const NUMBER_TOKENS_5_6 = [
+  2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6,
+  8, 8, 8, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12,
+];
+
+const PORT_TYPES_5_6: PortType[] = [
+  'generic', 'generic', 'generic', 'generic', 'generic',
+  'wood', 'brick', 'sheep', 'wheat', 'ore', 'wheat',
+];
+
+const NUM_PORTS_5_6 = 11;
+
+// 30-hex symmetric hexagon: rows 3-4-5-6-5-4-3 = 30. Each row's q-range
+// is chosen so the row's cartesian center sits at the same x as every
+// other row (x_center ∝ q_center + r/2 = -0.5 here), giving the board
+// horizontal mirror symmetry across r=0.
+function buildCoords5_6(): HexCoord[] {
+  const out: HexCoord[] = [];
+  const rows: Array<[number, number, number]> = [
+    [-3, 0, 2],
+    [-2, -1, 2],
+    [-1, -2, 2],
+    [0, -3, 2],
+    [1, -3, 1],
+    [2, -3, 0],
+    [3, -3, -1],
+  ];
+  for (const [r, qMin, qMax] of rows) {
+    for (let q = qMin; q <= qMax; q++) out.push({ q, r });
+  }
+  return out;
+}
+
 const MAX_NUMBER_PLACEMENT_ATTEMPTS = 200;
 
-export function generateBoard(rngState: number): { board: BoardState; rngState: number } {
-  const graph = buildBaseGraph();
+export function generateBoard(
+  rngState: number,
+  variant: BoardVariant = '3-4',
+): { board: BoardState; rngState: number } {
+  const graph =
+    variant === '5-6' ? buildGraphFromCoords(buildCoords5_6()) : buildBaseGraph();
+  const terrainDistribution =
+    variant === '5-6' ? TERRAIN_DISTRIBUTION_5_6 : TERRAIN_DISTRIBUTION_BASE;
+  const numberTokensSource =
+    variant === '5-6' ? NUMBER_TOKENS_5_6 : NUMBER_TOKENS_BASE;
+  const portTypesSource =
+    variant === '5-6' ? PORT_TYPES_5_6 : PORT_TYPES_BASE;
+  const numPorts = variant === '5-6' ? NUM_PORTS_5_6 : NUM_PORTS_BASE;
   let rng = rngState;
 
   // 1. Assign terrains
   let terrains: Terrain[];
-  [terrains, rng] = shuffle(rng, TERRAIN_DISTRIBUTION);
+  [terrains, rng] = shuffle(rng, terrainDistribution);
   const hexes: Record<HexId, Hex> = {};
   let robberHex: HexId | null = null;
   graph.hexIds.forEach((id, i) => {
@@ -58,7 +117,9 @@ export function generateBoard(rngState: number): { board: BoardState; rngState: 
       corners,
       center: { x: Math.round(cx * 100) / 100, y: Math.round(cy * 100) / 100 },
     };
-    if (terrain === 'desert') robberHex = id;
+    // For multi-desert boards (5-6p), put the robber on the first desert
+    // encountered — players move it on the first 7 anyway.
+    if (terrain === 'desert' && robberHex === null) robberHex = id;
   });
   if (robberHex === null) throw new Error('No desert hex generated');
 
@@ -69,7 +130,7 @@ export function generateBoard(rngState: number): { board: BoardState; rngState: 
   let placed = false;
   for (let attempt = 0; attempt < MAX_NUMBER_PLACEMENT_ATTEMPTS; attempt++) {
     let tokens: number[];
-    [tokens, rng] = shuffle(rng, NUMBER_TOKENS);
+    [tokens, rng] = shuffle(rng, numberTokensSource);
     const proposed = new Map<HexId, number>();
     nonDesertHexes.forEach((id, i) => proposed.set(id, tokens[i]!));
 
@@ -82,17 +143,17 @@ export function generateBoard(rngState: number): { board: BoardState; rngState: 
   if (!placed) {
     // Fallback: accept whatever we have on the final attempt — extremely unlikely
     let tokens: number[];
-    [tokens, rng] = shuffle(rng, NUMBER_TOKENS);
+    [tokens, rng] = shuffle(rng, numberTokensSource);
     nonDesertHexes.forEach((id, i) => (hexes[id]!.numberToken = tokens[i]!));
   }
 
   // 3. Place ports on coastal edges
   const coastalEdges = graph.edgeIds.filter((eid) => graph.edges[eid]!.hexes.length === 1);
   const sortedCoastal = sortCoastalEdgesByAngle(coastalEdges, graph.vertices, graph.edges);
-  const portEdges = pickEvenlySpaced(sortedCoastal, NUM_PORTS);
+  const portEdges = pickEvenlySpaced(sortedCoastal, numPorts);
 
   let portTypes: PortType[];
-  [portTypes, rng] = shuffle(rng, PORT_TYPES);
+  [portTypes, rng] = shuffle(rng, portTypesSource);
   const ports: Port[] = portEdges.map((edge, i) => ({ edge, type: portTypes[i]! }));
 
   const board: BoardState = {

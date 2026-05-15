@@ -14,6 +14,7 @@ import {
   flattenBank,
 } from '../resources';
 import { pickOne } from '../rng';
+import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
 
 export function handleDiscard(state: GameState, action: DiscardAction): GameState {
   if (state.phase !== 'discard') throw new Error(`Cannot discard in phase ${state.phase}`);
@@ -45,7 +46,11 @@ export function handleDiscard(state: GameState, action: DiscardAction): GameStat
   delete newRequired[action.playerId];
 
   if (Object.keys(newRequired).length === 0) {
-    return { ...next, phase: 'moveRobber', discardState: undefined };
+    return {
+      ...next,
+      phase: robberOrPirateChoicePhase(next),
+      discardState: undefined,
+    };
   }
   return { ...next, discardState: { required: newRequired } };
 }

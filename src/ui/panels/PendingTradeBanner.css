@@ -1,11 +1,14 @@
 .ptbanner {
-  background: var(--panel-soft);
+  background: var(--panel);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  width: max-content;
+  max-width: 100%;
 }
 
 .ptbanner-row {
@@ -35,4 +38,42 @@
 
 .ptbanner-actions {
   margin-top: 2px;
+}
+
+.ptbanner-responders {
+  gap: 6px;
+}
+
+.ptbanner-responder {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  font-size: 0.8em;
+  color: var(--text);
+}
+
+.ptbanner-responder.is-rejected {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.ptbanner-responder-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid #00000040;
+}
+
+.ptbanner-responder-mark {
+  color: var(--danger);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.ptbanner-responder-name {
+  font-size: 0.95em;
 }

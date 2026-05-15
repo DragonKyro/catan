@@ -4,7 +4,7 @@ import { applyAction } from '../engine';
 import { runSetupPhase } from '../__testHelpers';
 
 function setupGame() {
-  return runSetupPhase(createGame({ playerNames: ['A', 'B'], seed: 42 }));
+  return runSetupPhase(createGame({ playerNames: ['A', 'B'], seed: 42, randomizeTurnOrder: false }));
 }
 
 describe('rollDice', () => {

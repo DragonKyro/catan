@@ -9,10 +9,18 @@ import type { GameState } from '@/game/types';
 // This exercises essentially every code path in the engine + AI: setup
 // snake order, dice rolls, resource distribution, building, dev cards,
 // robber, discard, and trades.
-function playFullGame(seed: number, vpTarget = 4): GameState {
+function playFullGame(
+  seed: number,
+  vpTarget = 4,
+  playerCount = 3,
+): GameState {
+  const names = ['AI-A', 'AI-B', 'AI-C', 'AI-D', 'AI-E', 'AI-F'].slice(
+    0,
+    playerCount,
+  );
   let s = createGame({
-    playerNames: ['AI-A', 'AI-B', 'AI-C'],
-    playerTypes: ['ai', 'ai', 'ai'],
+    playerNames: names,
+    playerTypes: names.map(() => 'ai' as const),
     seed,
     settings: { victoryPointsToWin: vpTarget },
   });
@@ -73,4 +81,10 @@ describe('AI plays a full game', () => {
     // the same player ends up winning sometimes.
     expect(a.board.robberHex === b.board.robberHex && a.players[0]!.settlements.join('') === b.players[0]!.settlements.join('')).toBe(false);
   }, 30_000);
+
+  it('5-player game terminates (exercises Special Build Phase)', () => {
+    const final = playFullGame(42, 4, 5);
+    expect(final.winner).not.toBeNull();
+    expect(final.phase).toBe('gameOver');
+  }, 60_000);
 });

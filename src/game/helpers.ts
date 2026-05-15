@@ -33,5 +33,13 @@ export function getActingPlayerId(state: GameState): PlayerId {
       if (required[id] !== undefined) return id;
     }
   }
+  // Seafarers gold-pick phase: same pattern as discard — iterate turn order,
+  // first player with a pending pick is the acting one.
+  if (state.phase === 'chooseGoldResource' && state.goldChoiceState) {
+    const pending = state.goldChoiceState.pending;
+    for (const id of state.playerOrder) {
+      if (pending[id] !== undefined) return id;
+    }
+  }
   return state.playerOrder[state.currentPlayerIndex]!;
 }

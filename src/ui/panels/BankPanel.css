@@ -22,3 +22,58 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+
+/* Multi-trade counter used inside BankTradeDialog. */
+.bank-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.bank-count-label {
+  font-size: 0.85em;
+  color: var(--text-soft);
+}
+
+.bank-count-btn {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 1.1em;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 10px;
+  font-family: inherit;
+}
+
+.bank-count-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #1a1a1a;
+}
+
+.bank-count-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.bank-count-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 1.5em;
+  text-align: center;
+}
+
+.bank-count-summary {
+  margin-left: auto;
+  font-size: 0.85em;
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

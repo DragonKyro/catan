@@ -10,6 +10,8 @@ export function canPlaceSettlement(
 ): boolean {
   const vertex = state.board.vertices[vertexId];
   if (!vertex) return false;
+  // Settlements need at least one adjacent land hex.
+  if (!vertex.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea')) return false;
   for (const p of state.players) {
     if (p.settlements.includes(vertexId) || p.cities.includes(vertexId)) return false;
     for (const n of vertex.neighborVertices) {
@@ -18,8 +20,11 @@ export function canPlaceSettlement(
   }
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
+  // Connectivity: a settlement may be placed on the network via a road OR
+  // (Seafarers) a ship — both count as a "way to get there".
   for (const eid of vertex.edges) {
     if (player.roads.includes(eid)) return true;
+    if (player.ships.includes(eid)) return true;
   }
   return false;
 }
@@ -41,8 +46,11 @@ export function canConnectRoad(
 ): boolean {
   const edge = state.board.edges[edgeId];
   if (!edge) return false;
+  // Roads cannot be placed on pure-sea edges (those are ship-only).
+  if (edge.hexes.every((h) => state.board.hexes[h]!.terrain === 'sea')) return false;
   for (const p of state.players) {
     if (p.roads.includes(edgeId)) return false;
+    if (p.ships.includes(edgeId)) return false;
   }
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
@@ -59,7 +67,8 @@ export function canConnectRoad(
     if (player.settlements.includes(v) || player.cities.includes(v)) return true;
     if (blocked) continue;
     for (const eid of state.board.vertices[v]!.edges) {
-      if (eid !== edgeId && player.roads.includes(eid)) return true;
+      if (eid === edgeId) continue;
+      if (player.roads.includes(eid)) return true;
     }
   }
   return false;
@@ -74,6 +83,8 @@ export function canPlaceInitialSettlement(
 ): boolean {
   const vertex = state.board.vertices[vertexId];
   if (!vertex) return false;
+  // Settlements need at least one adjacent land hex.
+  if (!vertex.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea')) return false;
   for (const p of state.players) {
     if (p.settlements.includes(vertexId) || p.cities.includes(vertexId)) return false;
     for (const n of vertex.neighborVertices) {
@@ -91,6 +102,8 @@ export function canPlaceInitialRoad(
 ): boolean {
   const edge = state.board.edges[edgeId];
   if (!edge) return false;
+  // Initial roads cannot be placed on a pure-sea edge.
+  if (edge.hexes.every((h) => state.board.hexes[h]!.terrain === 'sea')) return false;
   if (edge.vertices[0] !== placedSettlement && edge.vertices[1] !== placedSettlement) {
     return false;
   }

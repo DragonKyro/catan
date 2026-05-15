@@ -26,6 +26,24 @@
   filter: brightness(1.1);
 }
 
+/* Production-pulse: brief flash on hexes whose number token matches the
+   roll. Driven by Board.tsx's pulseToken (cleared by timeout ~1.5s). */
+@keyframes hex-pulse-anim {
+  0% {
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+  30% {
+    filter: brightness(1.55) drop-shadow(0 0 14px rgba(255, 230, 120, 0.9));
+  }
+  100% {
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+  }
+}
+
+.hex.hex-pulse polygon {
+  animation: hex-pulse-anim 1.4s ease-out 1;
+}
+
 .ghost {
   transition: transform 80ms ease;
 }

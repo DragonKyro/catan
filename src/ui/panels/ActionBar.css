@@ -1,37 +1,59 @@
+/* Two-row grid: 4 columns. Build/buy actions on row 1, trade/end on
+   row 2. Keeps the bar's horizontal footprint compact and stable so the
+   HandPanel beside it doesn't reflow when buttons appear/disappear. */
 .actionbar {
-  background: var(--panel);
+  background: var(--panel-soft);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.actionbar-row {
-  display: flex;
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(32px, 1fr);
   gap: 6px;
+  align-content: center;
+  align-self: stretch;
+  flex: 0 0 auto;
+  /* Roughly fits 4 buttons with comfortable padding; constrains the bar
+     so the HandPanel beside it gets the rest of the bottom strip. */
+  width: 320px;
 }
 
-.actionbar-row > .btn {
-  flex: 1;
+.actionbar > .btn {
+  min-width: 0;
+}
+
+/* "Slot" wrappers let us span multiple grid columns for hero buttons. */
+.actionbar-slot {
+  display: flex;
+  min-width: 0;
+}
+
+.actionbar-slot-wide {
+  grid-column: span 4;
+}
+
+/* End turn lives on row 2 columns 3–4 so it sits to the right of Bank +
+   Players on the same row. */
+.actionbar-slot-end {
+  grid-column: span 2;
 }
 
 .actionbar-hint {
   color: var(--text-soft);
   font-style: italic;
   font-size: 0.9em;
-  text-align: center;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
 }
 
 .actionbar-thinking {
   color: var(--text-soft);
-  font-size: 0.95em;
-  text-align: center;
+  font-size: 0.9em;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
+  padding: 0 4px;
 }
 
 .actionbar-spinner {
@@ -45,4 +67,210 @@
 @keyframes actionbar-pulse {
   0%, 100% { opacity: 0.3; transform: scale(0.8); }
   50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* Wrapper that lets the Costs button sit alongside the actionbar grid
+   and host the popover above it. */
+.actionbar-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.actionbar-costs-btn {
+  flex: 0 0 auto;
+  width: 32px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text);
+  line-height: 1;
+}
+
+.actionbar-costs-btn:hover {
+  background: var(--panel);
+  border-color: var(--accent);
+}
+
+.actionbar-costs-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.actionbar-undo-btn {
+  flex: 0 0 auto;
+  width: 32px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text);
+  line-height: 1;
+}
+
+.actionbar-undo-btn:hover {
+  background: var(--panel);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cost-cheatsheet {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  z-index: 50;
+  min-width: 200px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.cost-cheatsheet-title {
+  font-weight: 700;
+  font-size: 0.95em;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.cost-cheatsheet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cost-cheatsheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9em;
+}
+
+.cost-cheatsheet-build {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.cost-cheatsheet-chips {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.actionbar-sbp-tag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-soft);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 0 4px;
+  text-align: center;
+  cursor: help;
+  min-width: 0;
+}
+
+.cost-cheatsheet-chip {
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Dev card cheatsheet: wider than cost cheatsheet because it carries
+   an effect description per card. Layered next to the cost button. */
+.dev-cheatsheet-deck {
+  font-weight: 500;
+  font-size: 0.85em;
+  color: var(--text-soft);
+  margin-left: 4px;
+}
+
+.dev-cheatsheet-row {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dev-cheatsheet-card {
+  flex: 0 0 105px;
+}
+
+.dev-cheatsheet-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 11px;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.dev-cheatsheet-effect {
+  flex: 1;
+  color: var(--text-soft);
+  font-size: 0.82em;
+  line-height: 1.3;
+}
+
+.actionbar-devcards-btn {
+  flex: 0 0 auto;
+  width: 32px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text);
+  line-height: 1;
+}
+
+.actionbar-devcards-btn:hover {
+  background: var(--panel);
+  border-color: var(--accent);
+}
+
+.actionbar-devcards-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Dev cheatsheet needs more horizontal room than the cost cheatsheet. */
+.cost-cheatsheet.is-devcards {
+  min-width: 340px;
+  max-width: 420px;
 }

@@ -46,7 +46,7 @@ function chainFromVertex(
 }
 
 describe('calculateLongestRoad', () => {
-  const state = createGame({ playerNames: ['A', 'B'], seed: 42 });
+  const state = createGame({ playerNames: ['A', 'B'], seed: 42, randomizeTurnOrder: false });
 
   it('returns 0 for a player with no roads', () => {
     expect(calculateLongestRoad(state, 'p0')).toBe(0);

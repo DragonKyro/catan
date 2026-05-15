@@ -1,0 +1,157 @@
+.log {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 240px;
+  min-height: 0;
+}
+
+.log-embedded {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+}
+
+.log-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.log-header h3 {
+  margin: 0;
+  font-size: 0.95em;
+}
+
+.log-search {
+  position: relative;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.log-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 24px 4px 8px;
+  font-size: 0.85em;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  color: inherit;
+}
+
+.log-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* `<input type="search">` renders its own clear-× in some browsers; we
+   already render a custom one. Suppress the native so only one × shows. */
+.log-search-input::-webkit-search-cancel-button,
+.log-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.log-search-clear {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 1.05em;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.log-search-clear:hover {
+  color: var(--text);
+}
+
+.log-search-meta {
+  padding: 4px 10px;
+  font-size: 0.75em;
+  color: var(--text-soft);
+  text-align: center;
+  border-top: 1px solid var(--panel-border);
+}
+
+.log-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.85em;
+}
+
+.log-empty {
+  color: var(--text-soft);
+  font-style: italic;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.log-line {
+  line-height: 1.4;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.log-line-gain {
+  background: rgba(123, 191, 122, 0.08);
+}
+
+.log-line-discard {
+  background: rgba(220, 100, 100, 0.08);
+}
+
+.log-line-trade {
+  background: rgba(255, 198, 88, 0.1);
+}
+
+.log-line-win {
+  background: rgba(255, 215, 0, 0.18);
+  font-weight: 600;
+  padding: 6px 4px;
+}
+
+.log-line-turn {
+  color: var(--accent);
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 4px;
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+  font-size: 0.85em;
+}
+
+.log-soft {
+  color: var(--text-soft);
+}
+
+.log-name {
+  font-weight: 700;
+}
+
+.log-dice {
+  font-variant-numeric: tabular-nums;
+}
+
+.log-rchip {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-bank {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}

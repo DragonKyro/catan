@@ -13,6 +13,7 @@ import {
   subtractResources,
   totalResources,
 } from '../resources';
+import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
 
 export function handleRollDice(state: GameState, action: RollDiceAction): GameState {
   if (state.phase !== 'rollOrPlayKnight') {
@@ -49,7 +50,7 @@ export function handleRollDice(state: GameState, action: RollDiceAction): GameSt
     }
     return {
       ...next,
-      phase: 'moveRobber',
+      phase: robberOrPirateChoicePhase(next),
       pendingRobberMove: { reason: 'sevenRoll', returnTo: 'main' },
     };
   }
@@ -60,19 +61,36 @@ export function handleRollDice(state: GameState, action: RollDiceAction): GameSt
 function distributeResources(state: GameState, rolled: number): GameState {
   type Grants = Record<Resource, number>;
   const grants = new Map<PlayerId, Grants>();
-  for (const p of state.players) grants.set(p.id, emptyGrants());
+  // Per-player count of "gold picks" earned this roll (settlement=1, city=2 per
+  // adjacent gold hex matching the rolled number). Always zero on the base
+  // board because there are no gold hexes there.
+  const goldPicks: Record<PlayerId, number> = {};
+  for (const p of state.players) {
+    grants.set(p.id, emptyGrants());
+    goldPicks[p.id] = 0;
+  }
 
   for (const hex of Object.values(state.board.hexes)) {
-    if (hex.terrain === 'desert') continue;
+    if (hex.terrain === 'desert' || hex.terrain === 'sea') continue;
     if (hex.numberToken !== rolled) continue;
     if (hex.id === state.board.robberHex) continue;
-    const resource = hex.terrain as Resource;
 
     const corners: VertexId[] = [];
     for (const v of Object.values(state.board.vertices)) {
       if (v.hexes.includes(hex.id)) corners.push(v.id);
     }
 
+    if (hex.terrain === 'gold') {
+      for (const vid of corners) {
+        for (const p of state.players) {
+          if (p.settlements.includes(vid)) goldPicks[p.id] += 1;
+          else if (p.cities.includes(vid)) goldPicks[p.id] += 2;
+        }
+      }
+      continue;
+    }
+
+    const resource = hex.terrain as Resource;
     for (const vid of corners) {
       for (const p of state.players) {
         if (p.settlements.includes(vid)) grants.get(p.id)![resource] += 1;
@@ -120,9 +138,24 @@ function distributeResources(state: GameState, rolled: number): GameState {
       if (g[r] > 0) bankOut[r] = (bankOut[r] ?? 0) + g[r];
     }
   }
-  next = { ...next, bank: subtractResources(next.bank, bankOut), phase: 'main' };
+  next = { ...next, bank: subtractResources(next.bank, bankOut) };
 
-  return next;
+  // Seafarers: if any player earned gold picks this roll, transition to the
+  // chooseGoldResource phase. They each get N "any resource" picks; the phase
+  // resolves once every pending player has dispatched chooseGoldResource.
+  const pendingGold: Record<PlayerId, number> = {};
+  for (const id of Object.keys(goldPicks)) {
+    if (goldPicks[id]! > 0) pendingGold[id] = goldPicks[id]!;
+  }
+  if (Object.keys(pendingGold).length > 0) {
+    return {
+      ...next,
+      phase: 'chooseGoldResource',
+      goldChoiceState: { pending: pendingGold },
+    };
+  }
+
+  return { ...next, phase: 'main' };
 }
 
 function emptyGrants(): Record<Resource, number> {

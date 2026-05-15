@@ -2,14 +2,8 @@ import { useState } from 'react';
 import { useNetworkStore } from '@/store/networkStore';
 import { Button } from '@/ui/shared/Button';
 import { ChatPanel } from '@/ui/chat/ChatPanel';
+import { playerColorVar } from '@/ui/shared/playerColors';
 import './LobbyScreen.css';
-
-const PLAYER_COLOR_CSS: Record<string, string> = {
-  red: 'var(--player-red)',
-  blue: 'var(--player-blue)',
-  orange: 'var(--player-orange)',
-  white: 'var(--player-white)',
-};
 
 export function LobbyScreen() {
   const {
@@ -27,7 +21,7 @@ export function LobbyScreen() {
   const [copied, setCopied] = useState(false);
 
   const isHost = role === 'host';
-  const canStart = lobby.seats.length >= 2 && lobby.seats.length <= 4;
+  const canStart = lobby.seats.length >= 3 && lobby.seats.length <= 4;
 
   const copyCode = async () => {
     if (!roomCode) return;
@@ -67,7 +61,7 @@ export function LobbyScreen() {
               <div key={i} className="lobby-seat">
                 <span
                   className="lobby-seat-swatch"
-                  style={{ background: PLAYER_COLOR_CSS[seat.color] }}
+                  style={{ background: playerColorVar(seat.color) }}
                 />
                 <span className="lobby-seat-name">
                   {seat.name}

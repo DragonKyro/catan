@@ -20,10 +20,10 @@ import {
   useGameStore,
 } from './gameStore';
 
-const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white'];
+const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink'];
 const DEFAULT_VP = 10;
-const MAX_SEATS = 4;
-const MIN_SEATS = 2;
+const MAX_SEATS = 6;
+const MIN_SEATS = 3;
 const SYSTEM_NAME = 'System';
 
 interface NetStore {
@@ -235,14 +235,20 @@ export const useNetworkStore = create<NetStore>((set, get) => {
       const uuid = s.uuidByPeerId[peerId];
       if (!uuid) return;
       const { [peerId]: _drop, ...rest } = s.uuidByPeerId;
+      // A single UUID may be reachable via multiple peers (e.g., two windows
+      // sharing localStorage). Only mark it offline / emit a disconnect if no
+      // other peerId still maps to that UUID.
+      const stillOnline = Object.values(rest).includes(uuid);
       const online = new Set(s.onlineUuids);
-      online.delete(uuid);
+      if (!stillOnline) online.delete(uuid);
       const name =
         s.lobby.seats.find((seat) => seat.uuid === uuid)?.name ?? 'A player';
       set({
         uuidByPeerId: rest,
         onlineUuids: online,
-        chat: [...s.chat, sysMessage(`${name} disconnected`, s.myUuid)],
+        chat: stillOnline
+          ? s.chat
+          : [...s.chat, sysMessage(`${name} disconnected`, s.myUuid)],
       });
     });
   }
