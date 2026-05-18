@@ -18,6 +18,65 @@ export interface ScenarioPortDef {
   type: PortType;
 }
 
+// ----------------------------------------------------------------------------
+// Modular scenario schema (Phase 7 work, additive — old per-hex `land` /
+// `ports` blueprints still build the same way).
+//
+// The official Seafarers Almanac distinguishes three things per scenario:
+//   1. The FRAME — fixed positions: which (q, r) cells exist and whether each
+//      is land, sea, or desert. This is the only piece that varies by player
+//      count (e.g. Heading for New Shores 3p uses a different shape than 4p).
+//   2. The POOLS — counts of terrains, number tokens, and port types. These
+//      get randomly distributed at game start over the frame's land hexes.
+//   3. The RULES — VP target, special mechanics, starting placement zone.
+//
+// Treating these as separate concerns makes future custom-map support
+// straightforward (a custom map is just a frame + pools), and lets multiple
+// scenarios reuse the same frame with different pools / rules.
+// ----------------------------------------------------------------------------
+
+export type ScenarioPositionKind = 'land' | 'sea' | 'desert';
+
+export interface ScenarioPosition {
+  q: number;
+  r: number;
+  kind: ScenarioPositionKind;
+  // Optional anchor: pin this position to a specific terrain (e.g. a
+  // designated gold field on a small island). Bypasses the pool draw.
+  // Only meaningful when `kind === 'land'`.
+  fixedTerrain?: Terrain;
+}
+
+// Port anchor without a type — the type is drawn from `ScenarioPools.portTypes`.
+export interface ScenarioPortAnchor {
+  q: number;
+  r: number;
+  direction: 0 | 1 | 2 | 3 | 4 | 5;
+}
+
+export interface ScenarioPools {
+  // Number of each terrain to place on `kind: 'land'` positions that don't
+  // have a `fixedTerrain`. Sum must equal the count of such positions.
+  terrainCounts: Partial<Record<Terrain, number>>;
+  // Number tokens to distribute across non-desert land positions (including
+  // pool-drawn AND fixed-terrain ones, except deserts). Length must equal
+  // the non-desert land count. Pool order doesn't matter — the generator
+  // shuffles and retries to avoid 6/8 adjacency.
+  tokens: number[];
+  // Port type pool. Length must equal `portAnchors.length`.
+  portTypes: PortType[];
+}
+
+export interface ScenarioLayout {
+  positions: ScenarioPosition[];
+  portAnchors: ScenarioPortAnchor[];
+  pools: ScenarioPools;
+  // Optional overrides for where robber / pirate start. When absent the
+  // generator falls back to defaults (first desert, first sea hex).
+  robberStart?: { q: number; r: number };
+  pirateStart?: { q: number; r: number };
+}
+
 // Forgotten Tribe token placement. Each token sits on a single hex; the
 // first player to settle on any vertex of that hex claims it.
 export interface ScenarioTribeTokenDef {
@@ -29,8 +88,8 @@ export interface ScenarioTribeTokenDef {
 export interface Scenario {
   id: string;
   name: string;
-  // Full hex grid for the 3-4 player variant. Anything not listed is
-  // implicitly absent.
+  // Legacy fixed-content layout (per-hex terrain + token). Empty arrays for
+  // modular scenarios — read `layout3p`/`layout4p`/`layout5_6p` instead.
   hexes: ScenarioHexDef[];
   ports: ScenarioPortDef[];
   // Default VP per outer island (smaller connected land component); the
@@ -88,4 +147,13 @@ export interface Scenario {
   // islands).
   clothHexes?: { q: number; r: number }[];
   clothHexes5_6?: { q: number; r: number }[];
+  // Modular layouts (Phase 7+). When set, the generator uses these in
+  // preference to the legacy fixed `hexes` field. Per-player-count buckets
+  // so scenarios like Heading for New Shores can declare distinct 3p vs 4p
+  // frames as printed in the rulebook. `layout4p` defaults to `layout3p`,
+  // `layout5_6p` defaults to itself or — for backwards compat — to the
+  // legacy `hexes5_6` data.
+  layout3p?: ScenarioLayout;
+  layout4p?: ScenarioLayout;
+  layout5_6p?: ScenarioLayout;
 }

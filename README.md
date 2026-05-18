@@ -6,13 +6,37 @@ The popular online version (colonist.io) paywalls the expansions; this is a free
 
 **🎲 Play it:** https://dragonkyro.github.io/catan/
 
-### Planned
+## Features
 
-- Post-game AI analysis: highlight likely misplays from the action log (held wood+brick instead of building; bank-traded into a 7-out; settled on a sub-optimal vertex)
+### Playable today
 
-## Status
+**Base game** — 3–8 players. 3–6 official; 7–8 is an unofficial extension modeled on colonist.io's: 37-hex board, scaled bank (24 per resource) and dev deck (35 cards), 2022 paired-player turn rule across all 5+ player counts.
 
-Fully playable: local hot-seat against AI **and** online multiplayer over WebRTC, with in-game chat. Base game complete for 3–8 players (3–6 official, 7–8 as an unofficial extension modeled on what colonist.io offers — 37-hex board, scaled bank and dev deck, default 10 VP target). Seafarers expansion playable for 3–6 players with 9 official scenarios. Other expansions are next.
+**Seafarers expansion** — 9 official scenarios, every one with its rulebook headline mechanic wired up:
+
+- **Heading for New Shores** — main island + outer islands with gold hexes and settlement-bonus chips
+- **Four Islands** — no main island; ships from turn one; starting settlements legal anywhere
+- **Through the Desert** — desert hexes act as island boundaries, so settling past the desert earns an outer-island chip
+- **New World** — random map for variety
+- **Fog Island** — outer hexes start hidden under fog; revealed (and rewarded) by adjacent builds
+- **The Forgotten Tribe** — outer islets carry one-shot tokens: dev cards, +VP, and commercial harbors (2:1 any resource)
+- **Pirate Islands** — an enemy fleet on a sea hex you attack with adjacent ships; killing-blow earns +2 VP
+- **Cloth for Catan** — designated hexes produce cloth tokens instead of resources; 2 cloth = 1 VP
+- **The Wonders of Catan** — 5 prerequisite-gated wonders with 4 levels each; **first to finish any wonder wins immediately** regardless of VP
+
+### Notable mechanics
+
+- **Online multiplayer with no backend.** WebRTC peer-to-peer over Trystero (BitTorrent-tracker signaling). Create a room, share a 4-character code, friends join. Full state replication; randomness baked into actions so all peers reduce to the same state. Drop out and rejoin mid-game with the same code — your seat is preserved via `localStorage` UUID. Late joiners without a saved UUID become read-only spectators.
+- **End-of-game match graph.** Tabbed line charts (VP, resources earned per-player and per-resource, hand size, knights, longest road, trade count, trade efficiency) and bar charts (dice frequency, cumulative bank circulation). Hover snaps to the nearest timeline step with an x-unified crosshair; x-axis is labeled in turn numbers.
+- **End-of-game replay.** Scrub through your finished game step by step, or auto-play at 0.5×–4×. Slider stops only on board-changing actions; rolls and trades fold in but skip.
+- **Heuristic AI with encoded win plans.** Six 10-VP templates (city+army, sprawl+road, etc.); AI scores each by resource cost + production mismatch and picks the cheapest reachable plan. Threat model flags opponents close to win, longest road, or largest army, and refuses trades that hand them the resource they need. In Seafarers it values outer-island chip VP, weights gold above any single resource, and builds ships toward unclaimed chips.
+- **Scenario progress tracker.** When a Seafarers scenario has live state (chips, fog, tribe tokens, wonder levels, pirate fleet, cloth), a "Scenario" side tab appears with everything-at-a-glance. Player badges in the hand/opponent panels mirror it (`🏝 +N`, `🧵 N`, `X/N VP`).
+- **Pass-device hot-seat.** In local games with multiple humans, an explicit handoff screen hides resource hands and unplayed dev cards between turns. AI hands stay face-down (counts visible, types hidden).
+- **Self-contained rulebook.** Paginated by topic with inline SVG diagrams; per-scenario explainers cover the actual implemented mechanic for each Seafarers scenario, including its win target.
+
+### Testing online multiplayer locally
+
+Two browser windows in the same incognito session share `localStorage`, which gives them the same identity UUID and breaks seat assignment. Append `?fresh` to the URL of each test window to force a per-tab UUID via `sessionStorage` instead.
 
 ## Tech stack
 
@@ -22,35 +46,6 @@ Fully playable: local hot-seat against AI **and** online multiplayer over WebRTC
 - **Zustand** for state management
 - **Vitest** for tests
 - **Trystero** (BitTorrent-tracker signaling) for WebRTC peer-to-peer multiplayer
-
-## How it works
-
-The game runs entirely in the browser as a static site. The engine is a pure
-TypeScript reducer (`applyAction(state, action) => state`) so a game is just
-a sequence of typed actions.
-
-- **Local hot-seat**: any mix of human and AI players on one device, 3–8 seats. A pass-device screen between human turns hides hidden info (resource hand, unplayed dev cards). In solo+AI games the AI's hand stays face-down (counts visible, types hidden).
-- **5–6 player expansion**: the larger 30-hex board with the 2022 paired-player turn rule. Each turn has two acting seats — Player 1 (rolls dice, full trade rights) and Player 2 (third seat to Player 1's left; may bank-trade, build, and play 1 dev card, but no player trades). Both markers shift one seat to the left at end of turn; if both reach 10 VP on the same turn, Player 1 wins because they act first.
-- **7–8 player extension (unofficial)**: a 37-hex regular hexagon board with 24 of each resource in the bank and a 35-card dev deck. Paired-player rule applies (inherited from the 5–6p rule). VP target stays at 10 — more players already stretches wall-clock time per round, so raising the target compounds that rather than balancing it.
-- **Online multiplayer**: WebRTC peer-to-peer, no backend. Create a room → share a 4-character code → friends join. Host runs any AI seats. Full state replication via action broadcast.
-- **AI**: a fast heuristic player. Plays setup, builds, robs, trades. Uses encoded 10-VP win-plan templates to decide what to invest in, threat-assesses opponents (leaders, LA/LR race, win-imminent) when trading, robbing, or denying resources, and avoids reverse / roundabout trades within a turn.
-- **Trading**: bank trades (4:1 / 3:1 / 2:1 by port, batchable in one action), and open-broadcast player trades with counter/reject/walk-away flow.
-- **Layout**: hand and action buttons live at the bottom of the screen (always your own hand, even on an AI's turn); the right pane shows opponents in turn order (active player highlighted), bank, and a log/chat tabs panel. The right pane stays the same shape every turn.
-- **Cost cheatsheet**: cost popover in the action bar plus hover tooltips on each build button.
-- **Undo (solo/hot-seat)**: revert your last reversible action (road / settlement / city / dev-card buy / bank trade) before doing anything else. Disabled online.
-- **Hover ghost**: in build mode, the hovered vertex/edge previews a faint silhouette of the actual settlement / city / road in your color.
-- **Game log**: dice rolls, builds, completed trades, steals (without revealing the stolen resource), discards, dev-card plays, and revolution-based turn markers stream into a scrollable log shared by all peers. Offers and rejections aren't logged — only outcomes.
-- **End-of-game match graph**: tabbed line and bar charts with x-unified hover crosshair and turn-numbered x-axis — VP, resources earned (totals, by player, by resource), hand size, knights played, longest road, trades count, trade efficiency, dice-roll frequency, and cumulative resources put into circulation by the bank.
-- **End-of-game replay**: scrub through your finished game step by step, or auto-play it back at 0.5×–4×. Only board-changing actions step the slider; rolls / trades / end-turns are folded in but skipped.
-- **Customization**: 10 distinct player colors selectable per seat; turn order shuffled at game start so signup order doesn't matter.
-- **Rulebook**: paginated by topic with inline diagrams, reachable from the main menu and from a `?` button on the board.
-- **Rejoin**: drop out and rejoin mid-game with the same room code — your seat is preserved via a `localStorage` UUID.
-- **Spectators**: anyone joining mid-game without a matching saved UUID becomes a read-only spectator (board + chat, no actions).
-- **Chat**: in-game text chat (tabbed alongside the game log), plus system messages for joins/leaves/game-start.
-
-### Testing online multiplayer locally
-
-Two browser windows in the same incognito session share `localStorage`, which gives them the same identity UUID and breaks the seat assignment. Append `?fresh` to the URL of each test window to force a per-tab UUID via `sessionStorage` instead.
 
 ## Local development
 
@@ -76,7 +71,7 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 4 — Online multiplayer (Trystero peer-to-peer) + in-game chat
 - [x] Phase 5 — Base game 5–6 player extension
 - [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
-- [x] Phase 6 — Seafarers expansion (9 official scenarios)
+- [x] Phase 6 — Seafarers expansion (9 official scenarios, each with its rulebook headline mechanic — see Features)
 - [ ] Phase 7 — Seafarers 5–6 player extension (partial — per-scenario `landExtra5_6` data exists but most scenarios still cap at `maxPlayers: 4` because the main island isn't enlarged for 10 starting settlements; lift `maxPlayers` once the main island is expanded for each scenario)
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
@@ -91,6 +86,10 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [ ] Phase 17 — Rivals expansion: Era of Progress
 - [ ] Phase 18 — Rivals expansion: Era of Barbarians
 - [ ] Phase 19 — Rivals expansion: Era of Merchants
+
+**Beyond the expansion roadmap:**
+- AI awareness of scenario actions — `buildWonder`, `attackPirateFleet`, and cloth/tribe-token scoring aren't yet driven by the AI's main-phase tree
+- Post-game AI analysis — highlight likely misplays from the action log (held wood+brick instead of building; bank-traded into a 7-out; settled on a sub-optimal vertex)
 
 ## Scope
 

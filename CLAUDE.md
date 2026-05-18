@@ -31,6 +31,26 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 
 **No `if (expansion === 'cities')` conditionals scattered through the code.** If you find yourself wanting one, add a module hook instead.
 
+Seafarers wrapper pattern: `src/game/modules/seafarers/actions/` contains thin wrappers around the base `buildSettlement` / `placeInitialSettlement` / `buildRoad` / `placeInitialRoad` handlers. The wrappers call the base, then run scenario-specific post-build hooks (`claimIslandChips`, `claimTribeTokens`, `revealAdjacentFog`). `buildShip`, `moveShip`, `buildWonder`, `attackPirateFleet`, `chooseGoldResource`, robber/pirate-choice, and `movePirate` are Seafarers-native handlers without a base counterpart. The dispatcher in `src/game/modules/seafarers/index.ts` routes only those action types — everything else falls through to the base module.
+
+## Seafarers scenario mechanics
+
+Every official scenario has its rulebook headline mechanic wired up. Mechanics are configured per-scenario via fields on `Scenario` (see `src/game/modules/seafarers/board/types.ts`); the engine reads optional `state` fields the generator populates from the scenario.
+
+- **Heading for New Shores / New World / Four Islands** — outer-island chips (`state.islandChips`). First settler on a non-main island earns the chip VP. Four Islands sets `startingPlacementZone: 'anyIsland'` so first settlements aren't restricted to the main island.
+- **Through the Desert** — `desertIsBoundary: true` makes `identifyIslands` treat desert hexes as boundaries; the far side becomes a separate outer island and earns a chip.
+- **Fog Island** — `fogHexes` populate `state.unrevealedFogHexes`. `revealAdjacentFog(state, hexIds, playerId)` in `seafarers/actions/fog.ts` fires from every build wrapper; resource hexes grant +1 from the bank, gold hexes stack picks into `goldChoiceState` (with `returnTo` honoured so setup-round-2 fog gold still drops back into the setup road step), desert/sea reveal silently. The helper is the single source of truth — all four build paths call it.
+- **The Forgotten Tribe** — `tribeTokens` produce `state.tribeTokens` claimed via the settlement wrapper. Three effect types: `devCard` (draws from `devCardDeck` into `boughtThisTurn`), `victoryPoint` (visible +1 via `calculateTribeTokenVp`), `commercialHarbor` (`player.commercialHarbors++`, floors bank trade rate at 2:1 — see `getBankTradeRate` in `actions/trade.ts`).
+- **Pirate Islands** — `pirateFleet` becomes `state.pirateFleet` (hexId + strength + maxStrength + defeatedBy). New action `attackPirateFleet`: requires an adjacent ship, capped at once per turn via `state.attackedPirateThisTurn` (cleared on `endTurn`). On strength → 0 the player earns +2 VP via `calculatePirateFleetVp`. Independent of the regular movable pirate token (`board.pirateHex`).
+- **Cloth for Catan** — `clothHexes` produce `state.clothHexes`. The dice handler (`actions/dice.ts`) diverts production: rolling a cloth hex's number grants `player.cloth` instead of the listed terrain's resource (1 per settle, 2 per city). `calculateClothVp = floor(cloth / 2)`.
+- **The Wonders of Catan** — `state.wonders` seeded at level 0 for every entry in `WONDERS` catalogue (`src/game/modules/seafarers/wonders/catalogue.ts`). New action `buildWonder` validates phase, current player, prereq (`prereqMet(state, playerId)`), cost, claim status, and max level. **Completing a wonder is an instant win** — the handler sets `winner` + `phase: 'gameOver'` directly, bypassing the normal VP check.
+
+Each scenario also carries `defaultVpToWin` (3-4p) and optional `defaultVpToWin5_6` (5-6p larger board). `createGame`'s VP target precedence: explicit override > scenario default > player-count default.
+
+## Scenario tracker UI
+
+`src/ui/panels/ScenarioPanel.tsx` is a single component that renders all active scenario state: chip claims, fog revealed/total, tribe tokens with type+claimer, wonder levels+claimer, pirate-fleet strength+defeater, per-player cloth counts. `hasScenarioTracker(game)` returns true iff any of these are populated; `SidePanelTabs` uses it to decide whether to render the "Scenario" tab alongside Log/Chat. Player badges in `HandPanel` and `OpponentPanel` also show `🏝 +N` (chip VP) and `🧵 N` (cloth) when nonzero. Board-level markers live in `src/ui/game/seafarers/`: `TribeTokenMarker`, `PirateFleetMarker`, `ClothHexMarker`, plus the existing `PirateMarker` and `Ship`. `HexTile` accepts a `foggy` prop that hides the terrain motif and number token under a cloud.
+
 ## Multiplayer model
 
 - **Trystero `/torrent`** for WebRTC signaling (BitTorrent trackers). No backend. App ID `catan-friends-v1`; room code doubles as the password for E2E encryption.
@@ -65,9 +85,11 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 - **Dev-card gate**: AI skips a dev card if it could instead settle now, finish a settle with one more resource, or unlock a settle spot with one road. Dev cards are slow VP; expansion compounds.
 - **Road gate**: builds only when (a) no reachable open settle spot AND target endpoint scores `≥ ROAD_TARGET_THRESHOLD` (default 4.5, dropped to 3.5 when the active win plan needs more settlements), or (b) pursuing Longest Road (within 2 of claim length — threshold drops to 1.5). Contested-endpoint penalty (-2 per enemy road touching the target vertex) keeps the AI from racing into spots opponents can settle first.
 - **Bank trade aggression**: bank-trades only when (1) we have a concrete build goal AND a specific shortfall, or (2) hand size ≥ 8 (next 7 would force a discard). The give-side picks a resource we have spare (above goal needs); receive-side prefers shortfall on the active goal.
-- Resource weights: ore/wheat 1.3, brick/wood 1.1, sheep 0.9. Tunable in `src/ai/value.ts`.
+- Resource weights: ore/wheat 1.3, brick/wood 1.1, sheep 0.9. Tunable in `src/ai/value.ts`. Gold weighted 1.6 (above any single resource — reflects the choice-of-resource on production) plus a flat +1 per gold hex bonus in `vertexScore` (smooths bad-luck spells).
 - Port valuation: 2:1 of a resource we produce here = 3.5, of a resource we produce elsewhere = 2.5, of one we don't produce = 1.2; generic 3:1 = 1.5.
-- One competent difficulty level. No state in the AI; no memory between turns (per-turn trade history lives on `GameState`, not the AI).
+- **Outer-island bonus**: `vertexScore` adds `chip.vp * 3` per unclaimed-outer-island chip the vertex touches. A 2-VP chip = +6 score (comparable to a strong missing-resource bonus); enough to pull the AI off the main island when ships open the path.
+- **Ship building** (`src/ai/seafarers/ships.ts`): Seafarers-only step in the priority tree between settlement and road. `tryBuildShip` scores each buildable ship edge by the destination vertex's `vertexScore` (which already bakes in chip + gold) plus a +1.5 connector bonus for ships one hop from an unclaimed chip. Same loop/dead-end/threshold gating as the road heuristic.
+- One competent difficulty level. No state in the AI; no memory between turns (per-turn trade history lives on `GameState`, not the AI). Scenario-specific actions (`buildWonder`, `attackPirateFleet`) aren't yet driven by the AI — currently AI plays Seafarers scenarios using only base + ship + chip heuristics. Adding wonder/fleet/cloth-aware AI is a TODO.
 
 ## UI conventions
 
@@ -83,7 +105,8 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
   - **Dialog overlay (`.gameview-dialog-overlay`)** at bottom-center of the board (just above the bottom strip) holds the other one-off dialogs.
   - Each container neutralizes the `.dialog-dock` absolute positioning so its child renders in place.
 - Use `variant="modal"` for screens that should block (GameOver, rulebook overlay).
-- **Player colors** come from `src/ui/shared/playerColors.ts` — `PLAYER_COLORS`, `PLAYER_COLOR_HEX`, `playerColorVar(c)`. Don't duplicate the `PLAYER_COLOR_CSS` map inline; reuse the helper.
+- **Player colors** come from `src/ui/shared/playerColors.ts` — `PLAYER_COLORS`, `PLAYER_COLOR_HEX`, `playerColorVar(c)`. Don't duplicate the `PLAYER_COLOR_CSS` map inline; reuse the helper. There are 10 colors; the new-game seat editor (`NewGame.tsx`) lets each seat pick one independently. Conflict resolution: if seat X picks the color seat Y already has, seat Y swaps to X's old color so all seats remain unique without any disable-locking dance.
+- **Clocks**: `GameClock` (top of the board, runs from game start) shows total wall-clock time; `TurnTimer` shows the active player's countdown when `settings.turnTimerSec > 0`. When the per-turn timer hits zero the UI auto-finishes any committed sub-phase (discard / robber move / etc.) using AI defaults, then dispatches `endTurn`. AI seats ignore the timer — they pace themselves via `AIDriver` (~450 ms per micro-step; ~10 s on the AI's own pending trade so a human can respond).
 - **Game log**: `LogPanel` reads from `logStore.entries`. Steal entries deliberately omit the stolen resource (private info). Trade offers, rejections, cancellations, and per-roll resource gains are NOT logged — only completed trades and the roll itself. Revolution-based turn markers (`── Turn N ──`) tick over when the table cycles back to the first player in `playerOrder`. For 5+p paired turns the P1→P2 hand-off doesn't increment the counter; only the P2→next-P1 transition does. Auto-scroll only fires when the user is already at the bottom (`wasAtBottomRef`); chat has the same behavior.
 - **Match graph**: `MatchGraph` reads `logStore.timeline` (per-step `vp`, `handTotal`, `gainedTotal`, `gainedByResource`, `knightsPlayed`, `longestRoadLength`, `tradesCount`, `tradesGiven`/`tradesReceived`, plus `turnNumber`) and `logStore.stats` (roll counts, resourcesInCirculation). Tabbed line charts (VP, resources earned, hand, knights, longest road, trades count, trade efficiency, by-player, by-resource) plus two game-wide bar charts (dice frequency, circulation). X-axis is labeled in turn numbers (thinned to ~10 labels); hover snaps to the nearest timeline step and shows an x-unified crosshair + tooltip including `Turn N · step M`. Embedded in `GameOverDialog`, which also offers a `Replay` tab.
 - **Replay**: `Replay.tsx` plays the finished game forward. It steps through a filtered list of *board-changing* actions (builds, ships, robber/pirate moves, dev-card plays) while reconstructing `replayState` from the full action list, so resources/VPs stay correct even though rolls / trades / end-turns aren't stops on the slider.
@@ -126,8 +149,8 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 - [x] Phase 4 — Online multiplayer + in-game chat
 - [x] Phase 5 — Base game 5–6 player extension
 - [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
-- [x] Phase 6 — Seafarers expansion (9 official scenarios)
-- [ ] Phase 7 — Seafarers 5–6 player extension (per-scenario `landExtra5_6` data exists but most scenarios still gate at `maxPlayers: 4` because the main island isn't enlarged; expand each scenario's main island so 5–6 players fit under the setup distance rule)
+- [x] Phase 6 — Seafarers expansion (9 official scenarios, each with rulebook headline mechanic wired up — see "Seafarers scenario mechanics" above)
+- [ ] Phase 7 — Seafarers 5–6 player extension (per-scenario `landExtra5_6` data exists but most scenarios still gate at `maxPlayers: 4` because the main island isn't enlarged; expand each scenario's main island so 5–6 players fit under the setup distance rule. The modular `ScenarioLayout` / `ScenarioPools` types in `seafarers/board/types.ts` are the in-progress migration path — old fixed `land`/`ports` blueprints still work)
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; would need per-scenario 7–8 boards. Currently the engine rejects Seafarers + >6 players via `createGame`. Re-evaluate after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
@@ -144,4 +167,10 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 
 ## Where to start next
 
-Phases 0–6 and 5b complete. Next up is **Phase 7 — Seafarers 5–6 player extension** (add expanded main-island layouts to the existing scenarios in `src/game/modules/seafarers/board/scenarios/`; the `landExtra5_6` field already enlarges outer islands but the main island stays at its 3-4p size, which leaves too little room for 10 starting settlements under the distance rule — that's why most scenarios still cap at `maxPlayers: 4` despite having `landExtra5_6` data). Each scenario also now carries a `defaultVpToWin5_6` that takes effect once `maxPlayers` is lifted. After Phase 7, **Phase 8 — Cities & Knights** as a new module under `src/game/modules/`. The action union and engine dispatcher are already extensible; new actions plug in via a new entry in their module file alongside the existing `seafarers/` and `base/` modules.
+Phases 0–6 and 5b complete; all 9 Seafarers scenario mechanics implemented. Next up is **Phase 7 — Seafarers 5–6 player extension** (add expanded main-island layouts to the existing scenarios in `src/game/modules/seafarers/board/scenarios/`; the `landExtra5_6` field already enlarges outer islands but the main island stays at its 3-4p size, which leaves too little room for 10 starting settlements under the distance rule — that's why most scenarios still cap at `maxPlayers: 4` despite having `landExtra5_6` data). The new modular `ScenarioLayout`/`ScenarioPools` types in `seafarers/board/types.ts` are the migration path: a layout declares (q, r) positions + a pool of terrains + a pool of tokens + a pool of port types, and the generator distributes pools onto positions at game start. Each scenario also now carries a `defaultVpToWin5_6` that takes effect once `maxPlayers` is lifted.
+
+Two smaller follow-ups worth doing alongside or after Phase 7:
+- **AI awareness of scenario actions**: `buildWonder`, `attackPirateFleet`, and cloth/tribe scoring aren't yet in `chooseMainPhaseAction`. Adding heuristics for these makes AI-vs-AI Wonders/Pirate/Cloth games competitive.
+- **Phase 7b — Seafarers 7–8 player extension**: no official version exists. The engine currently rejects Seafarers + >6 players; re-evaluate after Phase 7.
+
+After Phase 7, **Phase 8 — Cities & Knights** as a new module under `src/game/modules/`. The action union and engine dispatcher are already extensible; new actions plug in via a new entry in their module file alongside the existing `seafarers/` and `base/` modules.
