@@ -30,6 +30,10 @@ export type UIMode =
   | { kind: 'buildCity' }
   | { kind: 'buildRoad' }
   | { kind: 'buildShip' }
+  // Traders & Barbarians — picking a river edge to span with a bridge.
+  | { kind: 'buildBridge' }
+  // Cities & Knights — picking which of your own cities to put a wall under.
+  | { kind: 'buildCityWall' }
   | { kind: 'placeSetupSettlement' }
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }

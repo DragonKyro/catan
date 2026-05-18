@@ -6,6 +6,7 @@ import {
   canConnectRoad,
   canPlaceInitialSettlement,
   canPlaceInitialRoad,
+  canPlaceBridge,
 } from '@/game/placement';
 import { canBuildShip } from '@/game/modules/seafarers/validation/shipPlacement';
 import type { EdgeId, PlayerColor, VertexId } from '@/game/types';
@@ -73,6 +74,32 @@ export function PlacementOverlay() {
             />
           );
         })}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'buildCityWall') {
+    // City wall ghosts: light up only the player's own cities that don't
+    // already have a wall.
+    const me = game.players.find((p) => p.id === acting);
+    const walls = game.cityWalls ?? {};
+    return (
+      <g className="overlay overlay-vertices">
+        {(me?.cities ?? [])
+          .filter((vid) => !walls[vid])
+          .map((vid) => (
+            <VertexGhost
+              key={vid}
+              vid={vid}
+              variant="city"
+              previewColor={previewColor}
+              isHovered={hoveredVid === vid}
+              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
+              onClick={() =>
+                dispatch({ type: 'buildCityWall', playerId: acting, vertex: vid })
+              }
+            />
+          ))}
       </g>
     );
   }
@@ -171,6 +198,29 @@ export function PlacementOverlay() {
               onHoverChange={(h) => setHoveredEid(h ? eid : null)}
               onClick={() =>
                 dispatch({ type: 'buildShip', playerId: acting, edge: eid })
+              }
+            />
+          );
+        })}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'buildBridge') {
+    return (
+      <g className="overlay overlay-edges">
+        {(game.riverEdges ?? []).map((eid) => {
+          if (!canPlaceBridge(game, acting, eid)) return null;
+          return (
+            <EdgeGhost
+              key={eid}
+              eid={eid}
+              variant="bridge"
+              previewColor={previewColor}
+              isHovered={hoveredEid === eid}
+              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+              onClick={() =>
+                dispatch({ type: 'buildBridge', playerId: acting, edge: eid })
               }
             />
           );
@@ -351,7 +401,7 @@ function EdgeGhost({
   onClick,
 }: {
   eid: EdgeId;
-  variant: 'road' | 'ship';
+  variant: 'road' | 'ship' | 'bridge';
   previewColor: PlayerColor;
   isHovered: boolean;
   onHoverChange: (hovered: boolean) => void;
@@ -397,7 +447,7 @@ function EdgeGhost({
           y2={y2}
           stroke={playerColorVar(previewColor)}
           strokeOpacity={0.55}
-          strokeWidth={variant === 'ship' ? 4 : 5}
+          strokeWidth={variant === 'bridge' ? 6 : variant === 'ship' ? 4 : 5}
           strokeLinecap="round"
         />
       )}

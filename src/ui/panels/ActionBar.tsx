@@ -7,6 +7,11 @@ import { canAfford } from '@/game/resources';
 import { isPairedPlayer2 } from '@/game/helpers';
 import { SHIP_COST, MAX_SHIPS } from '@/game/modules/seafarers/constants';
 import { hasShipAdjacentToFleet } from '@/game/modules/seafarers/actions/attackPirateFleet';
+import {
+  CITIES_AND_KNIGHTS_EXPANSION_ID,
+  MAX_CITY_WALLS,
+} from '@/game/modules/citiesAndKnights/constants';
+import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import './ActionBar.css';
 
 export function ActionBar() {
@@ -62,9 +67,16 @@ export function ActionBar() {
     return null;
   }
 
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
+  const hasTraders = game.settings.expansions.includes(TRADERS_EXPANSION_ID);
+
   if (phase === 'rollOrPlayKnight') {
+    // Under C&K, dev cards are replaced by progress cards — no "Play Knight"
+    // pre-roll. Phase 8c will introduce the equivalent Alchemy pre-roll.
     const hasKnight =
-      !game.hasPlayedDevCardThisTurn && player.devCards.unplayed.includes('knight');
+      !hasCK &&
+      !game.hasPlayedDevCardThisTurn &&
+      player.devCards.unplayed.includes('knight');
     return wrap(
       <div className="actionbar">
         <div className="actionbar-slot actionbar-slot-wide">
@@ -134,6 +146,19 @@ export function ActionBar() {
             ⛵ Ship
           </Button>
         )}
+        {hasTraders && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.bridge) ||
+              (player.bridges?.length ?? 0) >= 3 ||
+              (game.riverEdges?.length ?? 0) === 0
+            }
+            onClick={() => setMode({ kind: 'buildBridge' })}
+            title="Build Bridge (1🌲 1🧱) — required to cross river edges; pays +3 gold"
+          >
+            🌉 Bridge
+          </Button>
+        )}
         <Button
           disabled={
             !canAfford(player.resources, COSTS.settlement) ||
@@ -155,16 +180,31 @@ export function ActionBar() {
         >
           🏛 City
         </Button>
-        <Button
-          disabled={
-            !canAfford(player.resources, COSTS.devCard) ||
-            game.devCardDeck.length === 0
-          }
-          onClick={() => dispatch({ type: 'buyDevCard', playerId: acting })}
-          title="Buy Dev Card (1🐑 1🌾 1🪨)"
-        >
-          🃏 Dev Card
-        </Button>
+        {hasCK && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.cityWall) ||
+              player.cities.length === 0 ||
+              (player.cityWalls ?? 0) >= MAX_CITY_WALLS
+            }
+            onClick={() => setMode({ kind: 'buildCityWall' })}
+            title="Build City Wall (2🧱) — adds +2 to your 7-roll hand limit"
+          >
+            🧱 Wall
+          </Button>
+        )}
+        {!hasCK && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.devCard) ||
+              game.devCardDeck.length === 0
+            }
+            onClick={() => dispatch({ type: 'buyDevCard', playerId: acting })}
+            title="Buy Dev Card (1🐑 1🌾 1🪨)"
+          >
+            🃏 Dev Card
+          </Button>
+        )}
         {pairedP2 ? (
           <Button
             onClick={() => openDialog('bankTrade')}

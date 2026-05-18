@@ -1,16 +1,26 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId } from './types';
 import { WONDERS } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import { generateSeafarersBoard } from './modules/seafarers/board/generator';
 import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
+import { generateTradersBoard } from './modules/traders/board/generator';
 import {
   getBaseScenario,
   DEFAULT_BASE_SCENARIO_ID,
 } from './modules/base/scenarios';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
+import { TRADERS_EXPANSION_ID } from './modules/traders/constants';
+import {
+  CITIES_AND_KNIGHTS_EXPANSION_ID,
+  CITIES_AND_KNIGHTS_DEFAULT_VP,
+  COMMODITY_BANK_SIZE,
+} from './modules/citiesAndKnights/constants';
 import { getScenario } from './modules/seafarers/board/scenarios';
+import { getTradersScenario } from './modules/traders/board/scenarios';
+import { recalcWealthTiles } from './modules/traders/scoring/wealthTiles';
 import { shuffle } from './rng';
 import { emptyBank, bankFull } from './resources';
+import { emptyCommodities, commoditiesFull } from './commodities';
 
 const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink', 'teal', 'gold'];
 
@@ -125,13 +135,54 @@ export function createGame(opts: CreateGameOptions): GameState {
     );
   }
 
+  const hasCitiesKnights = expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
+  const hasTraders = expansions.includes(TRADERS_EXPANSION_ID);
+
+  // Cities & Knights + Seafarers can be combined per the rulebook, but the
+  // combined ruleset has its own intercept points (knights on ships, pirate
+  // on barbarian track, etc.) we haven't implemented yet. Refuse the combo
+  // at the engine boundary so the UI picker is the only mutex to maintain.
+  if (hasCitiesKnights && expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    throw new Error(
+      'Cities & Knights cannot be combined with Seafarers yet (Phase 1 deferral).',
+    );
+  }
+
+  // Traders & Barbarians compatibility limits for this phase:
+  //   - 3-4 players only (no 5-6p scenario layouts yet).
+  //   - Cannot combine with Seafarers (no merged scenario boards).
+  //   - Cannot combine with Cities & Knights (variant interactions deferred).
+  if (hasTraders) {
+    if (numPlayers > 4) {
+      throw new Error(
+        `Traders & Barbarians is 3-4 players only in this build (got ${numPlayers}).`,
+      );
+    }
+    if (expansions.includes(SEAFARERS_EXPANSION_ID)) {
+      throw new Error(
+        'Traders & Barbarians cannot be combined with Seafarers yet.',
+      );
+    }
+    if (hasCitiesKnights) {
+      throw new Error(
+        'Traders & Barbarians cannot be combined with Cities & Knights yet.',
+      );
+    }
+  }
+
   // VP target precedence: explicit override > scenario default > player-count
   // default. Scenarios ship with rulebook-correct VP targets (e.g. Heading for
   // New Shores = 12 at 3-4p / 14 at 5-6p) so picking one without an override
   // does the right thing. Both Seafarers and base-game scenarios participate.
   const scenarioId = opts.settings?.scenarioId;
   const baseScenarioId = opts.settings?.baseScenarioId ?? DEFAULT_BASE_SCENARIO_ID;
+  const tradersScenarioId = opts.settings?.tradersScenarioId;
+  const tradersVariants = opts.settings?.tradersVariants;
   const scenarioVp = ((): number | undefined => {
+    if (hasTraders) {
+      const sc = getTradersScenario(tradersScenarioId ?? 'riversOfCatan');
+      return sc.defaultVpToWin;
+    }
     if (expansions.includes(SEAFARERS_EXPANSION_ID)) {
       if (!scenarioId) return undefined;
       const sc = getScenario(scenarioId);
@@ -142,13 +193,27 @@ export function createGame(opts: CreateGameOptions): GameState {
     if (numPlayers >= 5 && sc.defaultVpToWin5_6 != null) return sc.defaultVpToWin5_6;
     return sc.defaultVpToWin;
   })();
+  // VP precedence: explicit override > C&K default (13, overrides any base
+  // scenario VP when the expansion is on) > scenario default > player-count
+  // default (10). C&K's 13-VP target is rule-mandated for the expansion, so
+  // it beats whatever the base map shipped as its default.
+  const cnkVp = hasCitiesKnights ? CITIES_AND_KNIGHTS_DEFAULT_VP : undefined;
+  // Strongest Ports variant: rulebook explicitly says "increase the number
+  // of VPs needed to win by 1." Stacks on top of whatever else picked the VP.
+  const strongestPortsBump =
+    hasTraders && tradersVariants?.strongestPorts ? 1 : 0;
   const settings: GameSettings = {
     numPlayers,
     victoryPointsToWin:
-      opts.settings?.victoryPointsToWin ?? scenarioVp ?? defaultVpFor(numPlayers),
+      (opts.settings?.victoryPointsToWin ??
+        cnkVp ??
+        scenarioVp ??
+        defaultVpFor(numPlayers)) + strongestPortsBump,
     expansions,
     scenarioId,
     baseScenarioId,
+    tradersScenarioId: hasTraders ? tradersScenarioId ?? 'riversOfCatan' : undefined,
+    tradersVariants: hasTraders ? tradersVariants : undefined,
     turnTimerSec: opts.settings?.turnTimerSec,
   };
 
@@ -160,9 +225,19 @@ export function createGame(opts: CreateGameOptions): GameState {
   let wonders: WonderState[] | undefined;
   let pirateFleet: PirateFleet | undefined;
   let clothHexes: string[] | undefined;
+  let riverEdges: EdgeId[] | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
-  if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+  if (hasTraders) {
+    const result = generateTradersBoard(
+      settings.tradersScenarioId,
+      rng,
+      numPlayers,
+    );
+    board = result.board;
+    rng = result.rngState;
+    riverEdges = result.riverEdges.length > 0 ? result.riverEdges : undefined;
+  } else if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
     board = result.board;
     rng = result.rngState;
@@ -190,8 +265,17 @@ export function createGame(opts: CreateGameOptions): GameState {
     rng = baseResult.rngState;
   }
 
+  // Cities & Knights replaces dev cards with three progress card decks
+  // (drawn on the event die). Phase 1 of C&K doesn't ship those decks yet,
+  // so we just leave the dev card deck empty. Engine-side, the C&K module
+  // intercepts every dev card action to throw so a stale dispatch can't
+  // exercise it.
   let devCardDeck: DevCardType[];
-  [devCardDeck, rng] = shuffle(rng, devDeckFor(numPlayers));
+  if (hasCitiesKnights) {
+    devCardDeck = [];
+  } else {
+    [devCardDeck, rng] = shuffle(rng, devDeckFor(numPlayers));
+  }
 
   const players: Player[] = opts.playerNames.map((name, i) => ({
     id: `p${i}`,
@@ -212,6 +296,10 @@ export function createGame(opts: CreateGameOptions): GameState {
     hasLongestRoad: false,
     hasLargestArmy: false,
     ships: [],
+    ...(hasCitiesKnights
+      ? { commodities: emptyCommodities(), cityWalls: 0 }
+      : {}),
+    ...(hasTraders ? { gold: 0, bridges: [] } : {}),
   }));
 
   // Determine turn order. By default we shuffle so signup order doesn't
@@ -226,6 +314,31 @@ export function createGame(opts: CreateGameOptions): GameState {
     [shuffled, rng] = shuffle(rng, ids);
     playerOrder = shuffled;
   }
+
+  // Cities & Knights state seeding.
+  let commodityBank: CommodityBank | undefined;
+  let barbarian: BarbarianState | undefined;
+  let robberActive: boolean | undefined;
+  let cityWallsByVertex: Record<VertexId, PlayerId> | undefined;
+  if (hasCitiesKnights) {
+    commodityBank = commoditiesFull(COMMODITY_BANK_SIZE);
+    barbarian = { position: 0, attacksResolved: 0 };
+    // Robber starts "offshore" in C&K — represented by a flag rather than a
+    // sentinel hex. board.robberHex still points at the desert so the existing
+    // renderer doesn't NPE; the gate lives in the dice / moveRobber handlers.
+    robberActive = false;
+    cityWallsByVertex = {};
+  }
+
+  // T&B initial wealth/Strongest Ports state. Players start at 0 gold so
+  // wealthTiles encodes to { wealthiest: null, poor: [] }.
+  const wealthTilesInit = hasTraders
+    ? recalcWealthTiles({ players })
+    : undefined;
+  const strongestPortsInit =
+    hasTraders && tradersVariants?.strongestPorts
+      ? { holder: null }
+      : undefined;
 
   return {
     settings,
@@ -253,5 +366,12 @@ export function createGame(opts: CreateGameOptions): GameState {
     wonders,
     pirateFleet,
     clothHexes,
+    commodityBank,
+    barbarian,
+    robberActive,
+    cityWalls: cityWallsByVertex,
+    riverEdges,
+    wealthTiles: wealthTilesInit,
+    strongestPorts: strongestPortsInit,
   };
 }

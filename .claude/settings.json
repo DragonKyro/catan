@@ -6,7 +6,11 @@
       "Bash(npx vitest *)",
       "Bash(node -e ' *)",
       "WebSearch",
-      "Bash(where pdftoppm *)"
+      "Bash(where pdftoppm *)",
+      "Bash(where pdftotext *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx vite *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\klui\\.knowledge\\projects\\c--Users-klui-Desktop-Kyle-P-catan\\memory"

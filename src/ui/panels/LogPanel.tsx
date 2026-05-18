@@ -218,6 +218,20 @@ function entryMatches(
           : 'city downgraded',
       );
       break;
+    case 'cityWallBuilt':
+      pushName(entry.player);
+      parts.push('build', 'city wall', 'wall');
+      break;
+    case 'barbarianAdvance':
+      parts.push('barbarian', 'ship', 'advance', String(entry.position));
+      break;
+    case 'barbarianAttack':
+      parts.push('barbarian', 'attack', entry.outcome);
+      for (const id of entry.pillaged) pushName(id);
+      break;
+    case 'robberActivated':
+      parts.push('robber', 'active', 'activated');
+      break;
     case 'turnBegins':
       parts.push('turn', `turn ${entry.turnNumber}`);
       break;
@@ -375,6 +389,46 @@ function LogLine({
           {entry.effect === 'destroyed'
             ? 'settlement was destroyed'
             : 'city was downgraded to a settlement'}
+        </div>
+      );
+    case 'cityWallBuilt':
+      return (
+        <div className="log-line">
+          🧱 {pname(entry.player)} built a city wall
+        </div>
+      );
+    case 'barbarianAdvance':
+      return (
+        <div className="log-line log-soft">
+          🚢 Barbarian ship advances ({entry.position}/{entry.total})
+        </div>
+      );
+    case 'barbarianAttack':
+      return (
+        <div className="log-line">
+          ⚔️ Barbarians attacked —{' '}
+          {entry.outcome === 'won'
+            ? 'defenders held the line!'
+            : entry.outcome === 'tied'
+              ? 'a stalemate'
+              : 'the defenders fell'}
+          {entry.pillaged.length > 0 && (
+            <>
+              {' '}— pillaged{' '}
+              {entry.pillaged.map((id, i) => (
+                <span key={id}>
+                  {i > 0 ? ', ' : ''}
+                  {pname(id)}
+                </span>
+              ))}
+            </>
+          )}
+        </div>
+      );
+    case 'robberActivated':
+      return (
+        <div className="log-line log-soft">
+          🥷 Robber lands on the desert — now active on 7-rolls
         </div>
       );
     case 'turnBegins':

@@ -1,6 +1,7 @@
 import { useGameStore } from '@/store/gameStore';
 import { getScenario } from '@/game/modules/seafarers/board/scenarios';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
+import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { WONDERS } from '@/game/modules/seafarers/wonders/catalogue';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import type { TribeTokenType } from '@/game/types';
@@ -26,13 +27,20 @@ const TRIBE_TOKEN_ICON: Record<TribeTokenType, string> = {
 // this to decide whether to render the Scenario tab at all.
 export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getState>['game']): boolean {
   if (!state) return false;
-  if (!state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) return false;
-  if (state.islandChips && state.islandChips.length > 0) return true;
-  if (state.tribeTokens && state.tribeTokens.length > 0) return true;
-  if (fogTotal(state) > 0) return true;
-  if (state.wonders && state.wonders.length > 0) return true;
-  if (state.pirateFleet) return true;
-  if (state.clothHexes && state.clothHexes.length > 0) return true;
+  const hasSeafarers = state.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
+  const hasTraders = state.settings.expansions.includes(TRADERS_EXPANSION_ID);
+  if (hasSeafarers) {
+    if (state.islandChips && state.islandChips.length > 0) return true;
+    if (state.tribeTokens && state.tribeTokens.length > 0) return true;
+    if (fogTotal(state) > 0) return true;
+    if (state.wonders && state.wonders.length > 0) return true;
+    if (state.pirateFleet) return true;
+    if (state.clothHexes && state.clothHexes.length > 0) return true;
+  }
+  if (hasTraders) {
+    if (state.wealthTiles) return true;
+    if (state.strongestPorts) return true;
+  }
   return false;
 }
 
@@ -53,7 +61,13 @@ function fogTotal(
 export function ScenarioPanel() {
   const game = useGameStore((s) => s.game);
   if (!game) return null;
-  if (!game.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) return null;
+  const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
+  const hasTraders = game.settings.expansions.includes(TRADERS_EXPANSION_ID);
+  if (!hasSeafarers && !hasTraders) return null;
+  // T&B path: own simpler tracker (no chip / fog / wonder machinery).
+  if (hasTraders) {
+    return <TradersScenarioPanel />;
+  }
   const scenario = game.settings.scenarioId
     ? getScenario(game.settings.scenarioId)
     : null;
@@ -295,6 +309,76 @@ export function ScenarioPanel() {
               );
             })}
           </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Traders & Barbarians scenario tracker. Currently surfaces gold totals per
+// player, Wealthiest / Poor Catanian holders, and the Strongest Ports
+// holder when the variant is on. Future T&B scenarios will add fishing
+// catch counts, barbarian-attack progress, etc.
+function TradersScenarioPanel() {
+  const game = useGameStore((s) => s.game)!;
+  return (
+    <section className="scenario-panel">
+      <header className="scenario-panel-header">
+        <span className="scenario-panel-title">Traders & Barbarians</span>
+      </header>
+      <div className="scenario-panel-block">
+        <div className="scenario-panel-block-head">
+          <span>Gold</span>
+        </div>
+        <ul className="scenario-panel-chips">
+          {game.players.map((p) => (
+            <li key={p.id} className="scenario-panel-chip is-claimed">
+              <span className="scenario-panel-chip-vp">🪙 {p.gold ?? 0}</span>
+              <span
+                className="scenario-panel-chip-swatch"
+                style={{ background: playerColorVar(p.color) }}
+                aria-hidden
+              />
+              <span className="scenario-panel-chip-name">
+                {p.name}
+                {game.wealthTiles?.wealthiest === p.id && ' 👑'}
+                {game.wealthTiles?.poor.includes(p.id) && ' 👜'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {game.strongestPorts && (
+        <div className="scenario-panel-block">
+          <div className="scenario-panel-block-head">
+            <span>Strongest Ports</span>
+            <span className="scenario-panel-block-sum">+2 VP</span>
+          </div>
+          {(() => {
+            const holderId = game.strongestPorts.holder;
+            if (!holderId) {
+              return (
+                <div className="scenario-panel-note">
+                  No-one has 3+ VPs in port buildings yet.
+                </div>
+              );
+            }
+            const holder = game.players.find((p) => p.id === holderId);
+            if (!holder) return null;
+            return (
+              <ul className="scenario-panel-chips">
+                <li className="scenario-panel-chip is-claimed">
+                  <span className="scenario-panel-chip-vp">⚓</span>
+                  <span
+                    className="scenario-panel-chip-swatch"
+                    style={{ background: playerColorVar(holder.color) }}
+                    aria-hidden
+                  />
+                  <span className="scenario-panel-chip-name">{holder.name}</span>
+                </li>
+              </ul>
+            );
+          })()}
         </div>
       )}
     </section>

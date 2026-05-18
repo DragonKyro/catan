@@ -27,6 +27,7 @@ const TERRAIN_FILL: Record<string, string> = {
   desert: 'var(--terrain-desert)',
   sea: 'var(--terrain-sea)',
   gold: 'var(--terrain-gold)',
+  swamp: 'var(--terrain-swamp, #59733e)',
 };
 
 export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse, foggy }: Props) {

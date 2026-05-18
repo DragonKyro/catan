@@ -1,8 +1,12 @@
-import type { GameState, Action, PlayerId } from './types';
+import type { GameState, Action, PlayerId, MoveRobberAction } from './types';
 import type { RuleModule } from './modules/types';
 import { baseModule } from './modules/base';
 import { seafarersModule } from './modules/seafarers';
+import { citiesAndKnightsModule } from './modules/citiesAndKnights';
+import { tradersModule } from './modules/traders';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from './modules/citiesAndKnights/constants';
+import { TRADERS_EXPANSION_ID } from './modules/traders/constants';
 import { calculateLongestTradeRoute } from './modules/seafarers/scoring/longestTradeRoute';
 import { calculateLongestRoad } from './scoring/longestRoad';
 import { calculateLargestArmy } from './scoring/largestArmy';
@@ -13,9 +17,17 @@ import {
 
 // Modules are ordered most-specific first. The first module with a handler
 // for the action type wins, so expansion modules can intercept base actions
-// (used for the Seafarers buildSettlement island-chip intercept in phase 6).
+// (used for the Seafarers buildSettlement island-chip intercept in phase 6,
+// the T&B build wrappers that grant river-gold, and Cities & Knights'
+// full overrides of rollDice / discard / etc.).
 export function getActiveModules(state: GameState): RuleModule[] {
   const out: RuleModule[] = [];
+  if (state.settings.expansions.includes(TRADERS_EXPANSION_ID)) {
+    out.push(tradersModule);
+  }
+  if (state.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID)) {
+    out.push(citiesAndKnightsModule);
+  }
   if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     out.push(seafarersModule);
   }
@@ -26,6 +38,18 @@ export function getActiveModules(state: GameState): RuleModule[] {
 export function applyAction(state: GameState, action: Action): GameState {
   if (state.phase === 'gameOver') {
     throw new Error('Game is over');
+  }
+  // Module-level validators run before the dispatched handler. A non-null
+  // return aborts the action with a thrown error — handlers never see the
+  // rejected action. Currently only T&B's Friendly Robber registers one.
+  if (action.type === 'moveRobber') {
+    for (const mod of getActiveModules(state)) {
+      const err = mod.validators?.moveRobber?.(
+        state,
+        action as MoveRobberAction,
+      );
+      if (err) throw new Error(err);
+    }
   }
   for (const mod of getActiveModules(state)) {
     const handler = mod.handlers[action.type];

@@ -7,11 +7,17 @@ import type { GameState, PlayerId, VertexId, EdgeId } from '../types';
 // - An opponent's settlement or city at a vertex prevents the player's path
 //   from passing THROUGH that vertex (paths can end there, just not continue).
 // - Edges may not repeat; vertices may repeat (loops are allowed).
+// - Traders & Barbarians: bridges count as roads for Longest Road, so they
+//   are unioned into the path graph here.
 export function calculateLongestRoad(state: GameState, playerId: PlayerId): number {
   const player = state.players.find((p) => p.id === playerId);
-  if (!player || player.roads.length === 0) return 0;
+  if (!player) return 0;
 
-  const ownRoads = new Set(player.roads);
+  const ownRoads = new Set<EdgeId>([
+    ...player.roads,
+    ...(player.bridges ?? []),
+  ]);
+  if (ownRoads.size === 0) return 0;
 
   // Build adjacency: vertex -> [{ edge, other }]
   const adj = new Map<VertexId, Array<{ edge: EdgeId; to: VertexId }>>();

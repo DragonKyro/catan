@@ -18,3 +18,22 @@
   font-size: 1.1em;
   font-variant-numeric: tabular-nums;
 }
+
+.event-die {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  margin-left: 6px;
+  font-size: 1.2em;
+  border: 1px solid #1a1a1a;
+  background: #fefefe;
+}
+
+.event-die-barbarian { background: #e9d4b3; }
+.event-die-science   { background: #cfe5cf; }
+.event-die-trade     { background: #f3e1c4; }
+.event-die-politics  { background: #d4dde6; }
+

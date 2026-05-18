@@ -80,7 +80,16 @@ export function NewGame({ onBack }: Props = {}) {
         victoryPointsToWin: vp,
         expansions: expansionListFrom(expansions),
         scenarioId: expansions.seafarers ? expansions.scenarioId : undefined,
-        baseScenarioId: !expansions.seafarers ? expansions.baseScenarioId : undefined,
+        baseScenarioId:
+          !expansions.seafarers && !expansions.traders
+            ? expansions.baseScenarioId
+            : undefined,
+        tradersScenarioId: expansions.traders
+          ? expansions.tradersScenarioId
+          : undefined,
+        tradersVariants: expansions.traders
+          ? expansions.tradersVariants
+          : undefined,
         turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
       },
     });
@@ -106,16 +115,22 @@ export function NewGame({ onBack }: Props = {}) {
   // form state so the preview tracks every setting change.
   const previewExpansions = expansionListFrom(expansions);
   const previewScenarioId = expansions.seafarers ? expansions.scenarioId : undefined;
-  const previewBaseScenarioId = !expansions.seafarers ? expansions.baseScenarioId : undefined;
-  const previewCaption = isFunMap
-    ? `${scenario.name} (${numPlayers}p)`
-    : scenario.kind === 'seafarers'
+  const previewBaseScenarioId =
+    !expansions.seafarers && !expansions.traders
+      ? expansions.baseScenarioId
+      : undefined;
+  const previewCaption =
+    scenario.kind === 'traders'
       ? `${scenario.name} (${numPlayers}p)`
-      : numPlayers >= 7
-        ? `Base game 7-8p extension (${numPlayers}p)`
-        : numPlayers >= 5
-          ? `Base game 5-6p extension (${numPlayers}p)`
-          : `Base game (${numPlayers}p)`;
+      : isFunMap
+        ? `${scenario.name} (${numPlayers}p)`
+        : scenario.kind === 'seafarers'
+          ? `${scenario.name} (${numPlayers}p)`
+          : numPlayers >= 7
+            ? `Base game 7-8p extension (${numPlayers}p)`
+            : numPlayers >= 5
+              ? `Base game 5-6p extension (${numPlayers}p)`
+              : `Base game (${numPlayers}p)`;
 
   return (
     <div className="newgame-wrap">

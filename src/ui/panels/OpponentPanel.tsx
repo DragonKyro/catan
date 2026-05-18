@@ -3,9 +3,11 @@ import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { totalResources } from '@/game/resources';
+import { totalCommodities } from '@/game/commodities';
 import { pairedPlayer2Index, usesPairedRules } from '@/game/helpers';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import './OpponentPanel.css';
 
 // Base game piece limits per player. Engine already enforces these via the
@@ -32,6 +34,7 @@ export function OpponentPanel() {
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
   const actingId = getActingPlayerId(game);
   const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
 
   // 5+ player paired-player rule: identify Player 1 (the dice-roller) and
   // Player 2 (third seat to P1's left) for the current paired turn so we
@@ -115,6 +118,28 @@ export function OpponentPanel() {
                 <span title={`Cloth tokens — ${p.cloth} cloth = ${Math.floor(p.cloth / 2)} VP`}>
                   🧵 {p.cloth}
                 </span>
+              )}
+              {hasCK && p.commodities && totalCommodities(p.commodities) > 0 && (
+                <span title="Commodity cards (paper / cloth / coin)">
+                  📜 {totalCommodities(p.commodities)}
+                </span>
+              )}
+              {hasCK && (p.cityWalls ?? 0) > 0 && (
+                <span title={`City walls (+${(p.cityWalls ?? 0) * 2} 7-roll hand limit)`}>
+                  🧱 {p.cityWalls}
+                </span>
+              )}
+              {(p.gold ?? 0) > 0 && (
+                <span title={`Gold — ${p.gold} coins`}>🪙 {p.gold}</span>
+              )}
+              {game.wealthTiles?.wealthiest === p.id && (
+                <span title="Wealthiest Catanian (+1 VP)">👑</span>
+              )}
+              {game.wealthTiles?.poor.includes(p.id) && (
+                <span title="Poor Catanian (-2 VP)">👜</span>
+              )}
+              {game.strongestPorts?.holder === p.id && (
+                <span title="Strongest Ports (+2 VP)">⚓</span>
               )}
             </div>
             <div className="opp-pieces" title="Pieces remaining (built / cap)">

@@ -8,6 +8,7 @@ interface Props {
   expansions: string[];
   scenarioId?: string;
   baseScenarioId?: string;
+  tradersScenarioId?: string;
   // Optional caption shown under the preview. Defaults to "<scenario name>
   // (<n> players)" when a scenario is selected, otherwise "Base game
   // (<n> players)".

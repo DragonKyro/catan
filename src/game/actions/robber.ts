@@ -68,6 +68,8 @@ export function handleMoveRobber(
     throw new Error('Robber must move to a different hex');
   }
   if (!state.board.hexes[action.hex]) throw new Error('Unknown hex');
+  // Module-level validators (e.g. T&B Friendly Robber) are dispatched from
+  // engine.applyAction BEFORE this handler runs — no extra wiring here.
 
   // Find players adjacent to the target hex with at least one resource card.
   const stealCandidates = new Set<PlayerId>();

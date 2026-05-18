@@ -15,10 +15,56 @@ export const RESOURCES: readonly Resource[] = [
 export type ResourceBank = Record<Resource, number>;
 
 // ============================================================================
+// Cities & Knights commodities
+// ============================================================================
+
+// Cities & Knights adds three commodities. Cities adjacent to wood/sheep/ore
+// hexes produce both their resource and the matching commodity on a roll.
+// Commodities are spendable on city improvements / progress card abilities,
+// counted toward the 7-roll discard threshold, and stealable by the robber.
+export type Commodity = 'paper' | 'cloth' | 'coin';
+
+export const COMMODITIES: readonly Commodity[] = ['paper', 'cloth', 'coin'] as const;
+
+export type CommodityBank = Record<Commodity, number>;
+
+// Maps the base-game terrain to the commodity its cities produce. Wheat and
+// brick fields don't produce a commodity — their cities just yield 2 of the
+// base resource (per the rulebook).
+export const TERRAIN_TO_COMMODITY: Partial<Record<Resource, Commodity>> = {
+  wood: 'paper',
+  sheep: 'cloth',
+  ore: 'coin',
+};
+
+// The third die rolled in Cities & Knights. Three faces are barbarian-ship
+// (advance the track / trigger an attack) and the other three are the city
+// improvement icons that determine which progress-card deck draws this turn.
+export type EventDieFace = 'barbarian' | 'science' | 'trade' | 'politics';
+
+export const EVENT_DIE_FACES: readonly EventDieFace[] = [
+  'barbarian',
+  'barbarian',
+  'barbarian',
+  'science',
+  'trade',
+  'politics',
+] as const;
+
+export interface BarbarianState {
+  // Track position. Starts at 0; rulebook track has 7 spaces — the ship
+  // attacks when `position` first reaches `BARBARIAN_TRACK_LENGTH`.
+  position: number;
+  // How many attacks have resolved so far. Useful for UI + log derivation
+  // (the very first attack also activates the robber).
+  attacksResolved: number;
+}
+
+// ============================================================================
 // Terrain & hexes
 // ============================================================================
 
-export type Terrain = Resource | 'desert' | 'sea' | 'gold';
+export type Terrain = Resource | 'desert' | 'sea' | 'gold' | 'swamp';
 
 export interface HexCoord {
   q: number;
@@ -149,6 +195,25 @@ export interface Player {
   // to a cloth-producing hex. Not a regular resource — can't be traded or
   // spent on builds. Worth 1 VP per 2 cloth at game end (Math.floor).
   cloth?: number;
+  // Cities & Knights commodity hand (paper / cloth / coin). Empty bank when
+  // the expansion isn't active. Note: `Player.cloth` (Seafarers cloth tokens)
+  // and `commodities.cloth` (C&K commodity) are distinct — the two
+  // expansions are mutually exclusive in Phase 1, so collisions can't happen.
+  commodities?: CommodityBank;
+  // Cities & Knights: number of city walls built (0-3). Each wall adds 2 to
+  // the player's 7-roll hand-limit; a city wall comes off if a wall'd city is
+  // pillaged.
+  cityWalls?: number;
+  // Traders & Barbarians: coins / gold pieces. Earned by building on river
+  // tiles (1/build) and bridges (3/build), or by trading resources to the
+  // supply at the player's normal bank trade rate. Spent 2-for-1 to buy any
+  // resource (max twice per turn). Not part of the resource hand — does not
+  // count toward the 7-roll discard threshold and can't be stolen.
+  gold?: number;
+  // Traders & Barbarians / Rivers of Catan: edges where this player has built
+  // a bridge. Bridges count as roads for Longest Road but are separate
+  // pieces with their own placement rule (must sit on a river edge).
+  bridges?: EdgeId[];
 }
 
 // ============================================================================
@@ -200,6 +265,22 @@ export interface GameSettings {
   // AI defaults, then ends the turn. AI seats ignore this — they pace
   // themselves via AIDriver.
   turnTimerSec?: number;
+  // Traders & Barbarians: scenario picker (currently only 'riversOfCatan').
+  // Only consulted when expansions includes the T&B id. Mutually exclusive
+  // with `scenarioId` (Seafarers) and `baseScenarioId` (Fun Maps).
+  tradersScenarioId?: string;
+  // Traders & Barbarians: opt-in variants layered on top of any game.
+  // Variants are tiny rule modifiers shipped with the T&B box but composable
+  // with base / Seafarers / Fun Map games.
+  tradersVariants?: {
+    // "Friendly Robber" — you may not place the robber on a hex whose only
+    // adjacent buildings belong to players with ≤ 2 VPs. Falls back to the
+    // desert when no valid hex exists.
+    friendlyRobber?: boolean;
+    // "Strongest Ports / Harbors of Catan" — the player with ≥ 3 VPs in
+    // port-buildings holds a 2 VP bonus tile. Target VP bumps by 1 when on.
+    strongestPorts?: boolean;
+  };
 }
 
 export interface PendingTrade {
@@ -310,6 +391,47 @@ export interface GameState {
   // settlement, 2 per city — same multiplier as resources. Cloth lives
   // on player.cloth and converts to VP at 2:1 in scoring.
   clothHexes?: HexId[];
+  // ----- Cities & Knights extension -----
+  // Commodity bank (paper / cloth / coin). Mirrors `bank` but for the three
+  // C&K commodities. Decrements when cities produce commodities; refunds on
+  // spend.
+  commodityBank?: CommodityBank;
+  // Barbarian track state — present iff C&K is active. Cleared back to {0,n}
+  // when the barbarians attack.
+  barbarian?: BarbarianState;
+  // Last event-die face rolled this game. Stored for the UI to render the
+  // event die alongside the production dice.
+  lastEventDie?: EventDieFace;
+  // Whether the robber is "active". In C&K the robber starts offshore — it
+  // doesn't move or steal on 7s until the first barbarian attack resolves,
+  // at which point it activates on the desert. Always considered true in
+  // base / Seafarers games (the flag is just absent there).
+  robberActive?: boolean;
+  // Which city-vertices currently have a city wall built. Keyed by vertex
+  // so the board renderer can find walls without scanning players. Walls
+  // come off when the city is pillaged.
+  cityWalls?: Record<VertexId, PlayerId>;
+  // ----- Traders & Barbarians extension -----
+  // Edges flagged as "river edges" by the active T&B scenario. Roads are
+  // forbidden on these edges; bridges are the only structure that can
+  // occupy them. Empty / undefined when T&B is inactive.
+  riverEdges?: EdgeId[];
+  // Wealthiest / Poor Catanian bonus tiles. Recalculated after every gold
+  // change. `wealthiest` = unique max-gold player (≥ 1 gold; ties leave it
+  // null). `poor` = all players strictly below the min — i.e. everyone tied
+  // at the lowest gold count (which can be everyone at 0). Each Poor entry
+  // is worth -2 VP; Wealthiest is +1 VP.
+  wealthTiles?: {
+    wealthiest: PlayerId | null;
+    poor: PlayerId[];
+  };
+  // Strongest Ports variant: holder of the 2 VP "Strongest Ports" tile.
+  // Recalculated after every settlement/city build. Holder must have ≥ 3 VPs
+  // worth of buildings on ports (1 per port settlement, 2 per port city) and
+  // strictly more than every other player. Ties leave it null.
+  strongestPorts?: {
+    holder: PlayerId | null;
+  };
 }
 
 export interface IslandChip {
@@ -374,8 +496,15 @@ export interface PlaceInitialRoadAction extends ActionBase {
 
 export interface RollDiceAction extends ActionBase {
   type: 'rollDice';
+  // [red, yellow]. In the base game both dice are interchangeable and only
+  // the sum matters. Under Cities & Knights they're distinct: the RED die
+  // alone determines whether a progress card draws this turn (it must be
+  // <= your level on the matching city-improvement track), while the sum
+  // still drives normal production. Roll order is therefore semantic, not
+  // just visual: keep dice[0] = red, dice[1] = yellow everywhere.
   dice: [number, number];
 }
+
 
 export interface DiscardAction extends ActionBase {
   type: 'discard';
@@ -506,6 +635,35 @@ export interface AttackPirateFleetAction extends ActionBase {
   type: 'attackPirateFleet';
 }
 
+// ----------------------------------------------------------------------------
+// Traders & Barbarians expansion actions
+// ----------------------------------------------------------------------------
+
+export interface BuildBridgeAction extends ActionBase {
+  type: 'buildBridge';
+  edge: EdgeId;
+}
+
+// ----------------------------------------------------------------------------
+// Cities & Knights expansion actions
+// ----------------------------------------------------------------------------
+
+export interface BuildCityWallAction extends ActionBase {
+  type: 'buildCityWall';
+  vertex: VertexId;
+}
+
+// Discard action that may include both resources and commodities.
+// Note: the existing `DiscardAction` only handles resources; Cities & Knights
+// discards are routed through the C&K discard handler which accepts this
+// extended payload. We don't merge them onto the same action shape because
+// the base discard validation logic is simpler when it only sees resources.
+export interface DiscardCKAction extends ActionBase {
+  type: 'discardCK';
+  resources: Partial<ResourceBank>;
+  commodities: Partial<CommodityBank>;
+}
+
 export type Action =
   | PlaceInitialSettlementAction
   | PlaceInitialRoadAction
@@ -534,7 +692,10 @@ export type Action =
   | MovePirateAction
   | ChooseGoldResourceAction
   | BuildWonderAction
-  | AttackPirateFleetAction;
+  | AttackPirateFleetAction
+  | BuildBridgeAction
+  | BuildCityWallAction
+  | DiscardCKAction;
 
 export type ActionType = Action['type'];
 
@@ -542,9 +703,18 @@ export type ActionType = Action['type'];
 // Costs (base game)
 // ============================================================================
 
-export const COSTS: Record<'road' | 'settlement' | 'city' | 'devCard', Partial<ResourceBank>> = {
+export const COSTS: Record<
+  'road' | 'settlement' | 'city' | 'devCard' | 'cityWall' | 'bridge',
+  Partial<ResourceBank>
+> = {
   road: { wood: 1, brick: 1 },
   settlement: { wood: 1, brick: 1, sheep: 1, wheat: 1 },
   city: { wheat: 2, ore: 3 },
   devCard: { sheep: 1, wheat: 1, ore: 1 },
+  // Cities & Knights: city wall costs 2 brick.
+  cityWall: { brick: 2 },
+  // Traders & Barbarians / Rivers of Catan: same as a road. Sits in the road
+  // column of the rulebook's player aid; the visible payoff is +3 gold on
+  // build, so a road-equivalent cost keeps the math balanced.
+  bridge: { wood: 1, brick: 1 },
 };

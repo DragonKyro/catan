@@ -73,6 +73,9 @@ export function materializeLayout(
     const pos = layout.positions[i]!;
     if (h.terrain === 'sea') continue;
     if (h.terrain === 'desert' && !pos.forceToken) continue;
+    // Swamp (T&B Rivers of Catan) — non-producing like desert. Never takes a
+    // token; `forceToken` doesn't apply since swamps don't roll for events.
+    if (h.terrain === 'swamp') continue;
     if (pos.fixedToken != null) {
       fixedAssignments.push({ index: i, token: pos.fixedToken });
     } else {

@@ -1,4 +1,6 @@
 import type { GameState, PlayerId } from '../types';
+import { calculateWealthTilesVp } from '../modules/traders/scoring/wealthTiles';
+import { calculateStrongestPortsVp } from '../modules/traders/scoring/strongestPorts';
 
 const LONGEST_ROAD_MIN_LENGTH = 5;
 
@@ -80,6 +82,10 @@ export function calculateVictoryPoints(
   vp += calculatePirateFleetVp(state, playerId);
   // Seafarers / Cloth for Catan: 1 VP per 2 cloth tokens.
   vp += calculateClothVp(state, playerId);
+  // Traders & Barbarians / Rivers of Catan: Wealthiest (+1) and Poor (-2).
+  vp += calculateWealthTilesVp(state, playerId);
+  // Traders & Barbarians / Strongest Ports variant: +2 for the tile holder.
+  vp += calculateStrongestPortsVp(state, playerId);
   return vp;
 }
 

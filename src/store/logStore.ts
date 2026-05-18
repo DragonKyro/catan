@@ -104,6 +104,24 @@ export type LogEntry =
       // that dropped to a settlement.
       effect: 'destroyed' | 'downgraded';
     }
+  // Cities & Knights events.
+  | { id: number; kind: 'cityWallBuilt'; player: PlayerId }
+  | {
+      id: number;
+      kind: 'barbarianAdvance';
+      // Position after the advance, out of total track spaces.
+      position: number;
+      total: number;
+    }
+  | {
+      id: number;
+      kind: 'barbarianAttack';
+      // Outcome of the attack — Phase 1 always 'lost' until knights ship.
+      outcome: 'won' | 'lost' | 'tied';
+      // Players who had a city pillaged this attack.
+      pillaged: PlayerId[];
+    }
+  | { id: number; kind: 'robberActivated' }
   | {
       id: number;
       kind: 'turnBegins';
@@ -482,6 +500,53 @@ export const useLogStore = create<LogStore>((set, get) => ({
             }
           }
         }
+
+        // Cities & Knights: derive barbarian-ship advance and any attack
+        // resolution from before/after barbarian state. Attack-counter
+        // changes are unambiguous; ship-position changes only matter when
+        // there wasn't a wrap-to-0 (which means an attack — handled in the
+        // attack branch below).
+        if (before.barbarian && after.barbarian) {
+          const attacksDelta =
+            after.barbarian.attacksResolved - before.barbarian.attacksResolved;
+          if (attacksDelta > 0) {
+            // An attack just resolved. Detect pillaged cities by diffing each
+            // player's city count.
+            const pillaged: PlayerId[] = [];
+            for (const beforeP of before.players) {
+              const afterP = after.players.find((p) => p.id === beforeP.id);
+              if (!afterP) continue;
+              if (afterP.cities.length < beforeP.cities.length) {
+                pillaged.push(beforeP.id);
+              }
+            }
+            append.push({
+              id: stamp(),
+              kind: 'barbarianAttack',
+              outcome: pillaged.length > 0 ? 'lost' : 'won',
+              pillaged,
+            });
+            if (before.robberActive === false && after.robberActive === true) {
+              append.push({ id: stamp(), kind: 'robberActivated' });
+            }
+          } else if (after.barbarian.position > before.barbarian.position) {
+            // Pure advance — no attack this roll.
+            append.push({
+              id: stamp(),
+              kind: 'barbarianAdvance',
+              position: after.barbarian.position,
+              total: 7,
+            });
+          }
+        }
+        break;
+      }
+      case 'buildCityWall': {
+        append.push({
+          id: stamp(),
+          kind: 'cityWallBuilt',
+          player: action.playerId,
+        });
         break;
       }
       case 'buildSettlement':

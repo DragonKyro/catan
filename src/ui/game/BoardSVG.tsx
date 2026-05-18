@@ -13,6 +13,9 @@ import { TribeTokenMarker } from './seafarers/TribeTokenMarker';
 import { PirateFleetMarker } from './seafarers/PirateFleetMarker';
 import { ClothHexMarker } from './seafarers/ClothHexMarker';
 import { VolcanoMarker } from './base/VolcanoMarker';
+import { CityWallMarker } from './citiesAndKnights/CityWallMarker';
+import { Bridge } from './traders/Bridge';
+import { RiverEdgeMarker } from './traders/RiverEdgeMarker';
 import './Board.css';
 
 interface Props {
@@ -103,10 +106,31 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           ))}
         </g>
 
+        {game.riverEdges && (
+          <g className="river-edges">
+            {game.riverEdges.map((eid) => {
+              // Hide the river decoration once a bridge spans the edge.
+              const hasBridge = game.players.some((p) =>
+                p.bridges?.includes(eid),
+              );
+              if (hasBridge) return null;
+              return <RiverEdgeMarker key={eid} board={board} edge={eid} />;
+            })}
+          </g>
+        )}
+
         <g className="roads">
           {game.players.flatMap((player) =>
             player.roads.map((eid) => (
               <Road key={eid} board={board} edge={eid} color={player.color} />
+            )),
+          )}
+        </g>
+
+        <g className="bridges">
+          {game.players.flatMap((player) =>
+            (player.bridges ?? []).map((eid) => (
+              <Bridge key={eid} board={board} edge={eid} color={player.color} />
             )),
           )}
         </g>
@@ -134,6 +158,8 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
             )),
           )}
         </g>
+
+        <CityWallMarker game={game} />
 
         {/* Interactive ghosts render on top of pieces so the full circle is
             clickable — especially important for city upgrade, where the

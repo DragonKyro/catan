@@ -1,10 +1,12 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import { RESOURCES } from '@/game/types';
+import { RESOURCES, COMMODITIES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
+import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
 import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
 import { playerColorVar } from '@/ui/shared/playerColors';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import './HandPanel.css';
 
 export function HandPanel() {
@@ -124,6 +126,37 @@ export function HandPanel() {
               🧵 {player.cloth}
             </span>
           )}
+          {(player.cityWalls ?? 0) > 0 && (
+            <span
+              className="hand-flag"
+              title={`City walls (+${(player.cityWalls ?? 0) * 2} to 7-roll hand limit)`}
+            >
+              🧱 {player.cityWalls}
+            </span>
+          )}
+          {(player.gold ?? 0) > 0 && (
+            <span
+              className="hand-flag"
+              title={`Gold — ${player.gold} coins. Spend 2 gold for any resource (max 2× per turn).`}
+            >
+              🪙 {player.gold}
+            </span>
+          )}
+          {game.wealthTiles?.wealthiest === player.id && (
+            <span className="hand-flag" title="Wealthiest Catanian (+1 VP)">
+              👑
+            </span>
+          )}
+          {game.wealthTiles?.poor.includes(player.id) && (
+            <span className="hand-flag" title="Poor Catanian (-2 VP)">
+              👜
+            </span>
+          )}
+          {game.strongestPorts?.holder === player.id && (
+            <span className="hand-flag" title="Strongest Ports (+2 VP)">
+              ⚓
+            </span>
+          )}
         </h3>
         <span
           className="hand-vp"
@@ -143,6 +176,22 @@ export function HandPanel() {
           />
         ))}
       </div>
+
+      {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) && (
+        <div className="hand-commodities">
+          {COMMODITIES.map((c) => {
+            const n = player.commodities?.[c] ?? 0;
+            return (
+              <CommodityChip
+                key={c}
+                commodity={c}
+                count={n}
+                dimmed={n === 0}
+              />
+            );
+          })}
+        </div>
+      )}
 
       <div className="hand-section">
         <div className="hand-cards">

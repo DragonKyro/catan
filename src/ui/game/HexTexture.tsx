@@ -185,6 +185,32 @@ function Glyph({ terrain }: { terrain: string }) {
           />
         </g>
       );
+    case 'swamp':
+      // Reeds / cattail tufts emerging from murky water.
+      return (
+        <g opacity={0.55}>
+          <line
+            x1={0}
+            y1={2}
+            x2={0}
+            y2={-2.4}
+            stroke="#2b3416"
+            strokeWidth={0.5}
+            strokeLinecap="round"
+          />
+          <ellipse cx={0} cy={-2.6} rx={0.7} ry={1.4} fill="#3a2c12" />
+          <line
+            x1={-1.6}
+            y1={2.2}
+            x2={-1.6}
+            y2={-0.8}
+            stroke="#2b3416"
+            strokeWidth={0.4}
+            strokeLinecap="round"
+          />
+          <ellipse cx={-1.6} cy={-1} rx={0.55} ry={1.1} fill="#3a2c12" />
+        </g>
+      );
     default:
       return null;
   }

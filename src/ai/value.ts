@@ -26,7 +26,7 @@ export function probabilityDots(token: number | null): number {
 }
 
 export function terrainWeight(t: Terrain): number {
-  if (t === 'desert' || t === 'sea') return 0;
+  if (t === 'desert' || t === 'sea' || t === 'swamp') return 0;
   // Gold hexes pay any resource on roll — the player chooses, so they
   // function as a "best available" resource each tick. Weight above the
   // strongest single-resource value (ore/wheat at 1.3) to reflect that
