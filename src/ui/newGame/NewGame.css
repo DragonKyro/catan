@@ -1,9 +1,11 @@
 .newgame-wrap {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 24px;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
 .newgame-card {
@@ -17,6 +19,46 @@
   flex-direction: column;
   gap: 16px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+.newgame-preview-pane {
+  width: 100%;
+  max-width: 420px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  /* Stay at the top of the form-card on tall screens. */
+  position: sticky;
+  top: 24px;
+}
+
+.newgame-preview-heading {
+  margin: 0;
+  font-size: 0.9em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.newgame-preview-note {
+  margin: 0;
+  font-size: 0.75em;
+  color: var(--text-soft);
+  line-height: 1.4;
+  text-align: center;
+}
+
+@media (max-width: 950px) {
+  /* Stack vertically on narrow screens. */
+  .newgame-preview-pane {
+    position: static;
+  }
 }
 
 .newgame-title {

@@ -1,81 +1,18 @@
 import type { Terrain, PortType, TribeTokenType } from '../../../types';
 
-export interface ScenarioHexDef {
-  q: number;
-  r: number;
-  terrain: Terrain;
-  token: number | null;
-}
-
-// Port placement: anchored by a (q, r) land/island hex and a direction 0..5
-// (clockwise from the upper-right edge, pointy-top orientation). The edge
-// chosen is the shared edge between this hex and the neighbour in that
-// direction. The neighbour is expected to be a sea hex.
-export interface ScenarioPortDef {
-  q: number;
-  r: number;
-  direction: 0 | 1 | 2 | 3 | 4 | 5;
-  type: PortType;
-}
-
-// ----------------------------------------------------------------------------
-// Modular scenario schema (Phase 7 work, additive — old per-hex `land` /
-// `ports` blueprints still build the same way).
-//
-// The official Seafarers Almanac distinguishes three things per scenario:
-//   1. The FRAME — fixed positions: which (q, r) cells exist and whether each
-//      is land, sea, or desert. This is the only piece that varies by player
-//      count (e.g. Heading for New Shores 3p uses a different shape than 4p).
-//   2. The POOLS — counts of terrains, number tokens, and port types. These
-//      get randomly distributed at game start over the frame's land hexes.
-//   3. The RULES — VP target, special mechanics, starting placement zone.
-//
-// Treating these as separate concerns makes future custom-map support
-// straightforward (a custom map is just a frame + pools), and lets multiple
-// scenarios reuse the same frame with different pools / rules.
-// ----------------------------------------------------------------------------
-
-export type ScenarioPositionKind = 'land' | 'sea' | 'desert';
-
-export interface ScenarioPosition {
-  q: number;
-  r: number;
-  kind: ScenarioPositionKind;
-  // Optional anchor: pin this position to a specific terrain (e.g. a
-  // designated gold field on a small island). Bypasses the pool draw.
-  // Only meaningful when `kind === 'land'`.
-  fixedTerrain?: Terrain;
-}
-
-// Port anchor without a type — the type is drawn from `ScenarioPools.portTypes`.
-export interface ScenarioPortAnchor {
-  q: number;
-  r: number;
-  direction: 0 | 1 | 2 | 3 | 4 | 5;
-}
-
-export interface ScenarioPools {
-  // Number of each terrain to place on `kind: 'land'` positions that don't
-  // have a `fixedTerrain`. Sum must equal the count of such positions.
-  terrainCounts: Partial<Record<Terrain, number>>;
-  // Number tokens to distribute across non-desert land positions (including
-  // pool-drawn AND fixed-terrain ones, except deserts). Length must equal
-  // the non-desert land count. Pool order doesn't matter — the generator
-  // shuffles and retries to avoid 6/8 adjacency.
-  tokens: number[];
-  // Port type pool. Length must equal `portAnchors.length`.
-  portTypes: PortType[];
-}
-
-export interface ScenarioLayout {
-  positions: ScenarioPosition[];
-  portAnchors: ScenarioPortAnchor[];
-  pools: ScenarioPools;
-  // Optional overrides for where robber / pirate start. When absent the
-  // generator falls back to defaults (first desert, first sea hex).
-  robberStart?: { q: number; r: number };
-  pirateStart?: { q: number; r: number };
-}
+// Shared modular layout schema lives in the board layer (used by both the
+// Seafarers scenario set and the base-game Fun Maps set). Re-exported here
+// for back-compat with the existing scenario files under this directory.
+export type {
+  ScenarioHexDef,
+  ScenarioPortDef,
+  ScenarioPosition,
+  ScenarioPositionKind,
+  ScenarioPortAnchor,
+  ScenarioPools,
+  ScenarioTokenConstraints,
+  ScenarioLayout,
+} from '../../../board/scenarioTypes';
 
 // Forgotten Tribe token placement. Each token sits on a single hex; the
 // first player to settle on any vertex of that hex claims it.
@@ -90,8 +27,8 @@ export interface Scenario {
   name: string;
   // Legacy fixed-content layout (per-hex terrain + token). Empty arrays for
   // modular scenarios — read `layout3p`/`layout4p`/`layout5_6p` instead.
-  hexes: ScenarioHexDef[];
-  ports: ScenarioPortDef[];
+  hexes: import('../../../board/scenarioTypes').ScenarioHexDef[];
+  ports: import('../../../board/scenarioTypes').ScenarioPortDef[];
   // Default VP per outer island (smaller connected land component); the
   // largest connected land component is the "main island" and gets no chip.
   defaultIslandBonusVp: number;
@@ -102,8 +39,8 @@ export interface Scenario {
   // Optional 5-6 player variant. When present and the game has >= 5 players,
   // these hex/port definitions replace the 3-4 ones. The grid radius is
   // increased to 4 so larger layouts fit.
-  hexes5_6?: ScenarioHexDef[];
-  ports5_6?: ScenarioPortDef[];
+  hexes5_6?: import('../../../board/scenarioTypes').ScenarioHexDef[];
+  ports5_6?: import('../../../board/scenarioTypes').ScenarioPortDef[];
   // Official VP target for this scenario (used as the default in lobby UI;
   // still overridable by the host). Applies to the 3-4 player layout.
   defaultVpToWin: number;
@@ -153,7 +90,11 @@ export interface Scenario {
   // frames as printed in the rulebook. `layout4p` defaults to `layout3p`,
   // `layout5_6p` defaults to itself or — for backwards compat — to the
   // legacy `hexes5_6` data.
-  layout3p?: ScenarioLayout;
-  layout4p?: ScenarioLayout;
-  layout5_6p?: ScenarioLayout;
+  layout3p?: import('../../../board/scenarioTypes').ScenarioLayout;
+  layout4p?: import('../../../board/scenarioTypes').ScenarioLayout;
+  layout5_6p?: import('../../../board/scenarioTypes').ScenarioLayout;
 }
+
+// Re-export `Terrain` / `PortType` here too so callers that import them
+// alongside the scenario types don't have to chase the long relative path.
+export type { Terrain, PortType };

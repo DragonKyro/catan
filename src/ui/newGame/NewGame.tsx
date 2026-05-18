@@ -15,6 +15,7 @@ import {
   activeScenario,
   type ExpansionPickerValue,
 } from './ExpansionPicker';
+import { ScenarioPreview } from './ScenarioPreview';
 import './NewGame.css';
 
 const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3', 'AI 4', 'AI 5', 'AI 6', 'AI 7'];
@@ -100,6 +101,18 @@ export function NewGame({ onBack }: Props = {}) {
     setColors(next);
     setOpenPicker(null);
   };
+
+  // Expansions / scenario for the live preview. Computed from the current
+  // form state so the preview tracks every setting change.
+  const previewExpansions = expansionListFrom(expansions);
+  const previewScenarioId = expansions.seafarers ? expansions.scenarioId : undefined;
+  const previewCaption = scenario
+    ? `${scenario.name} (${numPlayers}p)`
+    : numPlayers >= 7
+      ? `Base game 7-8p extension (${numPlayers}p)`
+      : numPlayers >= 5
+        ? `Base game 5-6p extension (${numPlayers}p)`
+        : `Base game (${numPlayers}p)`;
 
   return (
     <div className="newgame-wrap">
@@ -274,6 +287,20 @@ export function NewGame({ onBack }: Props = {}) {
           Start game
         </Button>
       </div>
+      <aside className="newgame-preview-pane">
+        <h3 className="newgame-preview-heading">Map preview</h3>
+        <ScenarioPreview
+          numPlayers={numPlayers}
+          expansions={previewExpansions}
+          scenarioId={previewScenarioId}
+          caption={previewCaption}
+        />
+        <p className="newgame-preview-note">
+          Sample layout for the chosen settings. Terrain, number tokens, and
+          harbor types are randomized at game start; the shape stays the same
+          for a given scenario + player count.
+        </p>
+      </aside>
     </div>
   );
 }

@@ -2,6 +2,11 @@ import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardSt
 import { WONDERS } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import { generateSeafarersBoard } from './modules/seafarers/board/generator';
+import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
+import {
+  getBaseScenario,
+  DEFAULT_BASE_SCENARIO_ID,
+} from './modules/base/scenarios';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
 import { getScenario } from './modules/seafarers/board/scenarios';
 import { shuffle } from './rng';
@@ -123,11 +128,17 @@ export function createGame(opts: CreateGameOptions): GameState {
   // VP target precedence: explicit override > scenario default > player-count
   // default. Scenarios ship with rulebook-correct VP targets (e.g. Heading for
   // New Shores = 12 at 3-4p / 14 at 5-6p) so picking one without an override
-  // does the right thing.
+  // does the right thing. Both Seafarers and base-game scenarios participate.
   const scenarioId = opts.settings?.scenarioId;
+  const baseScenarioId = opts.settings?.baseScenarioId ?? DEFAULT_BASE_SCENARIO_ID;
   const scenarioVp = ((): number | undefined => {
-    if (!expansions.includes(SEAFARERS_EXPANSION_ID) || !scenarioId) return undefined;
-    const sc = getScenario(scenarioId);
+    if (expansions.includes(SEAFARERS_EXPANSION_ID)) {
+      if (!scenarioId) return undefined;
+      const sc = getScenario(scenarioId);
+      if (numPlayers >= 5 && sc.defaultVpToWin5_6 != null) return sc.defaultVpToWin5_6;
+      return sc.defaultVpToWin;
+    }
+    const sc = getBaseScenario(baseScenarioId);
     if (numPlayers >= 5 && sc.defaultVpToWin5_6 != null) return sc.defaultVpToWin5_6;
     return sc.defaultVpToWin;
   })();
@@ -137,6 +148,7 @@ export function createGame(opts: CreateGameOptions): GameState {
       opts.settings?.victoryPointsToWin ?? scenarioVp ?? defaultVpFor(numPlayers),
     expansions,
     scenarioId,
+    baseScenarioId,
     turnTimerSec: opts.settings?.turnTimerSec,
   };
 
@@ -165,6 +177,13 @@ export function createGame(opts: CreateGameOptions): GameState {
     if (settings.scenarioId === 'wondersOfCatan') {
       wonders = WONDERS.map((w) => ({ id: w.id, builtBy: null, level: 0 }));
     }
+  } else if (baseScenarioId && baseScenarioId !== DEFAULT_BASE_SCENARIO_ID) {
+    // Fun Maps (Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes,
+    // Pond, Twirl) route through the modular layout system. The volcanoHex
+    // (if any) is stamped onto BoardState inside the generator.
+    const baseResult = generateBaseScenarioBoard(baseScenarioId, rng, numPlayers);
+    board = baseResult.board;
+    rng = baseResult.rngState;
   } else {
     const baseResult = generateBoard(rng, boardVariant);
     board = baseResult.board;

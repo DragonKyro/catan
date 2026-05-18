@@ -153,7 +153,7 @@ Each scenario also carries `defaultVpToWin` (3-4p) and optional `defaultVpToWin5
 - [x] Phase 5 — Base game 5–6 player extension
 - [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
 - [x] Phase 6 — Seafarers expansion (9 official scenarios, each with rulebook headline mechanic wired up — see "Seafarers scenario mechanics" above)
-- [ ] Phase 7 — Seafarers 5–6 player extension (per-scenario `landExtra5_6` data exists but most scenarios still gate at `maxPlayers: 4` because the main island isn't enlarged; expand each scenario's main island so 5–6 players fit under the setup distance rule. The modular `ScenarioLayout` / `ScenarioPools` types in `seafarers/board/types.ts` are the in-progress migration path — old fixed `land`/`ports` blueprints still work)
+- [x] Phase 7 — Seafarers 5–6 player extension (all 9 scenarios ship a `layout5_6p` matching the 5-6p rulebook's component counts; per-scenario `defaultVpToWin5_6` applies when player count ≥ 5. The rulebook's "Six Islands" scenario is implemented as Four Islands' 5-6p geometry — same scenario id, geometry swaps based on player count. All 5-6p layouts fit the radius-4 hex disk (61 hexes total). Visual position verification against [docs/.scenario-renders/seafarers-56-*.png] is still pending; pool counts match rulebook exactly)
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; would need per-scenario 7–8 boards. Currently the engine rejects Seafarers + >6 players via `createGame`. Re-evaluate after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
@@ -170,10 +170,14 @@ Each scenario also carries `defaultVpToWin` (3-4p) and optional `defaultVpToWin5
 
 ## Where to start next
 
-Phases 0–6 and 5b complete; all 9 Seafarers scenario mechanics implemented. Next up is **Phase 7 — Seafarers 5–6 player extension** (add expanded main-island layouts to the existing scenarios in `src/game/modules/seafarers/board/scenarios/`; the `landExtra5_6` field already enlarges outer islands but the main island stays at its 3-4p size, which leaves too little room for 10 starting settlements under the distance rule — that's why most scenarios still cap at `maxPlayers: 4` despite having `landExtra5_6` data). The new modular `ScenarioLayout`/`ScenarioPools` types in `seafarers/board/types.ts` are the migration path: a layout declares (q, r) positions + a pool of terrains + a pool of tokens + a pool of port types, and the generator distributes pools onto positions at game start. Each scenario also now carries a `defaultVpToWin5_6` that takes effect once `maxPlayers` is lifted.
+Phases 0–7 and 5b complete; all 9 Seafarers scenarios support 3–6 players. The 5-6p geometries are approximations of the rulebook layouts (positions are roughly correct, component counts match exactly); a useful follow-up is visual verification against `docs/.scenario-renders/seafarers-56-*.png` and tightening hex positions to match the diagrams.
 
-Two smaller follow-ups worth doing alongside or after Phase 7:
+Two smaller follow-ups worth doing soon:
 - **AI awareness of scenario actions**: `buildWonder`, `attackPirateFleet`, and cloth/tribe scoring aren't yet in `chooseMainPhaseAction`. Adding heuristics for these makes AI-vs-AI Wonders/Pirate/Cloth games competitive.
-- **Phase 7b — Seafarers 7–8 player extension**: no official version exists. The engine currently rejects Seafarers + >6 players; re-evaluate after Phase 7.
+- **Phase 7b — Seafarers 7–8 player extension**: no official version exists. The engine currently rejects Seafarers + >6 players via `createGame`. Would need per-scenario 7–8 boards.
 
-After Phase 7, **Phase 8 — Cities & Knights** as a new module under `src/game/modules/`. The action union and engine dispatcher are already extensible; new actions plug in via a new entry in their module file alongside the existing `seafarers/` and `base/` modules.
+Then **Phase 8 — Cities & Knights** as a new module under `src/game/modules/`. The action union and engine dispatcher are already extensible; new actions plug in via a new entry in their module file alongside the existing `seafarers/` and `base/` modules.
+
+## Token distribution rule
+
+Every layout's number tokens are **symmetric around 7**: `count(N) == count(14-N)`. This mirrors dice symmetry (P(2) = P(12), P(3) = P(11), etc.). For odd-total layouts where strict symmetry is impossible, the smallest possible asymmetry (1) is placed on the rarest pair (2/12 or 3/11) so the most-common 6/8 stay balanced.

@@ -3,25 +3,54 @@ import {
   DEFAULT_SCENARIO_ID,
   getScenario,
 } from '@/game/modules/seafarers/board/scenarios';
+import {
+  BASE_SCENARIO_ORDER,
+  DEFAULT_BASE_SCENARIO_ID,
+  getBaseScenario,
+} from '@/game/modules/base/scenarios';
 import './ExpansionPicker.css';
 
 export interface ExpansionPickerValue {
   seafarers: boolean;
   scenarioId: string;
+  baseScenarioId: string;
 }
 
 export const SEAFARERS_SCENARIOS = SCENARIO_ORDER;
+export const BASE_SCENARIOS_LIST = BASE_SCENARIO_ORDER;
 
-// Resolve the effective scenario for the given picker state, or null if
-// Seafarers is off. Used by the lobby/new-game screens to read scenario
-// constraints (min/max players, default VP).
+// Resolve the effective scenario for the given picker state. Returns the
+// Seafarers scenario when the expansion is on (no fallback to base — the two
+// dropdowns are independent), otherwise the base-game scenario. The shape is
+// loose because each scenario type carries its own metadata fields; callers
+// read what they need.
 export function activeScenario(v: ExpansionPickerValue) {
-  return v.seafarers ? getScenario(v.scenarioId) : null;
+  if (v.seafarers) {
+    const s = getScenario(v.scenarioId);
+    return {
+      kind: 'seafarers' as const,
+      name: s.name,
+      minPlayers: s.minPlayers,
+      maxPlayers: s.maxPlayers,
+      defaultVpToWin: s.defaultVpToWin,
+      defaultVpToWin5_6: s.defaultVpToWin5_6,
+    };
+  }
+  const s = getBaseScenario(v.baseScenarioId);
+  return {
+    kind: 'base' as const,
+    name: s.name,
+    minPlayers: s.minPlayers,
+    maxPlayers: s.maxPlayers,
+    defaultVpToWin: s.defaultVpToWin ?? 10,
+    defaultVpToWin5_6: s.defaultVpToWin5_6,
+  };
 }
 
 export const DEFAULT_EXPANSIONS: ExpansionPickerValue = {
   seafarers: false,
   scenarioId: DEFAULT_SCENARIO_ID,
+  baseScenarioId: DEFAULT_BASE_SCENARIO_ID,
 };
 
 interface Props {
@@ -33,6 +62,29 @@ export function ExpansionPicker({ value, onChange }: Props) {
   return (
     <div className="expansion-picker">
       <span className="expansion-picker-label">Expansions</span>
+
+      {/* Base game scenario dropdown — always visible. The "Standard" entry
+          falls through to the legacy 19/30/37-hex generator; the other entries
+          are colonist.io-style Fun Maps. Hidden when Seafarers is on because
+          that expansion supplies its own board shapes. */}
+      {!value.seafarers && (
+        <label className="expansion-picker-scenario">
+          <span>Base map</span>
+          <select
+            value={value.baseScenarioId}
+            onChange={(e) =>
+              onChange({ ...value, baseScenarioId: e.target.value })
+            }
+          >
+            {BASE_SCENARIOS_LIST.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
       <label className="expansion-picker-row">
         <input
           type="checkbox"

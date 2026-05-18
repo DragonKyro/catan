@@ -18,9 +18,12 @@ describe('seafarers board generator', () => {
     expect(terrains.has('ore')).toBe(true);
   });
 
-  it('places the robber on the desert and the pirate on a sea hex', () => {
+  it('places the robber on land and the pirate on a sea hex', () => {
+    // Heading for New Shores 3p (per the 2025 rulebook) ships with zero
+    // deserts, so the robber lands on the first non-sea hex rather than on
+    // a desert. The pirate still goes on a sea hex.
     const { board } = generateSeafarersBoard('headingForNewShores', 42);
-    expect(board.hexes[board.robberHex]!.terrain).toBe('desert');
+    expect(board.hexes[board.robberHex]!.terrain).not.toBe('sea');
     expect(board.pirateHex).toBeDefined();
     expect(board.hexes[board.pirateHex!]!.terrain).toBe('sea');
   });

@@ -72,7 +72,7 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 5 — Base game 5–6 player extension
 - [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
 - [x] Phase 6 — Seafarers expansion (9 official scenarios, each with its rulebook headline mechanic — see Features)
-- [ ] Phase 7 — Seafarers 5–6 player extension (partial — per-scenario `landExtra5_6` data exists but most scenarios still cap at `maxPlayers: 4` because the main island isn't enlarged for 10 starting settlements; lift `maxPlayers` once the main island is expanded for each scenario)
+- [x] Phase 7 — Seafarers 5–6 player extension (all 9 scenarios have a `layout5_6p` matching the 5-6 player rulebook's component counts; the rulebook's "Six Islands" scenario is implemented as Four Islands' 5-6p geometry. Hex positions are approximate, pending visual verification against [docs/.scenario-renders/seafarers-56-*.png])
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
