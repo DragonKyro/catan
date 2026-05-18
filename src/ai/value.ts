@@ -245,6 +245,15 @@ export function vertexScore(
     volcanoPenalty = 3.5;
   }
 
+  // Traders & Barbarians / Rivers of Catan: each adjacent swamp hex grants
+  // +1 gold on build (and gold drives Wealthiest Catanian / spending). A
+  // small flat bonus is the right scale — it's a one-shot +1 gold worth
+  // roughly +1 VP toward the wealth tile race.
+  let riverGoldBonus = 0;
+  for (const hexId of vertex.hexes) {
+    if (state.board.hexes[hexId]?.terrain === 'swamp') riverGoldBonus += 0.4;
+  }
+
   return (
     totalPips +
     diversityBonus +
@@ -253,7 +262,8 @@ export function vertexScore(
     chipBonus +
     tribeBonus +
     fogBonus +
-    clothBonus -
+    clothBonus +
+    riverGoldBonus -
     shoreline -
     volcanoPenalty
   );

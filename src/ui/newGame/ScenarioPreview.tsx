@@ -30,6 +30,7 @@ export function ScenarioPreview({
   expansions,
   scenarioId,
   baseScenarioId,
+  tradersScenarioId,
   caption,
   seed = 12345,
 }: Props) {
@@ -45,6 +46,7 @@ export function ScenarioPreview({
           expansions,
           scenarioId,
           baseScenarioId,
+          tradersScenarioId,
         },
         randomizeTurnOrder: false,
       });
@@ -52,13 +54,15 @@ export function ScenarioPreview({
     } catch (e) {
       return { game: null, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [numPlayers, expansions, scenarioId, baseScenarioId, seed]);
+  }, [numPlayers, expansions, scenarioId, baseScenarioId, tradersScenarioId, seed]);
 
   const defaultCaption = scenarioId
     ? `${scenarioId} (${numPlayers}p)`
-    : baseScenarioId && baseScenarioId !== 'standard'
-      ? `${baseScenarioId} (${numPlayers}p)`
-      : `Base game (${numPlayers}p)`;
+    : tradersScenarioId
+      ? `${tradersScenarioId} (${numPlayers}p)`
+      : baseScenarioId && baseScenarioId !== 'standard'
+        ? `${baseScenarioId} (${numPlayers}p)`
+        : `Base game (${numPlayers}p)`;
 
   return (
     <div className="scenario-preview">

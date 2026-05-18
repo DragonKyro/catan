@@ -70,6 +70,20 @@ Each scenario also carries `defaultVpToWin` (3-4p) and optional `defaultVpToWin5
 
 `src/ui/panels/ScenarioPanel.tsx` is a single component that renders all active scenario state: chip claims, fog revealed/total, tribe tokens with type+claimer, wonder levels+claimer, pirate-fleet strength+defeater, per-player cloth counts. `hasScenarioTracker(game)` returns true iff any of these are populated; `SidePanelTabs` uses it to decide whether to render the "Scenario" tab alongside Log/Chat. Player badges in `HandPanel` and `OpponentPanel` also show `🏝 +N` (chip VP) and `🧵 N` (cloth) when nonzero. Board-level markers live in `src/ui/game/seafarers/`: `TribeTokenMarker`, `PirateFleetMarker`, `ClothHexMarker`, plus the existing `PirateMarker` and `Ship`. `HexTile` accepts a `foggy` prop that hides the terrain motif and number token under a cloud.
 
+For Traders & Barbarians the same panel renders a separate Traders block: per-player gold totals, Wealthiest / Poor Catanian holders, and (when the variant is on) the Strongest Ports holder. `HandPanel` / `OpponentPanel` add 🪙 gold, 👑 Wealthiest, 👜 Poor, and ⚓ Strongest Ports badges.
+
+## Traders & Barbarians
+
+Self-contained module under `src/game/modules/traders/`. Scenarios live in `src/game/modules/traders/board/scenarios/`. Same modular layout machinery as Seafarers / Fun Maps; `swamp` is a new non-producing terrain type (treated like desert for token skipping). The current commit ships **Rivers of Catan** plus the **Friendly Robber** and **Strongest Ports** variants — Fishing on Catan, Merchant Trains, Barbarian Attack, the Traders & Barbarians combo scenario, and the Catan Event Cards / Catan for Two variants are deferred to follow-up commits.
+
+- **Rivers of Catan** — 2 swamp hexes plus 5 declared river edges (`ScenarioEdgeRef[]`). `state.riverEdges` is the resolved EdgeId list. Roads are forbidden on river edges (gated by `state.riverEdges` check in `placement.canConnectRoad` + `canPlaceInitialRoad`). The new `buildBridge` action handles bridge placement (cost: 1 wood + 1 brick, same as a road; +3 gold on build; max 3 bridges per player; bridges count toward Longest Road via `calculateLongestRoad` unioning `roads` and `bridges`). Building a road or settlement adjacent to a swamp hex grants +1 gold and triggers `recalcWealthTiles`.
+- **Gold / coins** — `player.gold` (number) is a separate currency; not in the resource hand, not stolen, not counted toward the 7-roll discard threshold. Spend rules (2 gold → 1 resource, 2× per turn) are scaffolded but the trade UI for it lands in a follow-up.
+- **Wealthiest / Poor Catanian** — `state.wealthTiles = { wealthiest, poor[] }`. Recalc'd by `recalcWealthTiles(state)` after every gold change. Wealthiest = unique max-gold player with ≥ 1 gold (+1 VP). Poor = all players tied at the min when max > min (-2 VP each). VP swing is wired into `calculateVictoryPoints` via `calculateWealthTilesVp`.
+- **Friendly Robber variant** — engine-level validator. Module exports `validators.moveRobber` (typed via `ModuleValidators` in `src/game/modules/types.ts`). `engine.applyAction` runs all active modules' validators before the dispatched handler. The validator throws when the target hex's only adjacent buildings belong to players with ≤ 2 public VPs; desert is always allowed (fallback). No `if (variant)` conditional in the base robber handler.
+- **Strongest Ports variant** — `state.strongestPorts = { holder }`. Recalc'd by `recalcStrongestPorts(state)` after every settlement/city build. Holder must hold ≥ 3 port-VPs (settlement on port = 1, city on port = 2) AND strictly more than every other player; ties leave `holder: null`. +2 VP via `calculateStrongestPortsVp`. When the variant is on, `createGame` bumps the VP target by 1 (rulebook).
+- **createGame routing** — when `expansions.includes('traders')` and `tradersScenarioId` is set, route to `generateTradersBoard`. T&B is currently 3-4p only and mutually exclusive with Seafarers and C&K; `createGame` throws for invalid combos.
+- **AI** — `tryBuildBridge` (`src/ai/traders/bridges.ts`) fires between settlement and road in the priority tree when T&B is active. Threshold is 3.5 (vs. road's 4.5) because bridges pay +3 gold on top of network extension. `vertexScore` adds +0.4 per adjacent swamp hex (the river-build gold bonus). The Friendly Robber validator naturally bubbles into AI behavior because the same `applyAction` path runs for AI dispatches.
+
 ## Multiplayer model
 
 - **Trystero `/torrent`** for WebRTC signaling (BitTorrent trackers). No backend. App ID `catan-friends-v1`; room code doubles as the password for E2E encryption.
@@ -177,7 +191,7 @@ Each scenario also carries `defaultVpToWin` (3-4p) and optional `defaultVpToWin5
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; would need per-scenario 7–8 boards. Currently the engine rejects Seafarers + >6 players via `createGame`. Re-evaluate after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
-- [ ] Phase 10 — Traders & Barbarians expansion
+- [~] Phase 10 — Traders & Barbarians expansion (in progress: Rivers of Catan scenario + Friendly Robber and Strongest Ports variants land first. Fishing on Catan, Merchant Trains, Barbarian Attack, the Traders & Barbarians combo scenario, and the Catan Event Cards / Catan for Two variants are deferred to follow-up commits)
 - [ ] Phase 11 — Traders & Barbarians 5–6 player extension
 - [ ] Phase 12 — Explorers & Pirates expansion
 - [ ] Phase 13 — Explorers & Pirates 5–6 player extension

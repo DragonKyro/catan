@@ -10,6 +10,7 @@ import {
 import { SEAFARERS_TOPICS } from './seafarers/topics';
 import { FUN_MAPS_TOPICS } from './base/funMaps';
 import { CITIES_AND_KNIGHTS_TOPICS } from './citiesAndKnights/topics';
+import { TRADERS_TOPICS } from './traders/topics';
 
 export interface Topic {
   id: string;
@@ -305,5 +306,11 @@ export const TOPICS: Topic[] = [
   // later phases.
   ...CITIES_AND_KNIGHTS_TOPICS.map((t, i) =>
     i === 0 ? { ...t, section: 'Cities & Knights' } : t,
+  ),
+  // Traders & Barbarians — Rivers of Catan + Friendly Robber + Strongest
+  // Ports for now; remaining scenarios (Fishing, Merchant Trains, etc.)
+  // land in follow-up commits.
+  ...TRADERS_TOPICS.map((t, i) =>
+    i === 0 ? { ...t, section: 'Traders & Barbarians' } : t,
   ),
 ];

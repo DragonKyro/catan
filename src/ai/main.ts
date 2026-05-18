@@ -17,6 +17,8 @@ import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { chooseWinPlan } from './winPaths';
 import { tryBuildShip } from './seafarers/ships';
+import { tryBuildBridge } from './traders/bridges';
+import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { tryAttackPirateFleet } from './seafarers/pirateFleet';
 import { tryBuildWonder } from './seafarers/wonders';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
@@ -125,6 +127,17 @@ export function chooseMainPhaseAction(
   if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const shipAction = tryBuildShip(state, playerId);
     if (shipAction) return shipAction;
+  }
+
+  // 2.6) BUILD BRIDGE (Traders & Barbarians / Rivers of Catan). Bridges
+  //      sit between settlement and road for the same reason ships do:
+  //      they extend the network across river edges that roads can't
+  //      occupy, and they pay +3 gold on build which feeds Wealthiest
+  //      Catanian / spending. Same cost as a road but with a higher
+  //      payoff, so the threshold is a notch lower than a road's.
+  if (state.settings.expansions.includes(TRADERS_EXPANSION_ID)) {
+    const bridgeAction = tryBuildBridge(state, playerId);
+    if (bridgeAction) return bridgeAction;
   }
 
   // 3) BUILD ROAD

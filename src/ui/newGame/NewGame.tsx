@@ -312,6 +312,9 @@ export function NewGame({ onBack }: Props = {}) {
           expansions={previewExpansions}
           scenarioId={previewScenarioId}
           baseScenarioId={previewBaseScenarioId}
+          tradersScenarioId={
+            expansions.traders ? expansions.tradersScenarioId : undefined
+          }
           caption={previewCaption}
         />
         <p className="newgame-preview-note">
