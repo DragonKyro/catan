@@ -57,4 +57,9 @@ export interface TradersScenario {
   // Fishing on Catan: six fishing-ground tiles on coastal frame vertices.
   // Resolved into `state.fishingGrounds: FishingGround[]` by the generator.
   fishingGrounds?: FishingGroundDef[];
+  // Merchant Trains: hex position of the watering hole (centre, non-
+  // producing). Scenario layout pins it via `fixedTerrain: 'wateringHole'`;
+  // this field surfaces the coord to the generator for `state.wateringHoleHexId`.
+  // Falls back to scanning hexes with `terrain === 'wateringHole'`.
+  wateringHole?: { q: number; r: number };
 }

@@ -13,5 +13,7 @@ export function handleBuildCityWithStrongestPortsRefresh(
   if (next.strongestPorts) {
     next = { ...next, strongestPorts: recalcStrongestPorts(next) };
   }
+  // Merchant Trains: city builds count toward the end-of-turn voting round.
+  if (next.wateringHoleHexId) next = { ...next, builtThisTurn: true };
   return next;
 }

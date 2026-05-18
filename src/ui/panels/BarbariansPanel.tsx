@@ -1,6 +1,10 @@
 import { useGameStore } from '@/store/gameStore';
 import { COMMODITIES } from '@/game/types';
 import { BARBARIAN_TRACK_LENGTH } from '@/game/modules/citiesAndKnights/constants';
+import {
+  barbarianStrength,
+  defenderStrengthByPlayer,
+} from '@/game/modules/citiesAndKnights/barbarian';
 import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import './BarbariansPanel.css';
@@ -13,13 +17,12 @@ export function BarbariansPanel() {
   const game = useGameStore((s) => s.game);
   if (!game || !game.barbarian) return null;
   const { barbarian } = game;
-  const barbarianStrength = game.players.reduce(
-    (acc, p) => acc + p.cities.length,
+  const barbStr = barbarianStrength(game);
+  const defenderByPlayer = defenderStrengthByPlayer(game);
+  const defenderStrength = Object.values(defenderByPlayer).reduce(
+    (a, b) => a + b,
     0,
   );
-  // Defender strength = 0 until knights ship (Phase 8e). Show "—" so it's
-  // clear the system isn't yet computing anything.
-  const defenderStrength: number | '—' = '—';
 
   return (
     <div className="barbarians-panel">
@@ -52,24 +55,30 @@ export function BarbariansPanel() {
       <div className="bp-strengths">
         <div className="bp-row">
           <span className="bp-label">Barbarian strength</span>
-          <span className="bp-val bp-bad">{barbarianStrength}</span>
+          <span className="bp-val bp-bad">{barbStr}</span>
         </div>
         <div className="bp-row">
           <span className="bp-label">Defender strength</span>
-          <span className="bp-val bp-good">{defenderStrength}</span>
+          <span
+            className={`bp-val ${defenderStrength >= barbStr ? 'bp-good' : 'bp-bad'}`}
+          >
+            {defenderStrength}
+          </span>
         </div>
         <div className="bp-hint">
-          (Knights, city improvements and progress cards land in upcoming phases.
-          For now every attack pillages a city per player.)
+          Defenders win on tie. Top contributor earns a Defender of Catan
+          token (+1 VP).
         </div>
       </div>
 
-      <header className="bp-subheader">Walls &amp; commodities</header>
+      <header className="bp-subheader">Walls, knights &amp; commodities</header>
       <table className="bp-table">
         <thead>
           <tr>
             <th>Player</th>
             <th title="City walls">🧱</th>
+            <th title="Active-knight strength">🛡</th>
+            <th title="Defender tokens (+1 VP each)">🥇</th>
             {COMMODITIES.map((c) => (
               <th key={c}>{c === 'paper' ? '📜' : c === 'cloth' ? '🧵' : '🪙'}</th>
             ))}
@@ -89,6 +98,8 @@ export function BarbariansPanel() {
                   {p.name}
                 </td>
                 <td>{p.cityWalls ?? 0}</td>
+                <td>{defenderByPlayer[p.id] ?? 0}</td>
+                <td>{p.defenderTokens ?? 0}</td>
                 {COMMODITIES.map((c) => (
                   <td key={c}>
                     <CommodityChip

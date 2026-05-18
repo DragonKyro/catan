@@ -86,6 +86,14 @@
   align-items: center;
 }
 
+.hand-progress-cards {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  grid-column: 2;
+}
+
 .hand-section {
   grid-area: cards;
   display: flex;

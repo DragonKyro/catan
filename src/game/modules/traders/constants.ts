@@ -5,6 +5,19 @@ export const TRADERS_EXPANSION_ID = 'traders';
 // Scenario identifiers.
 export const TRADERS_SCENARIO_RIVERS = 'riversOfCatan';
 export const TRADERS_SCENARIO_FISHING = 'fishingOnCatan';
+export const TRADERS_SCENARIO_MERCHANT_TRAINS = 'merchantTrains';
+
+// Merchant Trains: rulebook ships 22 wagon tokens in a shared neutral
+// supply. Each successful `placeWagon` action draws one.
+export const MERCHANT_WAGON_SUPPLY = 22;
+
+// Merchant Trains victory-point target (rulebook: "If you have 12 or more
+// VPs at any point during your turn, the game ends and you are the winner!").
+export const MERCHANT_TRAINS_DEFAULT_VP = 12;
+
+// Bid resources. Only wool (sheep) and wheat may be wagered in the voting
+// round. Other resources are rejected by `handleSubmitWagonVote`.
+export const MERCHANT_BID_RESOURCES = ['sheep', 'wheat'] as const;
 
 // Fishing on Catan: cap on fish tokens a player may hold (rulebook). Excess
 // draws are blocked once the cap is reached; the per-turn discard-and-

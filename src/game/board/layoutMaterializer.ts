@@ -76,6 +76,9 @@ export function materializeLayout(
     // Swamp (T&B Rivers of Catan) — non-producing like desert. Never takes a
     // token; `forceToken` doesn't apply since swamps don't roll for events.
     if (h.terrain === 'swamp') continue;
+    // Watering hole (T&B Merchant Trains) — non-producing centre hex; the
+    // origin of merchant trains. Never takes a token.
+    if (h.terrain === 'wateringHole') continue;
     if (pos.fixedToken != null) {
       fixedAssignments.push({ index: i, token: pos.fixedToken });
     } else {

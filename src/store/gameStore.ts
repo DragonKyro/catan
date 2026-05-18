@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Action, EdgeId, HexId, PlayerId } from '@/game/types';
+import type { Action, EdgeId, HexId, PlayerId, VertexId } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';

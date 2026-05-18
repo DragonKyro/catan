@@ -8,6 +8,8 @@ import { handlePlaceInitialSettlementWithRiverGold } from './actions/placeInitia
 import { handlePlaceInitialRoadWithRiverGold } from './actions/placeInitialRoad';
 import { handleSpendFish } from './actions/spendFish';
 import { handlePassOldBoot } from './actions/passOldBoot';
+import { handleSubmitWagonVote, handlePlaceWagon } from './merchantTrains/voting';
+import { handleEndTurnWithWagonVote } from './merchantTrains/turn';
 import { validateMoveRobberFriendlyRobber } from './variants/friendlyRobber';
 import { TRADERS_EXPANSION_ID } from './constants';
 

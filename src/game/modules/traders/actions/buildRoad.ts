@@ -21,5 +21,7 @@ export function handleBuildRoadWithRiverGold(
     }));
     next = { ...next, wealthTiles: recalcWealthTiles(next) };
   }
+  // Merchant Trains: road builds count toward the end-of-turn voting round.
+  if (next.wateringHoleHexId) next = { ...next, builtThisTurn: true };
   return next;
 }

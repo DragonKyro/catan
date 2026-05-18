@@ -104,6 +104,260 @@ export function PlacementOverlay() {
     );
   }
 
+  if (uiMode.kind === 'recruitKnight') {
+    // Empty vertex connected to the actor's road network.
+    return (
+      <g className="overlay overlay-vertices">
+        {game.board.vertexIds
+          .filter((vid) => canRecruitKnightAt(game, acting, vid))
+          .map((vid) => (
+            <VertexGhost
+              key={vid}
+              vid={vid}
+              variant="settlement"
+              previewColor={previewColor}
+              isHovered={hoveredVid === vid}
+              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
+              onClick={() =>
+                dispatch({
+                  type: 'recruitKnight',
+                  playerId: acting,
+                  vertex: vid,
+                })
+              }
+            />
+          ))}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'activateKnight' || uiMode.kind === 'promoteKnight') {
+    const isActivate = uiMode.kind === 'activateKnight';
+    const matches = Object.entries(game.knights ?? {}).filter(([, k]) => {
+      if (k.playerId !== acting) return false;
+      if (isActivate) return !k.active;
+      return k.strength < 3;
+    });
+    return (
+      <g className="overlay overlay-vertices">
+        {matches.map(([vid]) => (
+          <VertexGhost
+            key={vid}
+            vid={vid}
+            variant="city"
+            previewColor={previewColor}
+            isHovered={hoveredVid === vid}
+            onHoverChange={(h) => setHoveredVid(h ? vid : null)}
+            onClick={() =>
+              dispatch(
+                isActivate
+                  ? { type: 'activateKnight', playerId: acting, vertex: vid }
+                  : { type: 'promoteKnight', playerId: acting, vertex: vid },
+              )
+            }
+          />
+        ))}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'chaseRobber') {
+    const robberHex = game.board.robberHex;
+    const candidates = Object.entries(game.knights ?? {}).filter(([vid, k]) => {
+      if (k.playerId !== acting || !k.active) return false;
+      const v = game.board.vertices[vid];
+      return !!v && v.hexes.includes(robberHex);
+    });
+    return (
+      <g className="overlay overlay-vertices">
+        {candidates.map(([vid]) => (
+          <VertexGhost
+            key={vid}
+            vid={vid}
+            variant="city"
+            previewColor={previewColor}
+            isHovered={hoveredVid === vid}
+            onHoverChange={(h) => setHoveredVid(h ? vid : null)}
+            onClick={() =>
+              dispatch({ type: 'chaseRobber', playerId: acting, vertex: vid })
+            }
+          />
+        ))}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'moveKnight' || uiMode.kind === 'displaceKnight') {
+    const src = uiMode.sourceVertex;
+    if (!src) {
+      const candidates = Object.entries(game.knights ?? {}).filter(
+        ([vid, k]) =>
+          k.playerId === acting &&
+          k.active &&
+          !(game.activatedKnightsThisTurn ?? []).includes(vid),
+      );
+      return (
+        <g className="overlay overlay-vertices">
+          {candidates.map(([vid]) => (
+            <VertexGhost
+              key={vid}
+              vid={vid}
+              variant="city"
+              previewColor={previewColor}
+              isHovered={hoveredVid === vid}
+              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
+              onClick={() => setMode({ ...uiMode, sourceVertex: vid })}
+            />
+          ))}
+        </g>
+      );
+    }
+    return (
+      <g className="overlay overlay-vertices">
+        {game.board.vertexIds
+          .filter((vid) => {
+            if (vid === src) return false;
+            if (uiMode.kind === 'moveKnight') {
+              if (game.knights?.[vid]) return false;
+              return vertexConnectedToOwnRoadNetwork(game, acting, vid);
+            }
+            const k = game.knights?.[vid];
+            const srcK = game.knights?.[src];
+            if (!k || !srcK) return false;
+            if (k.playerId === acting) return false;
+            return k.strength < srcK.strength;
+          })
+          .map((vid) => (
+            <VertexGhost
+              key={vid}
+              vid={vid}
+              variant="settlement"
+              previewColor={previewColor}
+              isHovered={hoveredVid === vid}
+              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
+              onClick={() => {
+                if (uiMode.kind === 'moveKnight') {
+                  dispatch({
+                    type: 'moveKnight',
+                    playerId: acting,
+                    from: src,
+                    to: vid,
+                  });
+                } else {
+                  dispatch({
+                    type: 'displaceKnight',
+                    playerId: acting,
+                    from: src,
+                    to: vid,
+                  });
+                }
+                setMode({ kind: 'idle' });
+              }}
+            />
+          ))}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'displacedKnightMove') {
+    const ctx = game.pendingKnightMove;
+    if (!ctx || ctx.playerId !== acting) return null;
+    return (
+      <g className="overlay overlay-vertices">
+        {game.board.vertexIds
+          .filter((vid) => {
+            if (vid === ctx.sourceVertex) return false;
+            if (game.knights?.[vid]) return false;
+            return vertexConnectedToOwnRoadNetwork(game, acting, vid);
+          })
+          .map((vid) => (
+            <VertexGhost
+              key={vid}
+              vid={vid}
+              variant="settlement"
+              previewColor={previewColor}
+              isHovered={hoveredVid === vid}
+              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
+              onClick={() =>
+                dispatch({
+                  type: 'displacedKnightMove',
+                  playerId: acting,
+                  to: vid,
+                })
+              }
+            />
+          ))}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'placeMerchant') {
+    const player = game.players.find((p) => p.id === acting);
+    if (!player) return null;
+    const eligible = game.board.hexIds.filter((hid) => {
+      const h = game.board.hexes[hid]!;
+      if (h.terrain === 'sea' || h.terrain === 'desert' || h.terrain === 'gold') {
+        return false;
+      }
+      for (const v of Object.values(game.board.vertices)) {
+        if (!v.hexes.includes(hid)) continue;
+        if (player.settlements.includes(v.id) || player.cities.includes(v.id)) {
+          return true;
+        }
+      }
+      return false;
+    });
+    return (
+      <g className="overlay overlay-hexes">
+        {eligible.map((hid) => {
+          const h = game.board.hexes[hid]!;
+          return (
+            <circle
+              key={hid}
+              cx={h.center.x}
+              cy={h.center.y}
+              r={26}
+              fill="#000"
+              fillOpacity={0.15}
+              stroke="#fff"
+              strokeOpacity={0.7}
+              strokeDasharray="4 3"
+              strokeWidth={2}
+              style={{ cursor: 'pointer' }}
+              onClick={() =>
+                dispatch({ type: 'placeMerchant', playerId: acting, hex: hid })
+              }
+            />
+          );
+        })}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'removeRoad') {
+    return (
+      <g className="overlay overlay-edges">
+        {game.board.edgeIds
+          .filter((eid) =>
+            game.players.some((p) => p.roads.includes(eid)),
+          )
+          .map((eid) => (
+            <EdgeGhost
+              key={eid}
+              eid={eid}
+              variant="road"
+              previewColor={previewColor}
+              isHovered={hoveredEid === eid}
+              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+              onClick={() =>
+                dispatch({ type: 'removeRoad', playerId: acting, edge: eid })
+              }
+            />
+          ))}
+      </g>
+    );
+  }
+
   if (
     uiMode.kind === 'buildRoad' ||
     uiMode.kind === 'placeSetupRoad' ||
@@ -492,6 +746,38 @@ function FirstRoadPreview({ eid, color }: { eid: EdgeId; color: PlayerColor }) {
       strokeLinecap="round"
     />
   );
+}
+
+// Cities & Knights — helper: is this vertex empty (no building, no knight)
+// and connected by at least one edge to one of the player's roads/ships/
+// bridges? Used by recruitKnight overlay and by displacement-target picks.
+function canRecruitKnightAt(
+  game: import('@/game/types').GameState,
+  pid: string,
+  vid: import('@/game/types').VertexId,
+): boolean {
+  if (game.knights?.[vid]) return false;
+  for (const p of game.players) {
+    if (p.settlements.includes(vid) || p.cities.includes(vid)) return false;
+  }
+  return vertexConnectedToOwnRoadNetwork(game, pid, vid);
+}
+
+function vertexConnectedToOwnRoadNetwork(
+  game: import('@/game/types').GameState,
+  pid: string,
+  vid: import('@/game/types').VertexId,
+): boolean {
+  const v = game.board.vertices[vid];
+  if (!v) return false;
+  const p = game.players.find((x) => x.id === pid);
+  if (!p) return false;
+  for (const eid of v.edges) {
+    if (p.roads.includes(eid)) return true;
+    if (p.ships.includes(eid)) return true;
+    if (p.bridges?.includes(eid)) return true;
+  }
+  return false;
 }
 
 // Returns IDs of opponent players with a settlement/city on the given hex

@@ -193,6 +193,84 @@ export function ActionBar() {
             🧱 Wall
           </Button>
         )}
+        {hasCK && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.knight) ||
+              (game.knightSupply?.[acting]?.[1] ?? 0) <= 0
+            }
+            onClick={() => setMode({ kind: 'recruitKnight' })}
+            title="Recruit Knight (1🐑 1🪨)"
+          >
+            🛡 Recruit
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.activateKnight) ||
+              !Object.values(game.knights ?? {}).some(
+                (k) => k.playerId === acting && !k.active,
+              )
+            }
+            onClick={() => setMode({ kind: 'activateKnight' })}
+            title="Activate Knight (1🌾)"
+          >
+            ⚡ Activate
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            disabled={
+              !!game.promotedKnightThisTurn ||
+              !canAfford(player.resources, COSTS.promoteKnight) ||
+              !Object.values(game.knights ?? {}).some(
+                (k) => k.playerId === acting && k.strength < 3,
+              )
+            }
+            onClick={() => setMode({ kind: 'promoteKnight' })}
+            title="Promote Knight (1🐑 1🪨) — once per turn"
+          >
+            ⬆ Promote
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            disabled={
+              !Object.values(game.knights ?? {}).some(
+                (k) => k.playerId === acting && k.active,
+              )
+            }
+            onClick={() => setMode({ kind: 'moveKnight' })}
+            title="Move an active knight (then click destination)"
+          >
+            ➡ Move Knight
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            onClick={() => openDialog('cityImprovements')}
+            title="Build a city improvement (spends commodities)"
+          >
+            📜 Improve
+          </Button>
+        )}
+        {hasCK && (() => {
+          const p = game.players.find((x) => x.id === acting);
+          const cards = p?.progressCards;
+          const total = cards
+            ? cards.science.length + cards.trade.length + cards.politics.length
+            : 0;
+          return (
+            <Button
+              disabled={total === 0}
+              onClick={() => openDialog('progressCards')}
+              title={`Play a progress card (${total} in hand)`}
+            >
+              🃏 Cards ({total})
+            </Button>
+          );
+        })()}
         {!hasCK && (
           <Button
             disabled={

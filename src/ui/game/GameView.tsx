@@ -25,6 +25,9 @@ import { SpendFishDialog } from '@/ui/dialogs/SpendFishDialog';
 import { PassBootDialog } from '@/ui/dialogs/PassBootDialog';
 import { GoldResourceDialog } from '@/ui/dialogs/GoldResourceDialog';
 import { RobberOrPirateDialog } from '@/ui/dialogs/RobberOrPirateDialog';
+import { ImprovementsDialog } from '@/ui/dialogs/ImprovementsDialog';
+import { ProgressCardsDialog } from '@/ui/dialogs/ProgressCardsDialog';
+import { AlchemyDialog } from '@/ui/dialogs/AlchemyDialog';
 import { GameOverDialog } from '@/ui/dialogs/GameOverDialog';
 import { PassDeviceScreen } from '@/ui/handoff/PassDeviceScreen';
 import { Rulebook } from '@/rulebook/Rulebook';
@@ -74,6 +77,11 @@ export function GameView() {
   const robberOrPirateDialog =
     game.phase === 'chooseRobberOrPirate' && !handoffPending ? <RobberOrPirateDialog /> : null;
   const robberDialog = pendingRobberHex ? <RobberStealDialog /> : null;
+  const improvementsDialog =
+    dialog === 'cityImprovements' ? <ImprovementsDialog /> : null;
+  const progressCardsDialog =
+    dialog === 'progressCards' ? <ProgressCardsDialog /> : null;
+  const alchemyDialog = dialog === 'alchemy' ? <AlchemyDialog /> : null;
 
   return (
     <div className="gameview">
@@ -157,7 +165,7 @@ export function GameView() {
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
             bottom-center of the board, above the hand strip. */}
-        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog) && (
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
             {monopolyDialog}
@@ -168,6 +176,9 @@ export function GameView() {
             {robberDialog}
             {goldDialog}
             {robberOrPirateDialog}
+            {improvementsDialog}
+            {progressCardsDialog}
+            {alchemyDialog}
           </div>
         )}
       </main>

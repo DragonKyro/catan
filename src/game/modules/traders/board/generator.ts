@@ -17,6 +17,9 @@ export interface TradersBoardResult {
   // that don't use them.
   lakeHexId: HexId | null;
   fishingGrounds: FishingGround[];
+  // Merchant Trains: the watering hole hex id (origin of every train).
+  // null when the scenario doesn't have one.
+  wateringHoleHexId: HexId | null;
 }
 
 export function generateTradersBoard(
@@ -38,11 +41,14 @@ export function generateTradersBoard(
   );
   const lakeHexId = scenario.lake
     ? `${scenario.lake.q},${scenario.lake.r}`
-    : findLakeHex(assembled.board);
+    : findHexByTerrain(assembled.board, 'lake');
   const fishingGrounds = resolveFishingGrounds(
     scenario.fishingGrounds ?? [],
     assembled.board,
   );
+  const wateringHoleHexId = scenario.wateringHole
+    ? `${scenario.wateringHole.q},${scenario.wateringHole.r}`
+    : findHexByTerrain(assembled.board, 'wateringHole');
   // Fishing on Catan: the robber starts off-board. We can't represent
   // "no robber hex" in BoardState, so we keep robberHex pointing at the
   // lake (or whatever the assembly picked) and rely on `state.robberActive`
@@ -53,12 +59,19 @@ export function generateTradersBoard(
     riverEdges,
     lakeHexId: lakeHexId && assembled.board.hexes[lakeHexId] ? lakeHexId : null,
     fishingGrounds,
+    wateringHoleHexId:
+      wateringHoleHexId && assembled.board.hexes[wateringHoleHexId]
+        ? wateringHoleHexId
+        : null,
   };
 }
 
-function findLakeHex(board: BoardState): HexId | null {
+function findHexByTerrain(
+  board: BoardState,
+  terrain: BoardState['hexes'][string]['terrain'],
+): HexId | null {
   for (const id of board.hexIds) {
-    if (board.hexes[id]?.terrain === 'lake') return id;
+    if (board.hexes[id]?.terrain === terrain) return id;
   }
   return null;
 }

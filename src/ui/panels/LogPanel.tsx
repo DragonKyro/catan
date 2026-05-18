@@ -222,6 +222,47 @@ function entryMatches(
       pushName(entry.player);
       parts.push('build', 'city wall', 'wall');
       break;
+    case 'recruitKnight':
+      pushName(entry.player);
+      parts.push('recruit', 'knight');
+      break;
+    case 'activateKnight':
+      pushName(entry.player);
+      parts.push('activate', 'knight');
+      break;
+    case 'promoteKnight':
+      pushName(entry.player);
+      parts.push('promote', 'knight');
+      break;
+    case 'moveKnight':
+      pushName(entry.player);
+      parts.push('move', 'knight');
+      break;
+    case 'displaceKnight':
+      pushName(entry.player);
+      pushName(entry.victim);
+      parts.push('displace', 'knight');
+      break;
+    case 'chaseRobber':
+      pushName(entry.player);
+      parts.push('chase', 'robber');
+      break;
+    case 'buildImprovement':
+      pushName(entry.player);
+      parts.push('improvement', entry.track, String(entry.level));
+      break;
+    case 'metropolisGained':
+      pushName(entry.player);
+      parts.push('metropolis', entry.track);
+      break;
+    case 'progressCardDrawn':
+      pushName(entry.player);
+      parts.push('progress card', entry.deck);
+      break;
+    case 'progressCardPlayed':
+      pushName(entry.player);
+      parts.push('progress card', entry.card);
+      break;
     case 'barbarianAdvance':
       parts.push('barbarian', 'ship', 'advance', String(entry.position));
       break;
@@ -395,6 +436,47 @@ function LogLine({
       return (
         <div className="log-line">
           🧱 {pname(entry.player)} built a city wall
+        </div>
+      );
+    case 'recruitKnight':
+      return <div className="log-line">🛡 {pname(entry.player)} recruited a knight</div>;
+    case 'activateKnight':
+      return <div className="log-line log-soft">⚡ {pname(entry.player)} activated a knight</div>;
+    case 'promoteKnight':
+      return <div className="log-line">⬆ {pname(entry.player)} promoted a knight</div>;
+    case 'moveKnight':
+      return <div className="log-line log-soft">➡ {pname(entry.player)} moved a knight</div>;
+    case 'displaceKnight':
+      return (
+        <div className="log-line">
+          ⚔ {pname(entry.player)} displaced {pname(entry.victim)}'s knight
+        </div>
+      );
+    case 'chaseRobber':
+      return <div className="log-line">🥷 {pname(entry.player)} chased the robber</div>;
+    case 'buildImprovement':
+      return (
+        <div className="log-line">
+          📜 {pname(entry.player)} reached {entry.track} level {entry.level}
+        </div>
+      );
+    case 'metropolisGained':
+      return (
+        <div className="log-line">
+          🏛 {pname(entry.player)} claimed the {entry.track} metropolis{' '}
+          {entry.permanent ? '★ permanent' : '(temporary)'}
+        </div>
+      );
+    case 'progressCardDrawn':
+      return (
+        <div className="log-line log-soft">
+          🃏 {pname(entry.player)} drew a {entry.deck} card
+        </div>
+      );
+    case 'progressCardPlayed':
+      return (
+        <div className="log-line">
+          🃏 {pname(entry.player)} played {entry.card}
         </div>
       );
     case 'barbarianAdvance':

@@ -145,6 +145,40 @@ export function HandPanel() {
               🧱 {player.cityWalls}
             </span>
           )}
+          {/* C&K improvement levels (only when nonzero) */}
+          {player.improvements?.science ? (
+            <span className="hand-flag" title={`Science level ${player.improvements.science}`}>📚 {player.improvements.science}</span>
+          ) : null}
+          {player.improvements?.trade ? (
+            <span className="hand-flag" title={`Trade level ${player.improvements.trade}`}>⚖️ {player.improvements.trade}</span>
+          ) : null}
+          {player.improvements?.politics ? (
+            <span className="hand-flag" title={`Politics level ${player.improvements.politics}`}>🤝 {player.improvements.politics}</span>
+          ) : null}
+          {(player.defenderTokens ?? 0) > 0 && (
+            <span className="hand-flag" title={`Defender of Catan tokens (+${player.defenderTokens} VP)`}>
+              🥇 {player.defenderTokens}
+            </span>
+          )}
+          {(() => {
+            const mets = game.metropolises;
+            if (!mets) return null;
+            let count = 0;
+            for (const t of ['science', 'trade', 'politics'] as const) {
+              if (mets[t]?.playerId === player.id) count++;
+            }
+            if (count === 0) return null;
+            return (
+              <span className="hand-flag" title={`Metropolises owned (+${count * 2} VP)`}>
+                🏛 {count}
+              </span>
+            );
+          })()}
+          {game.merchant?.ownerId === player.id && (
+            <span className="hand-flag" title="Merchant (+1 VP, 2:1 on hex)">
+              💰
+            </span>
+          )}
           {(player.gold ?? 0) > 0 && (
             <span
               className="hand-flag"
@@ -203,6 +237,28 @@ export function HandPanel() {
           />
         ))}
       </div>
+
+      {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) &&
+        player.progressCards &&
+        player.progressCards.science.length +
+          player.progressCards.trade.length +
+          player.progressCards.politics.length >
+          0 && (
+          <div className="hand-progress-cards">
+            <span style={{ color: 'var(--text-soft)', fontSize: '0.75em', textTransform: 'uppercase' }}>
+              Progress
+            </span>
+            <span style={{ color: 'var(--text)', fontWeight: 600 }}>
+              {player.progressCards.science.length +
+                player.progressCards.trade.length +
+                player.progressCards.politics.length}{' '}
+              cards
+            </span>
+            <span style={{ fontSize: '0.85em', color: 'var(--text-soft)' }}>
+              (open via Cards button)
+            </span>
+          </div>
+        )}
 
       {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) && (
         <div className="hand-commodities">

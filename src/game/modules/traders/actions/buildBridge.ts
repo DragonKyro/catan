@@ -41,5 +41,7 @@ export function handleBuildBridge(
   }));
   next = { ...next, bank: addResources(next.bank, COSTS.bridge) };
   next = { ...next, wealthTiles: recalcWealthTiles(next) };
+  // Merchant Trains: bridge builds count toward the end-of-turn voting round.
+  if (next.wateringHoleHexId) next = { ...next, builtThisTurn: true };
   return next;
 }

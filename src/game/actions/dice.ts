@@ -129,9 +129,14 @@ function distributeResources(state: GameState, rolled: number): GameState {
 
   for (const hex of Object.values(state.board.hexes)) {
     if (hex.terrain === 'desert' || hex.terrain === 'sea') continue;
-    // Swamp / lake don't produce resources. Lake fish production is handled
-    // in `maybeDistributeFish` (called after this loop in the dice handler).
-    if (hex.terrain === 'swamp' || hex.terrain === 'lake') continue;
+    // Swamp / lake / watering hole don't produce resources. Lake fish
+    // production is handled in `maybeDistributeFish` after this loop.
+    if (
+      hex.terrain === 'swamp' ||
+      hex.terrain === 'lake' ||
+      hex.terrain === 'wateringHole'
+    )
+      continue;
     if (hex.numberToken !== rolled) continue;
     if (hex.id === state.board.robberHex && (state.robberActive ?? true)) continue;
 

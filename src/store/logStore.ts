@@ -106,6 +106,38 @@ export type LogEntry =
     }
   // Cities & Knights events.
   | { id: number; kind: 'cityWallBuilt'; player: PlayerId }
+  | { id: number; kind: 'recruitKnight'; player: PlayerId }
+  | { id: number; kind: 'activateKnight'; player: PlayerId }
+  | { id: number; kind: 'promoteKnight'; player: PlayerId }
+  | { id: number; kind: 'moveKnight'; player: PlayerId }
+  | { id: number; kind: 'displaceKnight'; player: PlayerId; victim: PlayerId }
+  | { id: number; kind: 'chaseRobber'; player: PlayerId }
+  | {
+      id: number;
+      kind: 'buildImprovement';
+      player: PlayerId;
+      track: 'science' | 'trade' | 'politics';
+      level: number;
+    }
+  | {
+      id: number;
+      kind: 'metropolisGained';
+      player: PlayerId;
+      track: 'science' | 'trade' | 'politics';
+      permanent: boolean;
+    }
+  | {
+      id: number;
+      kind: 'progressCardDrawn';
+      player: PlayerId;
+      deck: 'science' | 'trade' | 'politics';
+    }
+  | {
+      id: number;
+      kind: 'progressCardPlayed';
+      player: PlayerId;
+      card: string;
+    }
   | {
       id: number;
       kind: 'barbarianAdvance';
@@ -546,6 +578,70 @@ export const useLogStore = create<LogStore>((set, get) => ({
           id: stamp(),
           kind: 'cityWallBuilt',
           player: action.playerId,
+        });
+        break;
+      }
+      case 'recruitKnight': {
+        append.push({ id: stamp(), kind: 'recruitKnight', player: action.playerId });
+        break;
+      }
+      case 'activateKnight': {
+        append.push({ id: stamp(), kind: 'activateKnight', player: action.playerId });
+        break;
+      }
+      case 'promoteKnight': {
+        append.push({ id: stamp(), kind: 'promoteKnight', player: action.playerId });
+        break;
+      }
+      case 'moveKnight': {
+        append.push({ id: stamp(), kind: 'moveKnight', player: action.playerId });
+        break;
+      }
+      case 'displaceKnight': {
+        // Find the victim from before-state's knight at action.to.
+        const victim = before.knights?.[action.to]?.playerId ?? '';
+        append.push({
+          id: stamp(),
+          kind: 'displaceKnight',
+          player: action.playerId,
+          victim,
+        });
+        break;
+      }
+      case 'chaseRobber': {
+        append.push({ id: stamp(), kind: 'chaseRobber', player: action.playerId });
+        break;
+      }
+      case 'buildCityImprovement': {
+        const beforeP = before.players.find((p) => p.id === action.playerId);
+        const level = (beforeP?.improvements?.[action.track] ?? 0) + 1;
+        append.push({
+          id: stamp(),
+          kind: 'buildImprovement',
+          player: action.playerId,
+          track: action.track,
+          level,
+        });
+        // Metropolis transition?
+        const wasOwner = before.metropolises?.[action.track]?.playerId;
+        const nowOwner = after.metropolises?.[action.track]?.playerId;
+        if (nowOwner === action.playerId && wasOwner !== action.playerId) {
+          append.push({
+            id: stamp(),
+            kind: 'metropolisGained',
+            player: action.playerId,
+            track: action.track,
+            permanent: !!after.metropolises?.[action.track]?.permanent,
+          });
+        }
+        break;
+      }
+      case 'playProgressCard': {
+        append.push({
+          id: stamp(),
+          kind: 'progressCardPlayed',
+          player: action.playerId,
+          card: action.card,
         });
         break;
       }

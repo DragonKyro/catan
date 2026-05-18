@@ -146,7 +146,7 @@ export interface ProgressCardHand {
 // Terrain & hexes
 // ============================================================================
 
-export type Terrain = Resource | 'desert' | 'sea' | 'gold' | 'swamp' | 'lake';
+export type Terrain = Resource | 'desert' | 'sea' | 'gold' | 'swamp' | 'lake' | 'wateringHole';
 
 export interface HexCoord {
   q: number;
@@ -334,6 +334,45 @@ export interface FishingGround {
   token: number;
 }
 
+// ----- Traders & Barbarians / Merchant Trains -----
+
+// A placed trade wagon. Neutral pieces — they're not owned by any player,
+// but they extend the road of whichever player owns a road on the same
+// edge. Wagons form merchant trains starting at the watering hole hex.
+export interface TradeWagon {
+  edge: EdgeId;
+}
+
+// A single bid in the end-of-turn voting round. `cards` is the wool/wheat
+// stack the player has committed to the location at `target`. `target` is
+// the edge they want the wagon placed on (`null` to abstain).
+export interface WagonVoteBid {
+  cards: Partial<ResourceBank>;
+  target: EdgeId | null;
+}
+
+// State for the wagon-voting phase. Built when a player ends their action
+// phase after having built ≥ 1 piece this turn (settlement / city / road
+// / bridge). All players (including the active one) submit a bid; the
+// engine auto-resolves once every player has spoken.
+export interface WagonVoteState {
+  // Player who acquired the wagon (the one who built and ended turn).
+  // They receive the placement-fallback by default and break ties at the
+  // edge level.
+  acquirerId: PlayerId;
+  // Submitted bids, keyed by player id. A player who hasn't submitted yet
+  // is absent from the map.
+  bids: Record<PlayerId, WagonVoteBid>;
+}
+
+// Mid-resolution: the voting closed and the placer has been chosen, but
+// they still need to pick an edge (the bid-winner location was ambiguous).
+// When the location is unambiguous after voting, we skip straight to
+// placing the wagon and never enter this phase.
+export interface PendingWagonPlacement {
+  placerId: PlayerId;
+}
+
 // ============================================================================
 // Game phase & state
 // ============================================================================
@@ -346,6 +385,9 @@ export type GamePhase =
   | 'moveRobber'
   | 'main'
   | 'gameOver'
+  // Traders & Barbarians / Merchant Trains: end-of-turn voting + placement.
+  | 'wagonVoting'
+  | 'placeWagon'
   // Seafarers extension phases.
   | 'chooseRobberOrPirate'
   | 'movePirate'
@@ -662,6 +704,24 @@ export interface GameState {
   // pool. Players may pass it during their turn to any player with ≥ their
   // VPs. null when in the supply.
   oldBootHolder?: PlayerId | null;
+  // Merchant Trains: hex id of the watering hole (non-producing centre hex,
+  // origin of every merchant train).
+  wateringHoleHexId?: HexId;
+  // All placed trade wagons in the scenario. Neutral pieces — they extend
+  // the road network of whichever player owns a road on the same edge.
+  wagons?: TradeWagon[];
+  // Remaining trade wagons in the supply. Starts at 22 (rulebook); decrements
+  // each placement. When 0, no more wagons can be placed (and the voting
+  // phase still runs but resolves to a no-op).
+  wagonSupply?: number;
+  // Did the active player build at least one piece this turn? Determines
+  // whether `endTurn` opens the voting phase. Cleared on turn advance.
+  builtThisTurn?: boolean;
+  // Voting state — present iff phase is 'wagonVoting'.
+  wagonVote?: WagonVoteState;
+  // Pending placement — present iff phase is 'placeWagon'. Resolved by a
+  // `placeWagon` action.
+  pendingWagonPlacement?: PendingWagonPlacement;
 }
 
 export interface IslandChip {
@@ -901,6 +961,25 @@ export interface PassOldBootAction extends ActionBase {
   to: PlayerId;
 }
 
+// Merchant Trains end-of-turn voting. Every player (including the active
+// one) dispatches this exactly once per voting round. `cards` are
+// wool/wheat resource cards spent on the bid; `target` is the edge to
+// vote for (null = abstain). Engine auto-resolves once all players have
+// submitted.
+export interface SubmitWagonVoteAction extends ActionBase {
+  type: 'submitWagonVote';
+  cards: Partial<ResourceBank>;
+  target: EdgeId | null;
+}
+
+// Merchant Trains placement after the vote resolves to a placer-with-no-
+// majority-location. Only the placer (set on state.pendingWagonPlacement)
+// may dispatch this. The edge must be a legal merchant-train extension.
+export interface PlaceWagonAction extends ActionBase {
+  type: 'placeWagon';
+  edge: EdgeId;
+}
+
 // ----------------------------------------------------------------------------
 // Cities & Knights expansion actions
 // ----------------------------------------------------------------------------
@@ -1097,6 +1176,8 @@ export type Action =
   | BuildBridgeAction
   | SpendFishAction
   | PassOldBootAction
+  | SubmitWagonVoteAction
+  | PlaceWagonAction
   | BuildCityWallAction
   | DiscardCKAction
   | RecruitKnightAction
