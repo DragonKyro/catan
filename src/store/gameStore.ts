@@ -32,6 +32,9 @@ export type UIMode =
   | { kind: 'buildShip' }
   // Traders & Barbarians — picking a river edge to span with a bridge.
   | { kind: 'buildBridge' }
+  // Traders & Barbarians / Merchant Trains — placing a trade wagon after a
+  // vote resolution that named a placer (no clear vote-winner edge).
+  | { kind: 'placeWagon' }
   // Cities & Knights — picking which of your own cities to put a wall under.
   | { kind: 'buildCityWall' }
   // Cities & Knights knight build/action modes.
@@ -147,6 +150,8 @@ const phaseToMode = (state: GameState): UIMode => {
   }
   if (state.phase === 'moveRobber') return { kind: 'moveRobber' };
   if (state.phase === 'movePirate') return { kind: 'movePirate' };
+  // T&B Merchant Trains: the placer picks an edge.
+  if (state.phase === 'placeWagon') return { kind: 'placeWagon' };
   // Cities & Knights sub-phases that drive board interactions.
   if (state.phase === 'displacedKnightMove') return { kind: 'displacedKnightMove' };
   if (state.phase === 'placeMerchant') return { kind: 'placeMerchant' };

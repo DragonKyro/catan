@@ -36,6 +36,9 @@ export const tradersModule: RuleModule = {
     placeInitialRoad: handlePlaceInitialRoadWithRiverGold as never,
     spendFish: handleSpendFish as never,
     passOldBoot: handlePassOldBoot as never,
+    submitWagonVote: handleSubmitWagonVote as never,
+    placeWagon: handlePlaceWagon as never,
+    endTurn: handleEndTurnWithWagonVote as never,
   },
   validators: {
     moveRobber: combineRobberValidators(

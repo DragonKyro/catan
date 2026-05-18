@@ -9,6 +9,7 @@ import {
   canPlaceBridge,
 } from '@/game/placement';
 import { canBuildShip } from '@/game/modules/seafarers/validation/shipPlacement';
+import { canPlaceWagon as canPlaceWagonHelper } from '@/game/modules/traders/merchantTrains/placement';
 import type { EdgeId, PlayerColor, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 
@@ -475,6 +476,32 @@ export function PlacementOverlay() {
               onHoverChange={(h) => setHoveredEid(h ? eid : null)}
               onClick={() =>
                 dispatch({ type: 'buildBridge', playerId: acting, edge: eid })
+              }
+            />
+          );
+        })}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'placeWagon') {
+    // Only the placer chosen by the vote may click. Other players see nothing.
+    const placerId = game.pendingWagonPlacement?.placerId;
+    if (!placerId || placerId !== acting) return null;
+    return (
+      <g className="overlay overlay-edges">
+        {game.board.edgeIds.map((eid) => {
+          if (!canPlaceWagonHelper(game, eid)) return null;
+          return (
+            <EdgeGhost
+              key={eid}
+              eid={eid}
+              variant="road"
+              previewColor={previewColor}
+              isHovered={hoveredEid === eid}
+              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+              onClick={() =>
+                dispatch({ type: 'placeWagon', playerId: acting, edge: eid })
               }
             />
           );

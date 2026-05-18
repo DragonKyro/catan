@@ -31,6 +31,8 @@ const TERRAIN_FILL: Record<string, string> = {
   // Lake = inland water. Slightly darker than the ocean fill so it reads
   // as a distinct body of water and doesn't disappear into the sea ring.
   lake: 'var(--terrain-lake, #2a5d7c)',
+  // Watering hole = dusty oasis. Sandy beige with a tinted center.
+  wateringHole: 'var(--terrain-wateringHole, #b89870)',
 };
 
 export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse, foggy }: Props) {

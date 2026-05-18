@@ -1,11 +1,15 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord } from './types';
 import { WONDERS } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import { generateSeafarersBoard } from './modules/seafarers/board/generator';
 import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
 import { generateTradersBoard } from './modules/traders/board/generator';
 import { buildInitialFishPool } from './modules/traders/fishing/pool';
-import { TRADERS_SCENARIO_FISHING } from './modules/traders/constants';
+import {
+  TRADERS_SCENARIO_FISHING,
+  TRADERS_SCENARIO_MERCHANT_TRAINS,
+  MERCHANT_WAGON_SUPPLY,
+} from './modules/traders/constants';
 import {
   getBaseScenario,
   DEFAULT_BASE_SCENARIO_ID,
@@ -232,6 +236,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let riverEdges: EdgeId[] | undefined;
   let lakeHexId: HexId | undefined;
   let fishingGrounds: FishingGround[] | undefined;
+  let wateringHoleHexId: HexId | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (hasTraders) {
@@ -246,6 +251,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     lakeHexId = result.lakeHexId ?? undefined;
     fishingGrounds =
       result.fishingGrounds.length > 0 ? result.fishingGrounds : undefined;
+    wateringHoleHexId = result.wateringHoleHexId ?? undefined;
   } else if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
     board = result.board;
@@ -394,6 +400,19 @@ export function createGame(opts: CreateGameOptions): GameState {
     robberActive = false;
   }
 
+  // Merchant Trains seeding. The robber enters only on a 7 / Knight; the
+  // 22-token wagon supply starts full; no wagons placed yet.
+  const isMerchantTrains =
+    hasTraders &&
+    settings.tradersScenarioId === TRADERS_SCENARIO_MERCHANT_TRAINS;
+  let wagons: TradeWagon[] | undefined;
+  let wagonSupply: number | undefined;
+  if (isMerchantTrains) {
+    wagons = [];
+    wagonSupply = MERCHANT_WAGON_SUPPLY;
+    robberActive = false;
+  }
+
   return {
     settings,
     rngState: rng,
@@ -436,5 +455,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     fishTokenPool,
     fishTokenDiscard,
     oldBootHolder,
+    wateringHoleHexId,
+    wagons,
+    wagonSupply,
   };
 }

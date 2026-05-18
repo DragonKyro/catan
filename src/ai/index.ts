@@ -7,6 +7,10 @@ import { chooseMainPhaseAction } from './main';
 import { chooseDevCardPlay } from './devcard';
 import { chooseGoldResourcePicks } from './seafarers/gold';
 import { choosePirateMove, preferPirate } from './seafarers/pirate';
+import {
+  trySubmitWagonVote,
+  tryPlaceWagon,
+} from './traders/merchantTrains';
 
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
@@ -95,6 +99,14 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
       return chooseMainPhaseAction(state, playerId, { allowPlayerTrade: false });
     }
     return chooseMainPhaseAction(state, playerId);
+  }
+
+  // T&B Merchant Trains end-of-turn phases.
+  if (state.phase === 'wagonVoting') {
+    return trySubmitWagonVote(state, playerId);
+  }
+  if (state.phase === 'placeWagon') {
+    return tryPlaceWagon(state, playerId);
   }
 
   return null;

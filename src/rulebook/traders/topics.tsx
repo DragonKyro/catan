@@ -263,4 +263,73 @@ export const TRADERS_TOPICS: Topic[] = [
       </>
     ),
   },
+  {
+    id: 'traders-merchant-trains',
+    title: 'Merchant Trains',
+    body: (
+      <>
+        <p>
+          The desert is replaced by a <strong>watering hole</strong> at the
+          centre of the board — the origin of every trade wagon. Whenever
+          you build at least one piece on your turn, you acquire a wagon
+          token. At the end of your turn, all players bid wool and wheat
+          to decide where it lands.
+        </p>
+        <ul>
+          <li>
+            <strong>Acquiring.</strong> Building any number of pieces
+            (road, settlement, city, bridge) on your turn earns you exactly
+            one wagon.
+          </li>
+          <li>
+            <strong>Voting.</strong> Each player commits some wool and/or
+            wheat to a single target edge — or passes. Cards spent are
+            forfeit to the supply.
+          </li>
+          <li>
+            <strong>Resolution.</strong> First, the unique location with
+            the most votes wins. Otherwise, the unique player with the most
+            votes picks the placement. Otherwise, the acquirer (active
+            builder) picks — even if they bid nothing.
+          </li>
+        </ul>
+        <p>
+          Trains start at the watering hole and extend in chains. New
+          wagons must connect either to the watering hole or to a train
+          endpoint (a vertex with exactly one incident wagon). Merchant
+          trains do not branch — once two trains meet at a vertex, it's
+          locked.
+        </p>
+        <p className="rb-muted">
+          Robber starts off the board and enters on the first 7 or Knight.
+          The game ends when someone reaches <strong>12 VP</strong>.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'traders-merchant-scoring',
+    title: 'Merchant Trains scoring',
+    body: (
+      <>
+        <p>
+          Wagons are <strong>neutral</strong> — they have no owner. They
+          score for whoever's road shares the edge:
+        </p>
+        <ul>
+          <li>
+            <strong>Longest Route.</strong> A wagon sharing an edge with
+            your road counts as an extra road on that edge — so a 3-road
+            chain with 2 wagons on it is worth 5 toward Longest Route.
+          </li>
+          <li>
+            <strong>Building bonus.</strong> Every settlement or city sat
+            between two wagons (vertex with ≥ 2 incident wagons) earns
+            {' '}<strong>+1 VP</strong>. Settlements jump from 1 → 2 VP,
+            cities from 2 → 3 VP.
+          </li>
+        </ul>
+      </>
+    ),
+  },
 ];

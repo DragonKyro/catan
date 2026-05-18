@@ -23,6 +23,7 @@ import { MonopolyDialog } from '@/ui/dialogs/MonopolyDialog';
 import { WondersDialog } from '@/ui/dialogs/WondersDialog';
 import { SpendFishDialog } from '@/ui/dialogs/SpendFishDialog';
 import { PassBootDialog } from '@/ui/dialogs/PassBootDialog';
+import { WagonVoteDialog } from '@/ui/dialogs/WagonVoteDialog';
 import { GoldResourceDialog } from '@/ui/dialogs/GoldResourceDialog';
 import { RobberOrPirateDialog } from '@/ui/dialogs/RobberOrPirateDialog';
 import { ImprovementsDialog } from '@/ui/dialogs/ImprovementsDialog';
@@ -70,6 +71,8 @@ export function GameView() {
   const wondersDialog = dialog === 'wonders' ? <WondersDialog /> : null;
   const spendFishDialog = dialog === 'spendFish' ? <SpendFishDialog /> : null;
   const passBootDialog = dialog === 'passBoot' ? <PassBootDialog /> : null;
+  const wagonVoteDialog =
+    game.phase === 'wagonVoting' && !handoffPending ? <WagonVoteDialog /> : null;
   const discardDialog =
     game.phase === 'discard' && !handoffPending ? <DiscardDialog /> : null;
   const goldDialog =
@@ -165,13 +168,14 @@ export function GameView() {
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
             bottom-center of the board, above the hand strip. */}
-        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || wagonVoteDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
             {monopolyDialog}
             {wondersDialog}
             {spendFishDialog}
             {passBootDialog}
+            {wagonVoteDialog}
             {discardDialog}
             {robberDialog}
             {goldDialog}

@@ -1,6 +1,7 @@
 import type { GameState, PlayerId } from '../types';
 import { calculateWealthTilesVp } from '../modules/traders/scoring/wealthTiles';
 import { calculateStrongestPortsVp } from '../modules/traders/scoring/strongestPorts';
+import { calculateMerchantTrainsVp } from '../modules/traders/scoring/merchantTrains';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../modules/citiesAndKnights/constants';
 
 // Cities & Knights — 2 VP per metropolis the player owns (1 each at level 4
@@ -142,6 +143,8 @@ export function calculateVictoryPoints(
   vp += calculateWealthTilesVp(state, playerId);
   // Traders & Barbarians / Strongest Ports variant: +2 for the tile holder.
   vp += calculateStrongestPortsVp(state, playerId);
+  // Traders & Barbarians / Merchant Trains: +1 per building between 2 wagons.
+  vp += calculateMerchantTrainsVp(state, playerId);
   return vp;
 }
 

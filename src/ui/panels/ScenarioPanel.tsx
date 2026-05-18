@@ -42,6 +42,7 @@ export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getStat
     if (state.strongestPorts) return true;
     if (state.fishingGrounds && state.fishingGrounds.length > 0) return true;
     if (state.lakeHexId) return true;
+    if (state.wateringHoleHexId) return true;
   }
   return false;
 }
@@ -325,11 +326,29 @@ function TradersScenarioPanel() {
   const game = useGameStore((s) => s.game)!;
   const isFishing = (game.fishingGrounds?.length ?? 0) > 0 || game.lakeHexId != null;
   const isRivers = (game.riverEdges?.length ?? 0) > 0;
+  const isMerchantTrains = game.wateringHoleHexId != null;
   return (
     <section className="scenario-panel">
       <header className="scenario-panel-header">
         <span className="scenario-panel-title">Traders & Barbarians</span>
       </header>
+      {isMerchantTrains && (
+        <div className="scenario-panel-block">
+          <div className="scenario-panel-block-head">
+            <span>Wagons</span>
+            <span className="scenario-panel-block-sum">
+              {game.wagons?.length ?? 0} placed · {game.wagonSupply ?? 0} in
+              supply
+            </span>
+          </div>
+          <div className="scenario-panel-note">
+            Every build acquires a wagon at the end of your turn. All
+            players bid wool/wheat to steer where it goes. Wagons on the
+            same edge as a road count for that player's Longest Route, and
+            buildings between two wagons earn +1 VP each.
+          </div>
+        </div>
+      )}
       {isRivers && (
         <div className="scenario-panel-block">
           <div className="scenario-panel-block-head">

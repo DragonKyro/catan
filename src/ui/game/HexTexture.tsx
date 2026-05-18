@@ -225,6 +225,43 @@ function Glyph({ terrain }: { terrain: string }) {
           <path d="M-2,0 L-3,-0.8 L-3,0.8 Z" fill="#cfe5ff" />
         </g>
       );
+    case 'wateringHole':
+      // Tiny palm-tuft silhouette: trunk plus three fronds. Reads as
+      // "small oasis" at any orientation.
+      return (
+        <g opacity={0.55}>
+          <line
+            x1={0}
+            y1={2}
+            x2={0}
+            y2={-2}
+            stroke="#5a3010"
+            strokeWidth={0.55}
+            strokeLinecap="round"
+          />
+          <path
+            d="M0,-2 Q-2,-2.6 -3,-1.5"
+            fill="none"
+            stroke="#2f5a2a"
+            strokeWidth={0.5}
+            strokeLinecap="round"
+          />
+          <path
+            d="M0,-2 Q2,-2.6 3,-1.5"
+            fill="none"
+            stroke="#2f5a2a"
+            strokeWidth={0.5}
+            strokeLinecap="round"
+          />
+          <path
+            d="M0,-2 Q0,-3.5 0.6,-3.6"
+            fill="none"
+            stroke="#2f5a2a"
+            strokeWidth={0.5}
+            strokeLinecap="round"
+          />
+        </g>
+      );
     default:
       return null;
   }

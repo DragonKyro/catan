@@ -9,6 +9,10 @@ import type { GameState, PlayerId, VertexId, EdgeId } from '../types';
 // - Edges may not repeat; vertices may repeat (loops are allowed).
 // - Traders & Barbarians: bridges count as roads for Longest Road, so they
 //   are unioned into the path graph here.
+// - T&B Merchant Trains: when a wagon shares an edge with one of your
+//   roads, that edge contributes 2 to the path length instead of 1
+//   (rulebook: "A wagon on the same edge as a road counts as an
+//   additional road for determining the Longest Route").
 export function calculateLongestRoad(state: GameState, playerId: PlayerId): number {
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return 0;
@@ -18,6 +22,10 @@ export function calculateLongestRoad(state: GameState, playerId: PlayerId): numb
     ...(player.bridges ?? []),
   ]);
   if (ownRoads.size === 0) return 0;
+
+  // Edges that carry a "+1" bonus from a wagon co-occupying the same edge.
+  const wagonEdges = new Set<EdgeId>();
+  for (const w of state.wagons ?? []) wagonEdges.add(w.edge);
 
   // Build adjacency: vertex -> [{ edge, other }]
   const adj = new Map<VertexId, Array<{ edge: EdgeId; to: VertexId }>>();
@@ -53,7 +61,12 @@ export function calculateLongestRoad(state: GameState, playerId: PlayerId): numb
     for (const { edge, to } of adj.get(current) ?? []) {
       if (used.has(edge)) continue;
       used.add(edge);
-      dfs(to, depth + 1);
+      // Merchant Trains: traversing an edge with a co-located wagon counts
+      // as 2 segments instead of 1. The wagon doesn't extend the path
+      // graph (only roads/bridges form edges), it just makes each used
+      // road-edge worth more.
+      const step = wagonEdges.has(edge) ? 2 : 1;
+      dfs(to, depth + step);
       used.delete(edge);
     }
   }

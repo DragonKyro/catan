@@ -20,6 +20,7 @@ import { MerchantMarker } from './citiesAndKnights/MerchantMarker';
 import { Bridge } from './traders/Bridge';
 import { RiverEdgeMarker } from './traders/RiverEdgeMarker';
 import { FishingGroundMarker } from './traders/FishingGroundMarker';
+import { Wagon } from './traders/Wagon';
 import './Board.css';
 
 interface Props {
@@ -139,6 +140,14 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
             )),
           )}
         </g>
+
+        {game.wagons && (
+          <g className="wagons">
+            {game.wagons.map((w) => (
+              <Wagon key={w.edge} board={board} edge={w.edge} />
+            ))}
+          </g>
+        )}
 
         <g className="ships">
           {game.players.flatMap((player) =>
