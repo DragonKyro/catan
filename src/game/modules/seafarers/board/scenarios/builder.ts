@@ -5,6 +5,16 @@ export interface ScenarioBlueprint {
   id: string;
   name: string;
   defaultIslandBonusVp: number;
+  defaultVpToWin: number;
+  // Player-count window. `maxPlayers` is implicitly capped at 4 unless a 5-6
+  // layout is supplied below.
+  minPlayers: number;
+  maxPlayers: number;
+  // Optional. Defaults to 'mainIslandOnly' (the standard Seafarers rule:
+  // starting settlements go on the main island, outer islands are won by
+  // expansion). Scenarios that explicitly allow multi-island starts (Four
+  // Islands) override this.
+  startingPlacementZone?: 'mainIslandOnly' | 'anyIsland';
   // 3-4 player layout.
   land: ScenarioHexDef[];
   ports: ScenarioPortDef[];
@@ -44,6 +54,10 @@ export function buildScenario(bp: ScenarioBlueprint): Scenario {
     hexes,
     ports: bp.ports,
     defaultIslandBonusVp: bp.defaultIslandBonusVp,
+    defaultVpToWin: bp.defaultVpToWin,
+    minPlayers: bp.minPlayers,
+    maxPlayers: bp.maxPlayers,
+    startingPlacementZone: bp.startingPlacementZone ?? 'mainIslandOnly',
   };
   if (hexes5_6) scenario.hexes5_6 = hexes5_6;
   if (ports5_6) scenario.ports5_6 = ports5_6;

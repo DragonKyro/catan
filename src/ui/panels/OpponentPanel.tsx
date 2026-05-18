@@ -4,6 +4,7 @@ import { calculateVictoryPoints } from '@/game/scoring/points';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { totalResources } from '@/game/resources';
 import { playerColorVar } from '@/ui/shared/playerColors';
+import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 import './OpponentPanel.css';
 
 // Base game piece limits per player. Engine already enforces these via the
@@ -29,6 +30,7 @@ export function OpponentPanel() {
     .map((id) => game.players.find((p) => p.id === id))
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
   const actingId = getActingPlayerId(game);
+  const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
 
   // Mark "you" so the player can find themselves quickly. In solo mode we
   // call out the device-bound human; online uses the local seat.
@@ -68,7 +70,12 @@ export function OpponentPanel() {
                   <span className={`opp-dot ${onlineStatus}`} />
                 )}
               </span>
-              <span className="opp-vp" title="Visible VP">{visibleVp}+ VP</span>
+              <span
+                className="opp-vp"
+                title={`Visible VP (first to ${game.settings.victoryPointsToWin} wins)`}
+              >
+                {visibleVp}+/{game.settings.victoryPointsToWin} VP
+              </span>
             </div>
             <div className="opp-stats">
               <span title="Resource cards">🂠 {totalResources(p.resources)}</span>
@@ -90,7 +97,7 @@ export function OpponentPanel() {
               <span title={`Roads: ${p.roads.length}/${MAX_ROADS}`}>
                 🛣️ {MAX_ROADS - p.roads.length}
               </span>
-              {p.ships.length > 0 && (
+              {(hasSeafarers || p.ships.length > 0) && (
                 <span title={`Ships: ${p.ships.length}/${MAX_SHIPS}`}>
                   ⛵ {MAX_SHIPS - p.ships.length}
                 </span>

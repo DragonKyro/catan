@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { useGameStore } from '@/store/gameStore';
 import type { PlayerKind } from '@/game/createGame';
@@ -12,13 +12,23 @@ import {
   ExpansionPicker,
   DEFAULT_EXPANSIONS,
   expansionListFrom,
+  activeScenario,
   type ExpansionPickerValue,
 } from './ExpansionPicker';
 import './NewGame.css';
 
-const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3', 'AI 4', 'AI 5'];
-const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai', 'ai', 'ai'];
-const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink'];
+const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3', 'AI 4', 'AI 5', 'AI 6', 'AI 7'];
+const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai', 'ai', 'ai', 'ai', 'ai'];
+const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink', 'teal', 'gold'];
+
+// Recommended VP target: 10 for base / 5-6p, 12 for the unofficial 7-8p
+// extension (a 10-VP game with 8 players ends before everyone gets a turn).
+// Seafarers scenarios override this via their own defaultVpToWin.
+function recommendedVp(numPlayers: number, expansions: ExpansionPickerValue): number {
+  const scenario = activeScenario(expansions);
+  if (scenario) return scenario.defaultVpToWin;
+  return numPlayers >= 7 ? 12 : 10;
+}
 
 interface Props {
   onBack?: () => void;
@@ -30,11 +40,28 @@ export function NewGame({ onBack }: Props = {}) {
   const [types, setTypes] = useState<PlayerKind[]>(DEFAULT_TYPES);
   const [colors, setColors] = useState<PlayerColor[]>(DEFAULT_COLORS);
   const [openPicker, setOpenPicker] = useState<number | null>(null);
-  const [vp, setVp] = useState(10);
+  // null = follow the recommended default for the current player count; a
+  // number means the user explicitly chose this VP. Lets the visible default
+  // track the segmented picker (10 → 12 when crossing into 7-8p) while still
+  // respecting an explicit override.
+  const [vpOverride, setVpOverride] = useState<number | null>(null);
   const [turnTimer, setTurnTimer] = useState(0); // seconds; 0 = off
   const [seed, setSeed] = useState('');
   const [expansions, setExpansions] = useState<ExpansionPickerValue>(DEFAULT_EXPANSIONS);
   const newGame = useGameStore((s) => s.newGame);
+
+  const scenario = activeScenario(expansions);
+  const minPlayers = scenario?.minPlayers ?? 3;
+  const maxPlayers = scenario?.maxPlayers ?? 8;
+  const recommendedVpValue = recommendedVp(numPlayers, expansions);
+  const vp = vpOverride ?? recommendedVpValue;
+
+  // Auto-bump the seat count when the active scenario doesn't support it
+  // (e.g. switching from 6-player base to a 3-4-only Seafarers scenario).
+  useEffect(() => {
+    if (numPlayers < minPlayers) setNumPlayers(minPlayers);
+    else if (numPlayers > maxPlayers) setNumPlayers(maxPlayers);
+  }, [minPlayers, maxPlayers, numPlayers]);
 
   const start = () => {
     const finalSeed = seed ? hashSeed(seed) : Math.floor(Math.random() * 0xffffffff);
@@ -82,16 +109,25 @@ export function NewGame({ onBack }: Props = {}) {
         <label className="newgame-field">
           <span>Players</span>
           <div className="newgame-segmented">
-            {[3, 4, 5, 6].map((n) => (
-              <button
-                key={n}
-                type="button"
-                className={`newgame-seg${numPlayers === n ? ' active' : ''}`}
-                onClick={() => setNumPlayers(n)}
-              >
-                {n}
-              </button>
-            ))}
+            {[3, 4, 5, 6, 7, 8].map((n) => {
+              const disabled = n < minPlayers || n > maxPlayers;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  disabled={disabled}
+                  className={`newgame-seg${numPlayers === n ? ' active' : ''}`}
+                  onClick={() => setNumPlayers(n)}
+                  title={
+                    disabled && scenario
+                      ? `${scenario.name} supports ${minPlayers}-${maxPlayers} players`
+                      : undefined
+                  }
+                >
+                  {n}
+                </button>
+              );
+            })}
           </div>
         </label>
 
@@ -174,13 +210,23 @@ export function NewGame({ onBack }: Props = {}) {
         </div>
 
         <label className="newgame-field">
-          <span>Victory points to win</span>
+          <span>
+            Victory points to win
+            <span className="newgame-vp-hint">
+              {' '}(default: {recommendedVpValue}
+              {scenario ? ` — ${scenario.name} rules` : ''})
+            </span>
+          </span>
           <input
             type="number"
             min={3}
             max={20}
             value={vp}
-            onChange={(e) => setVp(Math.max(3, Math.min(20, Number(e.target.value) || 10)))}
+            onChange={(e) =>
+              setVpOverride(
+                Math.max(3, Math.min(20, Number(e.target.value) || recommendedVpValue)),
+              )
+            }
           />
         </label>
 

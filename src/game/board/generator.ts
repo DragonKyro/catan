@@ -12,7 +12,7 @@ import type {
 import { buildBaseGraph, buildGraphFromCoords, type BaseGraph } from './graph';
 import { shuffle } from '../rng';
 
-export type BoardVariant = '3-4' | '5-6';
+export type BoardVariant = '3-4' | '5-6' | '7-8';
 
 const TERRAIN_DISTRIBUTION_BASE: Terrain[] = [
   'wood', 'wood', 'wood', 'wood',
@@ -55,6 +55,45 @@ const PORT_TYPES_5_6: PortType[] = [
 
 const NUM_PORTS_5_6 = 11;
 
+// 7-8 player extension (unofficial, mirrors what colonist.io supports):
+// 37-hex regular hexagon (radius 3 honeycomb, rows 4-5-6-7-6-5-4), 35
+// number tokens, 13 ports. Terrain: 8 wood, 6 brick, 8 sheep, 7 wheat,
+// 6 ore, 2 desert. Each non-2/12 token has 4 copies (with the high-prob
+// retry loop still ensuring 6s/8s aren't adjacent).
+const TERRAIN_DISTRIBUTION_7_8: Terrain[] = [
+  'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood',
+  'brick', 'brick', 'brick', 'brick', 'brick', 'brick',
+  'sheep', 'sheep', 'sheep', 'sheep', 'sheep', 'sheep', 'sheep', 'sheep',
+  'wheat', 'wheat', 'wheat', 'wheat', 'wheat', 'wheat', 'wheat',
+  'ore', 'ore', 'ore', 'ore', 'ore', 'ore',
+  'desert', 'desert',
+];
+
+// 35 tokens. Three 6s and three 8s — matches the hot-hex density of the
+// 5-6p set so the no-adjacent-6/8 retry loop converges. The "extra" tokens
+// vs 5-6p go to mid-probability rolls (4, 10) plus a duplicate 2/12.
+const NUMBER_TOKENS_7_8 = [
+  2,
+  3, 3, 3, 3,
+  4, 4, 4, 4, 4,
+  5, 5, 5, 5,
+  6, 6, 6,
+  8, 8, 8,
+  9, 9, 9, 9,
+  10, 10, 10, 10, 10,
+  11, 11, 11, 11,
+  12, 12,
+];
+
+// 13 ports: 6 generic, 1 of each resource, plus an extra wheat and ore
+// (the city resources — longer game needs more outlets for them).
+const PORT_TYPES_7_8: PortType[] = [
+  'generic', 'generic', 'generic', 'generic', 'generic', 'generic',
+  'wood', 'brick', 'sheep', 'wheat', 'ore', 'wheat', 'ore',
+];
+
+const NUM_PORTS_7_8 = 13;
+
 // 30-hex symmetric hexagon: rows 3-4-5-6-5-4-3 = 30. Each row's q-range
 // is chosen so the row's cartesian center sits at the same x as every
 // other row (x_center ∝ q_center + r/2 = -0.5 here), giving the board
@@ -76,21 +115,51 @@ function buildCoords5_6(): HexCoord[] {
   return out;
 }
 
-const MAX_NUMBER_PLACEMENT_ATTEMPTS = 200;
+// 37-hex regular hexagon, radius 3 in axial coords: all (q, r) with
+// max(|q|, |r|, |q+r|) ≤ 3. Symmetric across both axes (centered at origin).
+function buildCoords7_8(): HexCoord[] {
+  const out: HexCoord[] = [];
+  const R = 3;
+  for (let r = -R; r <= R; r++) {
+    const qMin = Math.max(-R, -r - R);
+    const qMax = Math.min(R, -r + R);
+    for (let q = qMin; q <= qMax; q++) out.push({ q, r });
+  }
+  return out;
+}
+
+const MAX_NUMBER_PLACEMENT_ATTEMPTS = 500;
 
 export function generateBoard(
   rngState: number,
   variant: BoardVariant = '3-4',
 ): { board: BoardState; rngState: number } {
   const graph =
-    variant === '5-6' ? buildGraphFromCoords(buildCoords5_6()) : buildBaseGraph();
+    variant === '7-8'
+      ? buildGraphFromCoords(buildCoords7_8())
+      : variant === '5-6'
+        ? buildGraphFromCoords(buildCoords5_6())
+        : buildBaseGraph();
   const terrainDistribution =
-    variant === '5-6' ? TERRAIN_DISTRIBUTION_5_6 : TERRAIN_DISTRIBUTION_BASE;
+    variant === '7-8'
+      ? TERRAIN_DISTRIBUTION_7_8
+      : variant === '5-6'
+        ? TERRAIN_DISTRIBUTION_5_6
+        : TERRAIN_DISTRIBUTION_BASE;
   const numberTokensSource =
-    variant === '5-6' ? NUMBER_TOKENS_5_6 : NUMBER_TOKENS_BASE;
+    variant === '7-8'
+      ? NUMBER_TOKENS_7_8
+      : variant === '5-6'
+        ? NUMBER_TOKENS_5_6
+        : NUMBER_TOKENS_BASE;
   const portTypesSource =
-    variant === '5-6' ? PORT_TYPES_5_6 : PORT_TYPES_BASE;
-  const numPorts = variant === '5-6' ? NUM_PORTS_5_6 : NUM_PORTS_BASE;
+    variant === '7-8'
+      ? PORT_TYPES_7_8
+      : variant === '5-6'
+        ? PORT_TYPES_5_6
+        : PORT_TYPES_BASE;
+  const numPorts =
+    variant === '7-8' ? NUM_PORTS_7_8 : variant === '5-6' ? NUM_PORTS_5_6 : NUM_PORTS_BASE;
   let rng = rngState;
 
   // 1. Assign terrains

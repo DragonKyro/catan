@@ -118,7 +118,10 @@ describe('seafarers integration', () => {
   }, 60_000);
 
   it('AI plays a 5-player Seafarers game (5-6 board + SBP)', () => {
-    const final = playSeafarersGame5p('headingForNewShores', 11, 4);
+    // Four Islands is the only scenario whose starting-placement rule
+    // (anyIsland) currently supports 5+ players; the others wait on the
+    // Phase 7 main-island expansion. See scenario maxPlayers.
+    const final = playSeafarersGame5p('fourIslands', 11, 4);
     expect(final.winner).not.toBeNull();
     expect(final.phase).toBe('gameOver');
     // 5-6 player Seafarers uses the larger radius-4 grid (61 hexes).

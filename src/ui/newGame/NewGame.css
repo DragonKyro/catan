@@ -83,6 +83,17 @@
   color: #1a1a1a;
 }
 
+.newgame-seg:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.newgame-vp-hint {
+  color: var(--text-soft);
+  font-size: 0.85em;
+  font-weight: 400;
+}
+
 .newgame-players {
   display: flex;
   flex-direction: column;

@@ -217,8 +217,10 @@ export interface GameState {
   winner: PlayerId | null;
   // Which board layout this game uses. '5-6' = 5-6 player expansion (30 hexes,
   // 11 ports, 28 number tokens, plus Special Build Phase between turns).
+  // '7-8' = unofficial 7-8 player extension (37 hexes, 13 ports, 35 number
+  // tokens, SBP between turns, scaled bank + dev deck, default VP 12).
   // Optional for backwards-compat with snapshots from before the expansion.
-  boardVariant?: '3-4' | '5-6';
+  boardVariant?: '3-4' | '5-6' | '7-8';
   // Set during the Special Build Phase: players queued to take their SBP
   // mini-turn before the next real turn begins. Pinned in player-order
   // starting from the player after `turnHolderIndex`.
@@ -249,7 +251,14 @@ export interface GameState {
   >;
   // Seafarers extension. All optional, only populated when expansion is active.
   pendingPirateMove?: RobberMoveContext;
-  goldChoiceState?: { pending: Record<PlayerId, number> };
+  // `returnTo` records what phase to resume once every pending player has
+  // picked. Defaults to 'main' (the gold-roll case). 'setupRound2' is used
+  // when a gold-adjacent settlement was placed during setup round 2 — after
+  // the pick is made we drop back into setup road placement.
+  goldChoiceState?: {
+    pending: Record<PlayerId, number>;
+    returnTo?: 'main' | 'setupRound2';
+  };
   islandChips?: IslandChip[];
 }
 

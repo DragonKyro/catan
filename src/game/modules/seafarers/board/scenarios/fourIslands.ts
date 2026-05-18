@@ -41,6 +41,10 @@ export const fourIslands = buildScenario({
   id: 'fourIslands',
   name: 'Four Islands',
   defaultIslandBonusVp: 2,
+  defaultVpToWin: 12,
+  minPlayers: 3,
+  maxPlayers: 6,
+  startingPlacementZone: 'anyIsland',
   land: LAND,
   ports: [
     { q: 0, r: -2, direction: 0, type: 'generic' },

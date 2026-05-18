@@ -1,6 +1,6 @@
 import type { GameState, MoveShipAction, EdgeId } from '../../../types';
 import { currentPlayerId, updatePlayer, getPlayer } from '../../../helpers';
-import { canBuildShip } from '../validation/shipPlacement';
+import { canBuildShip, isPirateAdjacent } from '../validation/shipPlacement';
 
 // A ship is "movable" if at least one of its endpoint vertices is an "open
 // end" of the player's ship/road network — i.e. has no other piece of the
@@ -57,6 +57,9 @@ export function handleMoveShip(state: GameState, action: MoveShipAction): GameSt
   if (action.from === action.to) throw new Error('Source and destination must differ');
   if (!isShipMovable(state, action.playerId, action.from)) {
     throw new Error('That ship is not movable (must be an open end of your route)');
+  }
+  if (isPirateAdjacent(state, action.to)) {
+    throw new Error('Cannot move a ship adjacent to the pirate');
   }
 
   // Remove the ship from source first, then check destination validity.

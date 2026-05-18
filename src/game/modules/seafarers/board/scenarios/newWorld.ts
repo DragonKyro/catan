@@ -32,6 +32,9 @@ export const newWorld = buildScenario({
   id: 'newWorld',
   name: 'New World',
   defaultIslandBonusVp: 2,
+  defaultVpToWin: 14,
+  minPlayers: 3,
+  maxPlayers: 4,
   land: LAND,
   ports: [
     { q: -2, r: 0, direction: 4, type: 'generic' },

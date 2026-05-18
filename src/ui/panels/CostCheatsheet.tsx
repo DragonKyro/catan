@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { COSTS, RESOURCES } from '@/game/types';
 import type { Resource, ResourceBank } from '@/game/types';
+import { useGameStore } from '@/store/gameStore';
+import { SEAFARERS_EXPANSION_ID, SHIP_COST } from '@/game/modules/seafarers/constants';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 
 interface Row {
@@ -9,18 +11,24 @@ interface Row {
   cost: Partial<ResourceBank>;
 }
 
-const ROWS: Row[] = [
+const BASE_ROWS: Row[] = [
   { icon: '🛣', label: 'Road', cost: COSTS.road },
   { icon: '🏠', label: 'Settlement', cost: COSTS.settlement },
   { icon: '🏛', label: 'City', cost: COSTS.city },
   { icon: '🃏', label: 'Dev Card', cost: COSTS.devCard },
 ];
 
+const SHIP_ROW: Row = { icon: '⛵', label: 'Ship', cost: SHIP_COST };
+
 interface Props {
   onClose: () => void;
 }
 
 export function CostCheatsheet({ onClose }: Props) {
+  const hasSeafarers = useGameStore((s) =>
+    s.game?.settings.expansions.includes(SEAFARERS_EXPANSION_ID) ?? false,
+  );
+  const rows = hasSeafarers ? [BASE_ROWS[0], SHIP_ROW, ...BASE_ROWS.slice(1)] : BASE_ROWS;
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,7 +52,7 @@ export function CostCheatsheet({ onClose }: Props) {
     <div className="cost-cheatsheet" ref={ref} role="dialog" aria-label="Building costs">
       <div className="cost-cheatsheet-title">Building costs</div>
       <ul className="cost-cheatsheet-list">
-        {ROWS.map(({ icon, label, cost }) => (
+        {rows.map(({ icon, label, cost }) => (
           <li key={label} className="cost-cheatsheet-row">
             <span className="cost-cheatsheet-build">
               <span aria-hidden>{icon}</span> {label}

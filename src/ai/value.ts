@@ -112,7 +112,19 @@ export function vertexScore(
       shoreline += 0.5;
       continue;
     }
+    if (hex.terrain === 'sea') {
+      shoreline += 1;
+      continue;
+    }
     const pips = probabilityDots(hex.numberToken);
+    // Gold hexes pay any resource on roll; valued via the average resource
+    // weight rather than looked up as a fixed resource (since `gold` isn't a
+    // Resource type). Diversity / missing-resource bonuses don't apply
+    // because gold isn't a specific resource and won't fill a single gap.
+    if (hex.terrain === 'gold') {
+      totalPips += pips * terrainWeight('gold');
+      continue;
+    }
     const weight = RESOURCE_WEIGHT[hex.terrain as Resource];
     // Diminishing returns: pips count less if we already have this resource.
     const existingPips = existing[hex.terrain as Resource];

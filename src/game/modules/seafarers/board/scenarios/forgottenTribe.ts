@@ -35,6 +35,9 @@ export const forgottenTribe = buildScenario({
   id: 'forgottenTribe',
   name: 'The Forgotten Tribe',
   defaultIslandBonusVp: 2,
+  defaultVpToWin: 13,
+  minPlayers: 3,
+  maxPlayers: 4,
   land: [...MAIN, ...TRIBE_ISLETS],
   ports: [
     { q: 1, r: -1, direction: 0, type: 'generic' },

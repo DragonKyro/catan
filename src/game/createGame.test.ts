@@ -6,9 +6,12 @@ describe('createGame', () => {
     expect(() => createGame({ playerNames: ['Alice'], seed: 1 })).toThrow();
   });
 
-  it('rejects more than 6 players', () => {
+  it('rejects more than 8 players', () => {
     expect(() =>
-      createGame({ playerNames: ['A', 'B', 'C', 'D', 'E', 'F', 'G'], seed: 1 }),
+      createGame({
+        playerNames: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'],
+        seed: 1,
+      }),
     ).toThrow();
   });
 
@@ -77,5 +80,67 @@ describe('createGame', () => {
       settings: { victoryPointsToWin: 5 },
     });
     expect(state.settings.victoryPointsToWin).toBe(5);
+  });
+
+  describe('7-8 player extension', () => {
+    const names8 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+    it('creates a 7-player game on the 7-8 board variant', () => {
+      const state = createGame({ playerNames: names8.slice(0, 7), seed: 1 });
+      expect(state.players).toHaveLength(7);
+      expect(state.boardVariant).toBe('7-8');
+      expect(Object.keys(state.board.hexes)).toHaveLength(37);
+      const uniqueColors = new Set(state.players.map((p) => p.color));
+      expect(uniqueColors.size).toBe(7);
+    });
+
+    it('creates an 8-player game on the 7-8 board variant', () => {
+      const state = createGame({ playerNames: names8, seed: 1 });
+      expect(state.players).toHaveLength(8);
+      expect(state.boardVariant).toBe('7-8');
+      const uniqueColors = new Set(state.players.map((p) => p.color));
+      expect(uniqueColors.size).toBe(8);
+    });
+
+    it('defaults VP target to 12 for 7-8 players', () => {
+      const seven = createGame({ playerNames: names8.slice(0, 7), seed: 1 });
+      const eight = createGame({ playerNames: names8, seed: 1 });
+      expect(seven.settings.victoryPointsToWin).toBe(12);
+      expect(eight.settings.victoryPointsToWin).toBe(12);
+    });
+
+    it('still respects an explicit victoryPointsToWin override', () => {
+      const state = createGame({
+        playerNames: names8,
+        seed: 1,
+        settings: { victoryPointsToWin: 10 },
+      });
+      expect(state.settings.victoryPointsToWin).toBe(10);
+    });
+
+    it('scales the resource bank to 24 per resource', () => {
+      const state = createGame({ playerNames: names8, seed: 1 });
+      expect(state.bank).toEqual({
+        wood: 24,
+        brick: 24,
+        sheep: 24,
+        wheat: 24,
+        ore: 24,
+      });
+    });
+
+    it('shuffles a 35-card dev deck', () => {
+      const state = createGame({ playerNames: names8, seed: 1 });
+      expect(state.devCardDeck).toHaveLength(35);
+      const counts: Record<string, number> = {};
+      for (const c of state.devCardDeck) counts[c] = (counts[c] ?? 0) + 1;
+      expect(counts).toEqual({
+        knight: 20,
+        roadBuilding: 3,
+        yearOfPlenty: 3,
+        monopoly: 3,
+        victoryPoint: 6,
+      });
+    });
   });
 });

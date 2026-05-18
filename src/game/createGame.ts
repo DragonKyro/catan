@@ -2,10 +2,11 @@ import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardSt
 import { generateBoard } from './board/generator';
 import { generateSeafarersBoard } from './modules/seafarers/board/generator';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
+import { getScenario } from './modules/seafarers/board/scenarios';
 import { shuffle } from './rng';
 import { emptyBank, bankFull } from './resources';
 
-const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink'];
+const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink', 'teal', 'gold'];
 
 const ALL_PLAYER_COLORS: PlayerColor[] = [
   'red',
@@ -20,14 +21,49 @@ const ALL_PLAYER_COLORS: PlayerColor[] = [
   'brown',
 ];
 
-// Base game dev deck (25 cards total).
-const DEV_DECK: DevCardType[] = [
+// Base dev deck (3-4p): 25 cards. 5-6p extension: 34 cards. 7-8p (unofficial):
+// 35 cards — more knights so Largest Army stays competitive when twice as many
+// players are chasing it.
+const DEV_DECK_BASE: DevCardType[] = [
   ...Array<DevCardType>(14).fill('knight'),
   ...Array<DevCardType>(2).fill('roadBuilding'),
   ...Array<DevCardType>(2).fill('yearOfPlenty'),
   ...Array<DevCardType>(2).fill('monopoly'),
   ...Array<DevCardType>(5).fill('victoryPoint'),
 ];
+
+const DEV_DECK_5_6: DevCardType[] = [
+  ...Array<DevCardType>(20).fill('knight'),
+  ...Array<DevCardType>(3).fill('roadBuilding'),
+  ...Array<DevCardType>(3).fill('yearOfPlenty'),
+  ...Array<DevCardType>(3).fill('monopoly'),
+  ...Array<DevCardType>(5).fill('victoryPoint'),
+];
+
+const DEV_DECK_7_8: DevCardType[] = [
+  ...Array<DevCardType>(20).fill('knight'),
+  ...Array<DevCardType>(3).fill('roadBuilding'),
+  ...Array<DevCardType>(3).fill('yearOfPlenty'),
+  ...Array<DevCardType>(3).fill('monopoly'),
+  ...Array<DevCardType>(6).fill('victoryPoint'),
+];
+
+// Resource bank size per resource. 3-4p uses 19 (base game). 5-6p and 7-8p
+// use 24 — the 5-6 extension officially ships 24 of each so larger groups
+// don't starve the bank, and the unofficial 7-8 extension reuses that pool.
+function bankSizeFor(numPlayers: number): number {
+  return numPlayers >= 5 ? 24 : 19;
+}
+
+function devDeckFor(numPlayers: number): DevCardType[] {
+  if (numPlayers >= 7) return DEV_DECK_7_8;
+  if (numPlayers >= 5) return DEV_DECK_5_6;
+  return DEV_DECK_BASE;
+}
+
+function defaultVpFor(numPlayers: number): number {
+  return numPlayers >= 7 ? 12 : 10;
+}
 
 export type PlayerKind = 'human' | 'ai';
 
@@ -43,11 +79,12 @@ export interface CreateGameOptions {
 
 export function createGame(opts: CreateGameOptions): GameState {
   const numPlayers = opts.playerNames.length;
-  if (numPlayers < 2 || numPlayers > 6) {
+  if (numPlayers < 2 || numPlayers > 8) {
     // The engine still tolerates 2 players (used by tests and edge cases),
     // but the official rules and the standard new-game flow require 3-6
     // (with 5-6 using the larger expansion map + Special Build Phase).
-    throw new Error(`Catan supports 2-6 players, got ${numPlayers}`);
+    // 7-8 is an unofficial extension (37-hex board, scaled bank + dev deck).
+    throw new Error(`Catan supports 2-8 players, got ${numPlayers}`);
   }
   if (opts.playerTypes && opts.playerTypes.length !== numPlayers) {
     throw new Error('playerTypes length must match playerNames');
@@ -67,17 +104,29 @@ export function createGame(opts: CreateGameOptions): GameState {
     }
   }
 
+  // VP target precedence: explicit override > scenario default > player-count
+  // default. Scenarios ship with rulebook-correct VP targets (e.g. Heading for
+  // New Shores = 13) so picking one without an override does the right thing.
+  const expansions = opts.settings?.expansions ?? [];
+  const scenarioId = opts.settings?.scenarioId;
+  const scenarioVp =
+    expansions.includes(SEAFARERS_EXPANSION_ID) && scenarioId
+      ? getScenario(scenarioId).defaultVpToWin
+      : undefined;
   const settings: GameSettings = {
     numPlayers,
-    victoryPointsToWin: opts.settings?.victoryPointsToWin ?? 10,
-    expansions: opts.settings?.expansions ?? [],
-    scenarioId: opts.settings?.scenarioId,
+    victoryPointsToWin:
+      opts.settings?.victoryPointsToWin ?? scenarioVp ?? defaultVpFor(numPlayers),
+    expansions,
+    scenarioId,
+    turnTimerSec: opts.settings?.turnTimerSec,
   };
 
   let rng = opts.seed >>> 0;
   let board: BoardState;
   let islandChips: IslandChip[] | undefined;
-  const boardVariant: '3-4' | '5-6' = numPlayers >= 5 ? '5-6' : '3-4';
+  const boardVariant: '3-4' | '5-6' | '7-8' =
+    numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
     board = result.board;
@@ -90,7 +139,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   }
 
   let devCardDeck: DevCardType[];
-  [devCardDeck, rng] = shuffle(rng, DEV_DECK);
+  [devCardDeck, rng] = shuffle(rng, devDeckFor(numPlayers));
 
   const players: Player[] = opts.playerNames.map((name, i) => ({
     id: `p${i}`,
@@ -135,7 +184,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     currentPlayerIndex: 0,
     phase: 'setupRound1',
     setupState: { step: 'settlement', lastPlacedSettlement: null },
-    bank: bankFull(19),
+    bank: bankFull(bankSizeFor(numPlayers)),
     devCardDeck,
     hasRolledThisTurn: false,
     hasPlayedDevCardThisTurn: false,

@@ -21,7 +21,7 @@ export function LobbyScreen() {
   const [copied, setCopied] = useState(false);
 
   const isHost = role === 'host';
-  const canStart = lobby.seats.length >= 3 && lobby.seats.length <= 4;
+  const canStart = lobby.seats.length >= 3 && lobby.seats.length <= 8;
 
   const copyCode = async () => {
     if (!roomCode) return;
@@ -54,7 +54,7 @@ export function LobbyScreen() {
         )}
 
         <div className="lobby-seats">
-          <h3>Players ({lobby.seats.length} / 4)</h3>
+          <h3>Players ({lobby.seats.length} / 8)</h3>
           {lobby.seats.map((seat, i) => {
             const online = seat.isAI || (seat.uuid !== null && onlineUuids.has(seat.uuid));
             return (
@@ -78,7 +78,7 @@ export function LobbyScreen() {
               </div>
             );
           })}
-          {isHost && lobby.seats.length < 4 && (
+          {isHost && lobby.seats.length < 8 && (
             <Button size="sm" onClick={hostAddAISeat}>+ Add AI seat</Button>
           )}
         </div>

@@ -1,4 +1,5 @@
 import type { GameState, PlayerId, VertexId, EdgeId } from './types';
+import { canStartOnIsland } from './modules/seafarers/validation/setupPlacement';
 
 // Placement predicates — shared between action handlers (for validation) and
 // the UI (for highlighting legal placements). Pure functions, no mutation.
@@ -76,7 +77,8 @@ export function canConnectRoad(
 
 // During setup: a settlement can go anywhere unoccupied that respects the
 // distance rule. There's no road-connectivity requirement (you place your
-// road right after).
+// road right after). Seafarers scenarios additionally restrict round-1 and
+// round-2 starts to the main island unless the scenario opts out.
 export function canPlaceInitialSettlement(
   state: GameState,
   vertexId: VertexId,
@@ -91,6 +93,7 @@ export function canPlaceInitialSettlement(
       if (p.settlements.includes(n) || p.cities.includes(n)) return false;
     }
   }
+  if (!canStartOnIsland(state, vertexId)) return false;
   return true;
 }
 

@@ -34,6 +34,9 @@ export const throughTheDesert = buildScenario({
   id: 'throughTheDesert',
   name: 'Through the Desert',
   defaultIslandBonusVp: 2,
+  defaultVpToWin: 12,
+  minPlayers: 3,
+  maxPlayers: 4,
   land: LAND,
   ports: [
     { q: -3, r: 1, direction: 4, type: 'generic' },

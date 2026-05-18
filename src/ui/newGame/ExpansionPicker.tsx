@@ -1,4 +1,8 @@
-import { SCENARIO_ORDER, DEFAULT_SCENARIO_ID } from '@/game/modules/seafarers/board/scenarios';
+import {
+  SCENARIO_ORDER,
+  DEFAULT_SCENARIO_ID,
+  getScenario,
+} from '@/game/modules/seafarers/board/scenarios';
 import './ExpansionPicker.css';
 
 export interface ExpansionPickerValue {
@@ -7,6 +11,13 @@ export interface ExpansionPickerValue {
 }
 
 export const SEAFARERS_SCENARIOS = SCENARIO_ORDER;
+
+// Resolve the effective scenario for the given picker state, or null if
+// Seafarers is off. Used by the lobby/new-game screens to read scenario
+// constraints (min/max players, default VP).
+export function activeScenario(v: ExpansionPickerValue) {
+  return v.seafarers ? getScenario(v.scenarioId) : null;
+}
 
 export const DEFAULT_EXPANSIONS: ExpansionPickerValue = {
   seafarers: false,

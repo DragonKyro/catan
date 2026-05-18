@@ -4,13 +4,16 @@ import { classifyEdge } from '../board/edges';
 // A ship can be placed on edge E for player P if:
 //   1. E is a coastal or sea edge (never a pure land edge).
 //   2. E is currently empty (no road or ship from any player).
-//   3. At least one endpoint vertex V of E provides a "launch point":
+//   3. E is not adjacent to the pirate's hex (the pirate blocks new ships
+//      from being built on coastal/sea edges of its hex — the same
+//      restriction also gates ship moves whose destination uses this fn).
+//   4. At least one endpoint vertex V of E provides a "launch point":
 //        a) P has a settlement or city at V, OR
 //        b) P has an adjacent ship that uses V, OR
 //        c) P has an adjacent road that uses V AND V is a "coastal" vertex
 //           (touches at least one sea hex). Roads can launch ships only
 //           where they meet the sea.
-//   4. The launch vertex must not be blocked by an opponent's settlement
+//   5. The launch vertex must not be blocked by an opponent's settlement
 //      or city (the standard "broken road" rule applies to ships too —
 //      you can't extend through an enemy piece).
 export function canBuildShip(
@@ -21,6 +24,7 @@ export function canBuildShip(
   const edge = state.board.edges[edgeId];
   if (!edge) return false;
   if (classifyEdge(state.board, edgeId) === 'land') return false;
+  if (isPirateAdjacent(state, edgeId)) return false;
 
   for (const p of state.players) {
     if (p.roads.includes(edgeId)) return false;
@@ -87,4 +91,15 @@ function vertexIsCoastal(state: GameState, vertexId: string): boolean {
   const v = state.board.vertices[vertexId];
   if (!v) return false;
   return v.hexes.some((h) => state.board.hexes[h]?.terrain === 'sea');
+}
+
+// True when this edge sits on the pirate's hex — i.e. one of the six sides
+// of the pirate's sea hex. Existing ships on these edges are fine; the rule
+// only restricts NEW placement (build) and movement INTO the zone.
+export function isPirateAdjacent(state: GameState, edgeId: EdgeId): boolean {
+  const pirateHex = state.board.pirateHex;
+  if (!pirateHex) return false;
+  const edge = state.board.edges[edgeId];
+  if (!edge) return false;
+  return edge.hexes.includes(pirateHex);
 }

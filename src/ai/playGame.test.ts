@@ -14,10 +14,9 @@ function playFullGame(
   vpTarget = 4,
   playerCount = 3,
 ): GameState {
-  const names = ['AI-A', 'AI-B', 'AI-C', 'AI-D', 'AI-E', 'AI-F'].slice(
-    0,
-    playerCount,
-  );
+  const names = [
+    'AI-A', 'AI-B', 'AI-C', 'AI-D', 'AI-E', 'AI-F', 'AI-G', 'AI-H',
+  ].slice(0, playerCount);
   let s = createGame({
     playerNames: names,
     playerTypes: names.map(() => 'ai' as const),
@@ -87,4 +86,11 @@ describe('AI plays a full game', () => {
     expect(final.winner).not.toBeNull();
     expect(final.phase).toBe('gameOver');
   }, 60_000);
+
+  it('8-player game terminates (exercises 7-8p extension + SBP)', () => {
+    const final = playFullGame(42, 4, 8);
+    expect(final.winner).not.toBeNull();
+    expect(final.phase).toBe('gameOver');
+    expect(final.boardVariant).toBe('7-8');
+  }, 120_000);
 });

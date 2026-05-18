@@ -35,6 +35,9 @@ export const clothForCatan = buildScenario({
   id: 'clothForCatan',
   name: 'Cloth for Catan',
   defaultIslandBonusVp: 3,
+  defaultVpToWin: 14,
+  minPlayers: 3,
+  maxPlayers: 4,
   land: [...MAIN, ...CLOTH_ISLANDS],
   ports: [
     { q: 1, r: -1, direction: 0, type: 'generic' },

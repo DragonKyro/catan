@@ -37,4 +37,17 @@ export interface Scenario {
   // increased to 4 so larger layouts fit.
   hexes5_6?: ScenarioHexDef[];
   ports5_6?: ScenarioPortDef[];
+  // Official VP target for this scenario (used as the default in lobby UI;
+  // still overridable by the host).
+  defaultVpToWin: number;
+  // Player-count window the scenario supports. The lobby uses these to gray
+  // out unsupported seat counts. When `hexes5_6` is absent the scenario is
+  // effectively capped at 4.
+  minPlayers: number;
+  maxPlayers: number;
+  // Where players may put their two starting settlements. Most scenarios
+  // restrict setup to the main island and reward expansion onto outer
+  // islands during the game; a few (e.g. Four Islands) explicitly allow
+  // starting on any land hex.
+  startingPlacementZone: 'mainIslandOnly' | 'anyIsland';
 }

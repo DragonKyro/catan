@@ -38,6 +38,9 @@ export const wondersOfCatan = buildScenario({
   id: 'wondersOfCatan',
   name: 'The Wonders of Catan',
   defaultIslandBonusVp: 2,
+  defaultVpToWin: 10,
+  minPlayers: 3,
+  maxPlayers: 4,
   land: LAND,
   ports: [
     { q: 1, r: -1, direction: 4, type: 'generic' },

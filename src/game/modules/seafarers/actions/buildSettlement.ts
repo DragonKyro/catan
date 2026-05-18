@@ -5,6 +5,7 @@ import type {
 } from '../../../types';
 import { handleBuildSettlement as baseBuildSettlement } from '../../../actions/build';
 import { handlePlaceInitialSettlement as basePlaceInitialSettlement } from '../../../actions/setup';
+import { validateStartingIsland } from '../validation/setupPlacement';
 
 // After a settlement is placed, check whether it sits on an outer-island
 // chip that hasn't been claimed yet. Award the chip to this player.
@@ -43,10 +44,45 @@ export function handleBuildSettlementWithChips(
   return claimIslandChips(next, action.playerId, action.vertex);
 }
 
+// Count gold hexes adjacent to a vertex. Each one grants one "any resource"
+// pick at the chooseGoldResource phase.
+function goldPicksFor(state: GameState, vertexId: string): number {
+  const vertex = state.board.vertices[vertexId];
+  if (!vertex) return 0;
+  let n = 0;
+  for (const hexId of vertex.hexes) {
+    if (state.board.hexes[hexId]?.terrain === 'gold') n++;
+  }
+  return n;
+}
+
 export function handlePlaceInitialSettlementWithChips(
   state: GameState,
   action: PlaceInitialSettlementAction,
 ): GameState {
-  const next = basePlaceInitialSettlement(state, action);
-  return claimIslandChips(next, action.playerId, action.vertex);
+  validateStartingIsland(state, action.vertex);
+  const wasRound2 = state.phase === 'setupRound2';
+  let next = basePlaceInitialSettlement(state, action);
+  next = claimIslandChips(next, action.playerId, action.vertex);
+
+  // Round-2 only: a settlement adjacent to gold grants one free pick per gold
+  // hex (rulebook: "If you place your second settlement adjacent to a Gold
+  // hex you receive one resource of your choice"). Route through the same
+  // chooseGoldResource phase used by gold-roll production, with a returnTo
+  // marker so the handler knows to drop the player back into setup road
+  // placement when picks resolve.
+  if (wasRound2) {
+    const picks = goldPicksFor(state, action.vertex);
+    if (picks > 0) {
+      next = {
+        ...next,
+        phase: 'chooseGoldResource',
+        goldChoiceState: {
+          pending: { [action.playerId]: picks },
+          returnTo: 'setupRound2',
+        },
+      };
+    }
+  }
+  return next;
 }

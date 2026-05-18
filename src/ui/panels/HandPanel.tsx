@@ -106,7 +106,12 @@ export function HandPanel() {
             <span className="hand-flag" title="Largest Army (+2 VP)">⚔️</span>
           )}
         </h3>
-        <span className="hand-vp" title="Victory points">{vp} VP</span>
+        <span
+          className="hand-vp"
+          title={`Victory points (first to ${game.settings.victoryPointsToWin} wins)`}
+        >
+          {vp}/{game.settings.victoryPointsToWin} VP
+        </span>
       </header>
 
       <div className="hand-resources">

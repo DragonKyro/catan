@@ -37,6 +37,9 @@ export const pirateIslands = buildScenario({
   id: 'pirateIslands',
   name: 'Pirate Islands',
   defaultIslandBonusVp: 2,
+  defaultVpToWin: 10,
+  minPlayers: 3,
+  maxPlayers: 4,
   land: [...MAIN, ...PIRATE_ISLES],
   ports: [
     // (-3, 0) has no coastal edge at 3p (its open side is outside radius 3).
