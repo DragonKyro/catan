@@ -23,7 +23,7 @@ export function handleBuyDevCard(
   state: GameState,
   action: BuyDevCardAction,
 ): GameState {
-  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+  if (state.phase !== 'main') {
     throw new Error(`Cannot buy dev card in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');

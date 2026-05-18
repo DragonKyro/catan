@@ -1,42 +1,31 @@
-import type { GameState, EndTurnAction, PlayerId } from '../types';
-import { currentPlayerId, updatePlayer } from '../helpers';
+import type { GameState, EndTurnAction } from '../types';
+import { currentPlayerId, updatePlayer, usesPairedRules, isPairedPlayer2, pairedPlayer2Index } from '../helpers';
 
-// 5-6p Special Build Phase: each non-turn-holder gets a chance to build
-// (road / settlement / city / dev card / bank trade) between turns.
-// Player trades and dev-card plays are not allowed (per official rules).
-const SBP_MIN_PLAYERS = 5;
+// 5+ player paired-player rule (2022 revision of the CATAN 5-6 Player
+// Extension): each "paired turn" has two acting seats — Player 1 (the
+// dice-roller, full trade rights) and Player 2 (third seat to Player 1's
+// left, bank trades only, may build and play 1 dev card). Both markers
+// shift one seat to the left at the end of the paired turn.
+//
+// 3-4 player games do not use paired rules; endTurn simply advances to
+// the next seat. The branch lives in `handleEndTurn` below.
 
 export function handleEndTurn(state: GameState, action: EndTurnAction): GameState {
-  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+  if (state.phase !== 'main') {
     throw new Error(`Cannot end turn in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
 
-  // === SBP mini-turn end: pop the next SBP player, or hand off to the real
-  //     next turn if the queue is now empty. ===
-  if (state.phase === 'specialBuildPhase') {
-    const queue = state.sbpQueue ?? [];
-    const remaining = queue.slice(1);
-    if (remaining.length > 0) {
-      const nextSbp = remaining[0]!;
-      const nextIdx = state.playerOrder.indexOf(nextSbp);
-      return {
-        ...state,
-        currentPlayerIndex: nextIdx,
-        sbpQueue: remaining,
-      };
-    }
-    // Queue empty — advance to the next real turn.
-    return advanceToNextRealTurn(state);
-  }
-
-  // === Main turn end. ===
+  // The dice must have been rolled this paired turn (rolled by Player 1).
+  // For 3-4p this is checked against the active player; for 5+p the same
+  // flag is set when P1 rolled, so it still gates correctly when P2 ends
+  // their portion of the same paired turn.
   if (!state.hasRolledThisTurn) throw new Error('Must roll dice before ending turn');
 
   // Cycle the active player's bought-this-turn dev cards to playable.
   let next: GameState = state;
-  const me = state.playerOrder[state.currentPlayerIndex]!;
-  next = updatePlayer(next, me, (p) => {
+  const acting = state.playerOrder[state.currentPlayerIndex]!;
+  next = updatePlayer(next, acting, (p) => {
     if (p.devCards.boughtThisTurn.length === 0) return p;
     return {
       ...p,
@@ -48,28 +37,50 @@ export function handleEndTurn(state: GameState, action: EndTurnAction): GameStat
     };
   });
 
-  // 5-6p: drop into Special Build Phase before advancing to next real turn.
-  if (state.players.length >= SBP_MIN_PLAYERS) {
-    const turnHolder = state.turnHolderIndex ?? state.currentPlayerIndex;
-    const queue = buildSbpQueue(state.playerOrder, turnHolder);
-    if (queue.length > 0) {
-      const firstSbp = queue[0]!;
-      const firstIdx = state.playerOrder.indexOf(firstSbp);
+  // 5+ player paired-player flow.
+  if (usesPairedRules(state)) {
+    if (!isPairedPlayer2(state)) {
+      // Player 1's part just ended → hand the paired turn to Player 2.
+      const p2Idx = pairedPlayer2Index(state)!;
       return {
         ...next,
-        phase: 'specialBuildPhase',
-        sbpQueue: queue,
-        turnHolderIndex: turnHolder,
-        currentPlayerIndex: firstIdx,
-        // Clear pendingTrade so a stale offer doesn't bleed into SBP.
+        currentPlayerIndex: p2Idx,
+        // hasRolledThisTurn stays true — P2 doesn't roll, they inherit P1's roll.
+        // pendingTrade clears so any stale P1 offer doesn't bleed into P2's turn
+        // (P2 can't propose/accept player trades anyway).
         pendingTrade: undefined,
-        // Per-turn flags stay frozen for the real turn holder; they'll be
-        // reset when we eventually advance to the next real turn.
+        // hasPlayedDevCardThisTurn resets — the limit is "1 dev card per player
+        // per paired turn", and P2's allowance is independent of P1's.
+        hasPlayedDevCardThisTurn: false,
+        // tradesProposedThisTurn doesn't apply to P2 (they can't propose);
+        // leaving it at P1's count is fine.
       };
     }
+    // Player 2's part just ended → advance both markers and start a new paired turn.
+    return advanceToNextPairedTurn(next);
   }
 
+  // 3-4 player flow: advance directly to the next seat.
   return advanceToNextRealTurn(next);
+}
+
+function advanceToNextPairedTurn(state: GameState): GameState {
+  const currentP1 = state.turnHolderIndex ?? state.currentPlayerIndex;
+  const nextP1 = (currentP1 + 1) % state.players.length;
+  return {
+    ...state,
+    players: state.players.map((p) => ({ ...p, movedShipThisTurn: false })),
+    currentPlayerIndex: nextP1,
+    turnHolderIndex: nextP1,
+    phase: 'rollOrPlayKnight',
+    hasRolledThisTurn: false,
+    hasPlayedDevCardThisTurn: false,
+    tradesProposedThisTurn: 0,
+    lastRoll: null,
+    pendingTrade: undefined,
+    tradeResourcesThisTurn: undefined,
+    proposedTradesThisTurn: undefined,
+  };
 }
 
 function advanceToNextRealTurn(state: GameState): GameState {
@@ -77,9 +88,7 @@ function advanceToNextRealTurn(state: GameState): GameState {
   const nextIdx = (currentTurnHolder + 1) % state.players.length;
   return {
     ...state,
-    // Seafarers: clear per-turn movedShipThisTurn flag on all players. Doing
-    // it on all players (not just the outgoing one) is defensive — the flag
-    // should already be false for everyone else.
+    // Seafarers: clear per-turn movedShipThisTurn flag on all players.
     players: state.players.map((p) => ({ ...p, movedShipThisTurn: false })),
     currentPlayerIndex: nextIdx,
     turnHolderIndex: nextIdx,
@@ -89,20 +98,7 @@ function advanceToNextRealTurn(state: GameState): GameState {
     tradesProposedThisTurn: 0,
     lastRoll: null,
     pendingTrade: undefined,
-    sbpQueue: undefined,
-    // Fresh turn → fresh trade history. The AI uses this to detect
-    // reverse trades within a turn; resetting at the turn boundary is
-    // the right semantics.
     tradeResourcesThisTurn: undefined,
     proposedTradesThisTurn: undefined,
   };
-}
-
-function buildSbpQueue(playerOrder: PlayerId[], turnHolderIdx: number): PlayerId[] {
-  const n = playerOrder.length;
-  const out: PlayerId[] = [];
-  for (let i = 1; i < n; i++) {
-    out.push(playerOrder[(turnHolderIdx + i) % n]!);
-  }
-  return out;
 }

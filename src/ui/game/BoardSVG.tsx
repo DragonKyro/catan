@@ -71,22 +71,27 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill="url(#ocean-waves)" />
 
         <g className="hexes">
-          {board.hexIds.map((hid) => {
-            const hex = board.hexes[hid]!;
-            const isRobbed = board.robberHex === hid;
-            const shouldPulse =
-              pulseToken != null && hex.numberToken === pulseToken && !isRobbed;
-            return (
-              <HexTile
-                key={hid}
-                board={board}
-                hex={hex}
-                isRobberOnHex={isRobbed}
-                clickable={false}
-                pulse={shouldPulse}
-              />
-            );
-          })}
+          {(() => {
+            const foggySet = new Set(game.unrevealedFogHexes ?? []);
+            return board.hexIds.map((hid) => {
+              const hex = board.hexes[hid]!;
+              const isRobbed = board.robberHex === hid;
+              const isFoggy = foggySet.has(hid);
+              const shouldPulse =
+                pulseToken != null && hex.numberToken === pulseToken && !isRobbed && !isFoggy;
+              return (
+                <HexTile
+                  key={hid}
+                  board={board}
+                  hex={hex}
+                  isRobberOnHex={isRobbed}
+                  clickable={false}
+                  pulse={shouldPulse}
+                  foggy={isFoggy}
+                />
+              );
+            });
+          })()}
         </g>
 
         <g className="ports">

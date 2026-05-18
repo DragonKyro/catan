@@ -8,6 +8,7 @@ import { handleBuildSettlement as baseBuildSettlement } from '../../../actions/b
 import { handlePlaceInitialSettlement as basePlaceInitialSettlement } from '../../../actions/setup';
 import { updatePlayer } from '../../../helpers';
 import { validateStartingIsland } from '../validation/setupPlacement';
+import { revealAdjacentFog } from './fog';
 
 // After a settlement is placed, check whether it sits on an outer-island
 // chip that hasn't been claimed yet. Award the chip to this player.
@@ -45,6 +46,8 @@ export function handleBuildSettlementWithChips(
   let next = baseBuildSettlement(state, action);
   next = claimIslandChips(next, action.playerId, action.vertex);
   next = claimTribeTokens(next, action.playerId, action.vertex);
+  const adj = next.board.vertices[action.vertex]?.hexes ?? [];
+  next = revealAdjacentFog(next, adj, action.playerId);
   return next;
 }
 
@@ -132,15 +135,25 @@ export function handlePlaceInitialSettlementWithChips(
   if (wasRound2) {
     const picks = goldPicksFor(state, action.vertex);
     if (picks > 0) {
+      const existing = next.goldChoiceState?.pending[action.playerId] ?? 0;
       next = {
         ...next,
         phase: 'chooseGoldResource',
         goldChoiceState: {
-          pending: { [action.playerId]: picks },
+          pending: {
+            ...(next.goldChoiceState?.pending ?? {}),
+            [action.playerId]: existing + picks,
+          },
           returnTo: 'setupRound2',
         },
       };
     }
   }
+
+  // Fog reveal runs after the gold-adjacency check so any fog hex that
+  // turned out to be gold stacks into the same pending count (the helper
+  // honours existing goldChoiceState).
+  const adj = next.board.vertices[action.vertex]?.hexes ?? [];
+  next = revealAdjacentFog(next, adj, action.playerId);
   return next;
 }

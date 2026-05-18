@@ -3,6 +3,7 @@ import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { totalResources } from '@/game/resources';
+import { pairedPlayer2Index, usesPairedRules } from '@/game/helpers';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 import './OpponentPanel.css';
@@ -31,6 +32,16 @@ export function OpponentPanel() {
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
   const actingId = getActingPlayerId(game);
   const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
+
+  // 5+ player paired-player rule: identify Player 1 (the dice-roller) and
+  // Player 2 (third seat to P1's left) for the current paired turn so we
+  // can mark them in the panel. Returns null in 3-4p games.
+  const paired = usesPairedRules(game)
+    ? {
+        p1: game.playerOrder[game.turnHolderIndex ?? game.currentPlayerIndex]!,
+        p2: game.playerOrder[pairedPlayer2Index(game)!]!,
+      }
+    : null;
 
   // Mark "you" so the player can find themselves quickly. In solo mode we
   // call out the device-bound human; online uses the local seat.
@@ -66,6 +77,12 @@ export function OpponentPanel() {
                 {p.name}
                 {p.id === localId && <span className="opp-tag">YOU</span>}
                 {p.isAI && <span className="opp-tag">AI</span>}
+                {paired && p.id === paired.p1 && (
+                  <span className="opp-tag" title="Player 1 — rolls dice, full trade rights">P1</span>
+                )}
+                {paired && p.id === paired.p2 && (
+                  <span className="opp-tag" title="Player 2 — paired turn, bank trades only">P2</span>
+                )}
                 {onlineStatus !== 'na' && (
                   <span className={`opp-dot ${onlineStatus}`} />
                 )}

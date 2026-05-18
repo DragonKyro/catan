@@ -1,0 +1,127 @@
+.wonders-dialog-intro {
+  margin-top: 0;
+  color: var(--text-soft);
+  font-size: 0.9em;
+}
+
+.wonders-dialog-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wonders-dialog-row {
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wonders-dialog-row.is-claimed {
+  border-color: var(--accent);
+}
+
+.wonders-dialog-row.is-complete {
+  opacity: 0.75;
+}
+
+.wonders-dialog-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.wonders-dialog-name {
+  font-weight: 700;
+  font-size: 1.02em;
+}
+
+.wonders-dialog-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85em;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.wonders-dialog-progress.is-complete {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.wonders-dialog-pip {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+}
+
+.wonders-dialog-pip.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.wonders-dialog-row-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.85em;
+  color: var(--text-soft);
+}
+
+.wonders-dialog-prereq {
+  white-space: nowrap;
+}
+
+.wonders-dialog-cost {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.wonders-dialog-cost-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wonders-dialog-row-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.wonders-dialog-claimer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+}
+
+.wonders-dialog-claimer-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid #00000040;
+}
+
+.wonders-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}

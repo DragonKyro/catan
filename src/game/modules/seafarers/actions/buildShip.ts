@@ -3,9 +3,10 @@ import { currentPlayerId, updatePlayer, getPlayer } from '../../../helpers';
 import { canAfford, subtractResources, addResources } from '../../../resources';
 import { SHIP_COST, MAX_SHIPS } from '../constants';
 import { canBuildShip } from '../validation/shipPlacement';
+import { revealAdjacentFog } from './fog';
 
 export function handleBuildShip(state: GameState, action: BuildShipAction): GameState {
-  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+  if (state.phase !== 'main') {
     throw new Error(`Cannot build ship in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
@@ -22,5 +23,7 @@ export function handleBuildShip(state: GameState, action: BuildShipAction): Game
     resources: subtractResources(p.resources, SHIP_COST),
   }));
   next = { ...next, bank: addResources(next.bank, SHIP_COST) };
+  const adj = next.board.edges[action.edge]?.hexes ?? [];
+  next = revealAdjacentFog(next, adj, action.playerId);
   return next;
 }

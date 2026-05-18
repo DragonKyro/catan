@@ -25,6 +25,19 @@ export function calculateTribeTokenVp(state: GameState, playerId: PlayerId): num
   return sum;
 }
 
+// Wonders of Catan: one VP per built level of any wonder this player is
+// building. Visible. Completion (level === maxLevel) ALSO triggers an
+// instant-win check in the buildWonder handler — this function just
+// accounts for partial progress.
+export function calculateWonderVp(state: GameState, playerId: PlayerId): number {
+  if (!state.wonders) return 0;
+  let sum = 0;
+  for (const w of state.wonders) {
+    if (w.builtBy === playerId) sum += w.level;
+  }
+  return sum;
+}
+
 // Total victory points for a player.
 // `includeHidden` controls whether held VP dev cards are counted (true at
 // win-check time and for the player themselves; false when displaying to
@@ -46,6 +59,8 @@ export function calculateVictoryPoints(
   vp += calculateIslandChipVp(state, playerId);
   // Seafarers / Forgotten Tribe: visible VP tokens from settled tribe hexes.
   vp += calculateTribeTokenVp(state, playerId);
+  // Seafarers / Wonders of Catan: 1 VP per built wonder level.
+  vp += calculateWonderVp(state, playerId);
   return vp;
 }
 

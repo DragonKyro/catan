@@ -1,6 +1,7 @@
 import type { GameState, MoveShipAction, EdgeId } from '../../../types';
 import { currentPlayerId, updatePlayer, getPlayer } from '../../../helpers';
 import { canBuildShip, isPirateAdjacent } from '../validation/shipPlacement';
+import { revealAdjacentFog } from './fog';
 
 // A ship is "movable" if at least one of its endpoint vertices is an "open
 // end" of the player's ship/road network — i.e. has no other piece of the
@@ -48,7 +49,7 @@ function vertexBlockedByOpponent(
 }
 
 export function handleMoveShip(state: GameState, action: MoveShipAction): GameState {
-  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+  if (state.phase !== 'main') {
     throw new Error(`Cannot move ship in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
@@ -77,9 +78,12 @@ export function handleMoveShip(state: GameState, action: MoveShipAction): GameSt
     throw new Error('Invalid ship move destination');
   }
 
-  return updatePlayer(withoutSource, action.playerId, (p) => ({
+  let next = updatePlayer(withoutSource, action.playerId, (p) => ({
     ...p,
     ships: [...p.ships, action.to],
     movedShipThisTurn: true,
   }));
+  const adj = next.board.edges[action.to]?.hexes ?? [];
+  next = revealAdjacentFog(next, adj, action.playerId);
+  return next;
 }

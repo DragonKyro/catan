@@ -15,7 +15,7 @@ const MAX_CITIES = 4;
 const MAX_ROADS = 15;
 
 export function handleBuildRoad(state: GameState, action: BuildRoadAction): GameState {
-  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+  if (state.phase !== 'main') {
     throw new Error(`Cannot build road in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
@@ -44,7 +44,7 @@ export function handleBuildSettlement(
   state: GameState,
   action: BuildSettlementAction,
 ): GameState {
-  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+  if (state.phase !== 'main') {
     throw new Error(`Cannot build settlement in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
@@ -72,7 +72,7 @@ export function handleBuildSettlement(
 }
 
 export function handleBuildCity(state: GameState, action: BuildCityAction): GameState {
-  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+  if (state.phase !== 'main') {
     throw new Error(`Cannot build city in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');

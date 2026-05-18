@@ -41,6 +41,12 @@ export const pirateIslands = buildScenario({
   defaultVpToWin5_6: 13,
   minPlayers: 3,
   maxPlayers: 4,
+  // Fleet sits on a sea hex between the main island and the pirate isles.
+  // Players sail ships east to reach it; combat starts once any player
+  // has a ship adjacent. Defeating the fleet awards +2 VP to whoever
+  // lands the killing blow.
+  pirateFleet: { q: 1, r: 0, strength: 4 },
+  pirateFleet5_6: { q: 1, r: 0, strength: 5 },
   land: [...MAIN, ...PIRATE_ISLES],
   ports: [
     // (-3, 0) has no coastal edge at 3p (its open side is outside radius 3).

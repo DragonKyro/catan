@@ -149,7 +149,6 @@ export interface Player {
 export type GamePhase =
   | 'setupRound1'
   | 'setupRound2'
-  | 'specialBuildPhase'
   | 'rollOrPlayKnight'
   | 'discard'
   | 'moveRobber'
@@ -221,19 +220,18 @@ export interface GameState {
   lastRoll: { dice: [number, number]; total: number; player: PlayerId } | null;
   winner: PlayerId | null;
   // Which board layout this game uses. '5-6' = 5-6 player expansion (30 hexes,
-  // 11 ports, 28 number tokens, plus Special Build Phase between turns).
-  // '7-8' = unofficial 7-8 player extension (37 hexes, 13 ports, 35 number
-  // tokens, SBP between turns, scaled bank + dev deck, default VP 12).
+  // 11 ports, 28 number tokens). '7-8' = unofficial 7-8 player extension
+  // (37 hexes, 13 ports, 35 number tokens, scaled bank + dev deck). Both
+  // 5+ player layouts use the 2022 paired-player turn rule.
   // Optional for backwards-compat with snapshots from before the expansion.
   boardVariant?: '3-4' | '5-6' | '7-8';
-  // Set during the Special Build Phase: players queued to take their SBP
-  // mini-turn before the next real turn begins. Pinned in player-order
-  // starting from the player after `turnHolderIndex`.
-  sbpQueue?: PlayerId[];
-  // Index into `playerOrder` of the player whose main turn this is.
-  // During SBP this stays pinned while `currentPlayerIndex` rotates through
-  // `sbpQueue`. Win-checks key off this so an SBP-builder can't win
-  // mid-build (official rule: you can only win on your own turn).
+  // 5+ player paired-player rule: index of Player 1 (the dice-roller and full
+  // trader) within `playerOrder`. Player 2 is derived as
+  // `(turnHolderIndex + 3) % players.length`. During a paired turn,
+  // `currentPlayerIndex` rotates between the two — equal to turnHolderIndex
+  // when Player 1 is acting, equal to Player 2's index when Player 2 is acting.
+  // Optional only for backwards-compat with snapshots that pre-date it;
+  // 5+ player games always set it.
   turnHolderIndex?: number;
   // Per-player log of which resources they've given/received via TRADES
   // (bank trades + accepted player trades) during the current real turn.
@@ -271,6 +269,28 @@ export interface GameState {
   // (see TribeTokenType). Tokens stay on the board in `claimedBy` form so
   // the UI can render who got what.
   tribeTokens?: TribeToken[];
+  // Seafarers / Fog Island: hexes that start hidden under fog. Removed
+  // from this list as players build settlements / roads / ships adjacent
+  // to them. Empty / undefined when no fog is active. The terrain on the
+  // hex itself is still set; we just gate the UI on this list and grant
+  // the reveal bonus at the moment of unveiling.
+  unrevealedFogHexes?: HexId[];
+  // Seafarers / Wonders of Catan: one entry per wonder defined for the
+  // scenario. `builtBy` is null until a player builds the first level,
+  // then locked to that player for the rest of the game (only one
+  // builder per wonder). `level` increments to the wonder's max; on
+  // reaching max the game ends with that player as winner.
+  wonders?: WonderState[];
+  // Seafarers / Pirate Islands: enemy fleet anchored at a sea hex.
+  // Players attack it with ships; when strength hits 0 the fleet is
+  // defeated and the player who landed the final blow gets a bonus VP.
+  // The fleet is independent of the regular `board.pirateHex` (the
+  // movable pirate token); both can coexist on the board.
+  pirateFleet?: PirateFleet;
+  // Per-turn flag: has the current player already attacked the fleet
+  // this turn? Caps combat to one attack per turn so each player gets
+  // a roughly proportional shot at the killing blow. Cleared on endTurn.
+  attackedPirateThisTurn?: boolean;
 }
 
 export interface IslandChip {
@@ -285,6 +305,33 @@ export interface TribeToken {
   hexId: HexId;
   type: TribeTokenType;
   claimedBy: PlayerId | null;
+}
+
+export type WonderId =
+  | 'greatWall'
+  | 'greatBridge'
+  | 'hangingGardens'
+  | 'cathedral'
+  | 'tradeOffice';
+
+export interface WonderState {
+  id: WonderId;
+  // Player who first started this wonder. Only they can keep building it;
+  // other players are locked out once it's claimed.
+  builtBy: PlayerId | null;
+  // 0 = not started, increments by 1 per built level up to the wonder's
+  // max (defined in the wonder catalogue alongside cost and prereq).
+  level: number;
+}
+
+export interface PirateFleet {
+  hexId: HexId;
+  // Remaining strength. Each attack drops this by 1; 0 means defeated.
+  strength: number;
+  maxStrength: number;
+  // Player who landed the killing blow (strength → 0). Awarded a +2 VP
+  // bonus on top of standard scoring.
+  defeatedBy: PlayerId | null;
 }
 
 // ============================================================================
@@ -431,6 +478,15 @@ export interface ChooseGoldResourceAction extends ActionBase {
   resources: Resource[];
 }
 
+export interface BuildWonderAction extends ActionBase {
+  type: 'buildWonder';
+  wonderId: WonderId;
+}
+
+export interface AttackPirateFleetAction extends ActionBase {
+  type: 'attackPirateFleet';
+}
+
 export type Action =
   | PlaceInitialSettlementAction
   | PlaceInitialRoadAction
@@ -457,7 +513,9 @@ export type Action =
   | ChooseRobberAction
   | ChoosePirateAction
   | MovePirateAction
-  | ChooseGoldResourceAction;
+  | ChooseGoldResourceAction
+  | BuildWonderAction
+  | AttackPirateFleetAction;
 
 export type ActionType = Action['type'];
 

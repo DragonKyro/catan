@@ -30,6 +30,13 @@ export interface ScenarioBlueprint {
   // Optional. Forgotten Tribe token placements.
   tribeTokens?: ScenarioTribeTokenDef[];
   tribeTokens5_6?: ScenarioTribeTokenDef[];
+  // Optional. Fog Island hex coordinates (hidden at start, revealed on
+  // adjacent build).
+  fogHexes?: { q: number; r: number }[];
+  fogHexes5_6?: { q: number; r: number }[];
+  // Optional. Pirate Islands fleet anchor + initial strength.
+  pirateFleet?: { q: number; r: number; strength: number };
+  pirateFleet5_6?: { q: number; r: number; strength: number };
   // 3-4 player layout.
   land: ScenarioHexDef[];
   ports: ScenarioPortDef[];
@@ -80,5 +87,9 @@ export function buildScenario(bp: ScenarioBlueprint): Scenario {
   if (bp.desertIsBoundary) scenario.desertIsBoundary = true;
   if (bp.tribeTokens) scenario.tribeTokens = bp.tribeTokens;
   if (bp.tribeTokens5_6) scenario.tribeTokens5_6 = bp.tribeTokens5_6;
+  if (bp.fogHexes) scenario.fogHexes = bp.fogHexes;
+  if (bp.fogHexes5_6) scenario.fogHexes5_6 = bp.fogHexes5_6;
+  if (bp.pirateFleet) scenario.pirateFleet = bp.pirateFleet;
+  if (bp.pirateFleet5_6) scenario.pirateFleet5_6 = bp.pirateFleet5_6;
   return scenario;
 }

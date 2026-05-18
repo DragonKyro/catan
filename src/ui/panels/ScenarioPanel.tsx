@@ -1,6 +1,7 @@
 import { useGameStore } from '@/store/gameStore';
 import { getScenario } from '@/game/modules/seafarers/board/scenarios';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
+import { WONDERS } from '@/game/modules/seafarers/wonders/catalogue';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import type { TribeTokenType } from '@/game/types';
 import './ScenarioPanel.css';
@@ -28,7 +29,23 @@ export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getStat
   if (!state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) return false;
   if (state.islandChips && state.islandChips.length > 0) return true;
   if (state.tribeTokens && state.tribeTokens.length > 0) return true;
+  if (fogTotal(state) > 0) return true;
+  if (state.wonders && state.wonders.length > 0) return true;
   return false;
+}
+
+// Total number of fog hexes this scenario started with. We derive it from
+// the scenario definition (because state.unrevealedFogHexes shrinks as
+// the game proceeds — we need the original count to show "X/N revealed").
+function fogTotal(
+  state: ReturnType<typeof useGameStore.getState>['game'],
+): number {
+  if (!state) return 0;
+  if (!state.settings.scenarioId) return 0;
+  const sc = getScenario(state.settings.scenarioId);
+  const useLarge = state.players.length >= 5;
+  const defs = useLarge && sc.fogHexes5_6 ? sc.fogHexes5_6 : sc.fogHexes;
+  return defs?.length ?? 0;
 }
 
 export function ScenarioPanel() {
@@ -91,6 +108,71 @@ export function ScenarioPanel() {
                     </>
                   ) : (
                     <span className="scenario-panel-chip-name unclaimed">unclaimed</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {(() => {
+        const total = fogTotal(game);
+        if (total === 0) return null;
+        const unrevealed = game.unrevealedFogHexes?.length ?? 0;
+        const revealed = total - unrevealed;
+        return (
+          <div className="scenario-panel-block">
+            <div className="scenario-panel-block-head">
+              <span>Fog</span>
+              <span className="scenario-panel-block-sum">
+                {revealed}/{total} revealed
+              </span>
+            </div>
+            <div className="scenario-panel-note">
+              Build a settlement, road, or ship adjacent to a fog hex to reveal it
+              and earn the resource shown (gold gives a free pick).
+            </div>
+          </div>
+        );
+      })()}
+
+      {game.wonders && game.wonders.length > 0 && (
+        <div className="scenario-panel-block">
+          <div className="scenario-panel-block-head">
+            <span>Wonders</span>
+            <span className="scenario-panel-block-sum">
+              {game.wonders.filter((w) => w.level > 0).length}/{game.wonders.length} started
+            </span>
+          </div>
+          <ul className="scenario-panel-chips">
+            {game.wonders.map((w) => {
+              const def = WONDERS.find((d) => d.id === w.id);
+              if (!def) return null;
+              const claimer = w.builtBy
+                ? game.players.find((p) => p.id === w.builtBy)
+                : null;
+              return (
+                <li
+                  key={w.id}
+                  className={`scenario-panel-chip${claimer ? ' is-claimed' : ''}`}
+                  title={`${def.prereqLabel} · level ${w.level}/${def.maxLevel}`}
+                >
+                  <span className="scenario-panel-chip-vp">
+                    {w.level}/{def.maxLevel}
+                  </span>
+                  <span className="scenario-panel-chip-type">{def.name}</span>
+                  {claimer ? (
+                    <>
+                      <span
+                        className="scenario-panel-chip-swatch"
+                        style={{ background: playerColorVar(claimer.color) }}
+                        aria-hidden
+                      />
+                      <span className="scenario-panel-chip-name">{claimer.name}</span>
+                    </>
+                  ) : (
+                    <span className="scenario-panel-chip-name unclaimed">open</span>
                   )}
                 </li>
               );

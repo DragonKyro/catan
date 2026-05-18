@@ -45,7 +45,8 @@ export type DialogName =
   | 'bankTrade'
   | 'playerTrade'
   | 'yearOfPlenty'
-  | 'monopoly';
+  | 'monopoly'
+  | 'wonders';
 
 interface AppStore {
   game: GameState | null;

@@ -20,6 +20,7 @@ import { DiscardDialog } from '@/ui/dialogs/DiscardDialog';
 import { RobberStealDialog } from '@/ui/dialogs/RobberStealDialog';
 import { YearOfPlentyDialog } from '@/ui/dialogs/YearOfPlentyDialog';
 import { MonopolyDialog } from '@/ui/dialogs/MonopolyDialog';
+import { WondersDialog } from '@/ui/dialogs/WondersDialog';
 import { GoldResourceDialog } from '@/ui/dialogs/GoldResourceDialog';
 import { RobberOrPirateDialog } from '@/ui/dialogs/RobberOrPirateDialog';
 import { GameOverDialog } from '@/ui/dialogs/GameOverDialog';
@@ -61,6 +62,7 @@ export function GameView() {
   const yearOfPlentyDialog =
     dialog === 'yearOfPlenty' ? <YearOfPlentyDialog /> : null;
   const monopolyDialog = dialog === 'monopoly' ? <MonopolyDialog /> : null;
+  const wondersDialog = dialog === 'wonders' ? <WondersDialog /> : null;
   const discardDialog =
     game.phase === 'discard' && !handoffPending ? <DiscardDialog /> : null;
   const goldDialog =
@@ -151,10 +153,11 @@ export function GameView() {
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
             bottom-center of the board, above the hand strip. */}
-        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog) && (
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
             {monopolyDialog}
+            {wondersDialog}
             {discardDialog}
             {robberDialog}
             {goldDialog}

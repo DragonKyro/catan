@@ -87,7 +87,7 @@ describe('AI plays a full game', () => {
     expect(final.phase).toBe('gameOver');
   }, 60_000);
 
-  it('8-player game terminates (exercises 7-8p extension + SBP)', () => {
+  it('8-player game terminates (exercises 7-8p extension + paired-player rule)', () => {
     const final = playFullGame(42, 4, 8);
     expect(final.winner).not.toBeNull();
     expect(final.phase).toBe('gameOver');

@@ -98,8 +98,9 @@ export type LogEntry =
   | {
       id: number;
       kind: 'turnBegins';
-      // Player whose main turn just started. SBP mini-turns (5-6p
-      // expansion) are intentionally NOT logged here — only revolutions
+      // Player whose main turn just started. Player 2 hand-offs within a
+      // paired turn (5+p) are intentionally NOT logged here — only full
+      // revolutions
       // of true turn-holders.
       player: PlayerId;
       // 1-based turn number across the whole game (every player change
@@ -225,8 +226,9 @@ interface LogStore {
   // game; cleared on reset.
   actions: Action[];
   // 1-based count of real turns logged. Incremented each time `record`
-  // detects a transition into the rollOrPlayKnight phase. SBP mini-turns
-  // don't enter rollOrPlayKnight, so they're correctly excluded.
+  // detects a transition into the rollOrPlayKnight phase. The paired-player
+  // rule (5+p) routes P1→P2 within 'main', so the P1→P2 transition is
+  // correctly excluded — only the P2→next-P1 transition fires this.
   turnNumber: number;
   // Per-player cumulative trade stats — paired with timeline snapshots so
   // the end-game graph can show trade count and net resource flow over time.
@@ -550,8 +552,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // Turn detection: one "turn" = one full revolution of the table.
     // We bump the turn counter only when the active turn-holder wraps
     // back to playerOrder[0] (or on the very first rollOrPlayKnight,
-    // which kicks off turn 1). SBP mini-turns never enter
-    // rollOrPlayKnight, so they don't trigger this either way.
+    // which kicks off turn 1). For 5+ players the paired-player rule
+    // means two seats act per paired turn, but only the second endTurn
+    // advances `turnHolderIndex` — so this transition fires once per
+    // paired turn, same as a 3-4p turn.
     let newTurnNumber: number | null = null;
     if (
       after.phase === 'rollOrPlayKnight' &&
@@ -559,7 +563,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     ) {
       const turnHolderIdx = after.turnHolderIndex ?? after.currentPlayerIndex;
       const isRevolutionStart =
-        turnHolderIdx === 0 && (get().turnNumber === 0 || before.phase === 'main' || before.phase === 'specialBuildPhase' || before.phase === 'setupRound2');
+        turnHolderIdx === 0 && (get().turnNumber === 0 || before.phase === 'main' || before.phase === 'setupRound2');
       if (isRevolutionStart) {
         newTurnNumber = get().turnNumber + 1;
         append.push({

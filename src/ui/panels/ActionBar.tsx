@@ -4,6 +4,7 @@ import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { Button } from '@/ui/shared/Button';
 import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
+import { isPairedPlayer2 } from '@/game/helpers';
 import { SHIP_COST, MAX_SHIPS } from '@/game/modules/seafarers/constants';
 import './ActionBar.css';
 
@@ -93,7 +94,7 @@ export function ActionBar() {
     );
   }
 
-  if (phase === 'main' || phase === 'specialBuildPhase') {
+  if (phase === 'main') {
     const inMode = uiMode.kind !== 'idle';
     const cancel = () => setMode({ kind: 'idle' });
     if (inMode) {
@@ -107,7 +108,10 @@ export function ActionBar() {
         </div>,
       );
     }
-    const sbp = phase === 'specialBuildPhase';
+    // 5+ player paired-player rule: when the acting seat is Player 2,
+    // the trade button collapses to a bank-only label and we suppress the
+    // player-trade dialog entry point. P2 can still bank-trade.
+    const pairedP2 = isPairedPlayer2(game);
     return wrap(
       <div className="actionbar">
         <Button
@@ -160,10 +164,13 @@ export function ActionBar() {
         >
           🃏 Dev Card
         </Button>
-        {sbp ? (
-          <div className="actionbar-slot actionbar-sbp-tag" title="Special Build Phase — build between turns. No player trades or dev card plays.">
-            🛠 Build
-          </div>
+        {pairedP2 ? (
+          <Button
+            onClick={() => openDialog('bankTrade')}
+            title="Paired-turn Player 2 — bank trades only (no player trades)"
+          >
+            🏦 Bank trade
+          </Button>
         ) : (
           <Button
             onClick={() => openDialog('playerTrade')}
@@ -173,13 +180,21 @@ export function ActionBar() {
             🤝 Trade
           </Button>
         )}
+        {game.wonders && game.wonders.length > 0 && (
+          <Button
+            onClick={() => openDialog('wonders')}
+            title="Build a wonder — finish one to win"
+          >
+            🏛️ Wonder
+          </Button>
+        )}
         <div className="actionbar-slot actionbar-slot-end">
           <Button
             variant="primary"
             fullWidth
             onClick={() => dispatch({ type: 'endTurn', playerId: acting })}
           >
-            {sbp ? 'End build ▸' : 'End turn ▸'}
+            End turn ▸
           </Button>
         </div>
       </div>,

@@ -72,4 +72,14 @@ export interface Scenario {
   // board is generated.
   tribeTokens?: ScenarioTribeTokenDef[];
   tribeTokens5_6?: ScenarioTribeTokenDef[];
+  // Fog Island: coordinates of hexes that start under fog. Revealed (and
+  // removed from `state.unrevealedFogHexes`) when a settlement / road /
+  // ship is built adjacent to them.
+  fogHexes?: { q: number; r: number }[];
+  fogHexes5_6?: { q: number; r: number }[];
+  // Pirate Islands: starting fleet anchor + strength. The fleet sits on
+  // this sea hex; players attack it via the `attackPirateFleet` action
+  // and the +2 VP defeat bonus goes to whoever lands the killing blow.
+  pirateFleet?: { q: number; r: number; strength: number };
+  pirateFleet5_6?: { q: number; r: number; strength: number };
 }

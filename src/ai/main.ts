@@ -26,9 +26,11 @@ const ROAD_TARGET_THRESHOLD_LR = 1.5;
 const LR_CLAIM_LENGTH = 5;
 
 export interface MainPhaseOptions {
-  // Whether the AI may play a dev card this step. Off during SBP.
+  // Whether the AI may play a dev card this step. Defaults to true. Both
+  // Player 1 and Player 2 may play one dev card per paired turn.
   allowDevCardPlay?: boolean;
-  // Whether the AI may propose a player-to-player trade. Off during SBP.
+  // Whether the AI may propose a player-to-player trade. Defaults to true.
+  // Turned off when the AI is acting as paired-rule Player 2.
   allowPlayerTrade?: boolean;
 }
 

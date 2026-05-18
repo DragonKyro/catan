@@ -12,6 +12,10 @@ interface Props {
   // hex isn't currently robbed — used to play a brief production-pulse
   // animation when the dice land.
   pulse?: boolean;
+  // Seafarers / Fog Island: hex is currently under fog. We hide the
+  // terrain motif and number token, and overlay a fog cloud. The polygon
+  // itself stays at the hex's terrain color so the layout doesn't shift.
+  foggy?: boolean;
 }
 
 const TERRAIN_FILL: Record<string, string> = {
@@ -25,10 +29,43 @@ const TERRAIN_FILL: Record<string, string> = {
   gold: 'var(--terrain-gold)',
 };
 
-export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse }: Props) {
+export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse, foggy }: Props) {
   const points = hexPolygonPoints(board, hex.id);
   const isHot = hex.numberToken === 6 || hex.numberToken === 8;
   const pips = probabilityDots(hex.numberToken);
+
+  if (foggy) {
+    return (
+      <g
+        className={`hex hex-fog${clickable ? ' hex-clickable' : ''}`}
+        onClick={clickable ? onClick : undefined}
+      >
+        <polygon
+          points={points}
+          fill="#7a8696"
+          stroke="#1a1a1a40"
+          strokeWidth={1.5}
+        />
+        {/* Cloud silhouette — three overlapping puffs centred on the hex.
+            The "?" mark hints that the terrain is unknown until revealed. */}
+        <g transform={`translate(${hex.center.x}, ${hex.center.y})`} opacity={0.85}>
+          <circle cx={-12} cy={2} r={10} fill="#e8edf2" />
+          <circle cx={0} cy={-4} r={12} fill="#e8edf2" />
+          <circle cx={12} cy={2} r={10} fill="#e8edf2" />
+          <text
+            textAnchor="middle"
+            dominantBaseline="central"
+            y={1}
+            fontSize={18}
+            fontWeight={700}
+            fill="#3d4a5a"
+          >
+            ?
+          </text>
+        </g>
+      </g>
+    );
+  }
 
   return (
     <g

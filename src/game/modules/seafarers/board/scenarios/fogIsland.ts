@@ -33,6 +33,13 @@ const EXTRA_5_6: ScenarioHexDef[] = [
   { q: -1, r: -2, terrain: 'sheep', token: 11 },
 ];
 
+// Each fog-island hex starts hidden under fog. Revealed when a player
+// builds a settlement, road, or ship adjacent to it — they then receive
+// 1 of the revealed resource (gold goes through chooseGoldResource;
+// desert gives nothing).
+const FOG_COORDS = FOG_ISLAND.map((h) => ({ q: h.q, r: h.r }));
+const FOG_COORDS_5_6 = [...FOG_COORDS, ...EXTRA_5_6.map((h) => ({ q: h.q, r: h.r }))];
+
 export const fogIsland = buildScenario({
   id: 'fogIsland',
   name: 'Fog Island',
@@ -41,6 +48,8 @@ export const fogIsland = buildScenario({
   defaultVpToWin5_6: 13,
   minPlayers: 3,
   maxPlayers: 4,
+  fogHexes: FOG_COORDS,
+  fogHexes5_6: FOG_COORDS_5_6,
   land: [...STARTING, ...FOG_ISLAND],
   ports: [
     { q: 0, r: -1, direction: 5, type: 'generic' },

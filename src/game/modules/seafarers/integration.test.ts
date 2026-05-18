@@ -117,7 +117,7 @@ describe('seafarers integration', () => {
     expect(final.phase).toBe('gameOver');
   }, 60_000);
 
-  it('AI plays a 5-player Seafarers game (5-6 board + SBP)', () => {
+  it('AI plays a 5-player Seafarers game (5-6 board + paired-player rule)', () => {
     // Four Islands is the only scenario whose starting-placement rule
     // (anyIsland) currently supports 5+ players; the others wait on the
     // Phase 7 main-island expansion. See scenario maxPlayers.

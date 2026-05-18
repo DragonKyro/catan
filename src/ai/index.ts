@@ -1,4 +1,5 @@
 import type { Action, GameState, PlayerId } from '@/game/types';
+import { isPairedPlayer2 } from '@/game/helpers';
 import { chooseSetupSettlement, chooseSetupRoad } from './setup';
 import { chooseRobberMove } from './robber';
 import { chooseDiscard } from './discard';
@@ -87,16 +88,13 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
   }
 
   if (state.phase === 'main') {
+    // 5+ player paired-player rule: Player 2 may only trade with the supply
+    // (no player trades), but is otherwise allowed to build, buy + play dev
+    // cards, and bank trade.
+    if (isPairedPlayer2(state)) {
+      return chooseMainPhaseAction(state, playerId, { allowPlayerTrade: false });
+    }
     return chooseMainPhaseAction(state, playerId);
-  }
-
-  if (state.phase === 'specialBuildPhase') {
-    // SBP allows build / buy dev card / bank trade only — no dev card play,
-    // no player-to-player trades.
-    return chooseMainPhaseAction(state, playerId, {
-      allowDevCardPlay: false,
-      allowPlayerTrade: false,
-    });
   }
 
   return null;

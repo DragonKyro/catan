@@ -5,7 +5,8 @@
       "Bash(npm run *)",
       "Bash(npx vitest *)",
       "Bash(node -e ' *)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(where pdftoppm *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\klui\\.knowledge\\projects\\c--Users-klui-Desktop-Kyle-P-catan\\memory"

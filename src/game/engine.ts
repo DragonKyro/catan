@@ -59,18 +59,17 @@ function recomputeDerived(state: GameState): GameState {
 
   let next: GameState = { ...state, players, longestRoad, largestArmy };
 
-  // Win check — only mid-game / main phases, and only for the turn holder.
-  // During Special Build Phase the acting player can earn VP but cannot win
-  // (official rule: you can only win on your own turn). We key off
-  // turnHolderIndex when present so SBP-builders are excluded from the check.
+  // Win check — only mid-game / main phases, and only the acting seat can win.
+  // For 5+ player paired-player rules the acting seat is whichever of
+  // Player 1 / Player 2 is currently `currentPlayerIndex`, so this naturally
+  // gives Player 1 the simultaneous-10 tiebreak: P1's actions are processed
+  // first, so the game is already 'gameOver' before P2 takes their part.
   if (
     next.phase !== 'setupRound1' &&
     next.phase !== 'setupRound2' &&
-    next.phase !== 'specialBuildPhase' &&
     next.phase !== 'gameOver'
   ) {
-    const idx = next.turnHolderIndex ?? next.currentPlayerIndex;
-    const currentId = next.playerOrder[idx]!;
+    const currentId = next.playerOrder[next.currentPlayerIndex]!;
     const vp = calculateVictoryPoints(next, currentId, true);
     if (vp >= next.settings.victoryPointsToWin) {
       next = { ...next, winner: currentId, phase: 'gameOver' };

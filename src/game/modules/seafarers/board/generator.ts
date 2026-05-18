@@ -4,7 +4,7 @@ import type {
   HexId,
   Port,
 } from '../../../types';
-import type { IslandChip, TribeToken } from '../../../types';
+import type { IslandChip, PirateFleet, TribeToken } from '../../../types';
 import { buildGraphFromCoords, type BaseGraph } from '../../../board/graph';
 import { getScenario } from './scenarios';
 import { identifyIslands } from './islands';
@@ -14,6 +14,7 @@ export interface SeafarersBoardResult {
   rngState: number;
   islandChips: IslandChip[];
   tribeTokens: TribeToken[];
+  unrevealedFogHexes: HexId[];
 }
 
 // Build a Seafarers BoardState from a scenario id. When `numPlayers >= 5`
@@ -105,7 +106,18 @@ export function generateSeafarersBoard(
     tribeTokens.push({ hexId, type: def.type, claimedBy: null });
   }
 
-  return { board: partialBoard, rngState, islandChips, tribeTokens };
+  // Fog Island: collect the starting fog set. Coords that aren't actually
+  // on the generated board are quietly dropped (matches tribeToken handling).
+  const fogDefs = useLarge && scenario.fogHexes5_6
+    ? scenario.fogHexes5_6
+    : scenario.fogHexes ?? [];
+  const unrevealedFogHexes: HexId[] = [];
+  for (const def of fogDefs) {
+    const hexId = `${def.q},${def.r}`;
+    if (partialBoard.hexes[hexId]) unrevealedFogHexes.push(hexId);
+  }
+
+  return { board: partialBoard, rngState, islandChips, tribeTokens, unrevealedFogHexes };
 }
 
 function hexCenter(
