@@ -2,11 +2,13 @@ import type { TradersScenario } from './types';
 import { riversOfCatan } from './riversOfCatan';
 import { fishingOnCatan } from './fishingOnCatan';
 import { merchantTrains } from './merchantTrains';
+import { barbarianAttack } from './barbarianAttack';
 
 const TRADERS_SCENARIO_LIST: TradersScenario[] = [
   riversOfCatan,
   fishingOnCatan,
   merchantTrains,
+  barbarianAttack,
 ];
 
 export const TRADERS_SCENARIOS: Record<string, TradersScenario> = Object.fromEntries(

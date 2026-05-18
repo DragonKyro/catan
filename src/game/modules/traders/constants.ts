@@ -6,6 +6,7 @@ export const TRADERS_EXPANSION_ID = 'traders';
 export const TRADERS_SCENARIO_RIVERS = 'riversOfCatan';
 export const TRADERS_SCENARIO_FISHING = 'fishingOnCatan';
 export const TRADERS_SCENARIO_MERCHANT_TRAINS = 'merchantTrains';
+export const TRADERS_SCENARIO_BARBARIAN_ATTACK = 'barbarianAttack';
 
 // Merchant Trains: rulebook ships 22 wagon tokens in a shared neutral
 // supply. Each successful `placeWagon` action draws one.
@@ -62,3 +63,15 @@ export const STRONGEST_PORTS_VP = 2;
 // Wealthiest / Poor Catanian VP swings.
 export const WEALTHIEST_CATANIAN_VP = 1;
 export const POOR_CATANIAN_VP = -2;
+
+// Barbarian Attack defaults.
+export const BARBARIAN_ATTACK_DEFAULT_VP = 12;
+// Shared supply of defender knights. 18 = 6 per max player; finite to keep
+// scarcity bite even if everyone hires aggressively.
+export const BARBARIAN_KNIGHT_SUPPLY = 18;
+// Length of each barbarian path including the castle hex as the final
+// index. So with 4 hexes, position 0 = farthest, position 3 = at the
+// castle (combat tick).
+export const BARBARIAN_PATH_LENGTH = 4;
+// Default strength every barbarian group hits the castle with.
+export const BARBARIAN_BASE_STRENGTH = 4;

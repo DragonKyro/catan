@@ -33,6 +33,20 @@ export interface FishingGroundDef {
   token: number;
 }
 
+// Barbarian Attack: declarative castle entry. `castle` is the hex hosting
+// the castle (a fixed-terrain 'castle' position in the layout); `pathStart`
+// is the outer sea hex where the barbarian group spawns. The generator
+// walks from `pathStart` toward `castle` along hex-adjacency to derive the
+// concrete `barbarianPath`.
+export interface BarbarianCastleDef {
+  id: string;
+  castle: { q: number; r: number };
+  pathStart: { q: number; r: number };
+  // Override the default barbarian strength on this castle. Defaults to
+  // `BARBARIAN_BASE_STRENGTH` when omitted.
+  strength?: number;
+}
+
 export interface TradersScenario {
   id: string;
   name: string;
@@ -62,4 +76,8 @@ export interface TradersScenario {
   // this field surfaces the coord to the generator for `state.wateringHoleHexId`.
   // Falls back to scanning hexes with `terrain === 'wateringHole'`.
   wateringHole?: { q: number; r: number };
+  // Barbarian Attack: three (or however many) castle definitions. Resolved
+  // into `state.castles` by the generator. The layout must pin each castle
+  // position via `fixedTerrain: 'castle'`.
+  castles?: BarbarianCastleDef[];
 }

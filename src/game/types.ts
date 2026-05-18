@@ -146,7 +146,15 @@ export interface ProgressCardHand {
 // Terrain & hexes
 // ============================================================================
 
-export type Terrain = Resource | 'desert' | 'sea' | 'gold' | 'swamp' | 'lake' | 'wateringHole';
+export type Terrain =
+  | Resource
+  | 'desert'
+  | 'sea'
+  | 'gold'
+  | 'swamp'
+  | 'lake'
+  | 'wateringHole'
+  | 'castle';
 
 export interface HexCoord {
   q: number;
@@ -235,7 +243,11 @@ export type PlayerColor =
   | 'teal'
   | 'gold'
   | 'lime'
-  | 'brown';
+  | 'brown'
+  | 'black'
+  | 'forest'
+  | 'lavender'
+  | 'maroon';
 
 export type DevCardType =
   | 'knight'
@@ -313,6 +325,11 @@ export interface Player {
   // the rulebook. Not a resource — doesn't count toward 7-roll discard,
   // can't be stolen by robber, can't be traded.
   fishTokens?: Array<'one' | 'two' | 'three'>;
+  // Traders & Barbarians / Barbarian Attack: edges where this player has
+  // hired a defender knight. T&B knights are simple stationary pieces
+  // (no levels, no activation) — distinct from the C&K knight system
+  // which uses `state.knights` keyed by vertex.
+  defenderKnights?: EdgeId[];
 }
 
 // ----- Traders & Barbarians / Fishing on Catan -----
@@ -371,6 +388,23 @@ export interface WagonVoteState {
 // placing the wagon and never enter this phase.
 export interface PendingWagonPlacement {
   placerId: PlayerId;
+}
+
+// ----- Traders & Barbarians / Barbarian Attack -----
+
+// One castle on the board. Three of these per Barbarian Attack scenario.
+// `barbarianPath` walks from an outer sea hex inward to the castle; the
+// barbarian piece advances along it one hex per endTurn. Combat resolves
+// when `barbarianPosition === barbarianPath.length - 1`.
+export interface CastleState {
+  id: string;
+  hexId: HexId;
+  barbarianPath: HexId[];
+  barbarianPosition: number;
+  barbarianStrength: number;
+  // VP accumulated by each player from successful defenses at this castle.
+  // 1 VP per knight a player brought to a winning defense.
+  defenderVp: Record<PlayerId, number>;
 }
 
 // ============================================================================
@@ -722,6 +756,13 @@ export interface GameState {
   // Pending placement — present iff phase is 'placeWagon'. Resolved by a
   // `placeWagon` action.
   pendingWagonPlacement?: PendingWagonPlacement;
+  // Barbarian Attack: three castles + their barbarian advance state. Empty /
+  // undefined when the scenario isn't active.
+  castles?: CastleState[];
+  // Shared supply of defender knights left in the bag. Decrements on
+  // hireKnight; refunded when knights die in combat. Distinct from
+  // `state.knightSupply` (C&K, per-player by strength).
+  barbarianKnightSupply?: number;
 }
 
 export interface IslandChip {
@@ -980,6 +1021,15 @@ export interface PlaceWagonAction extends ActionBase {
   edge: EdgeId;
 }
 
+// Barbarian Attack: hire a defender knight on an edge adjacent to a
+// castle. Cost: 1 wheat + 1 ore. Knight is consumed from the shared
+// `state.barbarianKnightSupply`; the edge must be unoccupied and the
+// player must have a connecting road/settlement/city/defender-knight.
+export interface HireKnightAction extends ActionBase {
+  type: 'hireKnight';
+  edge: EdgeId;
+}
+
 // ----------------------------------------------------------------------------
 // Cities & Knights expansion actions
 // ----------------------------------------------------------------------------
@@ -1178,6 +1228,7 @@ export type Action =
   | PassOldBootAction
   | SubmitWagonVoteAction
   | PlaceWagonAction
+  | HireKnightAction
   | BuildCityWallAction
   | DiscardCKAction
   | RecruitKnightAction
@@ -1217,7 +1268,8 @@ export const COSTS: Record<
   | 'knight'
   | 'activateKnight'
   | 'promoteKnight'
-  | 'cityMedicine',
+  | 'cityMedicine'
+  | 'hireKnight',
   Partial<ResourceBank>
 > = {
   road: { wood: 1, brick: 1 },
@@ -1238,4 +1290,9 @@ export const COSTS: Record<
   // column of the rulebook's player aid; the visible payoff is +3 gold on
   // build, so a road-equivalent cost keeps the math balanced.
   bridge: { wood: 1, brick: 1 },
+  // Traders & Barbarians / Barbarian Attack: hire a defender knight.
+  // Rulebook is 1 wool + 1 wheat + 1 ore; we drop wool so the wool
+  // economy stays free for Merchant Trains-style bids in the combo
+  // scenario down the line.
+  hireKnight: { wheat: 1, ore: 1 },
 };

@@ -13,16 +13,20 @@
 
   /* Player colors — picked for maximum hue separation and to avoid clashes
      with terrain colors (wood/sheep green, brick/orange/gold, ore gray). */
-  --player-red: #d94545;
+  --player-red: #e64a4a;
   --player-blue: #3a6ec9;
   --player-orange: #f37025;
   --player-white: #f0f0f0;
-  --player-purple: #9b59d4;
+  --player-purple: #8a47c4;
   --player-pink: #e85a9c;
   --player-teal: #1abc9c;
   --player-gold: #f5b223;
   --player-lime: #6dc960;
   --player-brown: #6e4a2c;
+  --player-black: #4a4a4a;
+  --player-forest: #2e7d3a;
+  --player-lavender: #c89fe8;
+  --player-maroon: #7e2a2a;
 
   /* Number-token rules */
   --token-fill: #f7f1d8;

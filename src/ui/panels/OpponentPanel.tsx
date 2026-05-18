@@ -45,6 +45,12 @@ export function OpponentPanel() {
         p2: game.playerOrder[pairedPlayer2Index(game)!]!,
       }
     : null;
+  // The "partner" row gets a sky-blue highlight so both paired seats are
+  // visually distinct from each other and from the other 3-6 players.
+  // Whichever of the pair is currently acting gets the gold .opp-acting
+  // treatment; the OTHER gets .opp-partner.
+  const partnerId =
+    paired && (paired.p1 === actingId ? paired.p2 : paired.p1);
 
   // Mark "you" so the player can find themselves quickly. In solo mode we
   // call out the device-bound human; online uses the local seat.
@@ -62,6 +68,7 @@ export function OpponentPanel() {
         const visibleVp = calculateVictoryPoints(game, p.id, false);
         const cards = p.devCards.unplayed.length + p.devCards.boughtThisTurn.length;
         const isActing = p.id === actingId;
+        const isPartner = !!partnerId && p.id === partnerId;
         const uuid = uuidForPlayer(p.id);
         const onlineStatus: 'na' | 'online' | 'offline' =
           role === 'solo' || p.isAI
@@ -70,7 +77,10 @@ export function OpponentPanel() {
               ? 'online'
               : 'offline';
         return (
-          <div key={p.id} className={`opp ${isActing ? 'opp-acting' : ''}`}>
+          <div
+            key={p.id}
+            className={`opp ${isActing ? 'opp-acting' : ''} ${isPartner ? 'opp-partner' : ''}`}
+          >
             <div className="opp-head">
               <span
                 className="opp-swatch"
@@ -92,9 +102,14 @@ export function OpponentPanel() {
               </span>
               <span
                 className="opp-vp"
-                title={`Visible VP (first to ${game.settings.victoryPointsToWin} wins)`}
+                title={
+                  cards > 0
+                    ? `Visible VP — could be higher with hidden VP dev cards (first to ${game.settings.victoryPointsToWin} wins)`
+                    : `Visible VP (first to ${game.settings.victoryPointsToWin} wins)`
+                }
               >
-                {visibleVp}+/{game.settings.victoryPointsToWin} VP
+                {visibleVp}
+                {cards > 0 ? '+' : ''}/{game.settings.victoryPointsToWin} VP
               </span>
             </div>
             <div className="opp-stats">

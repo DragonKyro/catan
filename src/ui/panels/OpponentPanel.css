@@ -75,6 +75,31 @@
   text-transform: uppercase;
 }
 
+/* Paired-player partner (5+p games): the OTHER of the paired pair that
+   isn't currently acting. Sky-blue so it's clearly distinct from the gold
+   .opp-acting treatment. */
+.opp-partner {
+  border-color: #5fa8d9;
+  border-width: 2px;
+  padding: 7px 9px;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, #5fa8d9 18%, transparent),
+    var(--panel) 55%
+  );
+  box-shadow: 0 0 0 2px color-mix(in srgb, #5fa8d9 28%, transparent);
+}
+
+.opp-partner .opp-name::after {
+  content: '· paired';
+  margin-left: 8px;
+  font-weight: 600;
+  font-size: 0.78em;
+  color: #5fa8d9;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .opp-tag {
   font-size: 0.65em;
   font-weight: 700;

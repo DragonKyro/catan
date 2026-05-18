@@ -79,6 +79,9 @@ export function materializeLayout(
     // Watering hole (T&B Merchant Trains) — non-producing centre hex; the
     // origin of merchant trains. Never takes a token.
     if (h.terrain === 'wateringHole') continue;
+    // Castle (T&B Barbarian Attack) — non-producing fixed-terrain hex in
+    // the sea ring. Robber-immune; no number token.
+    if (h.terrain === 'castle') continue;
     if (pos.fixedToken != null) {
       fixedAssignments.push({ index: i, token: pos.fixedToken });
     } else {

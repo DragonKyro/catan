@@ -207,6 +207,18 @@ export function chooseMainPhaseAction(
     for (const r of RESOURCES) handSize += player.resources[r];
     const burnHand = handSize >= 6 && player.resources.wood >= 1 && player.resources.brick >= 1;
 
+    // VP-locked-out catch-all: when cities are maxed AND the dev card
+    // deck is empty AND there's no reachable settle spot in our current
+    // network, the ONLY remaining VP path is to extend roads toward new
+    // settle territory. Without this we'd see AIs sit on wood+brick at
+    // 6 VP for the rest of the game (the original bug: 7-8p games where
+    // the AI maxed cities, drained the dev deck, and stopped building).
+    const vpLockedOut =
+      state.devCardDeck.length === 0 &&
+      player.cities.length >= 4 &&
+      openSpots === 0 &&
+      player.settlements.length < 5;
+
     // Threshold tiers:
     //   - LR pursuit: very low (any extension is worth ~2 VP)
     //   - Plan wants settlements: 3.5 (weed out marginal extensions)
@@ -216,11 +228,7 @@ export function chooseMainPhaseAction(
     else if (planNeedsSettlements) threshold = 3.5;
     if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
     if (burnHand) threshold = Math.max(1.5, threshold - 1.5);
-    // `openSpots` no longer gates whether we try at all — we always
-    // evaluate candidates and let the quality threshold filter. That
-    // way idle wood/brick gets spent on the best available road if
-    // one is worth building.
-    void openSpots;
+    if (vpLockedOut) threshold = Math.min(threshold, 1.0);
 
     let bestEid: EdgeId | null = null;
     let bestScore = -Infinity;
@@ -264,7 +272,7 @@ export function chooseMainPhaseAction(
         }
         if (blockedAdjacent) break;
       }
-      if (blockedAdjacent && !stationAllowed) continue;
+      if (blockedAdjacent && !stationAllowed && !vpLockedOut) continue;
 
       // Count enemy roads on this vertex's OTHER edges. Heavy enemy
       // presence here means (a) opponents are racing for the same

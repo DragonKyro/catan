@@ -110,21 +110,33 @@
   pointer-events: auto;
 }
 
-/* Trade-building dialogs (propose / counter / bank trade) anchor to the
-   left side of the board, vertically centered. The board middle stays
-   visible so the player can plan moves while composing an offer. */
+/* Trade-building dialogs (propose / counter / bank trade) dock at the
+   top-right of the board, just below the dice display. Keeps the centre
+   of the map clear so the player can still plan moves while composing,
+   and on 7-8p (taller boards) the dialog no longer overlaps pieces. */
 .gameview-side-dialog-overlay {
   position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 6;
+  top: 72px;
+  right: 12px;
+  z-index: 7; /* above .gameview-banner-overlay so the active compose wins */
   pointer-events: none;
-  max-height: calc(100% - 24px);
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100% - 84px);
+  overflow-y: auto;
 }
 
 .gameview-side-dialog-overlay > * {
   pointer-events: auto;
+}
+
+/* Compact the inner trade dialog when docked top-right: the body has its
+   own scroll, so it doesn't have to lay out everything at full size. */
+.gameview-side-dialog-overlay .ptrade-list {
+  gap: 3px;
+}
+.gameview-side-dialog-overlay .ptrade-row {
+  padding: 1px 5px;
 }
 
 /* Other prompt dialogs (discard, robber steal, year of plenty, monopoly)

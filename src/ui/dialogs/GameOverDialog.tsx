@@ -118,6 +118,9 @@ export function GameOverDialog() {
         <span style={{ color: 'var(--text-soft)', marginLeft: 12, fontSize: '0.9em' }}>
           Total game time: {formatDurationMs(Math.max(0, lastActionT - startTime))}
         </span>
+        <span style={{ color: 'var(--text-soft)', marginLeft: 12, fontSize: '0.9em' }}>
+          · Total turns: {timeline[timeline.length - 1]?.turnNumber ?? 0}
+        </span>
       </p>
 
       {tab === 'summary' && (

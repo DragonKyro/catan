@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { DevCardType, GameState } from '@/game/types';
+import { devDeckTotalsFor } from '@/game/createGame';
 
 interface CardInfo {
   type: DevCardType;
@@ -68,7 +69,9 @@ export function DevCardCheatsheet({ game, onClose }: Props) {
 
   // Count what's still in the deck (face-down). This is the public info
   // every player has access to: the deck composition is fixed and the
-  // remaining cards are whatever hasn't been bought yet.
+  // remaining cards are whatever hasn't been bought yet. We deliberately
+  // do NOT inspect player hands — the count in any opponent's hand is
+  // hidden info (in particular, hidden VP cards would leak otherwise).
   const remaining: Record<DevCardType, number> = {
     knight: 0,
     roadBuilding: 0,
@@ -77,12 +80,17 @@ export function DevCardCheatsheet({ game, onClose }: Props) {
     victoryPoint: 0,
   };
   for (const c of game.devCardDeck) remaining[c]++;
+  const totals = devDeckTotalsFor(game.players.length);
   const deckTotal = game.devCardDeck.length;
+  const grandTotal = (Object.values(totals) as number[]).reduce((a, b) => a + b, 0);
 
   return (
     <div className="cost-cheatsheet is-devcards" ref={ref} role="dialog" aria-label="Dev cards">
       <div className="cost-cheatsheet-title">
-        Dev cards <span className="dev-cheatsheet-deck">({deckTotal} left)</span>
+        Dev cards{' '}
+        <span className="dev-cheatsheet-deck">
+          ({deckTotal}/{grandTotal} left in deck)
+        </span>
       </div>
       <ul className="cost-cheatsheet-list">
         {CARDS.map(({ type, icon, label, effect }) => (
@@ -90,8 +98,11 @@ export function DevCardCheatsheet({ game, onClose }: Props) {
             <span className="cost-cheatsheet-build dev-cheatsheet-card">
               <span aria-hidden>{icon}</span> {label}
             </span>
-            <span className="dev-cheatsheet-count" title={`${remaining[type]} left in deck`}>
-              {remaining[type]}
+            <span
+              className="dev-cheatsheet-count"
+              title={`${remaining[type]} of ${totals[type]} still in the face-down deck`}
+            >
+              {remaining[type]}/{totals[type]}
             </span>
             <span className="dev-cheatsheet-effect">{effect}</span>
           </li>

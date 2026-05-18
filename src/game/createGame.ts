@@ -1,4 +1,4 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, CastleState } from './types';
 import { WONDERS } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import { generateSeafarersBoard } from './modules/seafarers/board/generator';
@@ -8,7 +8,9 @@ import { buildInitialFishPool } from './modules/traders/fishing/pool';
 import {
   TRADERS_SCENARIO_FISHING,
   TRADERS_SCENARIO_MERCHANT_TRAINS,
+  TRADERS_SCENARIO_BARBARIAN_ATTACK,
   MERCHANT_WAGON_SUPPLY,
+  BARBARIAN_KNIGHT_SUPPLY,
 } from './modules/traders/constants';
 import {
   getBaseScenario,
@@ -83,6 +85,22 @@ function devDeckFor(numPlayers: number): DevCardType[] {
   if (numPlayers >= 7) return DEV_DECK_7_8;
   if (numPlayers >= 5) return DEV_DECK_5_6;
   return DEV_DECK_BASE;
+}
+
+// Public helper: total dev card composition for the cheatsheet. Returns
+// the count of each kind in the starting deck for the current player
+// count. The cheatsheet pairs these with `game.devCardDeck` counts to
+// show "remaining/total" without leaking any private hand info.
+export function devDeckTotalsFor(numPlayers: number): Record<DevCardType, number> {
+  const totals: Record<DevCardType, number> = {
+    knight: 0,
+    roadBuilding: 0,
+    yearOfPlenty: 0,
+    monopoly: 0,
+    victoryPoint: 0,
+  };
+  for (const c of devDeckFor(numPlayers)) totals[c]++;
+  return totals;
 }
 
 // Base-game default VP target. Official rule is 10 regardless of player
@@ -237,6 +255,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let lakeHexId: HexId | undefined;
   let fishingGrounds: FishingGround[] | undefined;
   let wateringHoleHexId: HexId | undefined;
+  let castles: CastleState[] | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (hasTraders) {
