@@ -31,6 +31,8 @@ export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getStat
   if (state.tribeTokens && state.tribeTokens.length > 0) return true;
   if (fogTotal(state) > 0) return true;
   if (state.wonders && state.wonders.length > 0) return true;
+  if (state.pirateFleet) return true;
+  if (state.clothHexes && state.clothHexes.length > 0) return true;
   return false;
 }
 
@@ -133,6 +135,76 @@ export function ScenarioPanel() {
               Build a settlement, road, or ship adjacent to a fog hex to reveal it
               and earn the resource shown (gold gives a free pick).
             </div>
+          </div>
+        );
+      })()}
+
+      {game.clothHexes && game.clothHexes.length > 0 && (
+        <div className="scenario-panel-block">
+          <div className="scenario-panel-block-head">
+            <span>Cloth</span>
+            <span className="scenario-panel-block-sum">
+              2 cloth = 1 VP
+            </span>
+          </div>
+          <ul className="scenario-panel-chips">
+            {game.players.map((p) => {
+              const cloth = p.cloth ?? 0;
+              if (cloth === 0) return null;
+              return (
+                <li key={p.id} className="scenario-panel-chip is-claimed">
+                  <span className="scenario-panel-chip-vp">{cloth}</span>
+                  <span
+                    className="scenario-panel-chip-swatch"
+                    style={{ background: playerColorVar(p.color) }}
+                    aria-hidden
+                  />
+                  <span className="scenario-panel-chip-name">
+                    {p.name} ({Math.floor(cloth / 2)} VP)
+                  </span>
+                </li>
+              );
+            })}
+            {game.players.every((p) => !(p.cloth && p.cloth > 0)) && (
+              <li className="scenario-panel-chip">
+                <span className="scenario-panel-chip-name unclaimed">
+                  No cloth produced yet
+                </span>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {game.pirateFleet && (() => {
+        const fleet = game.pirateFleet;
+        const defeater = fleet.defeatedBy
+          ? game.players.find((p) => p.id === fleet.defeatedBy)
+          : null;
+        return (
+          <div className="scenario-panel-block">
+            <div className="scenario-panel-block-head">
+              <span>Pirate fleet</span>
+              <span className="scenario-panel-block-sum">
+                {defeater ? 'defeated' : `${fleet.strength}/${fleet.maxStrength}`}
+              </span>
+            </div>
+            {defeater ? (
+              <div className="scenario-panel-chip is-claimed">
+                <span className="scenario-panel-chip-vp">+2</span>
+                <span
+                  className="scenario-panel-chip-swatch"
+                  style={{ background: playerColorVar(defeater.color) }}
+                  aria-hidden
+                />
+                <span className="scenario-panel-chip-name">{defeater.name} (final blow)</span>
+              </div>
+            ) : (
+              <div className="scenario-panel-note">
+                Sail a ship adjacent to the fleet and attack to weaken it.
+                The player who lands the killing blow earns <strong>+2 VP</strong>.
+              </div>
+            )}
           </div>
         );
       })()}

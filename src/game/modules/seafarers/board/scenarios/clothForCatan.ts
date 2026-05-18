@@ -31,6 +31,23 @@ const EXTRA_5_6: ScenarioHexDef[] = [
   { q: -3, r: 0, terrain: 'brick', token: 3 },
 ];
 
+// Non-gold cloth-island hexes produce cloth tokens (not their listed
+// terrain) on roll. We keep them as land hexes so settlements and ships
+// still treat them normally — only the production diversion is special.
+// 5-6p adds a few more cloth hexes on the larger islands.
+const CLOTH_HEXES_3_4 = [
+  { q: 3, r: -3 },
+  { q: 3, r: 0 },
+  { q: -1, r: 3 },
+];
+
+const CLOTH_HEXES_5_6 = [
+  ...CLOTH_HEXES_3_4,
+  { q: 4, r: -3 },
+  { q: 4, r: 0 },
+  { q: -2, r: 3 },
+];
+
 export const clothForCatan = buildScenario({
   id: 'clothForCatan',
   name: 'Cloth for Catan',
@@ -39,6 +56,8 @@ export const clothForCatan = buildScenario({
   defaultVpToWin5_6: 16,
   minPlayers: 3,
   maxPlayers: 4,
+  clothHexes: CLOTH_HEXES_3_4,
+  clothHexes5_6: CLOTH_HEXES_5_6,
   land: [...MAIN, ...CLOTH_ISLANDS],
   ports: [
     { q: 1, r: -1, direction: 0, type: 'generic' },

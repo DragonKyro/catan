@@ -6,6 +6,7 @@ import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import { isPairedPlayer2 } from '@/game/helpers';
 import { SHIP_COST, MAX_SHIPS } from '@/game/modules/seafarers/constants';
+import { hasShipAdjacentToFleet } from '@/game/modules/seafarers/actions/attackPirateFleet';
 import './ActionBar.css';
 
 export function ActionBar() {
@@ -188,6 +189,27 @@ export function ActionBar() {
             🏛️ Wonder
           </Button>
         )}
+        {(() => {
+          const fleet = game.pirateFleet;
+          if (!fleet || fleet.defeatedBy !== null) return null;
+          const adjacent = hasShipAdjacentToFleet(game, acting);
+          const alreadyAttacked = !!game.attackedPirateThisTurn;
+          const disabled = !adjacent || alreadyAttacked;
+          const title = alreadyAttacked
+            ? 'Already attacked this turn'
+            : !adjacent
+              ? 'Need a ship adjacent to the pirate fleet'
+              : `Attack pirate fleet (${fleet.strength}/${fleet.maxStrength})`;
+          return (
+            <Button
+              disabled={disabled}
+              onClick={() => dispatch({ type: 'attackPirateFleet', playerId: acting })}
+              title={title}
+            >
+              ⚔️ Attack ({fleet.strength})
+            </Button>
+          );
+        })()}
         <div className="actionbar-slot actionbar-slot-end">
           <Button
             variant="primary"

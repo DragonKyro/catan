@@ -38,6 +38,21 @@ export function calculateWonderVp(state: GameState, playerId: PlayerId): number 
   return sum;
 }
 
+// Pirate Islands: +2 VP for the player who landed the killing blow on the
+// pirate fleet. Visible bonus (like Longest Road / Largest Army).
+export function calculatePirateFleetVp(state: GameState, playerId: PlayerId): number {
+  if (!state.pirateFleet) return 0;
+  return state.pirateFleet.defeatedBy === playerId ? 2 : 0;
+}
+
+// Cloth for Catan: 1 VP per 2 cloth tokens (Math.floor). Visible — cloth
+// tokens are public information.
+export function calculateClothVp(state: GameState, playerId: PlayerId): number {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player || !player.cloth) return 0;
+  return Math.floor(player.cloth / 2);
+}
+
 // Total victory points for a player.
 // `includeHidden` controls whether held VP dev cards are counted (true at
 // win-check time and for the player themselves; false when displaying to
@@ -61,6 +76,10 @@ export function calculateVictoryPoints(
   vp += calculateTribeTokenVp(state, playerId);
   // Seafarers / Wonders of Catan: 1 VP per built wonder level.
   vp += calculateWonderVp(state, playerId);
+  // Seafarers / Pirate Islands: +2 for the player who defeated the fleet.
+  vp += calculatePirateFleetVp(state, playerId);
+  // Seafarers / Cloth for Catan: 1 VP per 2 cloth tokens.
+  vp += calculateClothVp(state, playerId);
   return vp;
 }
 

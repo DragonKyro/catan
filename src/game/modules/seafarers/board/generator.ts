@@ -15,6 +15,8 @@ export interface SeafarersBoardResult {
   islandChips: IslandChip[];
   tribeTokens: TribeToken[];
   unrevealedFogHexes: HexId[];
+  pirateFleet?: PirateFleet;
+  clothHexes: HexId[];
 }
 
 // Build a Seafarers BoardState from a scenario id. When `numPlayers >= 5`
@@ -117,7 +119,45 @@ export function generateSeafarersBoard(
     if (partialBoard.hexes[hexId]) unrevealedFogHexes.push(hexId);
   }
 
-  return { board: partialBoard, rngState, islandChips, tribeTokens, unrevealedFogHexes };
+  // Pirate Islands: anchor the fleet on the scenario's designated sea hex.
+  // If the coord doesn't resolve to a board hex (unusual — shouldn't happen
+  // for shipped scenarios), pirateFleet stays undefined.
+  const fleetDef = useLarge && scenario.pirateFleet5_6
+    ? scenario.pirateFleet5_6
+    : scenario.pirateFleet;
+  let pirateFleet: PirateFleet | undefined;
+  if (fleetDef) {
+    const hexId = `${fleetDef.q},${fleetDef.r}`;
+    if (partialBoard.hexes[hexId]) {
+      pirateFleet = {
+        hexId,
+        strength: fleetDef.strength,
+        maxStrength: fleetDef.strength,
+        defeatedBy: null,
+      };
+    }
+  }
+
+  // Cloth for Catan: resolve cloth-hex coordinates to live hex ids. Quietly
+  // drop coords that aren't on the generated board.
+  const clothDefs = useLarge && scenario.clothHexes5_6
+    ? scenario.clothHexes5_6
+    : scenario.clothHexes ?? [];
+  const clothHexes: HexId[] = [];
+  for (const def of clothDefs) {
+    const hexId = `${def.q},${def.r}`;
+    if (partialBoard.hexes[hexId]) clothHexes.push(hexId);
+  }
+
+  return {
+    board: partialBoard,
+    rngState,
+    islandChips,
+    tribeTokens,
+    unrevealedFogHexes,
+    pirateFleet,
+    clothHexes,
+  };
 }
 
 function hexCenter(

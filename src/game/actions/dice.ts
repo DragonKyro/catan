@@ -65,10 +65,15 @@ function distributeResources(state: GameState, rolled: number): GameState {
   // adjacent gold hex matching the rolled number). Always zero on the base
   // board because there are no gold hexes there.
   const goldPicks: Record<PlayerId, number> = {};
+  // Cloth tokens earned this roll (Cloth for Catan). Settlements yield 1,
+  // cities 2 per adjacent cloth hex matching the roll.
+  const clothGrants: Record<PlayerId, number> = {};
   for (const p of state.players) {
     grants.set(p.id, emptyGrants());
     goldPicks[p.id] = 0;
+    clothGrants[p.id] = 0;
   }
+  const clothHexes = new Set(state.clothHexes ?? []);
 
   for (const hex of Object.values(state.board.hexes)) {
     if (hex.terrain === 'desert' || hex.terrain === 'sea') continue;
@@ -78,6 +83,19 @@ function distributeResources(state: GameState, rolled: number): GameState {
     const corners: VertexId[] = [];
     for (const v of Object.values(state.board.vertices)) {
       if (v.hexes.includes(hex.id)) corners.push(v.id);
+    }
+
+    // Cloth hex: produces cloth instead of its terrain's resource. The
+    // check comes before the gold and resource branches so a cloth hex
+    // overrides whatever else the terrain would suggest.
+    if (clothHexes.has(hex.id)) {
+      for (const vid of corners) {
+        for (const p of state.players) {
+          if (p.settlements.includes(vid)) clothGrants[p.id] += 1;
+          else if (p.cities.includes(vid)) clothGrants[p.id] += 2;
+        }
+      }
+      continue;
     }
 
     if (hex.terrain === 'gold') {
@@ -139,6 +157,19 @@ function distributeResources(state: GameState, rolled: number): GameState {
     }
   }
   next = { ...next, bank: subtractResources(next.bank, bankOut) };
+
+  // Cloth for Catan: apply cloth grants. Cloth lives on player.cloth as a
+  // simple counter — it doesn't deplete a bank pool (the rulebook treats
+  // each cloth island as having unlimited tokens to give while production
+  // hits).
+  for (const p of state.players) {
+    const c = clothGrants[p.id] ?? 0;
+    if (c <= 0) continue;
+    next = updatePlayer(next, p.id, (pl) => ({
+      ...pl,
+      cloth: (pl.cloth ?? 0) + c,
+    }));
+  }
 
   // Seafarers: if any player earned gold picks this roll, transition to the
   // chooseGoldResource phase. They each get N "any resource" picks; the phase

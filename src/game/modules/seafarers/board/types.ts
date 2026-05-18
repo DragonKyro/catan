@@ -82,4 +82,10 @@ export interface Scenario {
   // and the +2 VP defeat bonus goes to whoever lands the killing blow.
   pirateFleet?: { q: number; r: number; strength: number };
   pirateFleet5_6?: { q: number; r: number; strength: number };
+  // Cloth for Catan: hexes that produce cloth tokens instead of their
+  // regular resource on roll. Overlaid on whatever the underlying terrain
+  // is — the scenario chooses which hexes (typically the small outer
+  // islands).
+  clothHexes?: { q: number; r: number }[];
+  clothHexes5_6?: { q: number; r: number }[];
 }

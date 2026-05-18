@@ -37,6 +37,9 @@ export interface ScenarioBlueprint {
   // Optional. Pirate Islands fleet anchor + initial strength.
   pirateFleet?: { q: number; r: number; strength: number };
   pirateFleet5_6?: { q: number; r: number; strength: number };
+  // Optional. Cloth for Catan: hexes that produce cloth on roll.
+  clothHexes?: { q: number; r: number }[];
+  clothHexes5_6?: { q: number; r: number }[];
   // 3-4 player layout.
   land: ScenarioHexDef[];
   ports: ScenarioPortDef[];
@@ -91,5 +94,7 @@ export function buildScenario(bp: ScenarioBlueprint): Scenario {
   if (bp.fogHexes5_6) scenario.fogHexes5_6 = bp.fogHexes5_6;
   if (bp.pirateFleet) scenario.pirateFleet = bp.pirateFleet;
   if (bp.pirateFleet5_6) scenario.pirateFleet5_6 = bp.pirateFleet5_6;
+  if (bp.clothHexes) scenario.clothHexes = bp.clothHexes;
+  if (bp.clothHexes5_6) scenario.clothHexes5_6 = bp.clothHexes5_6;
   return scenario;
 }

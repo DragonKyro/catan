@@ -140,6 +140,10 @@ export interface Player {
   // floor to 2:1 (better than generic 3:1 ports). Count, not boolean, so
   // future scenarios can stack effects if needed.
   commercialHarbors?: number;
+  // Seafarers / Cloth for Catan: cloth tokens earned by settling adjacent
+  // to a cloth-producing hex. Not a regular resource — can't be traded or
+  // spent on builds. Worth 1 VP per 2 cloth at game end (Math.floor).
+  cloth?: number;
 }
 
 // ============================================================================
@@ -291,6 +295,11 @@ export interface GameState {
   // this turn? Caps combat to one attack per turn so each player gets
   // a roughly proportional shot at the killing blow. Cleared on endTurn.
   attackedPirateThisTurn?: boolean;
+  // Seafarers / Cloth for Catan: hexes that produce cloth tokens instead
+  // of their regular resource on roll. Settled players get 1 cloth per
+  // settlement, 2 per city — same multiplier as resources. Cloth lives
+  // on player.cloth and converts to VP at 2:1 in scoring.
+  clothHexes?: HexId[];
 }
 
 export interface IslandChip {

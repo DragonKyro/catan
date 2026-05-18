@@ -80,6 +80,7 @@ function advanceToNextPairedTurn(state: GameState): GameState {
     pendingTrade: undefined,
     tradeResourcesThisTurn: undefined,
     proposedTradesThisTurn: undefined,
+    attackedPirateThisTurn: undefined,
   };
 }
 
@@ -100,5 +101,6 @@ function advanceToNextRealTurn(state: GameState): GameState {
     pendingTrade: undefined,
     tradeResourcesThisTurn: undefined,
     proposedTradesThisTurn: undefined,
+    attackedPirateThisTurn: undefined,
   };
 }

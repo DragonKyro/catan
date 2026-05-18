@@ -111,6 +111,11 @@ export function OpponentPanel() {
                   </span>
                 ) : null;
               })()}
+              {p.cloth && p.cloth > 0 && (
+                <span title={`Cloth tokens — ${p.cloth} cloth = ${Math.floor(p.cloth / 2)} VP`}>
+                  🧵 {p.cloth}
+                </span>
+              )}
             </div>
             <div className="opp-pieces" title="Pieces remaining (built / cap)">
               <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>

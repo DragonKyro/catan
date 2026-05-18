@@ -1,4 +1,4 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet } from './types';
 import { WONDERS } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import { generateSeafarersBoard } from './modules/seafarers/board/generator';
@@ -146,6 +146,8 @@ export function createGame(opts: CreateGameOptions): GameState {
   let tribeTokens: TribeToken[] | undefined;
   let unrevealedFogHexes: string[] | undefined;
   let wonders: WonderState[] | undefined;
+  let pirateFleet: PirateFleet | undefined;
+  let clothHexes: string[] | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
@@ -156,6 +158,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     tribeTokens = result.tribeTokens.length > 0 ? result.tribeTokens : undefined;
     unrevealedFogHexes =
       result.unrevealedFogHexes.length > 0 ? result.unrevealedFogHexes : undefined;
+    pirateFleet = result.pirateFleet;
+    clothHexes = result.clothHexes.length > 0 ? result.clothHexes : undefined;
     // Wonders of Catan: seed every wonder at level 0 / unclaimed. Other
     // scenarios leave `wonders` undefined so the build action stays gated.
     if (settings.scenarioId === 'wondersOfCatan') {
@@ -228,5 +232,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     tribeTokens,
     unrevealedFogHexes,
     wonders,
+    pirateFleet,
+    clothHexes,
   };
 }

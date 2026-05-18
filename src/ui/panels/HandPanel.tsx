@@ -116,6 +116,14 @@ export function HandPanel() {
               </span>
             ) : null;
           })()}
+          {player.cloth && player.cloth > 0 && (
+            <span
+              className="hand-flag"
+              title={`Cloth tokens — ${player.cloth} cloth = ${Math.floor(player.cloth / 2)} VP`}
+            >
+              🧵 {player.cloth}
+            </span>
+          )}
         </h3>
         <span
           className="hand-vp"
