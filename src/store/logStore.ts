@@ -97,6 +97,15 @@ export type LogEntry =
   | { id: number; kind: 'endTurn'; player: PlayerId }
   | {
       id: number;
+      kind: 'volcanoEruption';
+      // Player whose building was destroyed/downgraded.
+      victim: PlayerId;
+      // 'destroyed' for a settlement that vanished; 'downgraded' for a city
+      // that dropped to a settlement.
+      effect: 'destroyed' | 'downgraded';
+    }
+  | {
+      id: number;
       kind: 'turnBegins';
       // Player whose main turn just started. Player 2 hand-offs within a
       // paired turn (5+p) are intentionally NOT logged here — only full
@@ -430,6 +439,49 @@ export const useLogStore = create<LogStore>((set, get) => ({
           player: action.playerId,
           dice: action.dice,
         });
+        // Volcano scenario: detect eruption by comparing settlement / city
+        // counts before/after. Eruption fires inline inside the dice handler,
+        // so any settlement/city that vanished from a volcano-adjacent vertex
+        // during this action is an eruption victim.
+        if (after.board.volcanoHex) {
+          const volcanoCorners = new Set(
+            after.board.hexes[after.board.volcanoHex]?.corners ?? [],
+          );
+          for (const beforeP of before.players) {
+            const afterP = after.players.find((p) => p.id === beforeP.id);
+            if (!afterP) continue;
+            // Settlement disappeared (and didn't move to cities) → destroyed.
+            for (const vid of beforeP.settlements) {
+              if (!volcanoCorners.has(vid)) continue;
+              if (
+                !afterP.settlements.includes(vid) &&
+                !afterP.cities.includes(vid)
+              ) {
+                append.push({
+                  id: stamp(),
+                  kind: 'volcanoEruption',
+                  victim: beforeP.id,
+                  effect: 'destroyed',
+                });
+              }
+            }
+            // City became a settlement → downgraded.
+            for (const vid of beforeP.cities) {
+              if (!volcanoCorners.has(vid)) continue;
+              if (
+                !afterP.cities.includes(vid) &&
+                afterP.settlements.includes(vid)
+              ) {
+                append.push({
+                  id: stamp(),
+                  kind: 'volcanoEruption',
+                  victim: beforeP.id,
+                  effect: 'downgraded',
+                });
+              }
+            }
+          }
+        }
         break;
       }
       case 'buildSettlement':

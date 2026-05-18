@@ -14,6 +14,7 @@ import {
   totalResources,
 } from '../resources';
 import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
+import { rngInt } from '../rng';
 
 export function handleRollDice(state: GameState, action: RollDiceAction): GameState {
   if (state.phase !== 'rollOrPlayKnight') {
@@ -55,7 +56,56 @@ export function handleRollDice(state: GameState, action: RollDiceAction): GameSt
     };
   }
 
-  return distributeResources(next, total);
+  const afterProduction = distributeResources(next, total);
+  return maybeEruptVolcano(afterProduction, total);
+}
+
+// Volcano scenario: if the volcano hex's number was rolled, pick a random
+// occupied vertex among the volcano's six corners and destroy/downgrade the
+// building there. Cities downgrade to settlements; settlements vanish. No
+// resource refund. Uses the seeded `state.rngState` so all peers reduce
+// identically.
+function maybeEruptVolcano(state: GameState, rolled: number): GameState {
+  const volcanoHexId = state.board.volcanoHex;
+  if (!volcanoHexId) return state;
+  const hex = state.board.hexes[volcanoHexId];
+  if (!hex || hex.numberToken !== rolled) return state;
+
+  const corners = hex.corners;
+  // Collect (playerIndex, kind, vertexId) tuples for occupied corners.
+  const occupied: Array<{
+    playerId: PlayerId;
+    kind: 'settlement' | 'city';
+    vertexId: VertexId;
+  }> = [];
+  for (const vid of corners) {
+    for (const p of state.players) {
+      if (p.settlements.includes(vid)) {
+        occupied.push({ playerId: p.id, kind: 'settlement', vertexId: vid });
+      } else if (p.cities.includes(vid)) {
+        occupied.push({ playerId: p.id, kind: 'city', vertexId: vid });
+      }
+    }
+  }
+  if (occupied.length === 0) return state;
+
+  const [idx, nextRng] = rngInt(state.rngState, occupied.length);
+  const target = occupied[idx]!;
+  let next: GameState = { ...state, rngState: nextRng };
+  if (target.kind === 'settlement') {
+    next = updatePlayer(next, target.playerId, (p) => ({
+      ...p,
+      settlements: p.settlements.filter((v) => v !== target.vertexId),
+    }));
+  } else {
+    // Downgrade: remove from cities, restore to settlements.
+    next = updatePlayer(next, target.playerId, (p) => ({
+      ...p,
+      cities: p.cities.filter((v) => v !== target.vertexId),
+      settlements: [...p.settlements, target.vertexId],
+    }));
+  }
+  return next;
 }
 
 function distributeResources(state: GameState, rolled: number): GameState {

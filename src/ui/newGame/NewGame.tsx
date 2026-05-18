@@ -28,13 +28,10 @@ const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple
 // separate defaultVpToWin5_6 for the larger 5-6 player layout.
 function recommendedVp(numPlayers: number, expansions: ExpansionPickerValue): number {
   const scenario = activeScenario(expansions);
-  if (scenario) {
-    if (numPlayers >= 5 && scenario.defaultVpToWin5_6 != null) {
-      return scenario.defaultVpToWin5_6;
-    }
-    return scenario.defaultVpToWin;
+  if (numPlayers >= 5 && scenario.defaultVpToWin5_6 != null) {
+    return scenario.defaultVpToWin5_6;
   }
-  return 10;
+  return scenario.defaultVpToWin;
 }
 
 interface Props {
@@ -58,8 +55,10 @@ export function NewGame({ onBack }: Props = {}) {
   const newGame = useGameStore((s) => s.newGame);
 
   const scenario = activeScenario(expansions);
-  const minPlayers = scenario?.minPlayers ?? 3;
-  const maxPlayers = scenario?.maxPlayers ?? 8;
+  const isFunMap = scenario.kind === 'base' && expansions.baseScenarioId !== 'standard';
+  // Standard's player window covers 2-8 but the lobby still defaults to 3-8.
+  const minPlayers = isFunMap ? scenario.minPlayers : scenario.kind === 'seafarers' ? scenario.minPlayers : 3;
+  const maxPlayers = isFunMap ? scenario.maxPlayers : scenario.kind === 'seafarers' ? scenario.maxPlayers : 8;
   const recommendedVpValue = recommendedVp(numPlayers, expansions);
   const vp = vpOverride ?? recommendedVpValue;
 
@@ -81,6 +80,7 @@ export function NewGame({ onBack }: Props = {}) {
         victoryPointsToWin: vp,
         expansions: expansionListFrom(expansions),
         scenarioId: expansions.seafarers ? expansions.scenarioId : undefined,
+        baseScenarioId: !expansions.seafarers ? expansions.baseScenarioId : undefined,
         turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
       },
     });
@@ -106,13 +106,16 @@ export function NewGame({ onBack }: Props = {}) {
   // form state so the preview tracks every setting change.
   const previewExpansions = expansionListFrom(expansions);
   const previewScenarioId = expansions.seafarers ? expansions.scenarioId : undefined;
-  const previewCaption = scenario
+  const previewBaseScenarioId = !expansions.seafarers ? expansions.baseScenarioId : undefined;
+  const previewCaption = isFunMap
     ? `${scenario.name} (${numPlayers}p)`
-    : numPlayers >= 7
-      ? `Base game 7-8p extension (${numPlayers}p)`
-      : numPlayers >= 5
-        ? `Base game 5-6p extension (${numPlayers}p)`
-        : `Base game (${numPlayers}p)`;
+    : scenario.kind === 'seafarers'
+      ? `${scenario.name} (${numPlayers}p)`
+      : numPlayers >= 7
+        ? `Base game 7-8p extension (${numPlayers}p)`
+        : numPlayers >= 5
+          ? `Base game 5-6p extension (${numPlayers}p)`
+          : `Base game (${numPlayers}p)`;
 
   return (
     <div className="newgame-wrap">
@@ -293,6 +296,7 @@ export function NewGame({ onBack }: Props = {}) {
           numPlayers={numPlayers}
           expansions={previewExpansions}
           scenarioId={previewScenarioId}
+          baseScenarioId={previewBaseScenarioId}
           caption={previewCaption}
         />
         <p className="newgame-preview-note">

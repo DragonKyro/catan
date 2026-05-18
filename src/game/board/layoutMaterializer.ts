@@ -61,25 +61,50 @@ export function materializeLayout(
   }
 
   // ----- Token assignment -----
-  const tokenIndices: number[] = [];
+  // Standard rule: every non-sea, non-desert hex gets a token. Volcano-style
+  // scenarios opt into a token on a desert position via `forceToken: true`.
+  // Positions with `fixedToken` skip the pool draw and take their pinned
+  // value instead (used to pin the volcano's number so it erupts on a
+  // common roll).
+  const poolIndices: number[] = []; // positions taking a token from the pool
+  const fixedAssignments: Array<{ index: number; token: number }> = [];
   for (let i = 0; i < hexDefs.length; i++) {
     const h = hexDefs[i]!;
-    if (h.terrain !== 'sea' && h.terrain !== 'desert') tokenIndices.push(i);
+    const pos = layout.positions[i]!;
+    if (h.terrain === 'sea') continue;
+    if (h.terrain === 'desert' && !pos.forceToken) continue;
+    if (pos.fixedToken != null) {
+      fixedAssignments.push({ index: i, token: pos.fixedToken });
+    } else {
+      poolIndices.push(i);
+    }
   }
-  if (tokenIndices.length !== layout.pools.tokens.length) {
+  if (poolIndices.length !== layout.pools.tokens.length) {
     throw new Error(
-      `Scenario layout token pool mismatch: pool has ${layout.pools.tokens.length} tokens but ${tokenIndices.length} non-desert land positions need them`,
+      `Scenario layout token pool mismatch: pool has ${layout.pools.tokens.length} tokens but ${poolIndices.length} pool-drawn token positions need them`,
     );
   }
 
-  const adj = buildAxialAdjacency(hexDefs, tokenIndices);
+  // Apply fixed assignments first so the 6/8 retry sees them.
+  for (const { index, token } of fixedAssignments) {
+    hexDefs[index]!.token = token;
+  }
+
+  // Build adjacency over ALL tokenized positions (pool-drawn + fixed) so
+  // 6/8 constraints account for the volcano.
+  const allTokenized = [...poolIndices, ...fixedAssignments.map((a) => a.index)];
+  const adj = buildAxialAdjacency(hexDefs, allTokenized);
   const allow6_8Adjacent = layout.tokenConstraints?.allow6_8Adjacent === true;
 
   let assigned: number[] | null = null;
   for (let attempt = 0; attempt < MAX_TOKEN_RETRIES; attempt++) {
     let shuffledTokens: number[];
     [shuffledTokens, rng] = shuffle(rng, layout.pools.tokens);
-    if (allow6_8Adjacent || !hasAdjacentReds(shuffledTokens, adj)) {
+    const combined = [
+      ...shuffledTokens,
+      ...fixedAssignments.map((a) => a.token),
+    ];
+    if (allow6_8Adjacent || !hasAdjacentReds(combined, adj)) {
       assigned = shuffledTokens;
       break;
     }
@@ -87,8 +112,8 @@ export function materializeLayout(
   if (!assigned) {
     [assigned, rng] = shuffle(rng, layout.pools.tokens);
   }
-  for (let i = 0; i < tokenIndices.length; i++) {
-    hexDefs[tokenIndices[i]!]!.token = assigned[i]!;
+  for (let i = 0; i < poolIndices.length; i++) {
+    hexDefs[poolIndices[i]!]!.token = assigned[i]!;
   }
 
   // ----- Port type assignment -----

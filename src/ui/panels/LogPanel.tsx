@@ -209,6 +209,15 @@ function entryMatches(
       pushName(entry.player);
       parts.push('end turn');
       break;
+    case 'volcanoEruption':
+      pushName(entry.victim);
+      parts.push(
+        'volcano',
+        entry.effect === 'destroyed'
+          ? 'settlement destroyed'
+          : 'city downgraded',
+      );
+      break;
     case 'turnBegins':
       parts.push('turn', `turn ${entry.turnNumber}`);
       break;
@@ -358,6 +367,15 @@ function LogLine({
     case 'endTurn':
       return (
         <div className="log-line log-soft">{pname(entry.player)} ended turn</div>
+      );
+    case 'volcanoEruption':
+      return (
+        <div className="log-line">
+          🌋 {pname(entry.victim)}'s{' '}
+          {entry.effect === 'destroyed'
+            ? 'settlement was destroyed'
+            : 'city was downgraded to a settlement'}
+        </div>
       );
     case 'turnBegins':
       return (

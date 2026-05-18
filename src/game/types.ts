@@ -87,8 +87,8 @@ export interface BoardState {
   islandOfHex?: Record<HexId, string>;
   // Base-game Volcano scenario: the hex that erupts on its number roll.
   // When set, setup placement is blocked on any vertex adjacent to this hex
-  // and the dice handler dispatches `eruptVolcano` when the volcano's
-  // number is rolled.
+  // and the dice handler destroys a random adjacent building inline when
+  // the volcano's number is rolled (settlements vanish, cities downgrade).
   volcanoHex?: HexId;
 }
 
@@ -506,21 +506,6 @@ export interface AttackPirateFleetAction extends ActionBase {
   type: 'attackPirateFleet';
 }
 
-// ----------------------------------------------------------------------------
-// Base-game scenario actions
-// ----------------------------------------------------------------------------
-
-// Volcano scenario: emitted by the dice handler when the volcano's number
-// is rolled. The acting (rolling) player decides which adjacent vertex is
-// destroyed via Math.random and includes it in the payload so all peers
-// reduce to the same state. `vertexId === null` when no buildings sit on
-// the volcano's six corners (eruption no-ops with a log entry).
-export interface EruptVolcanoAction extends ActionBase {
-  type: 'eruptVolcano';
-  volcanoHexId: HexId;
-  vertexId: VertexId | null;
-}
-
 export type Action =
   | PlaceInitialSettlementAction
   | PlaceInitialRoadAction
@@ -549,8 +534,7 @@ export type Action =
   | MovePirateAction
   | ChooseGoldResourceAction
   | BuildWonderAction
-  | AttackPirateFleetAction
-  | EruptVolcanoAction;
+  | AttackPirateFleetAction;
 
 export type ActionType = Action['type'];
 

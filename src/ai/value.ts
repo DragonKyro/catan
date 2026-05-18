@@ -236,6 +236,15 @@ export function vertexScore(
     }
   }
 
+  // Volcano scenario: heavy penalty for touching the volcano hex. The
+  // engine already forbids it in setup, but the AI still scores main-game
+  // placements (e.g. roads toward an open vertex); a strong negative keeps
+  // it from racing into the eruption zone.
+  let volcanoPenalty = 0;
+  if (state.board.volcanoHex && vertex.hexes.includes(state.board.volcanoHex)) {
+    volcanoPenalty = 3.5;
+  }
+
   return (
     totalPips +
     diversityBonus +
@@ -245,7 +254,8 @@ export function vertexScore(
     tribeBonus +
     fogBonus +
     clothBonus -
-    shoreline
+    shoreline -
+    volcanoPenalty
   );
 }
 

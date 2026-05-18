@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { TOPICS } from './topics';
 import type { Topic } from './topics';
+import { buildSearchIndex, searchTopics } from './search';
 import './Rulebook.css';
 
 interface Props {
@@ -37,7 +38,17 @@ function buildSections(topics: Topic[]): Section[] {
 
 export function Rulebook({ variant = 'page', onClose }: Props) {
   const [index, setIndex] = useState(0);
+  const [query, setQuery] = useState('');
   const sections = useMemo(() => buildSections(TOPICS), []);
+  // Search index: title + extracted body text per topic, built once per
+  // Rulebook mount. The body walk is moderately expensive so memoise.
+  const searchIndex = useMemo(() => buildSearchIndex(TOPICS), []);
+  // Indices into TOPICS that match the current query (all topics when the
+  // query is empty).
+  const matchingIndices = useMemo(
+    () => new Set(searchTopics(searchIndex, query)),
+    [searchIndex, query],
+  );
   // Sections default open if they contain the currently-selected topic,
   // else collapsed. Keep both base + the selected section open initially.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
@@ -76,11 +87,39 @@ export function Rulebook({ variant = 'page', onClose }: Props) {
     }
   };
 
+  // While the search box is non-empty, force every section open so the user
+  // sees matches across the whole rulebook. Collapsed sections are restored
+  // when the query is cleared.
+  const isSearching = query.trim() !== '';
+  const matchCount = matchingIndices.size;
+
   const body = (
     <div className="rb">
       <nav className="rb-toc" aria-label="Rulebook topics">
+        <div className="rb-toc-search">
+          <input
+            type="search"
+            placeholder="Search rules…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search rulebook"
+          />
+          {isSearching && (
+            <span className="rb-toc-search-count" aria-live="polite">
+              {matchCount} {matchCount === 1 ? 'match' : 'matches'}
+            </span>
+          )}
+        </div>
         {sections.map((s) => {
-          const isCollapsed = collapsed.has(s.name) && s.name !== activeSectionName;
+          const visibleIndices = s.topicIndices.filter((i) =>
+            matchingIndices.has(i),
+          );
+          // Hide whole sections that have zero hits when searching.
+          if (isSearching && visibleIndices.length === 0) return null;
+          const isCollapsed =
+            !isSearching &&
+            collapsed.has(s.name) &&
+            s.name !== activeSectionName;
           return (
             <div key={s.name} className="rb-toc-group">
               <button
@@ -88,15 +127,18 @@ export function Rulebook({ variant = 'page', onClose }: Props) {
                 className={`rb-toc-section-btn ${isCollapsed ? 'is-collapsed' : ''}`}
                 onClick={() => toggleSection(s.name)}
                 aria-expanded={!isCollapsed}
+                disabled={isSearching}
               >
                 <span className="rb-toc-section-chevron" aria-hidden>
                   {isCollapsed ? '▸' : '▾'}
                 </span>
                 <span className="rb-toc-section-name">{s.name}</span>
-                <span className="rb-toc-section-count">{s.topicIndices.length}</span>
+                <span className="rb-toc-section-count">
+                  {isSearching ? visibleIndices.length : s.topicIndices.length}
+                </span>
               </button>
               {!isCollapsed &&
-                s.topicIndices.map((i) => {
+                (isSearching ? visibleIndices : s.topicIndices).map((i) => {
                   const t = TOPICS[i]!;
                   return (
                     <button

@@ -46,6 +46,16 @@ export interface ScenarioPosition {
   // Black Forest). Bypasses the pool draw. Only meaningful when
   // `kind === 'land'`.
   fixedTerrain?: Terrain;
+  // When true, this position participates in token assignment even though
+  // its terrain is desert. Used by the Volcano scenario where the volcano
+  // hex is mechanically a desert (robber-blocking, no production) but rolls
+  // its number to trigger eruption.
+  forceToken?: boolean;
+  // When set, the position takes this exact number token instead of drawing
+  // from the pool. The pool's token count should be reduced by the number
+  // of `fixedToken` positions on the layout. The 6/8 adjacency check still
+  // includes fixed-token hexes.
+  fixedToken?: number;
 }
 
 // Port anchor without a type — the type is drawn from `ScenarioPools.portTypes`.

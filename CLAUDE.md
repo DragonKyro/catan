@@ -31,6 +31,25 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 
 **No `if (expansion === 'cities')` conditionals scattered through the code.** If you find yourself wanting one, add a module hook instead.
 
+## Board scenario system
+
+Modular layout types live in `src/game/board/scenarioTypes.ts` (`ScenarioPosition`, `ScenarioPortAnchor`, `ScenarioPools`, `ScenarioLayout`), shared materializer in `src/game/board/layoutMaterializer.ts`, and assembly helper in `src/game/board/scenarioAssembly.ts`. Both Seafarers and base-game scenarios feed through these.
+
+- **Base scenarios** (`src/game/modules/base/scenarios/`): the colonist.io-style Fun Maps. `BaseScenario` records each declare optional `layout3p` / `layout4p` / `layout5_6p` plus optional volcano metadata. `Standard` is the sentinel — no layout, falls through to the legacy hardcoded `generateBoard()` so the default new-game flow is bit-for-bit unchanged.
+- **Seafarers scenarios** (`src/game/modules/seafarers/board/scenarios/`): the 9 official scenarios. Same modular layout machinery + Seafarers-specific fields (`fogHexes`, `tribeTokens`, `pirateFleet`, `clothHexes`).
+- **createGame routing**: if Seafarers is on → `generateSeafarersBoard`; else if `baseScenarioId !== 'standard'` → `generateBaseScenarioBoard`; else → legacy `generateBoard`.
+
+`ScenarioPosition` extensions: `fixedTerrain` pins terrain (Black Forest's fixed wood); `forceToken` joins a desert position to the token pool (Volcano's desert-with-a-number); `fixedToken` pins an exact number on a position (Volcano pinned to 6). `ScenarioLayout.tokenConstraints.allow6_8Adjacent` relaxes the no-adjacent-reds retry (Black Forest).
+
+## Base-game Fun Maps
+
+The colonist.io-style maps live as `BaseScenario` entries; pick from the **Base map** dropdown on the New Game screen.
+
+- **Gold Rush** — 2 gold fields (3 at 5-6p) mixed into the terrain pool. Uses the existing Seafarers-engine gold flow (settlement adjacent to gold = pick any resource on production).
+- **Volcano** — center hex is a fixed desert with a pinned 6 token. Setup blocks placement on volcano-adjacent vertices. When the volcano's number rolls, `maybeEruptVolcano` in `src/game/actions/dice.ts` picks a random occupied adjacent corner using seeded `state.rngState` and destroys/downgrades the building inline (no separate action — peers reduce identically). Log entry: `volcanoEruption` with 🌋 prefix, derived in `logStore.record` by diffing settlement/city counts on volcano corners. AI gets a `-3.5` penalty for volcano-adjacent vertices in `vertexScore`. UI: `src/ui/game/base/VolcanoMarker.tsx`.
+- **Black Forest** — 5 fixed-wood interior hexes; `tokenConstraints.allow6_8Adjacent: true` so a dense red cluster can land anywhere.
+- **Diamond / Gear / Lakes / Pond / Twirl** — pure shape variants (16-hex rhombus, 13-hex gear, 3 interior lakes, 1 center sea, 21-hex spiral). No new mechanics — the engine handles interior sea hexes for free (the distance rule across narrow lakes already works via the hex graph adjacency).
+
 Seafarers wrapper pattern: `src/game/modules/seafarers/actions/` contains thin wrappers around the base `buildSettlement` / `placeInitialSettlement` / `buildRoad` / `placeInitialRoad` handlers. The wrappers call the base, then run scenario-specific post-build hooks (`claimIslandChips`, `claimTribeTokens`, `revealAdjacentFog`). `buildShip`, `moveShip`, `buildWonder`, `attackPirateFleet`, `chooseGoldResource`, robber/pirate-choice, and `movePirate` are Seafarers-native handlers without a base counterpart. The dispatcher in `src/game/modules/seafarers/index.ts` routes only those action types — everything else falls through to the base module.
 
 ## Seafarers scenario mechanics
@@ -154,6 +173,7 @@ Each scenario also carries `defaultVpToWin` (3-4p) and optional `defaultVpToWin5
 - [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
 - [x] Phase 6 — Seafarers expansion (9 official scenarios, each with rulebook headline mechanic wired up — see "Seafarers scenario mechanics" above)
 - [x] Phase 7 — Seafarers 5–6 player extension (all 9 scenarios ship a `layout5_6p` matching the 5-6p rulebook's component counts; per-scenario `defaultVpToWin5_6` applies when player count ≥ 5. The rulebook's "Six Islands" scenario is implemented as Four Islands' 5-6p geometry — same scenario id, geometry swaps based on player count. All 5-6p layouts fit the radius-4 hex disk (61 hexes total). Visual position verification against [docs/.scenario-renders/seafarers-56-*.png] is still pending; pool counts match rulebook exactly)
+- [x] Phase 7c — Base-game colonist.io Fun Maps (Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl). Selectable from a base-map dropdown alongside Standard. Gold Rush + Pond ship 5-6p; the rest are 3-4p only. Volcano implements full eruption rules (setup-block on volcano-adjacent vertices, inline destruction on the volcano's number roll, AI penalty, rulebook entry). Rulebook now has a search bar.
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; would need per-scenario 7–8 boards. Currently the engine rejects Seafarers + >6 players via `createGame`. Re-evaluate after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
@@ -173,7 +193,6 @@ Each scenario also carries `defaultVpToWin` (3-4p) and optional `defaultVpToWin5
 Phases 0–7 and 5b complete; all 9 Seafarers scenarios support 3–6 players. The 5-6p geometries are approximations of the rulebook layouts (positions are roughly correct, component counts match exactly); a useful follow-up is visual verification against `docs/.scenario-renders/seafarers-56-*.png` and tightening hex positions to match the diagrams.
 
 Two smaller follow-ups worth doing soon:
-- **AI awareness of scenario actions**: `buildWonder`, `attackPirateFleet`, and cloth/tribe scoring aren't yet in `chooseMainPhaseAction`. Adding heuristics for these makes AI-vs-AI Wonders/Pirate/Cloth games competitive.
 - **Phase 7b — Seafarers 7–8 player extension**: no official version exists. The engine currently rejects Seafarers + >6 players via `createGame`. Would need per-scenario 7–8 boards.
 
 Then **Phase 8 — Cities & Knights** as a new module under `src/game/modules/`. The action union and engine dispatcher are already extensible; new actions plug in via a new entry in their module file alongside the existing `seafarers/` and `base/` modules.

@@ -8,6 +8,7 @@ import {
   RobberDiagram,
 } from './diagrams';
 import { SEAFARERS_TOPICS } from './seafarers/topics';
+import { FUN_MAPS_TOPICS } from './base/funMaps';
 
 export interface Topic {
   id: string;
@@ -292,6 +293,9 @@ export const TOPICS: Topic[] = [
       </>
     ),
   },
+  // Base-game Fun Maps — colonist.io-style variants. Their own section so
+  // players can find Volcano's eruption rule without scrolling.
+  ...FUN_MAPS_TOPICS.map((t, i) => (i === 0 ? { ...t, section: 'Fun Maps' } : t)),
   // Seafarers expansion topics — rendered with a section header so they're
   // visually separated from the base-game topics.
   ...SEAFARERS_TOPICS.map((t, i) => (i === 0 ? { ...t, section: 'Seafarers' } : t)),

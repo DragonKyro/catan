@@ -7,6 +7,7 @@ interface Props {
   numPlayers: number;
   expansions: string[];
   scenarioId?: string;
+  baseScenarioId?: string;
   // Optional caption shown under the preview. Defaults to "<scenario name>
   // (<n> players)" when a scenario is selected, otherwise "Base game
   // (<n> players)".
@@ -27,6 +28,7 @@ export function ScenarioPreview({
   numPlayers,
   expansions,
   scenarioId,
+  baseScenarioId,
   caption,
   seed = 12345,
 }: Props) {
@@ -41,6 +43,7 @@ export function ScenarioPreview({
         settings: {
           expansions,
           scenarioId,
+          baseScenarioId,
         },
         randomizeTurnOrder: false,
       });
@@ -48,11 +51,13 @@ export function ScenarioPreview({
     } catch (e) {
       return { game: null, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [numPlayers, expansions, scenarioId, seed]);
+  }, [numPlayers, expansions, scenarioId, baseScenarioId, seed]);
 
   const defaultCaption = scenarioId
     ? `${scenarioId} (${numPlayers}p)`
-    : `Base game (${numPlayers}p)`;
+    : baseScenarioId && baseScenarioId !== 'standard'
+      ? `${baseScenarioId} (${numPlayers}p)`
+      : `Base game (${numPlayers}p)`;
 
   return (
     <div className="scenario-preview">

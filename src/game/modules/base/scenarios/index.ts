@@ -1,4 +1,12 @@
 import { standard } from './standard';
+import { goldRush } from './goldRush';
+import { volcano } from './volcano';
+import { blackForest } from './blackForest';
+import { diamond } from './diamond';
+import { gear } from './gear';
+import { lakes } from './lakes';
+import { pond } from './pond';
+import { twirl } from './twirl';
 import type { BaseScenario } from './types';
 
 // Registry of base-game scenarios. The "Standard" entry produces the legacy
@@ -6,10 +14,19 @@ import type { BaseScenario } from './types';
 // through the modular layout system.
 //
 // Order here is the order shown in the lobby dropdown: Standard first (the
-// default), then Fun Maps in implementation order.
+// default), then Fun Maps roughly grouped by "shape variants" then "mechanic
+// variants."
 
 const BASE_SCENARIO_LIST: BaseScenario[] = [
   standard,
+  goldRush,
+  volcano,
+  blackForest,
+  diamond,
+  gear,
+  lakes,
+  pond,
+  twirl,
 ];
 
 export const BASE_SCENARIOS: Record<string, BaseScenario> = Object.fromEntries(
