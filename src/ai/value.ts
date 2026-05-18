@@ -181,7 +181,72 @@ export function vertexScore(
     }
   }
 
-  return totalPips + diversityBonus + portBonus + missingBonus + chipBonus - shoreline;
+  // Forgotten Tribe: bonus per unclaimed adjacent tribe token. Scaled by
+  // type — VP tokens use the same chip multiplier (× 3), commercial harbor
+  // is a long-term 2:1 trade rate worth a strong port, dev card is a single
+  // ~0.3 VP grant.
+  let tribeBonus = 0;
+  if (state.tribeTokens) {
+    const hexSet = new Set(vertex.hexes);
+    for (const t of state.tribeTokens) {
+      if (t.claimedBy !== null) continue;
+      if (!hexSet.has(t.hexId)) continue;
+      if (t.type === 'victoryPoint') tribeBonus += 3.0;
+      else if (t.type === 'commercialHarbor') tribeBonus += 2.5;
+      else tribeBonus += 1.5; // devCard
+    }
+  }
+
+  // Fog Island: small bonus per adjacent unrevealed fog hex. Reveal grants
+  // +1 of the underlying resource (or a gold pick / nothing for desert), so
+  // this is a one-shot ~1 weight. We don't know the terrain underneath yet —
+  // the rulebook keeps it hidden — so use the average resource weight as a
+  // proxy. Don't double-add the underlying terrain's production bonus; that
+  // path is already counted by the hex loop above.
+  let fogBonus = 0;
+  if (state.unrevealedFogHexes && state.unrevealedFogHexes.length > 0) {
+    const fog = new Set(state.unrevealedFogHexes);
+    for (const hexId of vertex.hexes) {
+      if (fog.has(hexId)) fogBonus += 1.0;
+    }
+  }
+
+  // Cloth for Catan: cloth-producing hexes pay 1 cloth per settle / 2 per
+  // city on roll, and 2 cloth = 1 VP. Treat as a direct VP source: pips ×
+  // 0.5 (VP per cloth) × ~1.4 settle-multiplier ≈ 0.7 × pips. Already-
+  // counted production from the underlying terrain is REPLACED by cloth,
+  // so subtract the resource contribution we added in the hex loop above
+  // to avoid double-paying.
+  let clothBonus = 0;
+  if (state.clothHexes && state.clothHexes.length > 0) {
+    const cloth = new Set(state.clothHexes);
+    for (const hexId of vertex.hexes) {
+      if (!cloth.has(hexId)) continue;
+      const hex = state.board.hexes[hexId]!;
+      const pips = probabilityDots(hex.numberToken);
+      // Strip the resource-production value the loop already added.
+      if (hex.terrain !== 'desert' && hex.terrain !== 'sea') {
+        const w = hex.terrain === 'gold' ? terrainWeight('gold') : RESOURCE_WEIGHT[hex.terrain as Resource];
+        clothBonus -= pips * w;
+      }
+      // Cloth payoff: pips × ~0.7 (see above). Add a flat +1.5 because cloth
+      // VP doesn't compete for board placement like settlements/cities do
+      // and stacks across cities, mirroring the chip-VP bias.
+      clothBonus += pips * 0.7 + 1.5;
+    }
+  }
+
+  return (
+    totalPips +
+    diversityBonus +
+    portBonus +
+    missingBonus +
+    chipBonus +
+    tribeBonus +
+    fogBonus +
+    clothBonus -
+    shoreline
+  );
 }
 
 // "What does this player need most?" — returns weighted shortfall to the

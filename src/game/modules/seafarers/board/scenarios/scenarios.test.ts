@@ -5,19 +5,22 @@ import { identifyIslands } from '../islands';
 
 describe('all Seafarers scenarios', () => {
   for (const { id, label } of SCENARIO_ORDER) {
-    it(`${label} generates a valid 5-6 player board`, () => {
-      const { board } = generateSeafarersBoard(id, 42, 6);
-      let landCount = 0;
-      let seaCount = 0;
-      for (const hid of board.hexIds) {
-        if (board.hexes[hid]!.terrain === 'sea') seaCount++;
-        else landCount++;
-      }
-      expect(landCount).toBeGreaterThan(0);
-      expect(seaCount).toBeGreaterThan(0);
-      // 5-6 player boards should be on a radius-4 grid → 61 hexes total.
-      expect(board.hexIds.length).toBe(61);
-    });
+    const scenario = getScenario(id);
+    if (scenario.maxPlayers >= 5) {
+      it(`${label} generates a valid 5-6 player board`, () => {
+        const { board } = generateSeafarersBoard(id, 42, 6);
+        let landCount = 0;
+        let seaCount = 0;
+        for (const hid of board.hexIds) {
+          if (board.hexes[hid]!.terrain === 'sea') seaCount++;
+          else landCount++;
+        }
+        expect(landCount).toBeGreaterThan(0);
+        expect(seaCount).toBeGreaterThan(0);
+        // 5-6 player boards should be on a radius-4 grid → 61 hexes total.
+        expect(board.hexIds.length).toBe(61);
+      });
+    }
     it(`${label} generates a valid board`, () => {
       const { board, islandChips } = generateSeafarersBoard(id, 42);
       // Sanity: at least some land, some sea

@@ -70,6 +70,11 @@ export function tryBuildShip(state: GameState, playerId: PlayerId): Action | nul
     // builds the connector ships even when they don't directly score.
     score += chipProximityBonus(state, newVid);
 
+    // Pirate Islands: a ship adjacent to the fleet enables `attackPirateFleet`
+    // (free +2 VP on the killing blow). Score this edge highly when the
+    // fleet is still alive and we don't yet have an adjacent ship.
+    score += fleetAttackBonus(state, playerId, eid);
+
     if (score > bestScore) {
       bestScore = score;
       bestEid = eid;
@@ -102,6 +107,28 @@ function isInOurMarineNetwork(
     if (player.ships.includes(e)) return true;
   }
   return false;
+}
+
+// Pirate Islands: bonus for a ship edge that touches the fleet hex. Worth
+// a lot — getting a ship adjacent unlocks the attack action and the +2 VP
+// killing blow. Skipped once we already have an adjacent ship (don't pile
+// more ships up around the fleet — one is enough to attack each turn).
+function fleetAttackBonus(state: GameState, playerId: PlayerId, edgeId: EdgeId): number {
+  if (!state.pirateFleet) return 0;
+  if (state.pirateFleet.defeatedBy !== null) return 0;
+  const edge = state.board.edges[edgeId];
+  if (!edge) return 0;
+  if (!edge.hexes.includes(state.pirateFleet.hexId)) return 0;
+  // Already have a ship adjacent? No need for another.
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return 0;
+  const fleetHex = state.pirateFleet.hexId;
+  const alreadyAdjacent = player.ships.some((eid) => {
+    const e = state.board.edges[eid];
+    return e ? e.hexes.includes(fleetHex) : false;
+  });
+  if (alreadyAdjacent) return 0;
+  return 6.0;
 }
 
 // Small bonus per neighbouring vertex (at one hop) that touches an

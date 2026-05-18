@@ -88,7 +88,6 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [ ] Phase 19 — Rivals expansion: Era of Merchants
 
 **Beyond the expansion roadmap:**
-- AI awareness of scenario actions — `buildWonder`, `attackPirateFleet`, and cloth/tribe-token scoring aren't yet driven by the AI's main-phase tree
 - Post-game AI analysis — highlight likely misplays from the action log (held wood+brick instead of building; bank-traded into a 7-out; settled on a sub-optimal vertex)
 
 ## Scope

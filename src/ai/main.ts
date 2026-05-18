@@ -17,6 +17,8 @@ import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { chooseWinPlan } from './winPaths';
 import { tryBuildShip } from './seafarers/ships';
+import { tryAttackPirateFleet } from './seafarers/pirateFleet';
+import { tryBuildWonder } from './seafarers/wonders';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
@@ -62,6 +64,23 @@ export function chooseMainPhaseAction(
   if (allowDevCardPlay) {
     const cardPlay = chooseDevCardPlay(state, playerId);
     if (cardPlay) return cardPlay;
+  }
+
+  // 0.5) Pirate Islands: attack the fleet whenever we have an adjacent ship
+  //      and haven't attacked this turn. Costs nothing and is +2 VP on the
+  //      killing blow, so it always precedes resource-spending steps.
+  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const attack = tryAttackPirateFleet(state, playerId);
+    if (attack) return attack;
+  }
+
+  // 0.75) Wonders of Catan: completing a wonder is an instant win, so if
+  //       this build would push a wonder to its max level, do it before
+  //       anything else. The normal-level pass runs further down in the
+  //       priority tree.
+  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const win = tryBuildWonder(state, playerId, { instantWinOnly: true });
+    if (win) return win;
   }
 
   // 1) BUILD CITY
@@ -279,6 +298,16 @@ export function chooseMainPhaseAction(
     if (bestEid && bestScore >= threshold) {
       return { type: 'buildRoad', playerId, edge: bestEid };
     }
+  }
+
+  // 3.5) BUILD WONDER (normal level). Each level is a guaranteed +1 VP
+  //      and locks the wonder to us so opponents can't race the prereq.
+  //      Lower than direct expansion (city / settle / road→settle) because
+  //      wonders don't add production, but higher than dev cards because
+  //      they're deterministic VP rather than ~0.2 expected VP per draw.
+  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const w = tryBuildWonder(state, playerId);
+    if (w) return w;
   }
 
   // 4) BUY DEV CARD — fallback when no quality road was buildable AND
