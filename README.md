@@ -104,6 +104,89 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 **Beyond the expansion roadmap:**
 - Post-game AI analysis — highlight likely misplays from the action log (held wood+brick instead of building; bank-traded into a 7-out; settled on a sub-optimal vertex)
 
+**Fun map ideas (not yet implemented):**
+
+*Shape-only variants (cheap to ship — just position arrays):*
+
+- [ ] Crescent / Moon — C-shaped board with no center hex; inside-curve vertices become premium
+- [ ] Continental Divide — long narrow board with a desert/mountain spine; crossing the divide is expensive but cuts trade distance
+- [ ] Hourglass / Bottleneck — two clusters joined by a 1–2 hex bridge; chokepoint warfare
+- [ ] Single-Resource Regions — 5 small islands (or zones), each producing exactly one resource; trade isn't optional
+- [ ] Pinwheel — 4 short spokes of 2–3 hexes radiating from a center hex; tight, fast games
+- [ ] Cross / Plus — 4 arms; territorial control by arm
+- [ ] Y-shape — 3 elongated arms; port-rich, encourages naval play with Seafarers
+
+*Resource-themed mechanics:*
+
+**Water / sea:**
+
+- [ ] Tides — half the tokens are "high tide" (produce on odd turns), other half "low tide" (even turns); forces a balanced mix of both
+- [ ] Whirlpool / Maelstrom — designated sea hex; ships ending a turn adjacent get pulled in and destroyed (with Seafarers); without ships, blocks port adjacency
+- [ ] Tidal Wave — on a rare roll, one coastal settlement (chosen by RNG) is destroyed; cities downgrade
+
+**Desert:**
+
+- [ ] Wandering Desert / Sandstorm — desert shifts to an adjacent hex on certain rolls; predictable but unavoidable
+- [ ] Oasis — desert ring around a fertile center; one "oasis" hex inside the ring acts as a 2:1 port for any resource
+
+**Wood (forests, logging, wildlife):**
+
+- [ ] Forest Fire — designated wood hex stops producing for N rolls after a pinned trigger; cascades if two burn at once
+- [ ] Logging Camp — wood hex yields +1 wood for its first 5 rolls, then permanently becomes a desert (clear-cut); race to plant on it early
+- [ ] Old-Growth Forest — designated wood hex worth +1 VP to whoever first settles adjacent (Forgotten-Tribe-style chip restricted to wood theme)
+- [ ] Regrowth / Sapling — clear-cut wood-hexes-turned-desert (from Logging Camp or Forest Fire) regrow back into wood hexes after N rolls; cycle continues
+- [ ] Sawmill — adjacent settlement gets a passive 2 wood → 1 of anything trade once per turn; wood becomes a soft currency
+- [ ] Druid's Grove — designated wood hex blocks the robber from ever sitting on it; one "safe" production hex
+- [ ] Charcoal Pit — settlement adjacent to BOTH a wood and an ore hex gets +1 of either per roll
+- [ ] Treeline — wood hexes can't be upgraded to cities (only settlements); forces sprawl over densification
+- [ ] Deer Migration — wildlife token moves through wood hexes each turn; settlement adjacent at the right moment gets a free wood
+
+**Ore (mountains, caves, mines):**
+
+- [ ] Avalanche — Volcano's sibling: ore hex destroys/downgrades a random adjacent building on its pinned roll
+- [ ] Mountain Pass — contiguous ore ridge acts as a wall; roads can't cross between ore-hex edges except through 1–2 marked "pass" edges
+- [ ] Cave / Tunnel Network — designated ore hexes are connected by hidden tunnels; a road on a tunnel edge gives a free road on a far-side ore hex
+- [ ] Cave-in — on every 7 roll (in addition to the robber), one ore hex stops producing for 3 rolls
+- [ ] Mountain Echo — when an ore hex rolls, ALL ore-adjacent settlers also get +1 ore (resonance); massive city-build buff
+- [ ] Gold Vein — designated ore hex doubles as a gold field 1-in-3 rolls (seeded RNG); commit-with-variance
+
+**Sheep (pasture, wildlife):**
+
+- [ ] Wolves — wolf token sits on a sheep hex and disables production; moves on pinned rolls or via a new shepherd mini-action
+- [ ] Migration / Flock Rotation — sheep hexes rotate which one is "currently grazed" each turn; only the active sheep hex produces (double); others produce nothing
+- [ ] Sheep Market / Festival — designated festival hex lets adjacent settlers spend 1 sheep for 1 of anything, once per turn; sheep becomes soft currency
+- [ ] Wool Boom — sheep hexes produce 2 instead of 1 on a pinned trigger roll; compensates sheep's natural weakness without changing the rest of the game
+- [ ] Plague — if any player ends turn holding >6 sheep, they discard half; encourages sheep throughput, punishes hoarders
+
+**Brick (clay, kilns, quarries):**
+
+- [ ] Quarry — designated brick hex gives adjacent settlers +1 brick on its first N rolls, then depletes into a desert
+- [ ] Kiln — designated brick hex acts as a passive 2 brick → 1 anything trade post; brick becomes a currency hex
+- [ ] Brickworks — settlements adjacent to a brickworks hex pay 1 less brick on all road builds; Longest Road buff
+- [ ] Mudslide — on a pinned roll, one brick hex floods and produces nothing for the next 4 rolls; roads adjacent can't be built that turn
+- [ ] Adobe — settlements on brick hexes are immune to robber/knight steals; brick hexes become safe-haven properties
+
+**Wheat (farms, weather):**
+
+- [ ] Drought — at game start, one "drought roll" is chosen (e.g., 4 or 5); on that roll, ALL wheat hexes are blocked for one turn
+- [ ] Locust Swarm — locust token disables one wheat hex at a time, moving clockwise on even rolls in a predictable patrol pattern
+- [ ] Harvest Festival — every 8 turns, the player with the most wheat-adjacent settlements gets +1 VP (caps at +3 over a game)
+- [ ] Granary — designated wheat hex with a granary token; adjacent player can stockpile up to 3 wheat that doesn't count toward 7-discard limits
+- [ ] Crop Rotation — wheat hexes have hidden secondary terrains and flip every 5 turns (e.g., wheat ↔ sheep)
+- [ ] Vineyard Upgrade — players can spend 2 wheat + 1 ore at any wheat hex they're adjacent to, permanently upgrading it to produce 2 wheat per roll
+
+*General / cross-resource mechanics:*
+
+- [ ] Earthquake — on every roll of a pinned number, two random tokens swap via seeded RNG; production geography becomes unstable
+- [ ] Bandit Camp — second robber-like figure that fires on the dice's *unrolled* number (if you roll 5, camp activates on a different hex)
+- [ ] Sacred Path / Trade Routes — specific 3-edge paths printed on the board grant +1 VP to whoever fully owns them with their roads
+- [ ] Treasure Hunt — face-down VP tokens on a few hexes; first settler reveals and keeps (Forgotten-Tribe-but-only-VP)
+- [ ] Reverse Robber / Trade Winds — on rolls of 2 or 12, a random player gets a free resource or 2:1 trade
+- [ ] Seasons — game cycles through Spring/Summer/Fall/Winter every N turns; each season disables one resource's hexes; forces production diversity
+- [ ] Tornado — permanent moving robber-like marker that hops to a random hex each turn; doesn't steal, just blocks production
+- [ ] Trade Caravan — NPC marker that walks the perimeter each turn; settlement adjacent that turn gets a free 2:1 (any → any) trade
+- [ ] Civilizations — each player draws a hidden civilization card at game start with a small permanent bias (e.g., free 2:1 sheep port, or +1 wheat per wheat hex); asymmetric starts
+
 ## Scope
 
 Intentionally **not** included: accounts, matchmaking, monetization, anti-cheat, persistent saves. Friends-only project — none of that pays for itself at this scale.
