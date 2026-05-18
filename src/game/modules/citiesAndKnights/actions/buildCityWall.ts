@@ -26,19 +26,24 @@ export function handleBuildCityWall(
   if (state.cityWalls?.[action.vertex]) {
     throw new Error('That city already has a wall');
   }
-  if (!canAfford(player.resources, COSTS.cityWall)) {
+  // Engineering progress card flag: this wall is free.
+  const free = !!state.engineeringActive;
+  if (!free && !canAfford(player.resources, COSTS.cityWall)) {
     throw new Error('Cannot afford city wall');
   }
 
   let next = updatePlayer(state, action.playerId, (p) => ({
     ...p,
     cityWalls: (p.cityWalls ?? 0) + 1,
-    resources: subtractResources(p.resources, COSTS.cityWall),
+    resources: free
+      ? p.resources
+      : subtractResources(p.resources, COSTS.cityWall),
   }));
   next = {
     ...next,
-    bank: addResources(next.bank, COSTS.cityWall),
+    bank: free ? next.bank : addResources(next.bank, COSTS.cityWall),
     cityWalls: { ...(next.cityWalls ?? {}), [action.vertex]: action.playerId },
+    engineeringActive: false,
   };
   return next;
 }

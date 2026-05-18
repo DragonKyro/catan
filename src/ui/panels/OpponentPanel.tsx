@@ -141,6 +141,16 @@ export function OpponentPanel() {
               {game.strongestPorts?.holder === p.id && (
                 <span title="Strongest Ports (+2 VP)">⚓</span>
               )}
+              {(p.fishTokens?.length ?? 0) > 0 && (
+                <span
+                  title={`Fish tokens — ${p.fishTokens!.length} held`}
+                >
+                  🐟 {p.fishTokens!.length}
+                </span>
+              )}
+              {game.oldBootHolder === p.id && (
+                <span title="Old boot — needs +1 VP to win">👢</span>
+              )}
             </div>
             <div className="opp-pieces" title="Pieces remaining (built / cap)">
               <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>

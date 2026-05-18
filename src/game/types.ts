@@ -61,10 +61,92 @@ export interface BarbarianState {
 }
 
 // ============================================================================
+// Cities & Knights — knights, improvements, progress cards
+// ============================================================================
+
+// Knight strength. 1=basic, 2=strong, 3=mighty.
+export type KnightStrength = 1 | 2 | 3;
+
+export interface KnightRecord {
+  playerId: PlayerId;
+  strength: KnightStrength;
+  active: boolean;
+}
+
+// Per-player supply of knight tokens by strength. Rulebook ships 2 of each.
+export type KnightSupply = Record<PlayerId, Record<KnightStrength, number>>;
+
+// Three city-improvement tracks. Each player has a level 0..5 on each track.
+export type ImprovementTrack = 'science' | 'trade' | 'politics';
+
+export const IMPROVEMENT_TRACKS: readonly ImprovementTrack[] = [
+  'science',
+  'trade',
+  'politics',
+] as const;
+
+export type ImprovementLevels = Record<ImprovementTrack, number>;
+
+// Which commodity feeds which improvement track.
+export const TRACK_COMMODITY: Record<ImprovementTrack, Commodity> = {
+  science: 'paper',
+  trade: 'cloth',
+  politics: 'coin',
+};
+
+export interface MetropolisRecord {
+  playerId: PlayerId;
+  // City vertex hosting the metropolis.
+  vertex: VertexId;
+  // True once the owner has reached level 5 — locked, can no longer be
+  // taken by another player.
+  permanent: boolean;
+}
+
+// Progress card kinds (rulebook p.13-16). 18 per deck × 3 decks = 54 cards.
+// The two VP cards (printing, constitution) are auto-revealed when drawn
+// (they don't count toward the 4-card hand limit).
+export type ProgressCardKind =
+  // Science (18 = 2+2+1+2+2+2+2+2+2+1)
+  | 'alchemy'
+  | 'crane'
+  | 'engineering'
+  | 'invention'
+  | 'irrigation'
+  | 'medicine'
+  | 'mining'
+  | 'progressRoadBuilding'
+  | 'smithing'
+  | 'printing'
+  // Trade (18 = 2+2+6+2+4+2)
+  | 'commercialHarborCard'
+  | 'guildDues'
+  | 'merchantCard'
+  | 'merchantFleet'
+  | 'resourceMonopoly'
+  | 'tradeMonopoly'
+  // Politics (18 = 2+2+3+2+2+2+2+1+2)
+  | 'diplomacy'
+  | 'encouragement'
+  | 'espionage'
+  | 'intrigue'
+  | 'sabotage'
+  | 'taxation'
+  | 'treason'
+  | 'constitution'
+  | 'wedding';
+
+export interface ProgressCardHand {
+  science: ProgressCardKind[];
+  trade: ProgressCardKind[];
+  politics: ProgressCardKind[];
+}
+
+// ============================================================================
 // Terrain & hexes
 // ============================================================================
 
-export type Terrain = Resource | 'desert' | 'sea' | 'gold' | 'swamp';
+export type Terrain = Resource | 'desert' | 'sea' | 'gold' | 'swamp' | 'lake';
 
 export interface HexCoord {
   q: number;
@@ -204,6 +286,17 @@ export interface Player {
   // the player's 7-roll hand-limit; a city wall comes off if a wall'd city is
   // pillaged.
   cityWalls?: number;
+  // Cities & Knights: improvement track levels (0..5 each). Only populated
+  // under C&K.
+  improvements?: ImprovementLevels;
+  // Cities & Knights: progress card hand by track. VP cards stay here and
+  // are visible (auto-flipped). Non-VP cards are secret and counted toward
+  // the 4-card hand limit.
+  progressCards?: ProgressCardHand;
+  // Cities & Knights: number of "Defender of Catan" VP tokens earned by
+  // contributing the most defender strength when the barbarians lost. 1 VP
+  // each.
+  defenderTokens?: number;
   // Traders & Barbarians: coins / gold pieces. Earned by building on river
   // tiles (1/build) and bridges (3/build), or by trading resources to the
   // supply at the player's normal bank trade rate. Spent 2-for-1 to buy any
@@ -214,6 +307,31 @@ export interface Player {
   // a bridge. Bridges count as roads for Longest Road but are separate
   // pieces with their own placement rule (must sit on a river edge).
   bridges?: EdgeId[];
+  // Traders & Barbarians / Fishing on Catan: drawn fish tokens. Each entry
+  // is a value token ('one' | 'two' | 'three' fish). The old boot is NOT a
+  // fish token — it lives in `state.oldBootHolder`. Capped at 7 tokens per
+  // the rulebook. Not a resource — doesn't count toward 7-roll discard,
+  // can't be stolen by robber, can't be traded.
+  fishTokens?: Array<'one' | 'two' | 'three'>;
+}
+
+// ----- Traders & Barbarians / Fishing on Catan -----
+
+// Pool of fish tokens shipped with the scenario. 11 ones + 10 twos + 8
+// threes = 29 fish tokens, plus a single 'oldBoot' acquired by whoever
+// draws it (then visible to all). Discarded fish go to a face-up pile and
+// the pile reshuffles into a fresh pool when the pool empties.
+export type FishTokenType = 'one' | 'two' | 'three' | 'oldBoot';
+
+// Fishing ground tile: placed on a frame edge at a coastal vertex. The tile
+// has its own number token; on roll, the settlement/city at the anchor
+// vertex (if any) draws fish tokens. Vertices uniquely identify a fishing
+// ground (one per coastal "V" notch on the frame).
+export interface FishingGround {
+  // Anchor vertex on the main island. Settlements/cities on this vertex
+  // earn fish when `token` is rolled.
+  vertex: VertexId;
+  token: number;
 }
 
 // ============================================================================
@@ -231,7 +349,19 @@ export type GamePhase =
   // Seafarers extension phases.
   | 'chooseRobberOrPirate'
   | 'movePirate'
-  | 'chooseGoldResource';
+  | 'chooseGoldResource'
+  // Cities & Knights sub-phases. All transitions live on the C&K module.
+  | 'displacedKnightMove'
+  | 'placeMetropolis'
+  | 'chooseProgressCardPick'
+  | 'progressCardDiscard'
+  | 'placeMerchant'
+  | 'removeRoad'
+  | 'treasonRemoveKnight'
+  | 'treasonPlaceKnight'
+  | 'commercialHarborOffer'
+  | 'weddingGive'
+  | 'aqueductPick';
 
 export interface SetupState {
   step: 'settlement' | 'road';
@@ -243,7 +373,9 @@ export interface DiscardState {
 }
 
 export interface RobberMoveContext {
-  reason: 'sevenRoll' | 'knight';
+  // 'knight' covers BOTH the legacy dev-card knight (base/Seafarers) and
+  // the C&K "chase the robber" knight action. 'taxation' is C&K only.
+  reason: 'sevenRoll' | 'knight' | 'taxation';
   returnTo: 'main' | 'rollOrPlayKnight';
 }
 
@@ -411,6 +543,85 @@ export interface GameState {
   // so the board renderer can find walls without scanning players. Walls
   // come off when the city is pillaged.
   cityWalls?: Record<VertexId, PlayerId>;
+  // Knights placed on the board, keyed by vertex. Each knight tracks its
+  // owner, strength (1/2/3), and active/inactive status. Vertices not in
+  // the map have no knight.
+  knights?: Record<VertexId, KnightRecord>;
+  // Per-player supply of knight tokens remaining. Rulebook: 2 of each
+  // strength per player.
+  knightSupply?: KnightSupply;
+  // Per-track metropolis owner. `null` means no one has reached level 4
+  // yet. `permanent: true` means the holder reached level 5 first; no
+  // other player can take it.
+  metropolises?: Record<ImprovementTrack, MetropolisRecord | null>;
+  // Three face-down progress card decks (drawn on the event die). Shuffled
+  // at game start. Each draws from the top.
+  progressDecks?: Record<ImprovementTrack, ProgressCardKind[]>;
+  // The merchant piece (C&K progress card "Merchant"). Owner gets +1 VP
+  // and a 2:1 trade rate on the hex's resource (not commodity).
+  merchant?: { ownerId: PlayerId; hexId: HexId };
+  // Per-turn flags reset on endTurn:
+  promotedKnightThisTurn?: boolean;
+  // Vertices of knights activated this turn — they can't take an action
+  // this same turn (rulebook p.9 "you may not activate a knight and then
+  // take an action with it on the same turn").
+  activatedKnightsThisTurn?: VertexId[];
+  hasPlayedProgressCardThisTurn?: boolean;
+  // Merchant Fleet card flag (this turn only): 2:1 on this resource/commodity.
+  merchantFleetActive?: {
+    kind: 'resource' | 'commodity';
+    which: Resource | Commodity;
+  };
+  // Crane: next buildCityImprovement costs 1 fewer commodity.
+  craneActive?: boolean;
+  // Engineering: next buildCityWall is free.
+  engineeringActive?: boolean;
+  // Medicine: next buildCity costs 1 wheat + 2 ore (instead of 2+3).
+  medicineActive?: boolean;
+  // Diplomacy "remove own road" follow-up — true when the next buildRoad
+  // is free because we just diplomatically removed one of our own roads.
+  diplomacyFreeRoad?: boolean;
+  // Alchemy pre-roll override. When set, the next rollDice uses these
+  // values instead of the action payload.
+  pendingAlchemy?: [number, number];
+  // Sub-phase containers:
+  pendingMetropolis?: { track: ImprovementTrack };
+  pendingKnightMove?: {
+    playerId: PlayerId;
+    sourceVertex: VertexId;
+    // Carried for the displaced-knight-move sub-phase so the engine knows
+    // what strength piece to drop back on the board after the owner picks
+    // their destination. Optional — only set when the knight is currently
+    // off-board (post-displacement).
+    knightStrength?: KnightStrength;
+    knightActive?: boolean;
+    returnTo: GamePhase;
+  };
+  // Progress-card pick state (Espionage, Guild Dues).
+  progressPickState?: {
+    kind: 'espionage' | 'guildDues';
+    picker: PlayerId;
+    targetId: PlayerId;
+    remaining: number;
+  };
+  pendingTreason?: {
+    attackerId: PlayerId;
+    targetId: PlayerId;
+    removedStrength?: KnightStrength;
+  };
+  pendingWedding?: { collector: PlayerId; remaining: PlayerId[] };
+  pendingCommercialHarbor?: { offererId: PlayerId; remaining: PlayerId[] };
+  // Progress card discard required after a draw pushed someone over the
+  // 4-card cap. Same shape as `discardState.required` but for progress
+  // cards.
+  progressCardDiscardRequired?: Record<PlayerId, number>;
+  // Aqueduct (science L3) free-pick state: after a production that gave
+  // the player nothing, they get one free resource.
+  pendingAqueduct?: PlayerId[];
+  // Defender-of-Catan tie: when a barbarian attack is won but the top
+  // contribution is tied across multiple players, each tied player draws
+  // a progress card of their choice. Queued here in turn order.
+  pendingDefenderTieDraw?: PlayerId[];
   // ----- Traders & Barbarians extension -----
   // Edges flagged as "river edges" by the active T&B scenario. Roads are
   // forbidden on these edges; bridges are the only structure that can
@@ -432,6 +643,25 @@ export interface GameState {
   strongestPorts?: {
     holder: PlayerId | null;
   };
+  // Traders & Barbarians / Fishing on Catan: face-down draw pile of fish
+  // tokens (the 30-token bag: 11/10/8 fish + 1 old boot). Drawn one at a
+  // time when settlements/cities on fishing grounds or the lake produce.
+  // When empty, `fishTokenDiscard` is shuffled in to make a new pool.
+  fishTokenPool?: FishTokenType[];
+  // Face-up pile of discarded fish tokens (spent on actions, or from the
+  // 7-token discard-and-replace rule). The boot never lands here — once
+  // drawn it stays on a player until passed or game-end.
+  fishTokenDiscard?: FishTokenType[];
+  // Fishing ground tiles (anchor vertex + number token). 6 in the 3-4p
+  // scenario, placed at the rulebook's coastal "V" notches.
+  fishingGrounds?: FishingGround[];
+  // Hex id of the lake (a non-resource hex with a number that produces fish
+  // on roll). Robber may sit on the lake to block its production.
+  lakeHexId?: HexId;
+  // Holder of the old boot (≥1 extra VP needed to win). Drawn from the fish
+  // pool. Players may pass it during their turn to any player with ≥ their
+  // VPs. null when in the supply.
+  oldBootHolder?: PlayerId | null;
 }
 
 export interface IslandChip {
@@ -644,6 +874,33 @@ export interface BuildBridgeAction extends ActionBase {
   edge: EdgeId;
 }
 
+// Spend fish tokens for one of five effects. `tokens` lists which fish
+// tokens are discarded — their summed face value must be ≥ the effect's
+// cost (2/3/4/5/7). Excess fish is lost to the discard pile (rulebook:
+// "you lose the excess fish"). `effect.kind` discriminates the action.
+export type FishSpendEffect =
+  | { kind: 'removeRobber' }
+  | { kind: 'steal'; target: PlayerId; resource: Resource }
+  | { kind: 'takeFromBank'; resource: Resource }
+  | { kind: 'buildRoad'; edge: EdgeId }
+  | { kind: 'buyDevCard'; drawn: DevCardType };
+
+export interface SpendFishAction extends ActionBase {
+  type: 'spendFish';
+  // Subset of fish-token TYPES (not full hand) being discarded. The values
+  // must sum to ≥ the effect's cost; excess is forfeit. Only 'one' / 'two'
+  // / 'three' tokens may be spent — the old boot is never spent.
+  tokens: Array<'one' | 'two' | 'three'>;
+  effect: FishSpendEffect;
+}
+
+// Hand the old boot to another player. Legal target: any other player whose
+// total VP ≥ yours. The recipient now needs +1 VP to win.
+export interface PassOldBootAction extends ActionBase {
+  type: 'passOldBoot';
+  to: PlayerId;
+}
+
 // ----------------------------------------------------------------------------
 // Cities & Knights expansion actions
 // ----------------------------------------------------------------------------
@@ -662,6 +919,150 @@ export interface DiscardCKAction extends ActionBase {
   type: 'discardCK';
   resources: Partial<ResourceBank>;
   commodities: Partial<CommodityBank>;
+}
+
+// ----- Knights -----
+
+export interface RecruitKnightAction extends ActionBase {
+  type: 'recruitKnight';
+  vertex: VertexId;
+}
+
+export interface ActivateKnightAction extends ActionBase {
+  type: 'activateKnight';
+  vertex: VertexId;
+}
+
+export interface PromoteKnightAction extends ActionBase {
+  type: 'promoteKnight';
+  vertex: VertexId;
+}
+
+export interface MoveKnightAction extends ActionBase {
+  type: 'moveKnight';
+  from: VertexId;
+  to: VertexId;
+}
+
+export interface DisplaceKnightAction extends ActionBase {
+  type: 'displaceKnight';
+  from: VertexId;
+  to: VertexId;
+}
+
+// Forced follow-up move dispatched by the displaced knight's owner.
+export interface DisplacedKnightMoveAction extends ActionBase {
+  type: 'displacedKnightMove';
+  to: VertexId;
+}
+
+// "Chase the Robber" — own active knight adjacent to the robber initiates
+// a robber move (followed by a standard moveRobber action).
+export interface ChaseRobberAction extends ActionBase {
+  type: 'chaseRobber';
+  vertex: VertexId;
+}
+
+// ----- Improvements + metropolis -----
+
+export interface BuildCityImprovementAction extends ActionBase {
+  type: 'buildCityImprovement';
+  track: ImprovementTrack;
+}
+
+export interface PlaceMetropolisAction extends ActionBase {
+  type: 'placeMetropolis';
+  track: ImprovementTrack;
+  vertex: VertexId;
+}
+
+// Aqueduct (Science L3) free-resource pick — same shape as the Seafarers
+// gold-resource pick.
+export interface AqueductPickAction extends ActionBase {
+  type: 'aqueductPick';
+  resource: Resource;
+}
+
+// ----- Progress cards -----
+
+export interface PlayProgressCardAction extends ActionBase {
+  type: 'playProgressCard';
+  card: ProgressCardKind;
+  // Per-card payload — flat to keep the union simple. Handlers read only
+  // the fields they care about.
+  dice?: [number, number]; // alchemy
+  fromHex?: HexId; // invention
+  toHex?: HexId; // invention
+  vertex?: VertexId; // medicine, intrigue source, treason placement
+  toVertex?: VertexId; // intrigue dest
+  edges?: [EdgeId] | [EdgeId, EdgeId]; // progressRoadBuilding
+  resource?: Resource; // resourceMonopoly, merchantFleet (if resource), guildDues target
+  commodity?: Commodity; // tradeMonopoly, merchantFleet (if commodity)
+  targetId?: PlayerId; // espionage, guildDues, treason, intrigue, taxation
+  knightVertices?: VertexId[]; // smithing — which knights to promote
+}
+
+// Generic "pick a card from this hand" follow-up used by Espionage + Guild Dues.
+export interface ChooseProgressCardPickAction extends ActionBase {
+  type: 'chooseProgressCardPick';
+  // For Espionage: which deck the picked card came from.
+  deck?: ImprovementTrack;
+  // The actual card kind taken (Espionage) or a resource/commodity (Guild Dues).
+  card?: ProgressCardKind;
+  resources?: Partial<ResourceBank>;
+  commodities?: Partial<CommodityBank>;
+}
+
+// Open-road removal (Diplomacy).
+export interface RemoveRoadAction extends ActionBase {
+  type: 'removeRoad';
+  edge: EdgeId;
+}
+
+// 4-card-limit follow-up: discard a progress card.
+export interface DiscardProgressCardAction extends ActionBase {
+  type: 'discardProgressCard';
+  card: ProgressCardKind;
+  deck: ImprovementTrack;
+}
+
+// Place the merchant on a land hex (Merchant progress card).
+export interface PlaceMerchantAction extends ActionBase {
+  type: 'placeMerchant';
+  hex: HexId;
+}
+
+// Treason multi-step.
+export interface TreasonRemoveKnightAction extends ActionBase {
+  type: 'treasonRemoveKnight';
+  vertex: VertexId;
+}
+
+export interface TreasonPlaceKnightAction extends ActionBase {
+  type: 'treasonPlaceKnight';
+  vertex: VertexId;
+  strength: KnightStrength;
+}
+
+// Commercial Harbor (C&K card) opponent reply: pick the commodity you'll
+// give back in exchange for the resource offered.
+export interface CommercialHarborOfferAction extends ActionBase {
+  type: 'commercialHarborOffer';
+  // null means "I have no commodity" — the resource bounces back.
+  commodity: Commodity | null;
+}
+
+// Wedding opponent give-back.
+export interface WeddingGiveAction extends ActionBase {
+  type: 'weddingGive';
+  resources: Partial<ResourceBank>;
+  commodities: Partial<CommodityBank>;
+}
+
+// Defender-of-Catan tie draw: pick which deck to take a card from.
+export interface DefenderTieDrawAction extends ActionBase {
+  type: 'defenderTieDraw';
+  deck: ImprovementTrack;
 }
 
 export type Action =
@@ -694,8 +1095,30 @@ export type Action =
   | BuildWonderAction
   | AttackPirateFleetAction
   | BuildBridgeAction
+  | SpendFishAction
+  | PassOldBootAction
   | BuildCityWallAction
-  | DiscardCKAction;
+  | DiscardCKAction
+  | RecruitKnightAction
+  | ActivateKnightAction
+  | PromoteKnightAction
+  | MoveKnightAction
+  | DisplaceKnightAction
+  | DisplacedKnightMoveAction
+  | ChaseRobberAction
+  | BuildCityImprovementAction
+  | PlaceMetropolisAction
+  | AqueductPickAction
+  | PlayProgressCardAction
+  | ChooseProgressCardPickAction
+  | RemoveRoadAction
+  | DiscardProgressCardAction
+  | PlaceMerchantAction
+  | TreasonRemoveKnightAction
+  | TreasonPlaceKnightAction
+  | CommercialHarborOfferAction
+  | WeddingGiveAction
+  | DefenderTieDrawAction;
 
 export type ActionType = Action['type'];
 
@@ -704,7 +1127,16 @@ export type ActionType = Action['type'];
 // ============================================================================
 
 export const COSTS: Record<
-  'road' | 'settlement' | 'city' | 'devCard' | 'cityWall' | 'bridge',
+  | 'road'
+  | 'settlement'
+  | 'city'
+  | 'devCard'
+  | 'cityWall'
+  | 'bridge'
+  | 'knight'
+  | 'activateKnight'
+  | 'promoteKnight'
+  | 'cityMedicine',
   Partial<ResourceBank>
 > = {
   road: { wood: 1, brick: 1 },
@@ -713,6 +1145,14 @@ export const COSTS: Record<
   devCard: { sheep: 1, wheat: 1, ore: 1 },
   // Cities & Knights: city wall costs 2 brick.
   cityWall: { brick: 2 },
+  // Cities & Knights: knight recruit / promote = 1 sheep + 1 ore.
+  knight: { sheep: 1, ore: 1 },
+  promoteKnight: { sheep: 1, ore: 1 },
+  // Cities & Knights: activate = 1 wheat.
+  activateKnight: { wheat: 1 },
+  // Cities & Knights / Medicine progress card: city upgrade cost while the
+  // card's effect is live.
+  cityMedicine: { wheat: 1, ore: 2 },
   // Traders & Barbarians / Rivers of Catan: same as a road. Sits in the road
   // column of the rulebook's player aid; the visible payoff is +3 gold on
   // build, so a road-equivalent cost keeps the math balanced.

@@ -229,6 +229,22 @@ export function ActionBar() {
             🏛️ Wonder
           </Button>
         )}
+        {(player.fishTokens?.length ?? 0) > 0 && (
+          <Button
+            onClick={() => openDialog('spendFish')}
+            title="Spend fish tokens for an effect (drive off robber, take from bank)"
+          >
+            🐟 Spend ({player.fishTokens!.length})
+          </Button>
+        )}
+        {game.oldBootHolder === acting && (
+          <Button
+            onClick={() => openDialog('passBoot')}
+            title="Pass the old boot to any opponent with ≥ your visible VPs"
+          >
+            👢 Pass boot
+          </Button>
+        )}
         {(() => {
           const fleet = game.pirateFleet;
           if (!fleet || fleet.defeatedBy !== null) return null;

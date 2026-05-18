@@ -14,6 +14,7 @@ import {
   totalResources,
 } from '../resources';
 import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
+import { maybeDistributeFish } from '../modules/traders/fishing/production';
 import { rngInt } from '../rng';
 
 export function handleRollDice(state: GameState, action: RollDiceAction): GameState {
@@ -57,7 +58,8 @@ export function handleRollDice(state: GameState, action: RollDiceAction): GameSt
   }
 
   const afterProduction = distributeResources(next, total);
-  return maybeEruptVolcano(afterProduction, total);
+  const afterFish = maybeDistributeFish(afterProduction, total);
+  return maybeEruptVolcano(afterFish, total);
 }
 
 // Volcano scenario: if the volcano hex's number was rolled, pick a random
@@ -127,8 +129,11 @@ function distributeResources(state: GameState, rolled: number): GameState {
 
   for (const hex of Object.values(state.board.hexes)) {
     if (hex.terrain === 'desert' || hex.terrain === 'sea') continue;
+    // Swamp / lake don't produce resources. Lake fish production is handled
+    // in `maybeDistributeFish` (called after this loop in the dice handler).
+    if (hex.terrain === 'swamp' || hex.terrain === 'lake') continue;
     if (hex.numberToken !== rolled) continue;
-    if (hex.id === state.board.robberHex) continue;
+    if (hex.id === state.board.robberHex && (state.robberActive ?? true)) continue;
 
     const corners: VertexId[] = [];
     for (const v of Object.values(state.board.vertices)) {

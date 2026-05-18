@@ -14,8 +14,12 @@ import { PirateFleetMarker } from './seafarers/PirateFleetMarker';
 import { ClothHexMarker } from './seafarers/ClothHexMarker';
 import { VolcanoMarker } from './base/VolcanoMarker';
 import { CityWallMarker } from './citiesAndKnights/CityWallMarker';
+import { KnightPiece } from './citiesAndKnights/KnightPiece';
+import { MetropolisMarker } from './citiesAndKnights/MetropolisMarker';
+import { MerchantMarker } from './citiesAndKnights/MerchantMarker';
 import { Bridge } from './traders/Bridge';
 import { RiverEdgeMarker } from './traders/RiverEdgeMarker';
+import { FishingGroundMarker } from './traders/FishingGroundMarker';
 import './Board.css';
 
 interface Props {
@@ -81,7 +85,8 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
             const foggySet = new Set(game.unrevealedFogHexes ?? []);
             return board.hexIds.map((hid) => {
               const hex = board.hexes[hid]!;
-              const isRobbed = board.robberHex === hid;
+              const isRobbed =
+                board.robberHex === hid && (game.robberActive ?? true);
               const isFoggy = foggySet.has(hid);
               const shouldPulse =
                 pulseToken != null && hex.numberToken === pulseToken && !isRobbed && !isFoggy;
@@ -161,12 +166,46 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
 
         <CityWallMarker game={game} />
 
+        {/* Cities & Knights: knights on intersections + metropolis flags +
+            merchant pawn. */}
+        <g className="knights">
+          {Object.entries(game.knights ?? {}).map(([vid, k]) => {
+            const p = game.players.find((pl) => pl.id === k.playerId);
+            if (!p) return null;
+            return (
+              <KnightPiece
+                key={vid}
+                board={board}
+                vertex={vid}
+                color={p.color}
+                strength={k.strength}
+                active={k.active}
+              />
+            );
+          })}
+        </g>
+        <MetropolisMarker game={game} />
+        <MerchantMarker game={game} />
+
         {/* Interactive ghosts render on top of pieces so the full circle is
             clickable — especially important for city upgrade, where the
             settlement icon would otherwise block clicks at the center. */}
         {overlay}
 
-        <Robber board={board} />
+        {game.fishingGrounds && (
+          <g className="fishing-grounds">
+            {game.fishingGrounds.map((fg) => (
+              <FishingGroundMarker
+                key={fg.vertex}
+                board={board}
+                fg={fg}
+                pulse={pulseToken != null && fg.token === pulseToken}
+              />
+            ))}
+          </g>
+        )}
+
+        <Robber board={board} active={game.robberActive ?? true} />
         <PirateMarker board={board} />
         <PirateFleetMarker game={game} />
         <TribeTokenMarker game={game} />

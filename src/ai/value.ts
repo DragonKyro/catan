@@ -26,7 +26,7 @@ export function probabilityDots(token: number | null): number {
 }
 
 export function terrainWeight(t: Terrain): number {
-  if (t === 'desert' || t === 'sea' || t === 'swamp') return 0;
+  if (t === 'desert' || t === 'sea' || t === 'swamp' || t === 'lake') return 0;
   // Gold hexes pay any resource on roll — the player chooses, so they
   // function as a "best available" resource each tick. Weight above the
   // strongest single-resource value (ore/wheat at 1.3) to reflect that
@@ -254,6 +254,27 @@ export function vertexScore(
     if (state.board.hexes[hexId]?.terrain === 'swamp') riverGoldBonus += 0.4;
   }
 
+  // Traders & Barbarians / Fishing on Catan:
+  //   - The lake produces fish tokens on its number. Settlements adjacent
+  //     to the lake catch 1 token per production, cities 2. Worth pips ×
+  //     0.5 (rough average value of a fish token, which is ~2 fish).
+  //   - A fishing ground's anchor vertex earns the same. They're per-
+  //     vertex rather than per-hex, so the bonus is concentrated and
+  //     significant — boost it more aggressively.
+  let fishBonus = 0;
+  if (state.lakeHexId && vertex.hexes.includes(state.lakeHexId)) {
+    const lake = state.board.hexes[state.lakeHexId];
+    if (lake) fishBonus += probabilityDots(lake.numberToken) * 0.5;
+  }
+  if (state.fishingGrounds) {
+    for (const fg of state.fishingGrounds) {
+      if (fg.vertex !== vertexId) continue;
+      // Fishing grounds are EXCLUSIVE to one vertex — extra strong (no
+      // neighbour competition like a regular hex with 6 corners).
+      fishBonus += probabilityDots(fg.token) * 0.9;
+    }
+  }
+
   return (
     totalPips +
     diversityBonus +
@@ -263,7 +284,8 @@ export function vertexScore(
     tribeBonus +
     fogBonus +
     clothBonus +
-    riverGoldBonus -
+    riverGoldBonus +
+    fishBonus -
     shoreline -
     volcanoPenalty
   );

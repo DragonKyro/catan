@@ -95,7 +95,11 @@ function recomputeDerived(state: GameState): GameState {
   ) {
     const currentId = next.playerOrder[next.currentPlayerIndex]!;
     const vp = calculateVictoryPoints(next, currentId, true);
-    if (vp >= next.settings.victoryPointsToWin) {
+    // Traders & Barbarians / Fishing on Catan: the old boot holder needs
+    // +1 VP to win. Per-player win threshold so the rest of the table is
+    // unaffected.
+    const bootTax = next.oldBootHolder === currentId ? 1 : 0;
+    if (vp >= next.settings.victoryPointsToWin + bootTax) {
       next = { ...next, winner: currentId, phase: 'gameOver' };
     }
   }

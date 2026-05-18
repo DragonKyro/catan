@@ -40,6 +40,8 @@ export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getStat
   if (hasTraders) {
     if (state.wealthTiles) return true;
     if (state.strongestPorts) return true;
+    if (state.fishingGrounds && state.fishingGrounds.length > 0) return true;
+    if (state.lakeHexId) return true;
   }
   return false;
 }
@@ -315,39 +317,89 @@ export function ScenarioPanel() {
   );
 }
 
-// Traders & Barbarians scenario tracker. Currently surfaces gold totals per
-// player, Wealthiest / Poor Catanian holders, and the Strongest Ports
-// holder when the variant is on. Future T&B scenarios will add fishing
-// catch counts, barbarian-attack progress, etc.
+// Traders & Barbarians scenario tracker. Surfaces per-player gold totals,
+// wealth tiles, the Strongest Ports tile, and (when Fishing on Catan is
+// active) fish-token totals and the old boot. Future T&B scenarios will
+// add barbarian-attack progress, etc.
 function TradersScenarioPanel() {
   const game = useGameStore((s) => s.game)!;
+  const isFishing = (game.fishingGrounds?.length ?? 0) > 0 || game.lakeHexId != null;
+  const isRivers = (game.riverEdges?.length ?? 0) > 0;
   return (
     <section className="scenario-panel">
       <header className="scenario-panel-header">
         <span className="scenario-panel-title">Traders & Barbarians</span>
       </header>
-      <div className="scenario-panel-block">
-        <div className="scenario-panel-block-head">
-          <span>Gold</span>
+      {isRivers && (
+        <div className="scenario-panel-block">
+          <div className="scenario-panel-block-head">
+            <span>Gold</span>
+          </div>
+          <ul className="scenario-panel-chips">
+            {game.players.map((p) => (
+              <li key={p.id} className="scenario-panel-chip is-claimed">
+                <span className="scenario-panel-chip-vp">🪙 {p.gold ?? 0}</span>
+                <span
+                  className="scenario-panel-chip-swatch"
+                  style={{ background: playerColorVar(p.color) }}
+                  aria-hidden
+                />
+                <span className="scenario-panel-chip-name">
+                  {p.name}
+                  {game.wealthTiles?.wealthiest === p.id && ' 👑'}
+                  {game.wealthTiles?.poor.includes(p.id) && ' 👜'}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
-        <ul className="scenario-panel-chips">
-          {game.players.map((p) => (
-            <li key={p.id} className="scenario-panel-chip is-claimed">
-              <span className="scenario-panel-chip-vp">🪙 {p.gold ?? 0}</span>
-              <span
-                className="scenario-panel-chip-swatch"
-                style={{ background: playerColorVar(p.color) }}
-                aria-hidden
-              />
-              <span className="scenario-panel-chip-name">
-                {p.name}
-                {game.wealthTiles?.wealthiest === p.id && ' 👑'}
-                {game.wealthTiles?.poor.includes(p.id) && ' 👜'}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      )}
+      {isFishing && (
+        <div className="scenario-panel-block">
+          <div className="scenario-panel-block-head">
+            <span>Fish</span>
+            <span className="scenario-panel-block-sum">
+              {(game.fishTokenPool?.length ?? 0)} in pool
+            </span>
+          </div>
+          <ul className="scenario-panel-chips">
+            {game.players.map((p) => {
+              const count = p.fishTokens?.length ?? 0;
+              const isBoot = game.oldBootHolder === p.id;
+              if (count === 0 && !isBoot) return null;
+              return (
+                <li
+                  key={p.id}
+                  className="scenario-panel-chip is-claimed"
+                >
+                  <span className="scenario-panel-chip-vp">
+                    🐟 {count}
+                  </span>
+                  <span
+                    className="scenario-panel-chip-swatch"
+                    style={{ background: playerColorVar(p.color) }}
+                    aria-hidden
+                  />
+                  <span className="scenario-panel-chip-name">
+                    {p.name}
+                    {isBoot && ' 👢 (+1 VP to win)'}
+                  </span>
+                </li>
+              );
+            })}
+            {game.players.every(
+              (p) => (p.fishTokens?.length ?? 0) === 0,
+            ) &&
+              game.oldBootHolder == null && (
+                <li className="scenario-panel-chip">
+                  <span className="scenario-panel-chip-name unclaimed">
+                    No fish caught yet
+                  </span>
+                </li>
+              )}
+          </ul>
+        </div>
+      )}
       {game.strongestPorts && (
         <div className="scenario-panel-block">
           <div className="scenario-panel-block-head">

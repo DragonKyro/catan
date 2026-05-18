@@ -2,9 +2,14 @@ import type { BoardState } from '@/game/types';
 
 interface Props {
   board: BoardState;
+  // When false, the robber is "off-board" (T&B Fishing on Catan setup, C&K
+  // before the first barbarian attack, or after a fish-spend remove-robber).
+  // Render nothing in that case — board.robberHex is just a parking slot.
+  active?: boolean;
 }
 
-export function Robber({ board }: Props) {
+export function Robber({ board, active = true }: Props) {
+  if (!active) return null;
   const hex = board.hexes[board.robberHex]!;
   const { x, y } = hex.center;
   return (

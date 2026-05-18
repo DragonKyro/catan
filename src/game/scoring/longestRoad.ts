@@ -31,12 +31,16 @@ export function calculateLongestRoad(state: GameState, playerId: PlayerId): numb
     adj.get(b)!.push({ edge: eid, to: a });
   }
 
-  // Vertices occupied by opponents (block path throughput).
+  // Vertices occupied by opponents (block path throughput). C&K knights
+  // (active or inactive) also block opposing roads per rulebook p.9.
   const blocked = new Set<VertexId>();
   for (const p of state.players) {
     if (p.id === playerId) continue;
     for (const v of p.settlements) blocked.add(v);
     for (const v of p.cities) blocked.add(v);
+  }
+  for (const [vid, k] of Object.entries(state.knights ?? {})) {
+    if (k.playerId !== playerId) blocked.add(vid);
   }
 
   let best = 0;

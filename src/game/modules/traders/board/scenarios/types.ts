@@ -15,6 +15,24 @@ export interface ScenarioEdgeRef {
   direction: 0 | 1 | 2 | 3 | 4 | 5;
 }
 
+// A vertex specified by which hex it touches and which corner index (0..5,
+// clockwise from the top-right corner — same enum as port anchors). Used
+// to declare fishing-ground anchors before VertexId strings exist.
+export interface ScenarioVertexRef {
+  q: number;
+  r: number;
+  corner: 0 | 1 | 2 | 3 | 4 | 5;
+}
+
+// Fishing on Catan declarative entry: anchor + token. Resolved to a
+// concrete VertexId in the generator.
+export interface FishingGroundDef {
+  q: number;
+  r: number;
+  corner: 0 | 1 | 2 | 3 | 4 | 5;
+  token: number;
+}
+
 export interface TradersScenario {
   id: string;
   name: string;
@@ -31,4 +49,12 @@ export interface TradersScenario {
   // robberStart, then to a desert/swamp scan. Rivers of Catan uses this to
   // pin the robber to one of the two swamps.
   robberStart?: { q: number; r: number };
+  // Fishing on Catan: hex position of the lake. The scenario layout pins
+  // the lake terrain + token; this just tells the generator where to
+  // resolve `state.lakeHexId` from. Falls back to scanning hexes with
+  // `terrain === 'lake'` when absent.
+  lake?: { q: number; r: number };
+  // Fishing on Catan: six fishing-ground tiles on coastal frame vertices.
+  // Resolved into `state.fishingGrounds: FishingGround[]` by the generator.
+  fishingGrounds?: FishingGroundDef[];
 }

@@ -7,7 +7,18 @@ import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
 import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
+import { FISH_TOKEN_VALUE } from '@/game/modules/traders/constants';
 import './HandPanel.css';
+
+function fishHandTooltip(tokens: Array<'one' | 'two' | 'three'>): string {
+  const counts = { one: 0, two: 0, three: 0 };
+  for (const t of tokens) counts[t]++;
+  const total = tokens.reduce(
+    (s, t) => s + (FISH_TOKEN_VALUE[t] ?? 0),
+    0,
+  );
+  return `Fish tokens: ${counts.one}×1 + ${counts.two}×2 + ${counts.three}×3 = ${total} fish total`;
+}
 
 export function HandPanel() {
   const { game, dispatch, openDialog, uiMode, setMode, handoffAcknowledgedForPlayer } = useGameStore();
@@ -155,6 +166,22 @@ export function HandPanel() {
           {game.strongestPorts?.holder === player.id && (
             <span className="hand-flag" title="Strongest Ports (+2 VP)">
               ⚓
+            </span>
+          )}
+          {(player.fishTokens?.length ?? 0) > 0 && (
+            <span
+              className="hand-flag"
+              title={fishHandTooltip(player.fishTokens ?? [])}
+            >
+              🐟 {player.fishTokens!.length}
+            </span>
+          )}
+          {game.oldBootHolder === player.id && (
+            <span
+              className="hand-flag"
+              title="Old boot — you need +1 VP to win. Pass it during your turn to anyone with ≥ your VPs."
+            >
+              👢
             </span>
           )}
         </h3>

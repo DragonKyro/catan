@@ -13,6 +13,8 @@ export function canPlaceSettlement(
   if (!vertex) return false;
   // Settlements need at least one adjacent land hex.
   if (!vertex.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea')) return false;
+  // Cities & Knights: a knight occupies a vertex like a building.
+  if (state.knights?.[vertexId]) return false;
   for (const p of state.players) {
     if (p.settlements.includes(vertexId) || p.cities.includes(vertexId)) return false;
     for (const n of vertex.neighborVertices) {
@@ -70,6 +72,10 @@ export function canConnectRoad(
         break;
       }
     }
+    // Cities & Knights: an opposing knight blocks the chain just like a
+    // settlement/city does (rulebook p.9).
+    const knight = state.knights?.[v];
+    if (knight && knight.playerId !== playerId) blocked = true;
     if (player.settlements.includes(v) || player.cities.includes(v)) return true;
     if (blocked) continue;
     for (const eid of state.board.vertices[v]!.edges) {

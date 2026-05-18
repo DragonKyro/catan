@@ -23,6 +23,8 @@ import {
 } from '../../../commodities';
 import { rngInt } from '../../../rng';
 import { advanceBarbarianShip, resolveBarbarianAttack } from '../barbarian';
+import { aqueductActive } from '../improvements/state';
+import { drawProgressCardsForEvent } from '../progress/draw';
 
 // Cities & Knights `rollDice` override. The rulebook flow is:
 //   1. (Optional progress card play — Alchemy. Not implemented in Phase 1.)
@@ -42,7 +44,9 @@ export function handleRollDiceCK(state: GameState, action: RollDiceAction): Game
   if (state.hasRolledThisTurn) throw new Error('Already rolled this turn');
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
 
-  const [d1, d2] = action.dice;
+  // Alchemy progress card: if the current player pre-played alchemy this
+  // turn, override the action's dice with the chosen values.
+  const [d1, d2] = state.pendingAlchemy ?? action.dice;
   if (d1 < 1 || d1 > 6 || d2 < 1 || d2 > 6) {
     throw new Error('Invalid dice values');
   }
@@ -56,8 +60,9 @@ export function handleRollDiceCK(state: GameState, action: RollDiceAction): Game
     ...state,
     rngState: rngAfterEvent,
     hasRolledThisTurn: true,
-    lastRoll: { dice: action.dice, total, player: action.playerId },
+    lastRoll: { dice: [d1, d2], total, player: action.playerId },
     lastEventDie: eventDie,
+    pendingAlchemy: undefined,
   };
 
   // Resolve the event die first (rulebook p.6 "Resolve the event die before
@@ -67,10 +72,11 @@ export function handleRollDiceCK(state: GameState, action: RollDiceAction): Game
     const advanced = advanceBarbarianShip(next);
     next = advanced.state;
     barbarianAttackTriggered = advanced.attacked;
+  } else {
+    // Improvement faces: each player whose track level is >= red die draws
+    // a progress card of the matching deck. Threads RNG via next state.
+    next = drawProgressCardsForEvent(next, eventDie, d1);
   }
-  // Other event-die faces (science / trade / politics) trigger progress card
-  // draws in Phase 8c. For now they're no-ops; the lastEventDie field still
-  // gets stored so the UI can render the face.
 
   if (barbarianAttackTriggered) {
     next = resolveBarbarianAttack(next);
@@ -81,7 +87,39 @@ export function handleRollDiceCK(state: GameState, action: RollDiceAction): Game
     return resolveSevenRoll(next);
   }
 
-  return distributeWithCommodities(next, total);
+  next = distributeWithCommodities(next, total);
+
+  // Aqueduct (science L3): any player at science >= 3 who received nothing
+  // (no resources, no commodities) on this roll gets to pick 1 resource.
+  const before = state.players;
+  const after = next.players;
+  const aqueductPending: PlayerId[] = [];
+  for (let i = 0; i < before.length; i++) {
+    const a = after.find((p) => p.id === before[i]!.id)!;
+    const b = before[i]!;
+    if (!aqueductActive(next, a.id)) continue;
+    const gainedRes = totalResources(a.resources) - totalResources(b.resources);
+    const gainedCom =
+      totalCommodities(a.commodities ?? { paper: 0, cloth: 0, coin: 0 }) -
+      totalCommodities(b.commodities ?? { paper: 0, cloth: 0, coin: 0 });
+    if (gainedRes === 0 && gainedCom === 0) aqueductPending.push(a.id);
+  }
+  if (aqueductPending.length > 0) {
+    // Order by player order starting from the current player.
+    const ordered: PlayerId[] = [];
+    const startIdx = state.currentPlayerIndex;
+    for (let i = 0; i < state.playerOrder.length; i++) {
+      const pid = state.playerOrder[(startIdx + i) % state.playerOrder.length]!;
+      if (aqueductPending.includes(pid)) ordered.push(pid);
+    }
+    return {
+      ...next,
+      phase: 'aqueductPick',
+      pendingAqueduct: ordered,
+    };
+  }
+
+  return next;
 }
 
 function resolveSevenRoll(state: GameState): GameState {

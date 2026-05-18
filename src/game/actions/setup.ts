@@ -66,7 +66,14 @@ export function handlePlaceInitialSettlement(
     for (const hexId of vertex.hexes) {
       const hex = state.board.hexes[hexId]!;
       const t = hex.terrain;
-      if (t === 'desert' || t === 'sea' || t === 'gold' || t === 'swamp') continue;
+      if (
+        t === 'desert' ||
+        t === 'sea' ||
+        t === 'gold' ||
+        t === 'swamp' ||
+        t === 'lake'
+      )
+        continue;
       grants[t] = (grants[t] ?? 0) + 1;
     }
     next = updatePlayer(next, action.playerId, (p) => ({

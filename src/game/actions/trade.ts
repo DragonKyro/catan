@@ -23,6 +23,18 @@ export function getBankTradeRate(state: GameState, playerId: string, give: Resou
   // at 2:1 for any resource — better than a generic port, equal to a
   // matching 2:1 port.
   if ((player.commercialHarbors ?? 0) > 0) rate = Math.min(rate, 2);
+  // C&K Merchant token: 2:1 on the resource the merchant's hex produces.
+  if (state.merchant?.ownerId === playerId) {
+    const hex = state.board.hexes[state.merchant.hexId];
+    if (hex && hex.terrain === give) rate = Math.min(rate, 2);
+  }
+  // C&K Merchant Fleet card (this turn only): 2:1 on the chosen item.
+  if (
+    state.merchantFleetActive?.kind === 'resource' &&
+    state.merchantFleetActive.which === give
+  ) {
+    rate = Math.min(rate, 2);
+  }
   return rate;
 }
 

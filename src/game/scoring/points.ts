@@ -1,6 +1,51 @@
 import type { GameState, PlayerId } from '../types';
 import { calculateWealthTilesVp } from '../modules/traders/scoring/wealthTiles';
 import { calculateStrongestPortsVp } from '../modules/traders/scoring/strongestPorts';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../modules/citiesAndKnights/constants';
+
+// Cities & Knights — 2 VP per metropolis the player owns (1 each at level 4
+// temporary, locked at level 5 permanent — either way it's still 2 VP).
+export function calculateMetropolisVp(state: GameState, playerId: PlayerId): number {
+  if (!state.metropolises) return 0;
+  let sum = 0;
+  for (const track of ['science', 'trade', 'politics'] as const) {
+    if (state.metropolises[track]?.playerId === playerId) sum += 2;
+  }
+  return sum;
+}
+
+// 1 VP per Printing or Constitution card in the player's hand (auto-flipped
+// face-up on draw).
+export function calculateProgressCardVp(
+  state: GameState,
+  playerId: PlayerId,
+): number {
+  const p = state.players.find((pl) => pl.id === playerId);
+  if (!p?.progressCards) return 0;
+  let sum = 0;
+  if (p.progressCards.science.includes('printing')) sum += 1;
+  if (p.progressCards.politics.includes('constitution')) sum += 1;
+  return sum;
+  // Note: a player can only ever hold one of each VP card; the deck has
+  // exactly one Printing and one Constitution.
+  void state;
+}
+
+// 1 VP for the player who currently holds the merchant piece.
+export function calculateMerchantVp(state: GameState, playerId: PlayerId): number {
+  return state.merchant?.ownerId === playerId ? 1 : 0;
+}
+
+// 1 VP per Defender of Catan token (rulebook p.11).
+export function calculateDefenderTokenVp(
+  state: GameState,
+  playerId: PlayerId,
+): number {
+  const p = state.players.find((pl) => pl.id === playerId);
+  if (!p) return 0;
+  void state;
+  return p.defenderTokens ?? 0;
+}
 
 const LONGEST_ROAD_MIN_LENGTH = 5;
 
@@ -66,12 +111,23 @@ export function calculateVictoryPoints(
 ): number {
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return 0;
+  const ckActive = state.settings.expansions.includes(
+    CITIES_AND_KNIGHTS_EXPANSION_ID,
+  );
   let vp = 0;
   vp += player.settlements.length;
   vp += player.cities.length * 2;
   if (player.hasLongestRoad) vp += 2;
-  if (player.hasLargestArmy) vp += 2;
+  // Largest Army is removed under C&K (rulebook p.3 "Return the development
+  // cards and the Largest Army tile to the CATAN box").
+  if (player.hasLargestArmy && !ckActive) vp += 2;
   if (includeHidden) vp += player.devCards.victoryPoints;
+  if (ckActive) {
+    vp += calculateMetropolisVp(state, playerId);
+    vp += calculateProgressCardVp(state, playerId);
+    vp += calculateMerchantVp(state, playerId);
+    vp += calculateDefenderTokenVp(state, playerId);
+  }
   // Seafarers: bonus VP from outer-island settlement chips.
   vp += calculateIslandChipVp(state, playerId);
   // Seafarers / Forgotten Tribe: visible VP tokens from settled tribe hexes.

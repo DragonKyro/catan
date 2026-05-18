@@ -28,6 +28,9 @@ const TERRAIN_FILL: Record<string, string> = {
   sea: 'var(--terrain-sea)',
   gold: 'var(--terrain-gold)',
   swamp: 'var(--terrain-swamp, #59733e)',
+  // Lake = inland water. Slightly darker than the ocean fill so it reads
+  // as a distinct body of water and doesn't disappear into the sea ring.
+  lake: 'var(--terrain-lake, #2a5d7c)',
 };
 
 export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse, foggy }: Props) {

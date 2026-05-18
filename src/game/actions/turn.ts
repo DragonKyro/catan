@@ -81,6 +81,16 @@ function advanceToNextPairedTurn(state: GameState): GameState {
     tradeResourcesThisTurn: undefined,
     proposedTradesThisTurn: undefined,
     attackedPirateThisTurn: undefined,
+    // Cities & Knights per-turn flags.
+    promotedKnightThisTurn: false,
+    activatedKnightsThisTurn: [],
+    hasPlayedProgressCardThisTurn: false,
+    merchantFleetActive: undefined,
+    craneActive: false,
+    engineeringActive: false,
+    medicineActive: false,
+    diplomacyFreeRoad: false,
+    pendingAlchemy: undefined,
   };
 }
 
@@ -102,5 +112,15 @@ function advanceToNextRealTurn(state: GameState): GameState {
     tradeResourcesThisTurn: undefined,
     proposedTradesThisTurn: undefined,
     attackedPirateThisTurn: undefined,
+    // Cities & Knights per-turn flags.
+    promotedKnightThisTurn: false,
+    activatedKnightsThisTurn: [],
+    hasPlayedProgressCardThisTurn: false,
+    merchantFleetActive: undefined,
+    craneActive: false,
+    engineeringActive: false,
+    medicineActive: false,
+    diplomacyFreeRoad: false,
+    pendingAlchemy: undefined,
   };
 }

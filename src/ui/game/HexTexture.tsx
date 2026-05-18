@@ -211,6 +211,20 @@ function Glyph({ terrain }: { terrain: string }) {
           <ellipse cx={-1.6} cy={-1} rx={0.55} ry={1.1} fill="#3a2c12" />
         </g>
       );
+    case 'lake':
+      // A tiny leaping fish silhouette. Two arcs (body + tail) so it
+      // reads as a fish at any orientation without needing realism.
+      return (
+        <g opacity={0.55}>
+          <path
+            d="M-2,0 Q-1,-1.4 1.4,-0.6 Q2.2,0 1.4,0.6 Q-1,1.4 -2,0 Z"
+            fill="#cfe5ff"
+            stroke="#274860"
+            strokeWidth={0.25}
+          />
+          <path d="M-2,0 L-3,-0.8 L-3,0.8 Z" fill="#cfe5ff" />
+        </g>
+      );
     default:
       return null;
   }

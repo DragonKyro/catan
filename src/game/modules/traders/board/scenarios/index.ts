@@ -1,7 +1,8 @@
 import type { TradersScenario } from './types';
 import { riversOfCatan } from './riversOfCatan';
+import { fishingOnCatan } from './fishingOnCatan';
 
-const TRADERS_SCENARIO_LIST: TradersScenario[] = [riversOfCatan];
+const TRADERS_SCENARIO_LIST: TradersScenario[] = [riversOfCatan, fishingOnCatan];
 
 export const TRADERS_SCENARIOS: Record<string, TradersScenario> = Object.fromEntries(
   TRADERS_SCENARIO_LIST.map((s) => [s.id, s]),

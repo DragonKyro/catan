@@ -18,6 +18,7 @@ import { calculateVictoryPoints } from '@/game/scoring/points';
 import { chooseWinPlan } from './winPaths';
 import { tryBuildShip } from './seafarers/ships';
 import { tryBuildBridge } from './traders/bridges';
+import { tryFishSpend, tryPassBoot } from './traders/fish';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { tryAttackPirateFleet } from './seafarers/pirateFleet';
 import { tryBuildWonder } from './seafarers/wonders';
@@ -138,6 +139,15 @@ export function chooseMainPhaseAction(
   if (state.settings.expansions.includes(TRADERS_EXPANSION_ID)) {
     const bridgeAction = tryBuildBridge(state, playerId);
     if (bridgeAction) return bridgeAction;
+    // 2.7) FISH SPEND. Drive off the robber if it's on us; take a needed
+    //      resource if we have one in reach. Pass the boot if we hold it
+    //      and someone qualifies. Both are pre-build because they shift
+    //      whether the rest of the priority tree can act (e.g. spending
+    //      4 fish to take wheat may unlock a settlement on this very turn).
+    const fish = tryFishSpend(state, playerId);
+    if (fish) return fish;
+    const boot = tryPassBoot(state, playerId);
+    if (boot) return boot;
   }
 
   // 3) BUILD ROAD

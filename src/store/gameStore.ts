@@ -34,6 +34,25 @@ export type UIMode =
   | { kind: 'buildBridge' }
   // Cities & Knights — picking which of your own cities to put a wall under.
   | { kind: 'buildCityWall' }
+  // Cities & Knights knight build/action modes.
+  | { kind: 'recruitKnight' }
+  | { kind: 'activateKnight' }
+  | { kind: 'promoteKnight' }
+  // Two-click flow: source own active knight, then destination empty vertex.
+  | { kind: 'moveKnight'; sourceVertex?: VertexId }
+  | { kind: 'displaceKnight'; sourceVertex?: VertexId }
+  // Forced move of a displaced knight (kicks in via state.pendingKnightMove).
+  | { kind: 'displacedKnightMove' }
+  | { kind: 'chaseRobber' }
+  // Cities & Knights — placing a metropolis (one of the player's cities).
+  | { kind: 'placeMetropolis' }
+  // Cities & Knights / Merchant card — pick a land hex adjacent to one of
+  // your buildings.
+  | { kind: 'placeMerchant' }
+  // Cities & Knights / Diplomacy — pick an open road to remove.
+  | { kind: 'removeRoad' }
+  // Cities & Knights / Invention — pick two number-token hexes to swap.
+  | { kind: 'swapTokens'; firstHex?: HexId }
   | { kind: 'placeSetupSettlement' }
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }
@@ -50,7 +69,27 @@ export type DialogName =
   | 'playerTrade'
   | 'yearOfPlenty'
   | 'monopoly'
-  | 'wonders';
+  | 'wonders'
+  // Traders & Barbarians / Fishing on Catan
+  | 'spendFish'
+  | 'passBoot'
+  // Cities & Knights dialogs.
+  | 'cityImprovements'
+  | 'progressCards'
+  | 'alchemy'
+  | 'smithing'
+  | 'merchantFleet'
+  | 'tradeMonopoly'
+  | 'resourceMonopolyCK'
+  | 'metropolisPlace'
+  | 'progressCardPick'
+  | 'treasonRemove'
+  | 'treasonPlace'
+  | 'commercialHarborOffer'
+  | 'weddingGive'
+  | 'progressCardDiscard'
+  | 'defenderTieDraw'
+  | 'aqueductPick';
 
 interface AppStore {
   game: GameState | null;
@@ -108,6 +147,10 @@ const phaseToMode = (state: GameState): UIMode => {
   }
   if (state.phase === 'moveRobber') return { kind: 'moveRobber' };
   if (state.phase === 'movePirate') return { kind: 'movePirate' };
+  // Cities & Knights sub-phases that drive board interactions.
+  if (state.phase === 'displacedKnightMove') return { kind: 'displacedKnightMove' };
+  if (state.phase === 'placeMerchant') return { kind: 'placeMerchant' };
+  if (state.phase === 'removeRoad') return { kind: 'removeRoad' };
   return { kind: 'idle' };
 };
 

@@ -24,3 +24,22 @@ export function edgeIsOnRiverTile(
   if (!e) return false;
   return e.hexes.some((h) => state.board.hexes[h]?.terrain === 'swamp');
 }
+
+// Fishing on Catan: is this vertex eligible for the starting fish bonus?
+// True when it touches the lake hex or is the anchor for one of the
+// scenario's fishing-ground tiles.
+export function vertexIsOnFishingWater(
+  state: GameState,
+  vertexId: VertexId,
+): boolean {
+  if (state.lakeHexId) {
+    const v = state.board.vertices[vertexId];
+    if (v && v.hexes.includes(state.lakeHexId)) return true;
+  }
+  if (state.fishingGrounds) {
+    for (const fg of state.fishingGrounds) {
+      if (fg.vertex === vertexId) return true;
+    }
+  }
+  return false;
+}

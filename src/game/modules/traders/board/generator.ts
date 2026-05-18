@@ -1,7 +1,11 @@
-import type { BoardState, EdgeId } from '../../../types';
+import type { BoardState, EdgeId, FishingGround, HexId } from '../../../types';
 import { assembleBoardFromLayout } from '../../../board/scenarioAssembly';
 import { getTradersScenario } from './scenarios';
-import type { TradersScenario, ScenarioEdgeRef } from './scenarios/types';
+import type {
+  TradersScenario,
+  ScenarioEdgeRef,
+  FishingGroundDef,
+} from './scenarios/types';
 
 export interface TradersBoardResult {
   board: BoardState;
@@ -9,6 +13,10 @@ export interface TradersBoardResult {
   // Concrete river-edge ids (bridge sites). Roads forbidden here at the
   // engine level — see placement.ts and the buildBridge handler.
   riverEdges: EdgeId[];
+  // Fishing on Catan extras. Both undefined for Rivers / future scenarios
+  // that don't use them.
+  lakeHexId: HexId | null;
+  fishingGrounds: FishingGround[];
 }
 
 export function generateTradersBoard(
@@ -28,11 +36,46 @@ export function generateTradersBoard(
     scenario.riverEdges ?? [],
     assembled.board,
   );
+  const lakeHexId = scenario.lake
+    ? `${scenario.lake.q},${scenario.lake.r}`
+    : findLakeHex(assembled.board);
+  const fishingGrounds = resolveFishingGrounds(
+    scenario.fishingGrounds ?? [],
+    assembled.board,
+  );
+  // Fishing on Catan: the robber starts off-board. We can't represent
+  // "no robber hex" in BoardState, so we keep robberHex pointing at the
+  // lake (or whatever the assembly picked) and rely on `state.robberActive`
+  // to flag whether the robber is on the board. createGame wires this.
   return {
     board: assembled.board,
     rngState: assembled.rngState,
     riverEdges,
+    lakeHexId: lakeHexId && assembled.board.hexes[lakeHexId] ? lakeHexId : null,
+    fishingGrounds,
   };
+}
+
+function findLakeHex(board: BoardState): HexId | null {
+  for (const id of board.hexIds) {
+    if (board.hexes[id]?.terrain === 'lake') return id;
+  }
+  return null;
+}
+
+function resolveFishingGrounds(
+  defs: FishingGroundDef[],
+  board: BoardState,
+): FishingGround[] {
+  const out: FishingGround[] = [];
+  for (const def of defs) {
+    const hex = board.hexes[`${def.q},${def.r}`];
+    if (!hex) continue;
+    const vertex = hex.corners[def.corner];
+    if (!vertex) continue;
+    out.push({ vertex, token: def.token });
+  }
+  return out;
 }
 
 function pickLayout(scenario: TradersScenario, numPlayers: number) {

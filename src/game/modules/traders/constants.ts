@@ -2,8 +2,33 @@
 
 export const TRADERS_EXPANSION_ID = 'traders';
 
-// Scenario identifiers (T&B ships 5 in total; this commit lands the first).
+// Scenario identifiers.
 export const TRADERS_SCENARIO_RIVERS = 'riversOfCatan';
+export const TRADERS_SCENARIO_FISHING = 'fishingOnCatan';
+
+// Fishing on Catan: cap on fish tokens a player may hold (rulebook). Excess
+// draws are blocked once the cap is reached; the per-turn discard-and-
+// replace nicety is deferred.
+export const FISH_TOKEN_CAP = 7;
+
+// Fish-token face values (cost units). Old boot has no value — never
+// participates in spending.
+export const FISH_TOKEN_VALUE: Record<'one' | 'two' | 'three', number> = {
+  one: 1,
+  two: 2,
+  three: 3,
+};
+
+// Fish spend costs (rulebook). Each spend action requires tokens summing to
+// at least this value; excess fish is forfeit.
+export const FISH_COST_REMOVE_ROBBER = 2;
+export const FISH_COST_STEAL = 3;
+export const FISH_COST_TAKE_FROM_BANK = 4;
+export const FISH_COST_BUILD_ROAD = 5;
+export const FISH_COST_BUY_DEV_CARD = 7;
+
+// Old boot VP penalty: the holder needs +1 VP to win (rulebook).
+export const OLD_BOOT_VP_TAX = 1;
 
 // Bridge build payoff (rules: +3 gold per built bridge).
 export const BRIDGE_GOLD_REWARD = 3;

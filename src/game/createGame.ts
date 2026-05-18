@@ -1,9 +1,11 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord } from './types';
 import { WONDERS } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import { generateSeafarersBoard } from './modules/seafarers/board/generator';
 import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
 import { generateTradersBoard } from './modules/traders/board/generator';
+import { buildInitialFishPool } from './modules/traders/fishing/pool';
+import { TRADERS_SCENARIO_FISHING } from './modules/traders/constants';
 import {
   getBaseScenario,
   DEFAULT_BASE_SCENARIO_ID,
@@ -14,7 +16,9 @@ import {
   CITIES_AND_KNIGHTS_EXPANSION_ID,
   CITIES_AND_KNIGHTS_DEFAULT_VP,
   COMMODITY_BANK_SIZE,
+  KNIGHT_SUPPLY_PER_STRENGTH,
 } from './modules/citiesAndKnights/constants';
+import { shuffleProgressDecks } from './modules/citiesAndKnights/progress/catalogue';
 import { getScenario } from './modules/seafarers/board/scenarios';
 import { getTradersScenario } from './modules/traders/board/scenarios';
 import { recalcWealthTiles } from './modules/traders/scoring/wealthTiles';
@@ -226,6 +230,8 @@ export function createGame(opts: CreateGameOptions): GameState {
   let pirateFleet: PirateFleet | undefined;
   let clothHexes: string[] | undefined;
   let riverEdges: EdgeId[] | undefined;
+  let lakeHexId: HexId | undefined;
+  let fishingGrounds: FishingGround[] | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (hasTraders) {
@@ -237,6 +243,9 @@ export function createGame(opts: CreateGameOptions): GameState {
     board = result.board;
     rng = result.rngState;
     riverEdges = result.riverEdges.length > 0 ? result.riverEdges : undefined;
+    lakeHexId = result.lakeHexId ?? undefined;
+    fishingGrounds =
+      result.fishingGrounds.length > 0 ? result.fishingGrounds : undefined;
   } else if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
     board = result.board;
@@ -297,9 +306,18 @@ export function createGame(opts: CreateGameOptions): GameState {
     hasLargestArmy: false,
     ships: [],
     ...(hasCitiesKnights
-      ? { commodities: emptyCommodities(), cityWalls: 0 }
+      ? {
+          commodities: emptyCommodities(),
+          cityWalls: 0,
+          improvements: { science: 0, trade: 0, politics: 0 },
+          progressCards: { science: [], trade: [], politics: [] },
+          defenderTokens: 0,
+        }
       : {}),
     ...(hasTraders ? { gold: 0, bridges: [] } : {}),
+    ...(hasTraders && settings.tradersScenarioId === TRADERS_SCENARIO_FISHING
+      ? { fishTokens: [] as Array<'one' | 'two' | 'three'> }
+      : {}),
   }));
 
   // Determine turn order. By default we shuffle so signup order doesn't
@@ -320,6 +338,10 @@ export function createGame(opts: CreateGameOptions): GameState {
   let barbarian: BarbarianState | undefined;
   let robberActive: boolean | undefined;
   let cityWallsByVertex: Record<VertexId, PlayerId> | undefined;
+  let knights: Record<VertexId, import('./types').KnightRecord> | undefined;
+  let knightSupply: KnightSupply | undefined;
+  let metropolises: Record<ImprovementTrack, MetropolisRecord | null> | undefined;
+  let progressDecks: Record<ImprovementTrack, ProgressCardKind[]> | undefined;
   if (hasCitiesKnights) {
     commodityBank = commoditiesFull(COMMODITY_BANK_SIZE);
     barbarian = { position: 0, attacksResolved: 0 };
@@ -328,6 +350,19 @@ export function createGame(opts: CreateGameOptions): GameState {
     // renderer doesn't NPE; the gate lives in the dice / moveRobber handlers.
     robberActive = false;
     cityWallsByVertex = {};
+    knights = {};
+    knightSupply = {} as KnightSupply;
+    for (const p of players) {
+      knightSupply[p.id] = {
+        1: KNIGHT_SUPPLY_PER_STRENGTH,
+        2: KNIGHT_SUPPLY_PER_STRENGTH,
+        3: KNIGHT_SUPPLY_PER_STRENGTH,
+      };
+    }
+    metropolises = { science: null, trade: null, politics: null };
+    const shuffled = shuffleProgressDecks(rng);
+    progressDecks = shuffled.decks;
+    rng = shuffled.rng;
   }
 
   // T&B initial wealth/Strongest Ports state. Players start at 0 gold so
@@ -339,6 +374,25 @@ export function createGame(opts: CreateGameOptions): GameState {
     hasTraders && tradersVariants?.strongestPorts
       ? { holder: null }
       : undefined;
+
+  // Fishing on Catan seeding. The robber starts off-board (rulebook: "It
+  // will enter the game when you Resolve a 7 or play a Knight card"), the
+  // 30-token fish pool is initialized face-down, and the boot starts in
+  // the supply (oldBootHolder=null) until someone draws it.
+  const isFishing =
+    hasTraders && settings.tradersScenarioId === TRADERS_SCENARIO_FISHING;
+  let fishTokenPool: FishTokenType[] | undefined;
+  let fishTokenDiscard: FishTokenType[] | undefined;
+  let oldBootHolder: PlayerId | null | undefined;
+  if (isFishing) {
+    [fishTokenPool, rng] = shuffle(rng, buildInitialFishPool());
+    fishTokenDiscard = [];
+    oldBootHolder = null;
+    // Robber off-board until activated. Use the existing robberActive flag
+    // shared with C&K. board.robberHex still points at whatever the
+    // assembler chose (the lake, for Fishing) so renderers don't crash.
+    robberActive = false;
+  }
 
   return {
     settings,
@@ -370,8 +424,17 @@ export function createGame(opts: CreateGameOptions): GameState {
     barbarian,
     robberActive,
     cityWalls: cityWallsByVertex,
+    knights,
+    knightSupply,
+    metropolises,
+    progressDecks,
     riverEdges,
     wealthTiles: wealthTilesInit,
     strongestPorts: strongestPortsInit,
+    lakeHexId,
+    fishingGrounds,
+    fishTokenPool,
+    fishTokenDiscard,
+    oldBootHolder,
   };
 }

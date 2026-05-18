@@ -1,6 +1,39 @@
-import type { Commodity } from '../../types';
+import type { Commodity, ImprovementTrack, KnightStrength } from '../../types';
 
 export const CITIES_AND_KNIGHTS_EXPANSION_ID = 'citiesAndKnights';
+
+// Per-player knight supply: 2 of each strength.
+export const KNIGHT_SUPPLY_PER_STRENGTH = 2;
+
+// Max city-improvement level. Levels 1-3 just gate progress card draws +
+// give the level-3 ability; 4/5 confer the metropolis.
+export const MAX_IMPROVEMENT_LEVEL = 5;
+export const MIN_METROPOLIS_LEVEL = 4;
+
+// Progress card hand limit (per rulebook p.10).
+export const PROGRESS_CARD_HAND_LIMIT = 4;
+
+// Aqueduct / Merchant Guild / Fortress unlock at level 3.
+export const LEVEL3_ABILITY_THRESHOLD = 3;
+
+// Track display info used by the cost cheatsheet and improvement panel.
+export const TRACK_LABEL: Record<ImprovementTrack, string> = {
+  science: 'Science',
+  trade: 'Trade',
+  politics: 'Politics',
+};
+
+export const TRACK_EMOJI: Record<ImprovementTrack, string> = {
+  science: '📚',
+  trade: '⚖️',
+  politics: '🤝',
+};
+
+export const KNIGHT_LABEL: Record<KnightStrength, string> = {
+  1: 'Basic Knight',
+  2: 'Strong Knight',
+  3: 'Mighty Knight',
+};
 
 // Number of spaces on the barbarian track. The ship starts at 0 and attacks
 // when it reaches this number — exactly 7 barbarian events between attacks.
