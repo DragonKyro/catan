@@ -1,0 +1,101 @@
+.scenario-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 0.85em;
+}
+
+.scenario-panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scenario-panel-title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.scenario-panel-note {
+  font-size: 0.85em;
+  color: var(--text-soft);
+  font-style: italic;
+}
+
+.scenario-panel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.scenario-panel-block-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+}
+
+.scenario-panel-block-sum {
+  font-variant-numeric: tabular-nums;
+}
+
+.scenario-panel-chips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.scenario-panel-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.scenario-panel-chip.is-claimed {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.scenario-panel-chip-vp {
+  font-weight: 700;
+  min-width: 2em;
+  text-align: right;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.scenario-panel-chip-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid #00000040;
+}
+
+.scenario-panel-chip-name {
+  color: var(--text);
+}
+
+.scenario-panel-chip-type {
+  flex: 1;
+  color: var(--text-soft);
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scenario-panel-chip-name.unclaimed {
+  color: var(--text-soft);
+  font-style: italic;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SCENARIO_ORDER } from './index';
+import { SCENARIO_ORDER, getScenario } from './index';
 import { generateSeafarersBoard } from '../generator';
 import { identifyIslands } from '../islands';
 
@@ -30,8 +30,12 @@ describe('all Seafarers scenarios', () => {
       expect(landCount).toBeGreaterThan(0);
       expect(seaCount).toBeGreaterThan(0);
 
-      // Islands identified; chips for outer islands present.
-      const islands = identifyIslands(board);
+      // Islands identified; chips for outer islands present. Pass the same
+      // desertIsBoundary flag the generator uses so partitioning matches.
+      const scenario = getScenario(id);
+      const islands = identifyIslands(board, {
+        desertIsBoundary: scenario.desertIsBoundary === true,
+      });
       expect(islands.mainIslandId).toBeTruthy();
       expect(islandChips.length).toBe(islands.outerIslandIds.length);
 

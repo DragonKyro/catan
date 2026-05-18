@@ -1,11 +1,16 @@
 import type { BoardState, HexId } from '../../../types';
 
 // Identify connected land components on the board. Two hexes are connected
-// when they share an edge and both have non-sea terrain.
+// when they share an edge and both have walkable terrain.
+//
+// By default "walkable" means non-sea. Pass `desertIsBoundary: true` for
+// scenarios like Through the Desert where the desert is meant to partition
+// the main island — the far side then counts as its own outer island.
 //
 // Returns:
-//   - hexToIsland: every land hex mapped to a stable island id ("island-0",
-//     "island-1", ...). Sea hexes are absent from the map.
+//   - hexToIsland: every walkable hex mapped to a stable island id
+//     ("island-0", ...). Sea hexes are absent; deserts are absent only
+//     when desertIsBoundary is true.
 //   - mainIslandId: the id of the largest component; this island never
 //     receives a settlement bonus chip.
 export interface IslandAnalysis {
@@ -14,10 +19,24 @@ export interface IslandAnalysis {
   outerIslandIds: string[];
 }
 
-export function identifyIslands(board: BoardState): IslandAnalysis {
+export interface IdentifyIslandsOptions {
+  desertIsBoundary?: boolean;
+}
+
+export function identifyIslands(
+  board: BoardState,
+  opts: IdentifyIslandsOptions = {},
+): IslandAnalysis {
   const hexToIsland: Record<HexId, string> = {};
   const islandSizes = new Map<string, number>();
   let counter = 0;
+
+  const isBarrier = (hexId: HexId): boolean => {
+    const t = board.hexes[hexId]!.terrain;
+    if (t === 'sea') return true;
+    if (opts.desertIsBoundary && t === 'desert') return true;
+    return false;
+  };
 
   // Build hex-to-hex adjacency from edges (any shared edge means adjacent).
   const adj = new Map<HexId, HexId[]>();
@@ -32,7 +51,7 @@ export function identifyIslands(board: BoardState): IslandAnalysis {
 
   for (const hexId of board.hexIds) {
     if (hexToIsland[hexId]) continue;
-    if (board.hexes[hexId]!.terrain === 'sea') continue;
+    if (isBarrier(hexId)) continue;
 
     const islandId = `island-${counter++}`;
     const stack = [hexId];
@@ -40,11 +59,11 @@ export function identifyIslands(board: BoardState): IslandAnalysis {
     while (stack.length) {
       const cur = stack.pop()!;
       if (hexToIsland[cur]) continue;
-      if (board.hexes[cur]!.terrain === 'sea') continue;
+      if (isBarrier(cur)) continue;
       hexToIsland[cur] = islandId;
       size++;
       for (const n of adj.get(cur) ?? []) {
-        if (!hexToIsland[n] && board.hexes[n]!.terrain !== 'sea') stack.push(n);
+        if (!hexToIsland[n] && !isBarrier(n)) stack.push(n);
       }
     }
     islandSizes.set(islandId, size);

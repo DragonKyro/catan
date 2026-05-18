@@ -125,8 +125,10 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 - [x] Phase 3 — AI + player-to-player trading
 - [x] Phase 4 — Online multiplayer + in-game chat
 - [x] Phase 5 — Base game 5–6 player extension
+- [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
 - [x] Phase 6 — Seafarers expansion (9 official scenarios)
-- [ ] Phase 7 — Seafarers 5–6 player extension
+- [ ] Phase 7 — Seafarers 5–6 player extension (per-scenario `landExtra5_6` data exists but most scenarios still gate at `maxPlayers: 4` because the main island isn't enlarged; expand each scenario's main island so 5–6 players fit under the setup distance rule)
+- [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; would need per-scenario 7–8 boards. Currently the engine rejects Seafarers + >6 players via `createGame`. Re-evaluate after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
 - [ ] Phase 10 — Traders & Barbarians expansion
@@ -142,4 +144,4 @@ Each rule set lives as a self-contained module in `src/game/modules/`: base game
 
 ## Where to start next
 
-Phases 0–6 complete. Next up is **Phase 7 — Seafarers 5–6 player extension** (add 5–6p variants of the existing scenarios in `src/game/modules/seafarers/board/scenarios/`). After that, **Phase 8 — Cities & Knights** as a new module under `src/game/modules/`. The action union and engine dispatcher are already extensible; new actions plug in via a new entry in their module file alongside the existing `seafarers/` and `base/` modules.
+Phases 0–6 and 5b complete. Next up is **Phase 7 — Seafarers 5–6 player extension** (add expanded main-island layouts to the existing scenarios in `src/game/modules/seafarers/board/scenarios/`; the `landExtra5_6` field already enlarges outer islands but the main island stays at its 3-4p size, which leaves too little room for 10 starting settlements under the distance rule — that's why most scenarios still cap at `maxPlayers: 4` despite having `landExtra5_6` data). Each scenario also now carries a `defaultVpToWin5_6` that takes effect once `maxPlayers` is lifted. After Phase 7, **Phase 8 — Cities & Knights** as a new module under `src/game/modules/`. The action union and engine dispatcher are already extensible; new actions plug in via a new entry in their module file alongside the existing `seafarers/` and `base/` modules.

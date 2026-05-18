@@ -3,7 +3,7 @@ import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
 import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
-import { calculateVictoryPoints } from '@/game/scoring/points';
+import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import './HandPanel.css';
 
@@ -105,6 +105,17 @@ export function HandPanel() {
           {player.hasLargestArmy && (
             <span className="hand-flag" title="Largest Army (+2 VP)">⚔️</span>
           )}
+          {(() => {
+            const chipVp = calculateIslandChipVp(game, player.id);
+            return chipVp > 0 ? (
+              <span
+                className="hand-flag"
+                title={`Outer-island settlement bonuses (+${chipVp} VP)`}
+              >
+                🏝 +{chipVp}
+              </span>
+            ) : null;
+          })()}
         </h3>
         <span
           className="hand-vp"

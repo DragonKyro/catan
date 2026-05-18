@@ -38,6 +38,7 @@ export const fogIsland = buildScenario({
   name: 'Fog Island',
   defaultIslandBonusVp: 3,
   defaultVpToWin: 12,
+  defaultVpToWin5_6: 13,
   minPlayers: 3,
   maxPlayers: 4,
   land: [...STARTING, ...FOG_ISLAND],

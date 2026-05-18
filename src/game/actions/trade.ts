@@ -16,9 +16,14 @@ import { addResources, subtractResources } from '../resources';
 
 export function getBankTradeRate(state: GameState, playerId: string, give: Resource): number {
   const player = getPlayer(state, playerId);
-  if (player.ports.includes(give)) return 2;
-  if (player.ports.includes('generic')) return 3;
-  return 4;
+  let rate = 4;
+  if (player.ports.includes(give)) rate = 2;
+  else if (player.ports.includes('generic')) rate = 3;
+  // Forgotten Tribe: commercial harbor tokens unconditionally cap the rate
+  // at 2:1 for any resource — better than a generic port, equal to a
+  // matching 2:1 port.
+  if ((player.commercialHarbors ?? 0) > 0) rate = Math.min(rate, 2);
+  return rate;
 }
 
 export function handleBankTrade(state: GameState, action: BankTradeAction): GameState {

@@ -16,6 +16,8 @@ import { chooseDevCardPlay } from './devcard';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { chooseWinPlan } from './winPaths';
+import { tryBuildShip } from './seafarers/ships';
+import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
 // Threshold dropped sharply when we're chasing Longest Road OR have nowhere
@@ -90,6 +92,18 @@ export function chooseMainPhaseAction(
       }
     }
     if (bestVid) return { type: 'buildSettlement', playerId, vertex: bestVid };
+  }
+
+  // 2.5) BUILD SHIP (Seafarers only). Ships sit between settlement and road
+  //      in priority: like roads they extend the network, but the chip-VP
+  //      payoff at outer-island chip vertices is direct VP and ships cost
+  //      wood+sheep — different resources from roads, so the two compete
+  //      for hand budget less than they look like they would. The
+  //      heuristic gates on actual progress (no loops, no opp-blocked
+  //      endpoints) and a threshold so we don't spam idle ships.
+  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const shipAction = tryBuildShip(state, playerId);
+    if (shipAction) return shipAction;
   }
 
   // 3) BUILD ROAD

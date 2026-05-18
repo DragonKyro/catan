@@ -2,6 +2,29 @@ import type { GameState, PlayerId } from '../types';
 
 const LONGEST_ROAD_MIN_LENGTH = 5;
 
+// Seafarers chip VP earned by a player (sum of every outer-island chip they
+// were the first to settle). Returns 0 when no chips exist (base game).
+export function calculateIslandChipVp(state: GameState, playerId: PlayerId): number {
+  if (!state.islandChips) return 0;
+  let sum = 0;
+  for (const chip of state.islandChips) {
+    if (chip.firstSettler === playerId) sum += chip.vp;
+  }
+  return sum;
+}
+
+// Forgotten Tribe: one VP per claimed VP-type tribe token. Visible bonus
+// (not hidden like a VP dev card) — the chip is on the board for all to
+// see, same as a Longest Road bonus.
+export function calculateTribeTokenVp(state: GameState, playerId: PlayerId): number {
+  if (!state.tribeTokens) return 0;
+  let sum = 0;
+  for (const token of state.tribeTokens) {
+    if (token.claimedBy === playerId && token.type === 'victoryPoint') sum += 1;
+  }
+  return sum;
+}
+
 // Total victory points for a player.
 // `includeHidden` controls whether held VP dev cards are counted (true at
 // win-check time and for the player themselves; false when displaying to
@@ -20,11 +43,9 @@ export function calculateVictoryPoints(
   if (player.hasLargestArmy) vp += 2;
   if (includeHidden) vp += player.devCards.victoryPoints;
   // Seafarers: bonus VP from outer-island settlement chips.
-  if (state.islandChips) {
-    for (const chip of state.islandChips) {
-      if (chip.firstSettler === playerId) vp += chip.vp;
-    }
-  }
+  vp += calculateIslandChipVp(state, playerId);
+  // Seafarers / Forgotten Tribe: visible VP tokens from settled tribe hexes.
+  vp += calculateTribeTokenVp(state, playerId);
   return vp;
 }
 

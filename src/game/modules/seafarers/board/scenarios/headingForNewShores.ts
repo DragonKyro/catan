@@ -49,7 +49,8 @@ export const headingForNewShores = buildScenario({
   id: 'headingForNewShores',
   name: 'Heading for New Shores',
   defaultIslandBonusVp: 2,
-  defaultVpToWin: 13,
+  defaultVpToWin: 12,
+  defaultVpToWin5_6: 14,
   minPlayers: 3,
   // 5-6p needs Phase 7: an expanded main island. The current
   // landExtra5_6 only enlarges outer islands, so 10 starting settlements

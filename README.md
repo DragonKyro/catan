@@ -9,11 +9,10 @@ The popular online version (colonist.io) paywalls the expansions; this is a free
 ### Planned
 
 - Post-game AI analysis: highlight likely misplays from the action log (held wood+brick instead of building; bank-traded into a 7-out; settled on a sub-optimal vertex)
-- 7-8 player Catan support (expansion beyond the official 5–6 player board)
 
 ## Status
 
-Fully playable: local hot-seat against AI **and** online multiplayer over WebRTC, with in-game chat. Base game (3–6 players) complete. Seafarers expansion playable with 9 official scenarios. Other expansions are next.
+Fully playable: local hot-seat against AI **and** online multiplayer over WebRTC, with in-game chat. Base game complete for 3–8 players (3–6 official, 7–8 as an unofficial extension modeled on what colonist.io offers — 37-hex board, scaled bank and dev deck, default 10 VP target). Seafarers expansion playable for 3–6 players with 9 official scenarios. Other expansions are next.
 
 ## Tech stack
 
@@ -30,8 +29,9 @@ The game runs entirely in the browser as a static site. The engine is a pure
 TypeScript reducer (`applyAction(state, action) => state`) so a game is just
 a sequence of typed actions.
 
-- **Local hot-seat**: any mix of human and AI players on one device, 3–6 seats. A pass-device screen between human turns hides hidden info (resource hand, unplayed dev cards). In solo+AI games the AI's hand stays face-down (counts visible, types hidden).
+- **Local hot-seat**: any mix of human and AI players on one device, 3–8 seats. A pass-device screen between human turns hides hidden info (resource hand, unplayed dev cards). In solo+AI games the AI's hand stays face-down (counts visible, types hidden).
 - **5–6 player expansion**: opt into the larger 30-hex board with a Special Build Phase between turns, letting non-turn-holders build (no trades or dev plays) before the next real turn.
+- **7–8 player extension (unofficial)**: a 37-hex regular hexagon board with 24 of each resource in the bank and a 35-card dev deck. SBP applies (inherited from the 5–6p rule). VP target stays at 10 — more players already stretches wall-clock time per round, so raising the target compounds that rather than balancing it.
 - **Online multiplayer**: WebRTC peer-to-peer, no backend. Create a room → share a 4-character code → friends join. Host runs any AI seats. Full state replication via action broadcast.
 - **AI**: a fast heuristic player. Plays setup, builds, robs, trades. Uses encoded 10-VP win-plan templates to decide what to invest in, threat-assesses opponents (leaders, LA/LR race, win-imminent) when trading, robbing, or denying resources, and avoids reverse / roundabout trades within a turn.
 - **Trading**: bank trades (4:1 / 3:1 / 2:1 by port, batchable in one action), and open-broadcast player trades with counter/reject/walk-away flow.
@@ -75,8 +75,10 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 3 — AI opponents + player-to-player trading
 - [x] Phase 4 — Online multiplayer (Trystero peer-to-peer) + in-game chat
 - [x] Phase 5 — Base game 5–6 player extension
+- [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
 - [x] Phase 6 — Seafarers expansion (9 official scenarios)
-- [ ] Phase 7 — Seafarers 5–6 player extension
+- [ ] Phase 7 — Seafarers 5–6 player extension (partial — per-scenario `landExtra5_6` data exists but most scenarios still cap at `maxPlayers: 4` because the main island isn't enlarged for 10 starting settlements; lift `maxPlayers` once the main island is expanded for each scenario)
+- [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
 - [ ] Phase 10 — Traders & Barbarians expansion

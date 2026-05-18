@@ -102,20 +102,20 @@ describe('createGame', () => {
       expect(uniqueColors.size).toBe(8);
     });
 
-    it('defaults VP target to 12 for 7-8 players', () => {
+    it('defaults VP target to 10 for 7-8 players (same as base game)', () => {
       const seven = createGame({ playerNames: names8.slice(0, 7), seed: 1 });
       const eight = createGame({ playerNames: names8, seed: 1 });
-      expect(seven.settings.victoryPointsToWin).toBe(12);
-      expect(eight.settings.victoryPointsToWin).toBe(12);
+      expect(seven.settings.victoryPointsToWin).toBe(10);
+      expect(eight.settings.victoryPointsToWin).toBe(10);
     });
 
     it('still respects an explicit victoryPointsToWin override', () => {
       const state = createGame({
         playerNames: names8,
         seed: 1,
-        settings: { victoryPointsToWin: 10 },
+        settings: { victoryPointsToWin: 13 },
       });
-      expect(state.settings.victoryPointsToWin).toBe(10);
+      expect(state.settings.victoryPointsToWin).toBe(13);
     });
 
     it('scales the resource bank to 24 per resource', () => {
@@ -141,6 +141,23 @@ describe('createGame', () => {
         monopoly: 3,
         victoryPoint: 6,
       });
+    });
+
+    it('rejects Seafarers + 7-8 players (no official 7-8p Seafarers extension exists)', () => {
+      expect(() =>
+        createGame({
+          playerNames: names8.slice(0, 7),
+          seed: 1,
+          settings: { expansions: ['seafarers'] },
+        }),
+      ).toThrow(/Seafarers supports at most 6/);
+      expect(() =>
+        createGame({
+          playerNames: names8,
+          seed: 1,
+          settings: { expansions: ['seafarers'] },
+        }),
+      ).toThrow(/Seafarers supports at most 6/);
     });
   });
 });

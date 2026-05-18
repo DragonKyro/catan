@@ -1,6 +1,6 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import { calculateVictoryPoints } from '@/game/scoring/points';
+import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { totalResources } from '@/game/resources';
 import { playerColorVar } from '@/ui/shared/playerColors';
@@ -86,6 +86,14 @@ export function OpponentPanel() {
               </span>
               {p.hasLongestRoad && <span title="Longest Road bonus">★ Road</span>}
               {p.hasLargestArmy && <span title="Largest Army bonus">★ Army</span>}
+              {(() => {
+                const chipVp = calculateIslandChipVp(game, p.id);
+                return chipVp > 0 ? (
+                  <span title={`Outer-island settlement bonuses (+${chipVp} VP)`}>
+                    🏝 +{chipVp}
+                  </span>
+                ) : null;
+              })()}
             </div>
             <div className="opp-pieces" title="Pieces remaining (built / cap)">
               <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>

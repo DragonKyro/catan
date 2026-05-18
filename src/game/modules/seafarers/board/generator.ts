@@ -4,7 +4,7 @@ import type {
   HexId,
   Port,
 } from '../../../types';
-import type { IslandChip } from '../../../types';
+import type { IslandChip, TribeToken } from '../../../types';
 import { buildGraphFromCoords, type BaseGraph } from '../../../board/graph';
 import { getScenario } from './scenarios';
 import { identifyIslands } from './islands';
@@ -13,6 +13,7 @@ export interface SeafarersBoardResult {
   board: BoardState;
   rngState: number;
   islandChips: IslandChip[];
+  tribeTokens: TribeToken[];
 }
 
 // Build a Seafarers BoardState from a scenario id. When `numPlayers >= 5`
@@ -80,7 +81,9 @@ export function generateSeafarersBoard(
     pirateHex,
     islandOfHex: {},
   };
-  const islands = identifyIslands(partialBoard);
+  const islands = identifyIslands(partialBoard, {
+    desertIsBoundary: scenario.desertIsBoundary === true,
+  });
   partialBoard.islandOfHex = islands.hexToIsland;
 
   const islandChips: IslandChip[] = islands.outerIslandIds.map((id) => ({
@@ -89,7 +92,20 @@ export function generateSeafarersBoard(
     firstSettler: null,
   }));
 
-  return { board: partialBoard, rngState, islandChips };
+  // Forgotten Tribe: instantiate tribe-token defs onto the actual hex ids.
+  // Quietly drop any token whose anchor hex isn't on the generated board
+  // (e.g. a 3-4p-only token for a 5-6p generation).
+  const tokenDefs = useLarge && scenario.tribeTokens5_6
+    ? scenario.tribeTokens5_6
+    : scenario.tribeTokens ?? [];
+  const tribeTokens: TribeToken[] = [];
+  for (const def of tokenDefs) {
+    const hexId = `${def.q},${def.r}`;
+    if (!partialBoard.hexes[hexId]) continue;
+    tribeTokens.push({ hexId, type: def.type, claimedBy: null });
+  }
+
+  return { board: partialBoard, rngState, islandChips, tribeTokens };
 }
 
 function hexCenter(

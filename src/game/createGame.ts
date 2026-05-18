@@ -1,4 +1,4 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken } from './types';
 import { generateBoard } from './board/generator';
 import { generateSeafarersBoard } from './modules/seafarers/board/generator';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
@@ -61,8 +61,12 @@ function devDeckFor(numPlayers: number): DevCardType[] {
   return DEV_DECK_BASE;
 }
 
-function defaultVpFor(numPlayers: number): number {
-  return numPlayers >= 7 ? 12 : 10;
+// Base-game default VP target. Official rule is 10 regardless of player
+// count; the 5-6p extension keeps 10 VP, and the unofficial 7-8p extension
+// stays at 10 too (more players already lengthens wall-clock time per
+// round, so raising the target compounds that rather than balancing it).
+function defaultVpFor(_numPlayers: number): number {
+  return 10;
 }
 
 export type PlayerKind = 'human' | 'ai';
@@ -104,15 +108,28 @@ export function createGame(opts: CreateGameOptions): GameState {
     }
   }
 
+  // Seafarers has no official 7-8p layout. Until per-scenario 7-8 boards
+  // are designed, refuse the combination at the engine boundary so the
+  // generator doesn't silently fall back to the 5-6 board for an
+  // 8-player game (which would be undersized).
+  const expansions = opts.settings?.expansions ?? [];
+  if (expansions.includes(SEAFARERS_EXPANSION_ID) && numPlayers > 6) {
+    throw new Error(
+      `Seafarers supports at most 6 players (got ${numPlayers}); a 7-8p Seafarers extension does not yet exist.`,
+    );
+  }
+
   // VP target precedence: explicit override > scenario default > player-count
   // default. Scenarios ship with rulebook-correct VP targets (e.g. Heading for
-  // New Shores = 13) so picking one without an override does the right thing.
-  const expansions = opts.settings?.expansions ?? [];
+  // New Shores = 12 at 3-4p / 14 at 5-6p) so picking one without an override
+  // does the right thing.
   const scenarioId = opts.settings?.scenarioId;
-  const scenarioVp =
-    expansions.includes(SEAFARERS_EXPANSION_ID) && scenarioId
-      ? getScenario(scenarioId).defaultVpToWin
-      : undefined;
+  const scenarioVp = ((): number | undefined => {
+    if (!expansions.includes(SEAFARERS_EXPANSION_ID) || !scenarioId) return undefined;
+    const sc = getScenario(scenarioId);
+    if (numPlayers >= 5 && sc.defaultVpToWin5_6 != null) return sc.defaultVpToWin5_6;
+    return sc.defaultVpToWin;
+  })();
   const settings: GameSettings = {
     numPlayers,
     victoryPointsToWin:
@@ -125,6 +142,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let rng = opts.seed >>> 0;
   let board: BoardState;
   let islandChips: IslandChip[] | undefined;
+  let tribeTokens: TribeToken[] | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
@@ -132,6 +150,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     board = result.board;
     rng = result.rngState;
     islandChips = result.islandChips;
+    tribeTokens = result.tribeTokens.length > 0 ? result.tribeTokens : undefined;
   } else {
     const baseResult = generateBoard(rng, boardVariant);
     board = baseResult.board;
@@ -196,5 +215,6 @@ export function createGame(opts: CreateGameOptions): GameState {
     boardVariant,
     turnHolderIndex: 0,
     islandChips,
+    tribeTokens,
   };
 }

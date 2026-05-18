@@ -31,13 +31,36 @@ const EXTRA_5_6: ScenarioHexDef[] = [
   { q: -1, r: 3, terrain: 'ore', token: 8 },
 ];
 
+// Tribe token placements. Per the official rulebook the Forgotten Tribe
+// brings ~8 tokens (3 dev card, 2 VP, 3 commercial harbor); we approximate
+// that distribution within the available islet hexes for each board size.
+// Anchor each token on an outer-islet land hex — the first player to
+// settle adjacent claims it.
+const TRIBE_TOKENS_3_4: { q: number; r: number; type: 'devCard' | 'victoryPoint' | 'commercialHarbor' }[] = [
+  { q: 3, r: -2, type: 'commercialHarbor' },
+  { q: 3, r: 0, type: 'devCard' },
+  { q: 2, r: 1, type: 'victoryPoint' },
+  { q: 0, r: 3, type: 'devCard' },
+  { q: -2, r: -1, type: 'commercialHarbor' },
+];
+
+const TRIBE_TOKENS_5_6: { q: number; r: number; type: 'devCard' | 'victoryPoint' | 'commercialHarbor' }[] = [
+  ...TRIBE_TOKENS_3_4,
+  { q: -3, r: 0, type: 'devCard' },
+  { q: -3, r: 3, type: 'victoryPoint' },
+  { q: 4, r: -2, type: 'commercialHarbor' },
+];
+
 export const forgottenTribe = buildScenario({
   id: 'forgottenTribe',
   name: 'The Forgotten Tribe',
   defaultIslandBonusVp: 2,
-  defaultVpToWin: 13,
+  defaultVpToWin: 11,
+  defaultVpToWin5_6: 13,
   minPlayers: 3,
   maxPlayers: 4,
+  tribeTokens: TRIBE_TOKENS_3_4,
+  tribeTokens5_6: TRIBE_TOKENS_5_6,
   land: [...MAIN, ...TRIBE_ISLETS],
   ports: [
     { q: 1, r: -1, direction: 0, type: 'generic' },

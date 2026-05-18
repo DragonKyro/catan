@@ -1,4 +1,4 @@
-import type { Terrain, PortType } from '../../../types';
+import type { Terrain, PortType, TribeTokenType } from '../../../types';
 
 export interface ScenarioHexDef {
   q: number;
@@ -16,6 +16,14 @@ export interface ScenarioPortDef {
   r: number;
   direction: 0 | 1 | 2 | 3 | 4 | 5;
   type: PortType;
+}
+
+// Forgotten Tribe token placement. Each token sits on a single hex; the
+// first player to settle on any vertex of that hex claims it.
+export interface ScenarioTribeTokenDef {
+  q: number;
+  r: number;
+  type: TribeTokenType;
 }
 
 export interface Scenario {
@@ -38,8 +46,12 @@ export interface Scenario {
   hexes5_6?: ScenarioHexDef[];
   ports5_6?: ScenarioPortDef[];
   // Official VP target for this scenario (used as the default in lobby UI;
-  // still overridable by the host).
+  // still overridable by the host). Applies to the 3-4 player layout.
   defaultVpToWin: number;
+  // Official VP target for the 5-6 player layout. When absent, falls back
+  // to `defaultVpToWin`. Most official Seafarers scenarios add 1-2 VP for
+  // the larger board because more island-bonus chips become reachable.
+  defaultVpToWin5_6?: number;
   // Player-count window the scenario supports. The lobby uses these to gray
   // out unsupported seat counts. When `hexes5_6` is absent the scenario is
   // effectively capped at 4.
@@ -50,4 +62,14 @@ export interface Scenario {
   // islands during the game; a few (e.g. Four Islands) explicitly allow
   // starting on any land hex.
   startingPlacementZone: 'mainIslandOnly' | 'anyIsland';
+  // When true, desert hexes act as island boundaries (like sea) during
+  // connected-component analysis. The "far side" of the desert then counts
+  // as a separate logical island and earns an outer-island chip even though
+  // it's land-connected through the desert. Used by Through the Desert.
+  desertIsBoundary?: boolean;
+  // Forgotten Tribe: tribe-token placements per board layout. The 3-4p set
+  // applies to the base layout; the 5-6p set replaces it when the larger
+  // board is generated.
+  tribeTokens?: ScenarioTribeTokenDef[];
+  tribeTokens5_6?: ScenarioTribeTokenDef[];
 }

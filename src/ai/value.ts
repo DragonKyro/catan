@@ -27,12 +27,11 @@ export function probabilityDots(token: number | null): number {
 
 export function terrainWeight(t: Terrain): number {
   if (t === 'desert' || t === 'sea') return 0;
-  // Gold hexes pay any resource on roll — average across the weights.
-  if (t === 'gold') {
-    let sum = 0;
-    for (const r of RESOURCES) sum += RESOURCE_WEIGHT[r];
-    return sum / RESOURCES.length;
-  }
+  // Gold hexes pay any resource on roll — the player chooses, so they
+  // function as a "best available" resource each tick. Weight above the
+  // strongest single-resource value (ore/wheat at 1.3) to reflect that
+  // choice, not the average (averaging undervalues optionality).
+  if (t === 'gold') return 1.6;
   return RESOURCE_WEIGHT[t];
 }
 
@@ -117,12 +116,11 @@ export function vertexScore(
       continue;
     }
     const pips = probabilityDots(hex.numberToken);
-    // Gold hexes pay any resource on roll; valued via the average resource
-    // weight rather than looked up as a fixed resource (since `gold` isn't a
-    // Resource type). Diversity / missing-resource bonuses don't apply
-    // because gold isn't a specific resource and won't fill a single gap.
+    // Gold pays the player's choice on roll. Bump it further with a small
+    // flat bonus on top of pips*weight because the optionality also smooths
+    // out cards-stuck-without-the-right-resource scenarios.
     if (hex.terrain === 'gold') {
-      totalPips += pips * terrainWeight('gold');
+      totalPips += pips * terrainWeight('gold') + 1.0;
       continue;
     }
     const weight = RESOURCE_WEIGHT[hex.terrain as Resource];
@@ -166,7 +164,24 @@ export function vertexScore(
     else portBonus = 1.2;
   }
 
-  return totalPips + diversityBonus + portBonus + missingBonus - shoreline;
+  // Seafarers: bonus for settling on an outer island whose chip is still
+  // unclaimed. Worth `chip.vp` VP at game end; scale by ~3 so it competes
+  // with strong missing-resource bonuses. Already-claimed chips don't apply
+  // (and our own claimed chips don't double-count — we already have that VP).
+  let chipBonus = 0;
+  if (state.islandChips && state.board.islandOfHex) {
+    const islandIds = new Set<string>();
+    for (const hexId of vertex.hexes) {
+      const id = state.board.islandOfHex[hexId];
+      if (id) islandIds.add(id);
+    }
+    for (const chip of state.islandChips) {
+      if (chip.firstSettler !== null) continue;
+      if (islandIds.has(chip.islandId)) chipBonus += chip.vp * 3;
+    }
+  }
+
+  return totalPips + diversityBonus + portBonus + missingBonus + chipBonus - shoreline;
 }
 
 // "What does this player need most?" — returns weighted shortfall to the

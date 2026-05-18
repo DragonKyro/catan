@@ -53,7 +53,11 @@ export function getEdgeLength(board: BoardState, edgeId: EdgeId): number {
 }
 
 // For coastal edges, returns the marker position on the OCEAN side of the
-// edge — distance pixels away from the single adjacent hex's center.
+// edge — distance pixels away from the land hex's center, in the direction
+// pointing OUT through the edge into the water. Base game coastal edges
+// only neighbour one hex (sea is implicit), but Seafarers coastal edges
+// have both a land and a sea neighbour, so we have to pick the land one
+// explicitly — otherwise the marker pushes from the sea hex into the land.
 export function getPortMarkerPosition(
   board: BoardState,
   edgeId: EdgeId,
@@ -61,8 +65,9 @@ export function getPortMarkerPosition(
 ): Point {
   const edge = board.edges[edgeId]!;
   const mid = getEdgeMidpoint(board, edgeId);
-  const hexId = edge.hexes[0]!;
-  const hex = board.hexes[hexId]!;
+  const landHexId =
+    edge.hexes.find((id) => board.hexes[id]?.terrain !== 'sea') ?? edge.hexes[0]!;
+  const hex = board.hexes[landHexId]!;
   const dx = mid.x - hex.center.x;
   const dy = mid.y - hex.center.y;
   const mag = Math.hypot(dx, dy) || 1;

@@ -1,4 +1,9 @@
-import type { Scenario, ScenarioHexDef, ScenarioPortDef } from '../types';
+import type {
+  Scenario,
+  ScenarioHexDef,
+  ScenarioPortDef,
+  ScenarioTribeTokenDef,
+} from '../types';
 import { fillSea } from './helpers';
 
 export interface ScenarioBlueprint {
@@ -6,6 +11,10 @@ export interface ScenarioBlueprint {
   name: string;
   defaultIslandBonusVp: number;
   defaultVpToWin: number;
+  // Optional VP override for the 5-6 player layout (official scenarios add
+  // ~1-2 VP because the larger board has more island-bonus chips to claim).
+  // Falls back to `defaultVpToWin` when absent.
+  defaultVpToWin5_6?: number;
   // Player-count window. `maxPlayers` is implicitly capped at 4 unless a 5-6
   // layout is supplied below.
   minPlayers: number;
@@ -15,6 +24,12 @@ export interface ScenarioBlueprint {
   // expansion). Scenarios that explicitly allow multi-island starts (Four
   // Islands) override this.
   startingPlacementZone?: 'mainIslandOnly' | 'anyIsland';
+  // Optional. When true, desert hexes act as island boundaries (used by
+  // Through the Desert so the far side earns an outer-island chip).
+  desertIsBoundary?: boolean;
+  // Optional. Forgotten Tribe token placements.
+  tribeTokens?: ScenarioTribeTokenDef[];
+  tribeTokens5_6?: ScenarioTribeTokenDef[];
   // 3-4 player layout.
   land: ScenarioHexDef[];
   ports: ScenarioPortDef[];
@@ -61,5 +76,9 @@ export function buildScenario(bp: ScenarioBlueprint): Scenario {
   };
   if (hexes5_6) scenario.hexes5_6 = hexes5_6;
   if (ports5_6) scenario.ports5_6 = ports5_6;
+  if (bp.defaultVpToWin5_6 != null) scenario.defaultVpToWin5_6 = bp.defaultVpToWin5_6;
+  if (bp.desertIsBoundary) scenario.desertIsBoundary = true;
+  if (bp.tribeTokens) scenario.tribeTokens = bp.tribeTokens;
+  if (bp.tribeTokens5_6) scenario.tribeTokens5_6 = bp.tribeTokens5_6;
   return scenario;
 }

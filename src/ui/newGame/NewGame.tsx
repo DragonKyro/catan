@@ -21,13 +21,19 @@ const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3', 'AI 4', 'AI 5', 'AI 6', 'A
 const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai', 'ai', 'ai', 'ai', 'ai'];
 const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink', 'teal', 'gold'];
 
-// Recommended VP target: 10 for base / 5-6p, 12 for the unofficial 7-8p
-// extension (a 10-VP game with 8 players ends before everyone gets a turn).
-// Seafarers scenarios override this via their own defaultVpToWin.
+// Recommended VP target. Base game uses 10 VP for all player counts (the
+// official rule — more players don't change the goal, only the wait time).
+// Seafarers scenarios override this via their own defaultVpToWin, with a
+// separate defaultVpToWin5_6 for the larger 5-6 player layout.
 function recommendedVp(numPlayers: number, expansions: ExpansionPickerValue): number {
   const scenario = activeScenario(expansions);
-  if (scenario) return scenario.defaultVpToWin;
-  return numPlayers >= 7 ? 12 : 10;
+  if (scenario) {
+    if (numPlayers >= 5 && scenario.defaultVpToWin5_6 != null) {
+      return scenario.defaultVpToWin5_6;
+    }
+    return scenario.defaultVpToWin;
+  }
+  return 10;
 }
 
 interface Props {

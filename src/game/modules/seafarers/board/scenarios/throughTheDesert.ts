@@ -34,9 +34,15 @@ export const throughTheDesert = buildScenario({
   id: 'throughTheDesert',
   name: 'Through the Desert',
   defaultIslandBonusVp: 2,
-  defaultVpToWin: 12,
+  defaultVpToWin: 14,
+  defaultVpToWin5_6: 15,
   minPlayers: 3,
   maxPlayers: 4,
+  // The three desert hexes bisect the main island. Treating them as island
+  // boundaries makes the "far side" a separate logical island, so the
+  // standard chip-VP system rewards the first player to settle past the
+  // desert — the rulebook's headline mechanic for this scenario.
+  desertIsBoundary: true,
   land: LAND,
   ports: [
     { q: -3, r: 1, direction: 4, type: 'generic' },

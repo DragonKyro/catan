@@ -135,6 +135,11 @@ export interface Player {
   // non-empty when the 'seafarers' expansion is active.
   ships: EdgeId[];
   movedShipThisTurn?: boolean;
+  // Seafarers / Forgotten Tribe: commercial harbor tokens awarded by tribe
+  // hexes. Each token unconditionally lowers the player's bank trade rate
+  // floor to 2:1 (better than generic 3:1 ports). Count, not boolean, so
+  // future scenarios can stack effects if needed.
+  commercialHarbors?: number;
 }
 
 // ============================================================================
@@ -260,12 +265,26 @@ export interface GameState {
     returnTo?: 'main' | 'setupRound2';
   };
   islandChips?: IslandChip[];
+  // Seafarers / Forgotten Tribe: friendly-tribe tokens placed on outer
+  // islets. Claimed the first time any player settles on a vertex
+  // adjacent to the token's hex. Each type has its own one-shot effect
+  // (see TribeTokenType). Tokens stay on the board in `claimedBy` form so
+  // the UI can render who got what.
+  tribeTokens?: TribeToken[];
 }
 
 export interface IslandChip {
   islandId: string;
   vp: number;
   firstSettler: PlayerId | null;
+}
+
+export type TribeTokenType = 'devCard' | 'victoryPoint' | 'commercialHarbor';
+
+export interface TribeToken {
+  hexId: HexId;
+  type: TribeTokenType;
+  claimedBy: PlayerId | null;
 }
 
 // ============================================================================

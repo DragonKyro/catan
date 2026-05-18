@@ -9,6 +9,7 @@ import { City } from './City';
 import { Road } from './Road';
 import { Ship } from './seafarers/Ship';
 import { PirateMarker } from './seafarers/PirateMarker';
+import { TribeTokenMarker } from './seafarers/TribeTokenMarker';
 import './Board.css';
 
 interface Props {
@@ -133,6 +134,7 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
 
         <Robber board={board} />
         <PirateMarker board={board} />
+        <TribeTokenMarker game={game} />
       </svg>
     </div>
   );
