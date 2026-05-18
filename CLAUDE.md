@@ -190,7 +190,11 @@ Each scenario also carries `defaultVpToWin` (3-4p) and optional `defaultVpToWin5
 
 ## Where to start next
 
-Phases 0–7 and 5b complete; all 9 Seafarers scenarios support 3–6 players. The 5-6p geometries are approximations of the rulebook layouts (positions are roughly correct, component counts match exactly); a useful follow-up is visual verification against `docs/.scenario-renders/seafarers-56-*.png` and tightening hex positions to match the diagrams.
+Phases 0–7, 5b, and 7c complete; all 9 Seafarers scenarios support 3–6 players, and eight base-game Fun Maps ship (Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl). The Seafarers 5-6p geometries are approximations of the rulebook layouts (positions are roughly correct, component counts match exactly); a useful follow-up is visual verification against `docs/.scenario-renders/seafarers-56-*.png`.
+
+Smaller Fun Maps follow-ups:
+- **5-6p Fun Map layouts** for Black Forest, Diamond, Gear, Lakes, Twirl, Volcano. Most are straightforward extensions of the 3-4p shape; Volcano 5-6p needs design thought (one volcano in the center, larger board, possibly more deserts).
+- **Hex-position tightening** for Diamond, Gear, Twirl — current coordinates are reasonable but not pixel-perfect to a hand-drawn diamond/gear/spiral shape.
 
 Two smaller follow-ups worth doing soon:
 - **Phase 7b — Seafarers 7–8 player extension**: no official version exists. The engine currently rejects Seafarers + >6 players via `createGame`. Would need per-scenario 7–8 boards.

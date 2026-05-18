@@ -12,6 +12,19 @@ The popular online version (colonist.io) paywalls the expansions; this is a free
 
 **Base game** — 3–8 players. 3–6 official; 7–8 is an unofficial extension modeled on colonist.io's: 37-hex board, scaled bank (24 per resource) and dev deck (35 cards), 2022 paired-player turn rule across all 5+ player counts.
 
+**Fun Maps** — eight colonist.io-style base-game variants, selectable from a **Base map** dropdown on the new-game screen:
+
+- **Gold Rush** — two or three gold fields mixed into the terrain pool; settlements next to one pick any resource on every production roll
+- **Volcano** — center hex is a volcano (pinned to roll a 6); when its number comes up, one random adjacent settlement is destroyed and any adjacent city downgrades to a settlement. Setup placement next to the volcano is forbidden
+- **Black Forest** — five fixed-position forest (wood) hexes anchor the middle; the usual no-adjacent-reds rule is relaxed so a dense 6/8 cluster can land anywhere
+- **Diamond** — 16-hex rhombus shape; smaller and tighter than standard
+- **Gear** — 13-hex gear with six "teeth" sticking out around a 7-hex core; one port per tooth
+- **Lakes** — standard outline with three interior lakes that roads have to route around
+- **Pond** — single sea hex dead-center
+- **Twirl** — 21-hex spiral; standard hexagon with a two-hex tail twisting off one corner
+
+Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 3–4 player only for now.
+
 **Seafarers expansion** — 9 official scenarios, every one with its rulebook headline mechanic wired up:
 
 - **Heading for New Shores** — main island + outer islands with gold hexes and settlement-bonus chips
@@ -32,7 +45,7 @@ The popular online version (colonist.io) paywalls the expansions; this is a free
 - **Heuristic AI with encoded win plans.** Six 10-VP templates (city+army, sprawl+road, etc.); AI scores each by resource cost + production mismatch and picks the cheapest reachable plan. Threat model flags opponents close to win, longest road, or largest army, and refuses trades that hand them the resource they need. In Seafarers it values outer-island chip VP, weights gold above any single resource, and builds ships toward unclaimed chips.
 - **Scenario progress tracker.** When a Seafarers scenario has live state (chips, fog, tribe tokens, wonder levels, pirate fleet, cloth), a "Scenario" side tab appears with everything-at-a-glance. Player badges in the hand/opponent panels mirror it (`🏝 +N`, `🧵 N`, `X/N VP`).
 - **Pass-device hot-seat.** In local games with multiple humans, an explicit handoff screen hides resource hands and unplayed dev cards between turns. AI hands stay face-down (counts visible, types hidden).
-- **Self-contained rulebook.** Paginated by topic with inline SVG diagrams; per-scenario explainers cover the actual implemented mechanic for each Seafarers scenario, including its win target.
+- **Self-contained rulebook with search.** Paginated by topic with inline SVG diagrams; per-scenario explainers cover the actual implemented mechanic for each Seafarers scenario and base-game Fun Map, including its win target. A search box filters topics by title and body text in real time so you can find a specific rule without scrolling.
 
 ### Testing online multiplayer locally
 
@@ -73,6 +86,7 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
 - [x] Phase 6 — Seafarers expansion (9 official scenarios, each with its rulebook headline mechanic — see Features)
 - [x] Phase 7 — Seafarers 5–6 player extension (all 9 scenarios have a `layout5_6p` matching the 5-6 player rulebook's component counts; the rulebook's "Six Islands" scenario is implemented as Four Islands' 5-6p geometry. Hex positions are approximate, pending visual verification against [docs/.scenario-renders/seafarers-56-*.png])
+- [x] Phase 7c — Base-game colonist.io Fun Maps: Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl. Selectable from a base-map dropdown alongside Standard. Volcano implements full eruption rules (setup block, inline destruction on roll, AI penalty, dedicated rulebook entry). Gold Rush and Pond ship 5-6p layouts; the rest are 3-4p
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
 - [ ] Phase 8 — Cities & Knights expansion
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
