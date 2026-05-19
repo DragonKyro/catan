@@ -332,4 +332,96 @@ export const TRADERS_TOPICS: Topic[] = [
       </>
     ),
   },
+  {
+    id: 'traders-barbarian-attack',
+    title: 'Barbarian Attack',
+    body: (
+      <>
+        <p>
+          Three castles ring the island. Each one is the target of a
+          barbarian group creeping in from the sea. Every turn the
+          barbarians advance one hex; when they arrive at a castle,
+          combat resolves automatically. First player to <strong>12 VP
+          </strong> wins.
+        </p>
+        <ul>
+          <li>
+            <strong>Castle hexes</strong> are non-producing and immune to
+            the robber. They sit in the outer sea ring; building can still
+            happen on adjacent coastal vertices.
+          </li>
+          <li>
+            <strong>Barbarian groups</strong> walk a 4-hex path from an
+            outer sea hex inward. The first three turns the barbarian
+            moves; the fourth turn it arrives and fights.
+          </li>
+          <li>
+            <strong>Defender knights</strong> are hired on the six edges
+            that bound each castle. Up to 6 per castle (the supply of 18
+            divides evenly across the three castles).
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 'traders-hire-knight',
+    title: 'Hiring knights',
+    body: (
+      <>
+        <p>
+          During your main phase, spend <strong>1 wheat + 1 ore</strong>
+          {' '}to place a defender knight on a castle-bordering edge that
+          is empty (no road, ship, bridge, or knight there). Any player
+          may fill any open castle slot — defenders aren't tied to your
+          own road network, so you can rush to defend a contested castle
+          even without prior buildup there.
+        </p>
+        <p>
+          The <strong>shared knight supply</strong> starts at 18 (6 per
+          castle). Each hire draws one; combat losses refund their
+          knights to the supply, so the bag refills naturally over time.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'traders-castle-combat',
+    title: 'Castle combat',
+    body: (
+      <>
+        <p>
+          When a barbarian reaches its castle (path position 3 of 3),
+          combat happens immediately at end of turn:
+        </p>
+        <ul>
+          <li>
+            <strong>Defender strength</strong> = the total number of
+            knights on the six edges around the castle, summed across
+            all players.
+          </li>
+          <li>
+            <strong>Barbarian strength</strong> = 4 (default for every
+            castle).
+          </li>
+          <li>
+            If defenders ≥ barbarians, the defense wins: each
+            participating player earns <strong>+1 VP per knight</strong>
+            {' '}they brought, and roughly half the defending knights
+            die (rounded up).
+          </li>
+          <li>
+            If defenders &lt; barbarians, the castle is overrun. All
+            defending knights die. The defender with the fewest knights
+            loses one settlement / city adjacent to the castle (cities
+            downgrade to settlements). When no defenders are present,
+            any player with a building on the castle's hex may lose it.
+          </li>
+          <li>
+            The barbarian resets to position 0 and the cycle repeats.
+          </li>
+        </ul>
+      </>
+    ),
+  },
 ];

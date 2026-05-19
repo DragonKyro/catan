@@ -262,6 +262,16 @@ function Glyph({ terrain }: { terrain: string }) {
           />
         </g>
       );
+    case 'castle':
+      // Crenellated tower silhouette: thin tower with battlement teeth.
+      return (
+        <g opacity={0.65}>
+          <rect x={-1.6} y={-2.4} width={3.2} height={4.4} fill="#3a3f48" />
+          <rect x={-2} y={-2.4} width={0.9} height={1.2} fill="#3a3f48" />
+          <rect x={-0.4} y={-2.4} width={0.8} height={1.2} fill="#3a3f48" />
+          <rect x={1.1} y={-2.4} width={0.9} height={1.2} fill="#3a3f48" />
+        </g>
+      );
     default:
       return null;
   }

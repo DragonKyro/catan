@@ -9,7 +9,8 @@ import { handlePlaceInitialRoadWithRiverGold } from './actions/placeInitialRoad'
 import { handleSpendFish } from './actions/spendFish';
 import { handlePassOldBoot } from './actions/passOldBoot';
 import { handleSubmitWagonVote, handlePlaceWagon } from './merchantTrains/voting';
-import { handleEndTurnWithWagonVote } from './merchantTrains/turn';
+import { handleEndTurnTraders } from './turn';
+import { handleHireKnight } from './actions/hireKnight';
 import { validateMoveRobberFriendlyRobber } from './variants/friendlyRobber';
 import { TRADERS_EXPANSION_ID } from './constants';
 
@@ -38,12 +39,14 @@ export const tradersModule: RuleModule = {
     passOldBoot: handlePassOldBoot as never,
     submitWagonVote: handleSubmitWagonVote as never,
     placeWagon: handlePlaceWagon as never,
-    endTurn: handleEndTurnWithWagonVote as never,
+    hireKnight: handleHireKnight as never,
+    endTurn: handleEndTurnTraders as never,
   },
   validators: {
     moveRobber: combineRobberValidators(
       validateMoveRobberFriendlyRobber,
       validateMoveRobberFishingScenario,
+      validateMoveRobberCastle,
     ),
   },
 };
@@ -76,5 +79,20 @@ function validateMoveRobberFishingScenario(
   _state: GameState,
   _action: MoveRobberAction,
 ): string | null {
+  return null;
+}
+
+// Barbarian Attack: the robber cannot sit on a castle hex (rulebook —
+// the castle is a defended position, not a steal target). Sea-ring
+// position is already gated by the base robber validator, but this
+// makes the ban explicit.
+function validateMoveRobberCastle(
+  state: GameState,
+  action: MoveRobberAction,
+): string | null {
+  if (!state.castles?.length) return null;
+  if (state.castles.some((c) => c.hexId === action.hex)) {
+    return 'Cannot place the robber on a castle hex';
+  }
   return null;
 }

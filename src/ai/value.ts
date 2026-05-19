@@ -31,7 +31,8 @@ export function terrainWeight(t: Terrain): number {
     t === 'sea' ||
     t === 'swamp' ||
     t === 'lake' ||
-    t === 'wateringHole'
+    t === 'wateringHole' ||
+    t === 'castle'
   )
     return 0;
   // Gold hexes pay any resource on roll — the player chooses, so they
@@ -261,6 +262,19 @@ export function vertexScore(
     if (state.board.hexes[hexId]?.terrain === 'swamp') riverGoldBonus += 0.4;
   }
 
+  // Traders & Barbarians / Barbarian Attack: a small bonus for settling
+  // adjacent to a castle. The defender-VP upside isn't tied to the
+  // building, but castle-adjacent vertices put us in the area where
+  // hire knights matter and they're also relatively safer (no enemy
+  // settles in the sea ring).
+  let castleBonus = 0;
+  if (state.castles?.length) {
+    const castleHexes = new Set(state.castles.map((c) => c.hexId));
+    for (const hexId of vertex.hexes) {
+      if (castleHexes.has(hexId)) castleBonus += 0.5;
+    }
+  }
+
   // Traders & Barbarians / Fishing on Catan:
   //   - The lake produces fish tokens on its number. Settlements adjacent
   //     to the lake catch 1 token per production, cities 2. Worth pips ×
@@ -292,7 +306,8 @@ export function vertexScore(
     fogBonus +
     clothBonus +
     riverGoldBonus +
-    fishBonus -
+    fishBonus +
+    castleBonus -
     shoreline -
     volcanoPenalty
   );

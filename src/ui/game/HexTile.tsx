@@ -33,6 +33,10 @@ const TERRAIN_FILL: Record<string, string> = {
   lake: 'var(--terrain-lake, #2a5d7c)',
   // Watering hole = dusty oasis. Sandy beige with a tinted center.
   wateringHole: 'var(--terrain-wateringHole, #b89870)',
+  // Castle = stone fortress. Slate gray; the CastleMarker overlay paints
+  // a battlement silhouette on top so the hex reads as fortified at a
+  // glance.
+  castle: 'var(--terrain-castle, #5a6473)',
 };
 
 export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse, foggy }: Props) {

@@ -4,7 +4,7 @@ import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { WONDERS } from '@/game/modules/seafarers/wonders/catalogue';
 import { playerColorVar } from '@/ui/shared/playerColors';
-import type { TribeTokenType } from '@/game/types';
+import type { CastleState, TribeTokenType } from '@/game/types';
 import './ScenarioPanel.css';
 
 const TRIBE_TOKEN_LABEL: Record<TribeTokenType, string> = {
@@ -43,8 +43,39 @@ export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getStat
     if (state.fishingGrounds && state.fishingGrounds.length > 0) return true;
     if (state.lakeHexId) return true;
     if (state.wateringHoleHexId) return true;
+    if (state.castles && state.castles.length > 0) return true;
   }
   return false;
+}
+
+// Display name of the player with the most defender knights at this
+// castle. Returns null when no one has any defenders here (rendered as
+// "unclaimed" by the caller). Ties show "tied" so the row stays clean.
+function topDefenderName(
+  game: NonNullable<ReturnType<typeof useGameStore.getState>['game']>,
+  castle: CastleState,
+): string | null {
+  let topCount = 0;
+  let topPid: string | null = null;
+  let tied = false;
+  for (const p of game.players) {
+    const count =
+      p.defenderKnights?.filter((e) => {
+        const edge = game.board.edges[e];
+        return edge?.hexes.includes(castle.hexId);
+      }).length ?? 0;
+    if (count === 0) continue;
+    if (count > topCount) {
+      topCount = count;
+      topPid = p.id;
+      tied = false;
+    } else if (count === topCount) {
+      tied = true;
+    }
+  }
+  if (!topPid) return null;
+  const name = game.players.find((p) => p.id === topPid)?.name ?? '?';
+  return tied ? `${topCount}× tied` : `${topCount}× ${name}`;
 }
 
 // Total number of fog hexes this scenario started with. We derive it from
@@ -327,11 +358,52 @@ function TradersScenarioPanel() {
   const isFishing = (game.fishingGrounds?.length ?? 0) > 0 || game.lakeHexId != null;
   const isRivers = (game.riverEdges?.length ?? 0) > 0;
   const isMerchantTrains = game.wateringHoleHexId != null;
+  const isBarbarianAttack = (game.castles?.length ?? 0) > 0;
   return (
     <section className="scenario-panel">
       <header className="scenario-panel-header">
         <span className="scenario-panel-title">Traders & Barbarians</span>
       </header>
+      {isBarbarianAttack && (
+        <div className="scenario-panel-block">
+          <div className="scenario-panel-block-head">
+            <span>Barbarian Attack</span>
+            <span className="scenario-panel-block-sum">
+              🛡 {game.barbarianKnightSupply ?? 0} in supply
+            </span>
+          </div>
+          <ul className="scenario-panel-chips">
+            {(game.castles ?? []).map((c, idx) => {
+              const max = c.barbarianPath.length - 1;
+              const filled = '▰'.repeat(c.barbarianPosition);
+              const open = '▱'.repeat(Math.max(0, max - c.barbarianPosition));
+              const topDefender = topDefenderName(game, c);
+              return (
+                <li key={c.id} className="scenario-panel-chip is-claimed">
+                  <span className="scenario-panel-chip-vp">{`#${idx + 1}`}</span>
+                  <span
+                    className="scenario-panel-chip-type"
+                    title={`Barbarian position ${c.barbarianPosition}/${max} · strength ${c.barbarianStrength}`}
+                  >
+                    🪓 {filled || '·'}{open} ({c.barbarianStrength})
+                  </span>
+                  {topDefender && (
+                    <span className="scenario-panel-chip-name">
+                      {topDefender}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="scenario-panel-note">
+            Every turn the barbarians creep one hex closer. When they reach a
+            castle, defender knights at that castle fight back — winning
+            earns +1 VP per knight (half die); losing burns every knight
+            there and one defending building.
+          </div>
+        </div>
+      )}
       {isMerchantTrains && (
         <div className="scenario-panel-block">
           <div className="scenario-panel-block-head">

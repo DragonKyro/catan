@@ -271,6 +271,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     fishingGrounds =
       result.fishingGrounds.length > 0 ? result.fishingGrounds : undefined;
     wateringHoleHexId = result.wateringHoleHexId ?? undefined;
+    castles = result.castles.length > 0 ? result.castles : undefined;
   } else if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
     board = result.board;
@@ -342,6 +343,10 @@ export function createGame(opts: CreateGameOptions): GameState {
     ...(hasTraders ? { gold: 0, bridges: [] } : {}),
     ...(hasTraders && settings.tradersScenarioId === TRADERS_SCENARIO_FISHING
       ? { fishTokens: [] as Array<'one' | 'two' | 'three'> }
+      : {}),
+    ...(hasTraders &&
+    settings.tradersScenarioId === TRADERS_SCENARIO_BARBARIAN_ATTACK
+      ? { defenderKnights: [] as EdgeId[] }
       : {}),
   }));
 
@@ -432,6 +437,18 @@ export function createGame(opts: CreateGameOptions): GameState {
     robberActive = false;
   }
 
+  // Barbarian Attack seeding. Castle states already come from the generator;
+  // initialize the shared knight supply. Each castle's `defenderVp` map is
+  // empty until a successful defense lands. Resolved-state-only scenario —
+  // no off-board robber tweak; the regular desert robber rule applies.
+  const isBarbarianAttack =
+    hasTraders &&
+    settings.tradersScenarioId === TRADERS_SCENARIO_BARBARIAN_ATTACK;
+  let barbarianKnightSupply: number | undefined;
+  if (isBarbarianAttack) {
+    barbarianKnightSupply = BARBARIAN_KNIGHT_SUPPLY;
+  }
+
   return {
     settings,
     rngState: rng,
@@ -477,5 +494,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     wateringHoleHexId,
     wagons,
     wagonSupply,
+    castles,
+    barbarianKnightSupply,
   };
 }

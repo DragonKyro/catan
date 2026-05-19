@@ -1,6 +1,7 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
+import { calculateBarbarianDefenderVp } from '@/game/modules/traders/scoring/barbarianAttack';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { totalResources } from '@/game/resources';
 import { totalCommodities } from '@/game/commodities';
@@ -17,6 +18,14 @@ const MAX_SETTLEMENTS = 5;
 const MAX_CITIES = 4;
 const MAX_ROADS = 15;
 const MAX_SHIPS = 15;
+
+function sumDefenderVp(
+  game: ReturnType<typeof useGameStore.getState>['game'],
+  playerId: string,
+): number {
+  if (!game) return 0;
+  return calculateBarbarianDefenderVp(game, playerId);
+}
 
 export function OpponentPanel() {
   const game = useGameStore((s) => s.game!);
@@ -165,6 +174,16 @@ export function OpponentPanel() {
               )}
               {game.oldBootHolder === p.id && (
                 <span title="Old boot — needs +1 VP to win">👢</span>
+              )}
+              {(p.defenderKnights?.length ?? 0) > 0 && (
+                <span title={`Defender knights — ${p.defenderKnights!.length}`}>
+                  🛡 {p.defenderKnights!.length}
+                </span>
+              )}
+              {(game.castles?.length ?? 0) > 0 && sumDefenderVp(game, p.id) > 0 && (
+                <span title={`Castle-defense VP earned — +${sumDefenderVp(game, p.id)}`}>
+                  🪖 +{sumDefenderVp(game, p.id)}
+                </span>
               )}
             </div>
             <div className="opp-pieces" title="Pieces remaining (built / cap)">

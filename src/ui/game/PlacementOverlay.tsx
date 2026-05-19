@@ -10,6 +10,7 @@ import {
 } from '@/game/placement';
 import { canBuildShip } from '@/game/modules/seafarers/validation/shipPlacement';
 import { canPlaceWagon as canPlaceWagonHelper } from '@/game/modules/traders/merchantTrains/placement';
+import { canPlaceKnight } from '@/game/modules/traders/barbarianAttack/placement';
 import type { EdgeId, PlayerColor, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 
@@ -510,6 +511,31 @@ export function PlacementOverlay() {
     );
   }
 
+  if (uiMode.kind === 'hireKnight') {
+    // Highlight every edge that bounds a castle hex and is currently
+    // empty — see canPlaceKnight.
+    return (
+      <g className="overlay overlay-edges">
+        {game.board.edgeIds.map((eid) => {
+          if (!canPlaceKnight(game, eid, acting)) return null;
+          return (
+            <EdgeGhost
+              key={eid}
+              eid={eid}
+              variant="knight"
+              previewColor={previewColor}
+              isHovered={hoveredEid === eid}
+              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+              onClick={() =>
+                dispatch({ type: 'hireKnight', playerId: acting, edge: eid })
+              }
+            />
+          );
+        })}
+      </g>
+    );
+  }
+
   if (uiMode.kind === 'moveRobber') {
     return (
       <g className="overlay overlay-hexes">
@@ -682,7 +708,7 @@ function EdgeGhost({
   onClick,
 }: {
   eid: EdgeId;
-  variant: 'road' | 'ship' | 'bridge';
+  variant: 'road' | 'ship' | 'bridge' | 'knight';
   previewColor: PlayerColor;
   isHovered: boolean;
   onHoverChange: (hovered: boolean) => void;
@@ -728,7 +754,15 @@ function EdgeGhost({
           y2={y2}
           stroke={playerColorVar(previewColor)}
           strokeOpacity={0.55}
-          strokeWidth={variant === 'bridge' ? 6 : variant === 'ship' ? 4 : 5}
+          strokeWidth={
+            variant === 'bridge'
+              ? 6
+              : variant === 'ship'
+                ? 4
+                : variant === 'knight'
+                  ? 7
+                  : 5
+          }
           strokeLinecap="round"
         />
       )}

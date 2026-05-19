@@ -270,6 +270,17 @@ function entryMatches(
       parts.push('barbarian', 'attack', entry.outcome);
       for (const id of entry.pillaged) pushName(id);
       break;
+    case 'castleAdvance':
+      parts.push('barbarian', 'castle', 'advance', `castle ${entry.castleIndex + 1}`);
+      break;
+    case 'castleDefended':
+      parts.push('castle', 'defended', 'knight');
+      for (const id of entry.winners) pushName(id);
+      break;
+    case 'castleOverrun':
+      parts.push('castle', 'overrun', 'barbarian');
+      if (entry.victim) pushName(entry.victim);
+      break;
     case 'robberActivated':
       parts.push('robber', 'active', 'activated');
       break;
@@ -483,6 +494,39 @@ function LogLine({
       return (
         <div className="log-line log-soft">
           🚢 Barbarian ship advances ({entry.position}/{entry.total})
+        </div>
+      );
+    case 'castleAdvance':
+      return (
+        <div className="log-line log-soft">
+          🪓 Barbarians advance toward Castle {entry.castleIndex + 1} ({entry.to}/3)
+        </div>
+      );
+    case 'castleDefended':
+      return (
+        <div className="log-line">
+          🛡 Castle {entry.castleIndex + 1} defended —{' '}
+          {entry.winners.map((id, i) => (
+            <span key={id}>
+              {i > 0 ? ', ' : ''}
+              {pname(id)}
+            </span>
+          ))}{' '}
+          earn defender VP
+        </div>
+      );
+    case 'castleOverrun':
+      return (
+        <div className="log-line">
+          🪓 Castle {entry.castleIndex + 1} overrun
+          {entry.victim && (
+            <>
+              {' '}— {pname(entry.victim)}'s{' '}
+              {entry.effect === 'downgraded'
+                ? 'city downgraded'
+                : 'settlement destroyed'}
+            </>
+          )}
         </div>
       );
     case 'barbarianAttack':

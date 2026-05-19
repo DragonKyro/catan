@@ -2,6 +2,7 @@ import type { GameState, PlayerId } from '../types';
 import { calculateWealthTilesVp } from '../modules/traders/scoring/wealthTiles';
 import { calculateStrongestPortsVp } from '../modules/traders/scoring/strongestPorts';
 import { calculateMerchantTrainsVp } from '../modules/traders/scoring/merchantTrains';
+import { calculateBarbarianDefenderVp } from '../modules/traders/scoring/barbarianAttack';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../modules/citiesAndKnights/constants';
 
 // Cities & Knights — 2 VP per metropolis the player owns (1 each at level 4
@@ -145,6 +146,9 @@ export function calculateVictoryPoints(
   vp += calculateStrongestPortsVp(state, playerId);
   // Traders & Barbarians / Merchant Trains: +1 per building between 2 wagons.
   vp += calculateMerchantTrainsVp(state, playerId);
+  // Traders & Barbarians / Barbarian Attack: visible +1 per knight per won
+  // defense, accumulated on `state.castles[i].defenderVp`.
+  vp += calculateBarbarianDefenderVp(state, playerId);
   return vp;
 }
 

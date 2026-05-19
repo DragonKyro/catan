@@ -5,10 +5,19 @@ import { ResourceChip } from '@/ui/shared/ResourceChip';
 import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
 import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
+import { calculateBarbarianDefenderVp } from '@/game/modules/traders/scoring/barbarianAttack';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { FISH_TOKEN_VALUE } from '@/game/modules/traders/constants';
 import './HandPanel.css';
+
+function countDefenderVp(
+  game: ReturnType<typeof useGameStore.getState>['game'],
+  playerId: string,
+): number {
+  if (!game) return 0;
+  return calculateBarbarianDefenderVp(game, playerId);
+}
 
 function fishHandTooltip(tokens: Array<'one' | 'two' | 'three'>): string {
   const counts = { one: 0, two: 0, three: 0 };
@@ -216,6 +225,22 @@ export function HandPanel() {
               title="Old boot — you need +1 VP to win. Pass it during your turn to anyone with ≥ your VPs."
             >
               👢
+            </span>
+          )}
+          {(player.defenderKnights?.length ?? 0) > 0 && (
+            <span
+              className="hand-flag"
+              title={`Defender knights — ${player.defenderKnights!.length} stationed`}
+            >
+              🛡 {player.defenderKnights!.length}
+            </span>
+          )}
+          {countDefenderVp(game, player.id) > 0 && (
+            <span
+              className="hand-flag"
+              title={`Successful castle defenses — +${countDefenderVp(game, player.id)} VP`}
+            >
+              🪖 +{countDefenderVp(game, player.id)}
             </span>
           )}
         </h3>

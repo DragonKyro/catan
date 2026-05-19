@@ -19,6 +19,7 @@ import { chooseWinPlan } from './winPaths';
 import { tryBuildShip } from './seafarers/ships';
 import { tryBuildBridge } from './traders/bridges';
 import { tryFishSpend, tryPassBoot } from './traders/fish';
+import { tryHireKnight } from './traders/knights';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { tryAttackPirateFleet } from './seafarers/pirateFleet';
 import { tryBuildWonder } from './seafarers/wonders';
@@ -148,6 +149,13 @@ export function chooseMainPhaseAction(
     if (fish) return fish;
     const boot = tryPassBoot(state, playerId);
     if (boot) return boot;
+    // 2.8) HIRE KNIGHT (Barbarian Attack). Fires only when a barbarian is
+    //      1-2 hexes from a castle AND the castle's existing defense is
+    //      under the barbarian strength. Higher priority than road
+    //      because losing combat costs a building outright — much worse
+    //      than a missed road segment.
+    const knight = tryHireKnight(state, playerId);
+    if (knight) return knight;
   }
 
   // 3) BUILD ROAD

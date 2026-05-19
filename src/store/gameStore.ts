@@ -35,6 +35,9 @@ export type UIMode =
   // Traders & Barbarians / Merchant Trains — placing a trade wagon after a
   // vote resolution that named a placer (no clear vote-winner edge).
   | { kind: 'placeWagon' }
+  // Traders & Barbarians / Barbarian Attack — picking a castle-adjacent
+  // edge to hire a defender knight on.
+  | { kind: 'hireKnight' }
   // Cities & Knights — picking which of your own cities to put a wall under.
   | { kind: 'buildCityWall' }
   // Cities & Knights knight build/action modes.

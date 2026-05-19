@@ -159,6 +159,18 @@ export function ActionBar() {
             🌉 Bridge
           </Button>
         )}
+        {hasTraders && (game.castles?.length ?? 0) > 0 && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.hireKnight) ||
+              (game.barbarianKnightSupply ?? 0) <= 0
+            }
+            onClick={() => setMode({ kind: 'hireKnight' })}
+            title="Hire Knight (1🌾 1🪨) — place a defender on a castle-adjacent edge"
+          >
+            🛡 Knight
+          </Button>
+        )}
         <Button
           disabled={
             !canAfford(player.resources, COSTS.settlement) ||

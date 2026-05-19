@@ -21,6 +21,9 @@ import { Bridge } from './traders/Bridge';
 import { RiverEdgeMarker } from './traders/RiverEdgeMarker';
 import { FishingGroundMarker } from './traders/FishingGroundMarker';
 import { Wagon } from './traders/Wagon';
+import { Knight as DefenderKnight } from './traders/Knight';
+import { CastleMarker } from './traders/CastleMarker';
+import { Barbarian } from './traders/Barbarian';
 import './Board.css';
 
 interface Props {
@@ -147,6 +150,43 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
               <Wagon key={w.edge} board={board} edge={w.edge} />
             ))}
           </g>
+        )}
+
+        {/* T&B / Barbarian Attack: castle markers, defender knights on
+            castle-bordering edges, and barbarian tokens striding along
+            their paths. Rendered before the regular pieces so the knight
+            shields and barbarian skulls sit on top of road / settlement
+            layers. */}
+        {game.castles && (
+          <>
+            <g className="castle-markers">
+              {game.castles.map((c, i) => (
+                <CastleMarker
+                  key={c.id}
+                  board={board}
+                  hexId={c.hexId}
+                  label={`Castle ${i + 1}`}
+                />
+              ))}
+            </g>
+            <g className="defender-knights">
+              {game.players.flatMap((player) =>
+                (player.defenderKnights ?? []).map((eid) => (
+                  <DefenderKnight
+                    key={`${player.id}-${eid}`}
+                    board={board}
+                    edge={eid}
+                    color={player.color}
+                  />
+                )),
+              )}
+            </g>
+            <g className="barbarians">
+              {game.castles.map((c) => (
+                <Barbarian key={c.id} board={board} castle={c} />
+              ))}
+            </g>
+          </>
         )}
 
         <g className="ships">

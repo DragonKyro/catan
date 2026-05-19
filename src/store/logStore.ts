@@ -104,6 +104,24 @@ export type LogEntry =
       // that dropped to a settlement.
       effect: 'destroyed' | 'downgraded';
     }
+  // Traders & Barbarians / Barbarian Attack events. Kind names are
+  // prefixed `castle*` to avoid collision with the C&K barbarian-ship
+  // log kinds (which use `barbarianAdvance` for a different shape).
+  | { id: number; kind: 'castleAdvance'; castleIndex: number; from: number; to: number }
+  | {
+      id: number;
+      kind: 'castleDefended';
+      castleIndex: number;
+      winners: PlayerId[];
+    }
+  | {
+      id: number;
+      kind: 'castleOverrun';
+      castleIndex: number;
+      // Null when there's no defender and no building adjacent — rare edge.
+      victim: PlayerId | null;
+      effect: 'destroyed' | 'downgraded' | null;
+    }
   // Cities & Knights events.
   | { id: number; kind: 'cityWallBuilt'; player: PlayerId }
   | { id: number; kind: 'recruitKnight'; player: PlayerId }
@@ -750,6 +768,80 @@ export const useLogStore = create<LogStore>((set, get) => ({
         break;
       case 'endTurn':
         // Turn boundaries aren't logged — too noisy.
+        // Barbarian Attack: castle state changes ARE logged from here.
+        if (before.castles && after.castles) {
+          for (let i = 0; i < before.castles.length; i++) {
+            const b = before.castles[i]!;
+            const a = after.castles[i]!;
+            // Combat resolved this turn (barbarian reset from arrival).
+            if (
+              b.barbarianPosition === b.barbarianPath.length - 1 &&
+              a.barbarianPosition === 0
+            ) {
+              // Win path: defenderVp grew for at least one player.
+              const winners: PlayerId[] = [];
+              for (const pid of Object.keys(a.defenderVp)) {
+                const beforeVp = b.defenderVp[pid] ?? 0;
+                const afterVp = a.defenderVp[pid] ?? 0;
+                if (afterVp > beforeVp) winners.push(pid);
+              }
+              if (winners.length > 0) {
+                append.push({
+                  id: stamp(),
+                  kind: 'castleDefended',
+                  castleIndex: i,
+                  winners,
+                });
+              } else {
+                // Loss path — find the victim by diffing buildings on castle corners.
+                const hex = after.board.hexes[a.hexId];
+                const corners = new Set(hex?.corners ?? []);
+                let victim: PlayerId | null = null;
+                let effect: 'destroyed' | 'downgraded' | null = null;
+                for (const bp of before.players) {
+                  const ap = after.players.find((p) => p.id === bp.id);
+                  if (!ap) continue;
+                  for (const v of bp.settlements) {
+                    if (!corners.has(v)) continue;
+                    if (
+                      !ap.settlements.includes(v) &&
+                      !ap.cities.includes(v)
+                    ) {
+                      victim = bp.id;
+                      effect = 'destroyed';
+                    }
+                  }
+                  for (const v of bp.cities) {
+                    if (!corners.has(v)) continue;
+                    if (
+                      !ap.cities.includes(v) &&
+                      ap.settlements.includes(v)
+                    ) {
+                      victim = bp.id;
+                      effect = 'downgraded';
+                    }
+                  }
+                }
+                append.push({
+                  id: stamp(),
+                  kind: 'castleOverrun',
+                  castleIndex: i,
+                  victim,
+                  effect,
+                });
+              }
+            } else if (a.barbarianPosition > b.barbarianPosition) {
+              // Plain advance.
+              append.push({
+                id: stamp(),
+                kind: 'castleAdvance',
+                castleIndex: i,
+                from: b.barbarianPosition,
+                to: a.barbarianPosition,
+              });
+            }
+          }
+        }
         break;
       case 'rejectTrade':
         // Rejections aren't logged.
