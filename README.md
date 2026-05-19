@@ -88,9 +88,9 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 7 — Seafarers 5–6 player extension (all 9 scenarios have a `layout5_6p` matching the 5-6 player rulebook's component counts; the rulebook's "Six Islands" scenario is implemented as Four Islands' 5-6p geometry. Hex positions are approximate, pending visual verification against [docs/.scenario-renders/seafarers-56-*.png])
 - [x] Phase 7c — Base-game colonist.io Fun Maps: Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl. Selectable from a base-map dropdown alongside Standard. Volcano implements full eruption rules (setup block, inline destruction on roll, AI penalty, dedicated rulebook entry). Gold Rush and Pond ship 5-6p layouts; the rest are 3-4p
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
-- [ ] Phase 8 — Cities & Knights expansion
+- [~] Phase 8 — Cities & Knights expansion (engine complete: knights, commodities, barbarian advance + attack, all 3 improvement tracks with L3 abilities + metropolis, 54 progress cards with effects, city walls. **AI support missing** — AI seats default to base play; see Outstanding work)
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
-- [ ] Phase 10 — Traders & Barbarians expansion
+- [~] Phase 10 — Traders & Barbarians expansion (4 of 5 scenarios shipping: Rivers of Catan + Fishing on Catan + Merchant Trains + Barbarian Attack, plus the Friendly Robber and Strongest Ports variants. The Traders & Barbarians combo scenario, Catan Event Cards variant, and Catan for Two variant are deferred; see Outstanding work)
 - [ ] Phase 11 — Traders & Barbarians 5–6 player extension
 - [ ] Phase 12 — Explorers & Pirates expansion
 - [ ] Phase 13 — Explorers & Pirates 5–6 player extension
@@ -103,6 +103,30 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 
 **Beyond the expansion roadmap:**
 - Post-game AI analysis — highlight likely misplays from the action log (held wood+brick instead of building; bank-traded into a 7-out; settled on a sub-optimal vertex)
+
+### Outstanding work (audit, 2026-05)
+
+Items uncovered by a full audit of the two in-progress expansions, in rough priority order:
+
+**Cities & Knights (Phase 8):**
+
+- [ ] **AI support** — no `src/ai/citiesAndKnights/` module exists; `src/ai/main.ts` doesn't route C&K phases. AI seats currently default to base-game play (no knight recruitment, no improvement tracks, no progress cards). Largest single gap; without it, AI vs human C&K is a runaway human win.
+- [ ] **Deeper test coverage** — current C&K tests are basic smoke tests (`integration.test.ts` + `phase2.test.ts`, ~695 lines). Displacement, chase-robber, and per-progress-card effects are mostly untested.
+- [ ] **Spot-check progress-card dialogs** — confirm every progress card that requires a follow-up dialog (intrigue, espionage, treason, wedding, commercial harbor offer, etc.) has its UI wired and not just the engine handler.
+
+**Traders & Barbarians (Phase 10):**
+
+- [ ] **2:1 gold spend action + UI** — Rivers of Catan rule (2 gold → any 1 resource, max 2× per turn). Constants defined; no `spendGold` action, no dialog. Gold currently only converts to VP via the Wealthiest Catanian tile.
+- [ ] **Fish spend UI completeness** — only 2 of 5 effects surfaced in `SpendFishDialog.tsx` (`removeRobber`, `takeFromBank`). The other three (`steal`, `buildRoad`, `buyDevCard`) are engine-complete but UI-unreachable.
+- [ ] **Fish 7-token "discard and replace" once-per-turn rule** — current cap is a hard stop; the rulebook nuance isn't implemented.
+- [ ] **Smarter AI wagon voting** — `trySubmitWagonVote` always abstains. AI doesn't compete for Merchant Trains wagon placement.
+- [ ] **Traders & Barbarians combo scenario** — all four T&B mechanics on one board; explicitly deferred.
+- [ ] **Catan Event Cards variant** — 37-card deck replacing dice; not implemented.
+- [ ] **Catan for Two variant** — neutral players for 2p; not implemented.
+
+**Cross-cutting:**
+
+- [ ] **Replay slider action coverage** — `MEANINGFUL_ACTIONS` in `src/ui/replay/ReplayScreen.tsx` is missing every C&K and T&B action type (`buildBridge`, `spendFish`, `passOldBoot`, `submitWagonVote`, `placeWagon`, `hireKnight`, `recruitKnight`, `activateKnight`, `promoteKnight`, `buildCityWall`, `buildCityImprovement`, `playProgressCard`, etc.). Replays of expansion games skip the interesting bits on the slider.
 
 **Fun map ideas (not yet implemented):**
 
