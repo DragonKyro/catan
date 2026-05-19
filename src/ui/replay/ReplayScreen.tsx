@@ -3,6 +3,7 @@ import type { Action, GameState, Player, Resource } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { calculateVictoryPoints } from '@/game/scoring/points';
+import { pairedPlayer2Index, usesPairedRules } from '@/game/helpers';
 import { BoardSVG } from '@/ui/game/BoardSVG';
 import { Button } from '@/ui/shared/Button';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
@@ -173,17 +174,41 @@ function ReplayBody({
       </div>
 
       <div className="rscreen-players">
-        {replayState.playerOrder
-          .map((pid) => replayState.players.find((p) => p.id === pid))
-          .filter((p): p is NonNullable<typeof p> => !!p)
-          .map((p) => (
-            <PlayerCard
-              key={p.id}
-              player={p}
-              game={replayState}
-              isActing={getActingPlayerId(replayState) === p.id}
-            />
-          ))}
+        {(() => {
+          const actingId = getActingPlayerId(replayState);
+          const inSetup =
+            replayState.phase === 'setupRound1' ||
+            replayState.phase === 'setupRound2';
+          const paired = !inSetup && usesPairedRules(replayState)
+            ? {
+                p1: replayState.playerOrder[
+                  replayState.turnHolderIndex ?? replayState.currentPlayerIndex
+                ]!,
+                p2: replayState.playerOrder[pairedPlayer2Index(replayState)!]!,
+              }
+            : null;
+          const partnerId =
+            paired && (paired.p1 === actingId ? paired.p2 : paired.p1);
+          return replayState.playerOrder
+            .map((pid) => replayState.players.find((p) => p.id === pid))
+            .filter((p): p is NonNullable<typeof p> => !!p)
+            .map((p) => (
+              <PlayerCard
+                key={p.id}
+                player={p}
+                game={replayState}
+                isActing={actingId === p.id}
+                isPartner={!!partnerId && p.id === partnerId}
+                pairedTag={
+                  paired && p.id === paired.p1
+                    ? 'P1'
+                    : paired && p.id === paired.p2
+                      ? 'P2'
+                      : null
+                }
+              />
+            ));
+        })()}
       </div>
 
       <div className="rscreen-status">
@@ -299,10 +324,14 @@ function PlayerCard({
   player,
   game,
   isActing,
+  isPartner,
+  pairedTag,
 }: {
   player: Player;
   game: GameState;
   isActing: boolean;
+  isPartner: boolean;
+  pairedTag: 'P1' | 'P2' | null;
 }) {
   const vp = calculateVictoryPoints(game, player.id, true);
   const visibleVp = calculateVictoryPoints(game, player.id, false);
@@ -330,7 +359,7 @@ function PlayerCard({
 
   return (
     <div
-      className={`rscreen-pcard${isActing ? ' is-acting' : ''}`}
+      className={`rscreen-pcard${isActing ? ' is-acting' : ''}${isPartner ? ' is-partner' : ''}`}
       style={{ borderColor: playerColorVar(player.color) }}
     >
       <div className="rscreen-pcard-head">
@@ -338,7 +367,21 @@ function PlayerCard({
           className="rscreen-pcard-swatch"
           style={{ background: playerColorVar(player.color) }}
         />
-        <span className="rscreen-pcard-name">{player.name}</span>
+        <span className="rscreen-pcard-name">
+          {player.name}
+          {pairedTag && (
+            <span
+              className="rscreen-pcard-tag"
+              title={
+                pairedTag === 'P1'
+                  ? 'Player 1 — rolls dice, full trade rights'
+                  : 'Player 2 — paired turn, bank trades only'
+              }
+            >
+              {pairedTag}
+            </span>
+          )}
+        </span>
         <span className="rscreen-pcard-vp" title="Victory points (incl. hidden)">
           {vp}{' '}
           <span className="rscreen-pcard-vplabel">VP</span>
@@ -362,13 +405,18 @@ function PlayerCard({
         {(['knight', 'roadBuilding', 'yearOfPlenty', 'monopoly'] as const).map(
           (t) => {
             const c = devCountByType[t] ?? 0;
+            // Distinguish unplayed knights (in-hand 🛡) from played knights
+            // (already-resolved ⚔ in the next cell). Same emoji for both
+            // would obscure the at-a-glance "do they still have a knight
+            // to play?" question reviewers care about in replay.
+            const icon = t === 'knight' ? '🛡' : DEV_ICON[t];
             return (
               <span
                 key={t}
                 className={`rscreen-pcard-cell${c > 0 ? '' : ' is-zero'}`}
                 title={`${c} ${DEV_LABEL[t]} in hand`}
               >
-                <span aria-hidden>{DEV_ICON[t]}</span>
+                <span aria-hidden>{icon}</span>
                 <span className="rscreen-pcard-count">{c}</span>
               </span>
             );

@@ -12,10 +12,27 @@ export interface RobberChoice {
 // threatening opponent. Higher = more aggressive blocking.
 const THREAT_HEX_MULT = 3.0; // base bump when hex feeds any threat
 const WIN_THREAT_BONUS = 4.0; // additional bump if a win-threat is on this hex
+const LEADER_BONUS = 2.0; // additional bump if a runaway leader is on this hex
 const RACE_MATCH_BONUS = 2.5; // hex's resource matches the bonus they're racing for
+// Bonus applied to total hex score when it hits 2+ opponents. Multi-target
+// hexes are strictly better than single-target ones at equal damage —
+// every opponent we slow makes our path cheaper.
+const MULTI_PLAYER_BONUS_PER_EXTRA = 1.4;
+// Bonus when the hex produces the *only* (or near-only) source of a
+// particular resource for an opponent — choking off a resource hurts
+// more than tapping a redundant feed.
+const SCARCITY_HEX_BONUS = 1.6;
+// Pip threshold below which a hex counts as "high-number" (8/6 = 5 pips,
+// 9/5 = 4 pips). Used as a tiebreaker bump so the AI prefers to park on
+// 6/8 over 4/10 when both feed similar threats.
+const HIGH_NUMBER_PIPS = 4;
+const HIGH_NUMBER_BONUS = 2.0;
 
 export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberChoice {
   const threats = assessThreats(state);
+  // Pre-compute every player's pip totals by resource so we can spot
+  // hexes that are an opponent's only source of a given resource.
+  const pipsByResourceByPlayer = computePipsByResourceByPlayer(state);
   let bestHex: HexId | null = null;
   let bestScore = -Infinity;
   let bestStealTarget: PlayerId | null = null;
@@ -44,12 +61,33 @@ export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberCh
             const baseDamage = mult * pips * (1 + totalResources(p.resources) * 0.1);
             const threat = threats[p.id];
             const threatMult = threatMultiplierFor(threat, hexResource);
-            score += baseDamage * threatMult;
+            // Scarcity: if this hex is one of the player's only sources
+            // of `hexResource`, blocking it pinches their economy harder.
+            const totalPipsForRes =
+              pipsByResourceByPlayer[p.id]?.[hexResource] ?? 0;
+            const hexPipsHere = mult * pips;
+            const scarcityFactor =
+              totalPipsForRes > 0 && hexPipsHere / totalPipsForRes >= 0.5
+                ? SCARCITY_HEX_BONUS
+                : 1.0;
+            score += baseDamage * threatMult * scarcityFactor;
           }
         }
       }
     }
     if (touchesOwn) score -= 50; // strongly prefer not to hurt ourselves
+    // Multi-player bonus: hitting 2+ opponents at once is strictly better
+    // than hitting 1, especially in 4-6p games where 7s come around less
+    // often per-player.
+    if (playersOnHex.size > 1) {
+      score += (playersOnHex.size - 1) * MULTI_PLAYER_BONUS_PER_EXTRA *
+        Math.max(1, pips);
+    }
+    // High-number tiebreaker: a 6 or 8 produces 1.5x as often as a 5 or 9,
+    // so a 6/8 robber-block costs the opponent more expected resources.
+    if (pips >= HIGH_NUMBER_PIPS && playersOnHex.size > 0) {
+      score += HIGH_NUMBER_BONUS;
+    }
     if (score > bestScore) {
       bestScore = score;
       bestHex = hexId;
@@ -66,6 +104,38 @@ export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberCh
   return { hex: bestHex, stealFrom: bestStealTarget };
 }
 
+// Per-player resource production map (in pips). Mirrors pipsByResource
+// from value.ts but over all players in one pass — used to spot hexes
+// that are a major / sole source of a given resource for an opponent.
+function computePipsByResourceByPlayer(
+  state: GameState,
+): Record<PlayerId, Partial<Record<Resource, number>>> {
+  const out: Record<PlayerId, Partial<Record<Resource, number>>> = {};
+  for (const p of state.players) out[p.id] = {};
+  for (const hexId of state.board.hexIds) {
+    const hex = state.board.hexes[hexId]!;
+    if (hex.numberToken === undefined) continue;
+    const pips = probabilityDots(hex.numberToken);
+    if (pips === 0) continue;
+    const res = hex.terrain;
+    if (res === 'desert' || res === 'sea') continue;
+    for (const v of Object.values(state.board.vertices)) {
+      if (!v.hexes.includes(hexId)) continue;
+      for (const p of state.players) {
+        const mult = p.cities.includes(v.id)
+          ? 2
+          : p.settlements.includes(v.id)
+            ? 1
+            : 0;
+        if (mult === 0) continue;
+        const cur = out[p.id]![res as Resource] ?? 0;
+        out[p.id]![res as Resource] = cur + pips * mult;
+      }
+    }
+  }
+  return out;
+}
+
 // Multiplier applied to a hex's damage score based on the producing player's
 // threat profile. Returns 1.0 (no bump) for non-threats; higher for threats.
 function threatMultiplierFor(
@@ -77,11 +147,15 @@ function threatMultiplierFor(
   if (
     threat.closeToWin ||
     threat.closeToLargestArmy ||
-    threat.closeToLongestRoad
+    threat.closeToLongestRoad ||
+    threat.isLeader
   ) {
     mult *= THREAT_HEX_MULT;
   }
   if (threat.closeToWin) mult += WIN_THREAT_BONUS;
+  // Runaway leader (not yet on the brink): smaller bump than win-threats
+  // but still meaningfully more than a non-leader.
+  if (threat.isLeader && !threat.closeToWin) mult += LEADER_BONUS;
   // Resource-specific: if this hex produces a resource directly relevant to
   // the bonus they're racing for, bump again.
   if (threat.dangerousResources.has(hexResource)) {

@@ -96,6 +96,7 @@ export function GameView() {
           <GameClock />
           <DiceDisplay />
           <TurnTimer />
+          {game.pendingTrade && <PendingTradeBanner />}
         </div>
         <div className="gameview-topctrls">
           <button
@@ -151,13 +152,6 @@ export function GameView() {
             )}
           </div>
         </div>
-        {/* Live trade banner — tucked along the top-right of the board,
-            below the dice display, so it doesn't cover the map center. */}
-        {game.pendingTrade && (
-          <div className="gameview-banner-overlay">
-            <PendingTradeBanner />
-          </div>
-        )}
         {/* Trade-building dialogs (propose / counter / bank) anchor to the
             left side of the board — the board middle stays viewable. */}
         {(tradeDialog || bankTradeDialog) && (

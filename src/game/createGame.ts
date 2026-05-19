@@ -45,6 +45,10 @@ const ALL_PLAYER_COLORS: PlayerColor[] = [
   'gold',
   'lime',
   'brown',
+  'black',
+  'forest',
+  'lavender',
+  'maroon',
 ];
 
 // Base dev deck (3-4p): 25 cards. 5-6p extension: 34 cards. 7-8p (unofficial):

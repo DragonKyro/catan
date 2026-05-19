@@ -47,8 +47,10 @@ export function OpponentPanel() {
 
   // 5+ player paired-player rule: identify Player 1 (the dice-roller) and
   // Player 2 (third seat to P1's left) for the current paired turn so we
-  // can mark them in the panel. Returns null in 3-4p games.
-  const paired = usesPairedRules(game)
+  // can mark them in the panel. Returns null in 3-4p games and during
+  // initial setup (paired turns only kick in after both setup rounds).
+  const inSetup = game.phase === 'setupRound1' || game.phase === 'setupRound2';
+  const paired = !inSetup && usesPairedRules(game)
     ? {
         p1: game.playerOrder[game.turnHolderIndex ?? game.currentPlayerIndex]!,
         p2: game.playerOrder[pairedPlayer2Index(game)!]!,

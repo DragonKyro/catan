@@ -20,6 +20,8 @@
   overflow: hidden;
   cursor: grab;
   touch-action: none; /* let pointer events handle pan instead of native scroll */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .board-pan-wrap:active {
