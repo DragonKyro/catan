@@ -133,4 +133,65 @@ describe('generateBoard', () => {
       expect(board.hexes[board.robberHex]!.terrain).toBe('desert');
     });
   });
+
+  describe('7-8 player variant', () => {
+    it('produces 37 hexes with correct terrain distribution', () => {
+      const { board } = generateBoard(42, '7-8');
+      expect(Object.keys(board.hexes)).toHaveLength(37);
+      const terrainCounts: Record<string, number> = {};
+      for (const h of Object.values(board.hexes)) {
+        terrainCounts[h.terrain] = (terrainCounts[h.terrain] ?? 0) + 1;
+      }
+      expect(terrainCounts).toEqual({
+        wood: 8,
+        brick: 6,
+        sheep: 8,
+        wheat: 7,
+        ore: 6,
+        desert: 2,
+      });
+    });
+
+    it('places 35 number tokens, none on the 2 deserts', () => {
+      const { board } = generateBoard(42, '7-8');
+      let nonDesertTokens = 0;
+      for (const h of Object.values(board.hexes)) {
+        if (h.terrain === 'desert') {
+          expect(h.numberToken).toBeNull();
+        } else {
+          expect(h.numberToken).not.toBeNull();
+          nonDesertTokens++;
+        }
+      }
+      expect(nonDesertTokens).toBe(35);
+    });
+
+    it('does not place 6/8 adjacent across several seeds', () => {
+      for (const seed of [1, 7, 42, 100, 999, 12345]) {
+        const { board } = generateBoard(seed, '7-8');
+        const adj = buildHexAdjacency(board);
+        for (const h of Object.values(board.hexes)) {
+          const t = h.numberToken;
+          if (t !== 6 && t !== 8) continue;
+          for (const neighbor of adj.get(h.id) ?? []) {
+            const nt = board.hexes[neighbor]!.numberToken;
+            expect(nt === 6 || nt === 8).toBe(false);
+          }
+        }
+      }
+    });
+
+    it('places 13 ports, all on coastal edges', () => {
+      const { board } = generateBoard(42, '7-8');
+      expect(board.ports).toHaveLength(13);
+      for (const port of board.ports) {
+        expect(board.edges[port.edge]!.hexes).toHaveLength(1);
+      }
+    });
+
+    it('places robber on a desert hex', () => {
+      const { board } = generateBoard(42, '7-8');
+      expect(board.hexes[board.robberHex]!.terrain).toBe('desert');
+    });
+  });
 });

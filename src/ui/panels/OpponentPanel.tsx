@@ -1,9 +1,14 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import { calculateVictoryPoints } from '@/game/scoring/points';
+import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
+import { calculateBarbarianDefenderVp } from '@/game/modules/traders/scoring/barbarianAttack';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { totalResources } from '@/game/resources';
+import { totalCommodities } from '@/game/commodities';
+import { pairedPlayer2Index, usesPairedRules } from '@/game/helpers';
 import { playerColorVar } from '@/ui/shared/playerColors';
+import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import './OpponentPanel.css';
 
 // Base game piece limits per player. Engine already enforces these via the
@@ -13,6 +18,14 @@ const MAX_SETTLEMENTS = 5;
 const MAX_CITIES = 4;
 const MAX_ROADS = 15;
 const MAX_SHIPS = 15;
+
+function sumDefenderVp(
+  game: ReturnType<typeof useGameStore.getState>['game'],
+  playerId: string,
+): number {
+  if (!game) return 0;
+  return calculateBarbarianDefenderVp(game, playerId);
+}
 
 export function OpponentPanel() {
   const game = useGameStore((s) => s.game!);
@@ -29,6 +42,26 @@ export function OpponentPanel() {
     .map((id) => game.players.find((p) => p.id === id))
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
   const actingId = getActingPlayerId(game);
+  const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
+
+  // 5+ player paired-player rule: identify Player 1 (the dice-roller) and
+  // Player 2 (third seat to P1's left) for the current paired turn so we
+  // can mark them in the panel. Returns null in 3-4p games and during
+  // initial setup (paired turns only kick in after both setup rounds).
+  const inSetup = game.phase === 'setupRound1' || game.phase === 'setupRound2';
+  const paired = !inSetup && usesPairedRules(game)
+    ? {
+        p1: game.playerOrder[game.turnHolderIndex ?? game.currentPlayerIndex]!,
+        p2: game.playerOrder[pairedPlayer2Index(game)!]!,
+      }
+    : null;
+  // The "partner" row gets a sky-blue highlight so both paired seats are
+  // visually distinct from each other and from the other 3-6 players.
+  // Whichever of the pair is currently acting gets the gold .opp-acting
+  // treatment; the OTHER gets .opp-partner.
+  const partnerId =
+    paired && (paired.p1 === actingId ? paired.p2 : paired.p1);
 
   // Mark "you" so the player can find themselves quickly. In solo mode we
   // call out the device-bound human; online uses the local seat.
@@ -46,6 +79,7 @@ export function OpponentPanel() {
         const visibleVp = calculateVictoryPoints(game, p.id, false);
         const cards = p.devCards.unplayed.length + p.devCards.boughtThisTurn.length;
         const isActing = p.id === actingId;
+        const isPartner = !!partnerId && p.id === partnerId;
         const uuid = uuidForPlayer(p.id);
         const onlineStatus: 'na' | 'online' | 'offline' =
           role === 'solo' || p.isAI
@@ -54,7 +88,10 @@ export function OpponentPanel() {
               ? 'online'
               : 'offline';
         return (
-          <div key={p.id} className={`opp ${isActing ? 'opp-acting' : ''}`}>
+          <div
+            key={p.id}
+            className={`opp ${isActing ? 'opp-acting' : ''} ${isPartner ? 'opp-partner' : ''}`}
+          >
             <div className="opp-head">
               <span
                 className="opp-swatch"
@@ -64,11 +101,27 @@ export function OpponentPanel() {
                 {p.name}
                 {p.id === localId && <span className="opp-tag">YOU</span>}
                 {p.isAI && <span className="opp-tag">AI</span>}
+                {paired && p.id === paired.p1 && (
+                  <span className="opp-tag" title="Player 1 — rolls dice, full trade rights">P1</span>
+                )}
+                {paired && p.id === paired.p2 && (
+                  <span className="opp-tag" title="Player 2 — paired turn, bank trades only">P2</span>
+                )}
                 {onlineStatus !== 'na' && (
                   <span className={`opp-dot ${onlineStatus}`} />
                 )}
               </span>
-              <span className="opp-vp" title="Visible VP">{visibleVp}+ VP</span>
+              <span
+                className="opp-vp"
+                title={
+                  cards > 0
+                    ? `Visible VP — could be higher with hidden VP dev cards (first to ${game.settings.victoryPointsToWin} wins)`
+                    : `Visible VP (first to ${game.settings.victoryPointsToWin} wins)`
+                }
+              >
+                {visibleVp}
+                {cards > 0 ? '+' : ''}/{game.settings.victoryPointsToWin} VP
+              </span>
             </div>
             <div className="opp-stats">
               <span title="Resource cards">🂠 {totalResources(p.resources)}</span>
@@ -79,6 +132,61 @@ export function OpponentPanel() {
               </span>
               {p.hasLongestRoad && <span title="Longest Road bonus">★ Road</span>}
               {p.hasLargestArmy && <span title="Largest Army bonus">★ Army</span>}
+              {(() => {
+                const chipVp = calculateIslandChipVp(game, p.id);
+                return chipVp > 0 ? (
+                  <span title={`Outer-island settlement bonuses (+${chipVp} VP)`}>
+                    🏝 +{chipVp}
+                  </span>
+                ) : null;
+              })()}
+              {p.cloth && p.cloth > 0 && (
+                <span title={`Cloth tokens — ${p.cloth} cloth = ${Math.floor(p.cloth / 2)} VP`}>
+                  🧵 {p.cloth}
+                </span>
+              )}
+              {hasCK && p.commodities && totalCommodities(p.commodities) > 0 && (
+                <span title="Commodity cards (paper / cloth / coin)">
+                  📜 {totalCommodities(p.commodities)}
+                </span>
+              )}
+              {hasCK && (p.cityWalls ?? 0) > 0 && (
+                <span title={`City walls (+${(p.cityWalls ?? 0) * 2} 7-roll hand limit)`}>
+                  🧱 {p.cityWalls}
+                </span>
+              )}
+              {(p.gold ?? 0) > 0 && (
+                <span title={`Gold — ${p.gold} coins`}>🪙 {p.gold}</span>
+              )}
+              {game.wealthTiles?.wealthiest === p.id && (
+                <span title="Wealthiest Catanian (+1 VP)">👑</span>
+              )}
+              {game.wealthTiles?.poor.includes(p.id) && (
+                <span title="Poor Catanian (-2 VP)">👜</span>
+              )}
+              {game.strongestPorts?.holder === p.id && (
+                <span title="Strongest Ports (+2 VP)">⚓</span>
+              )}
+              {(p.fishTokens?.length ?? 0) > 0 && (
+                <span
+                  title={`Fish tokens — ${p.fishTokens!.length} held`}
+                >
+                  🐟 {p.fishTokens!.length}
+                </span>
+              )}
+              {game.oldBootHolder === p.id && (
+                <span title="Old boot — needs +1 VP to win">👢</span>
+              )}
+              {(p.defenderKnights?.length ?? 0) > 0 && (
+                <span title={`Defender knights — ${p.defenderKnights!.length}`}>
+                  🛡 {p.defenderKnights!.length}
+                </span>
+              )}
+              {(game.castles?.length ?? 0) > 0 && sumDefenderVp(game, p.id) > 0 && (
+                <span title={`Castle-defense VP earned — +${sumDefenderVp(game, p.id)}`}>
+                  🪖 +{sumDefenderVp(game, p.id)}
+                </span>
+              )}
             </div>
             <div className="opp-pieces" title="Pieces remaining (built / cap)">
               <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>
@@ -90,7 +198,7 @@ export function OpponentPanel() {
               <span title={`Roads: ${p.roads.length}/${MAX_ROADS}`}>
                 🛣️ {MAX_ROADS - p.roads.length}
               </span>
-              {p.ships.length > 0 && (
+              {(hasSeafarers || p.ships.length > 0) && (
                 <span title={`Ships: ${p.ships.length}/${MAX_SHIPS}`}>
                   ⛵ {MAX_SHIPS - p.ships.length}
                 </span>

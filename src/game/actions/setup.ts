@@ -31,6 +31,13 @@ export function handlePlaceInitialSettlement(
   const hasLand = vertex.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea');
   if (!hasLand) throw new Error('Settlement must touch at least one land hex');
 
+  // Volcano scenario: setup placement may not touch the volcano hex (the
+  // settlement would just get destroyed on the first eruption, so the rule
+  // forbids it outright).
+  if (state.board.volcanoHex && vertex.hexes.includes(state.board.volcanoHex)) {
+    throw new Error('Setup settlement may not touch the volcano hex');
+  }
+
   // Distance rule and occupancy
   for (const p of state.players) {
     if (p.settlements.includes(action.vertex) || p.cities.includes(action.vertex)) {
@@ -59,7 +66,16 @@ export function handlePlaceInitialSettlement(
     for (const hexId of vertex.hexes) {
       const hex = state.board.hexes[hexId]!;
       const t = hex.terrain;
-      if (t === 'desert' || t === 'sea' || t === 'gold') continue;
+      if (
+        t === 'desert' ||
+        t === 'sea' ||
+        t === 'gold' ||
+        t === 'swamp' ||
+        t === 'lake' ||
+        t === 'wateringHole' ||
+        t === 'castle'
+      )
+        continue;
       grants[t] = (grants[t] ?? 0) + 1;
     }
     next = updatePlayer(next, action.playerId, (p) => ({

@@ -1,18 +1,21 @@
-import type {
-  BoardState,
-  Hex,
-  HexId,
-  Port,
-} from '../../../types';
-import type { IslandChip } from '../../../types';
-import { buildGraphFromCoords, type BaseGraph } from '../../../board/graph';
+import type { BoardState, HexId } from '../../../types';
+import type { IslandChip, PirateFleet, TribeToken } from '../../../types';
+import {
+  assembleBoardFromDefs,
+  assembleBoardFromLayout,
+} from '../../../board/scenarioAssembly';
 import { getScenario } from './scenarios';
 import { identifyIslands } from './islands';
+import type { Scenario, ScenarioLayout } from './types';
 
 export interface SeafarersBoardResult {
   board: BoardState;
   rngState: number;
   islandChips: IslandChip[];
+  tribeTokens: TribeToken[];
+  unrevealedFogHexes: HexId[];
+  pirateFleet?: PirateFleet;
+  clothHexes: HexId[];
 }
 
 // Build a Seafarers BoardState from a scenario id. When `numPlayers >= 5`
@@ -24,64 +27,42 @@ export function generateSeafarersBoard(
   numPlayers = 3,
 ): SeafarersBoardResult {
   const scenario = getScenario(scenarioId);
-  const useLarge = numPlayers >= 5 && scenario.hexes5_6;
-  const hexDefs = useLarge ? scenario.hexes5_6! : scenario.hexes;
-  const portDefs = useLarge && scenario.ports5_6 ? scenario.ports5_6 : scenario.ports;
-  const coords = hexDefs.map((h) => ({ q: h.q, r: h.r }));
-  const graph = buildGraphFromCoords(coords);
+  // Track this for the legacy mechanic-data lookups below (tribeTokens5_6,
+  // fogHexes5_6, etc.). The actual hex/port source switches based on whether
+  // a modular layout exists.
+  const useLarge = numPlayers >= 5;
 
-  const hexes: Record<HexId, Hex> = {};
-  let robberHex: HexId | null = null;
-  let pirateHex: HexId | null = null;
+  // Modular path: when the scenario provides a `layout3p` (and optional
+  // layout4p / layout5_6p), materialize hexes + ports by drawing terrains,
+  // tokens and port types from the pool. Otherwise fall back to the legacy
+  // fixed-content `hexes` / `ports` arrays.
+  const layout = pickLayout(scenario, numPlayers);
+  const assembled = layout
+    ? assembleBoardFromLayout(layout, rngState)
+    : assembleBoardFromDefs(
+        useLarge && scenario.hexes5_6 ? scenario.hexes5_6 : scenario.hexes,
+        useLarge && scenario.ports5_6 ? scenario.ports5_6 : scenario.ports,
+        {},
+        rngState,
+      );
+  const board = assembled.board;
+  rngState = assembled.rngState;
 
-  // Map scenario defs onto the graph hex ids.
-  const defByKey = new Map(hexDefs.map((h) => [`${h.q},${h.r}`, h]));
-
-  for (const hexId of graph.hexIds) {
-    const coord = graph.hexCoords.get(hexId)!;
-    const key = `${coord.q},${coord.r}`;
-    const def = defByKey.get(key)!;
-    const corners = graph.hexCorners.get(hexId)!;
-    const center = hexCenter(graph, corners);
-    hexes[hexId] = {
-      id: hexId,
-      coord,
-      terrain: def.terrain,
-      numberToken: def.token,
-      corners,
-      center,
-    };
-    if (def.terrain === 'desert' && robberHex === null) robberHex = hexId;
-    if (def.terrain === 'sea' && pirateHex === null) pirateHex = hexId;
+  // Seafarers always has a sea hex — guarantee `pirateHex` is set (the
+  // engine assumes it when the expansion is active).
+  if (!board.pirateHex) {
+    board.pirateHex =
+      board.hexIds.find((id) => board.hexes[id]!.terrain === 'sea') ??
+      board.hexIds[0]!;
   }
-
-  // Fallbacks: scenarios with no desert place the robber on any non-sea hex
-  // outside play (we'd never use it, but the engine requires a HexId).
-  if (robberHex === null) {
-    robberHex = graph.hexIds.find((id) => hexes[id]!.terrain !== 'sea') ?? graph.hexIds[0]!;
-  }
-  if (pirateHex === null) {
-    pirateHex = graph.hexIds.find((id) => hexes[id]!.terrain === 'sea') ?? graph.hexIds[0]!;
-  }
-
-  const ports = resolvePorts(portDefs, graph);
 
   // Identify islands so the rendering layer can highlight them and so the
   // settlement-handler intercept (phase 6) can award the right chip.
-  const partialBoard: BoardState = {
-    hexes,
-    vertices: graph.vertices,
-    edges: graph.edges,
-    ports,
-    robberHex,
-    hexIds: graph.hexIds,
-    vertexIds: graph.vertexIds,
-    edgeIds: graph.edgeIds,
-    pirateHex,
-    islandOfHex: {},
-  };
-  const islands = identifyIslands(partialBoard);
-  partialBoard.islandOfHex = islands.hexToIsland;
+  board.islandOfHex = {};
+  const islands = identifyIslands(board, {
+    desertIsBoundary: scenario.desertIsBoundary === true,
+  });
+  board.islandOfHex = islands.hexToIsland;
 
   const islandChips: IslandChip[] = islands.outerIslandIds.map((id) => ({
     islandId: id,
@@ -89,48 +70,77 @@ export function generateSeafarersBoard(
     firstSettler: null,
   }));
 
-  return { board: partialBoard, rngState, islandChips };
+  // Forgotten Tribe: instantiate tribe-token defs onto the actual hex ids.
+  // Quietly drop any token whose anchor hex isn't on the generated board
+  // (e.g. a 3-4p-only token for a 5-6p generation).
+  const tokenDefs = useLarge && scenario.tribeTokens5_6
+    ? scenario.tribeTokens5_6
+    : scenario.tribeTokens ?? [];
+  const tribeTokens: TribeToken[] = [];
+  for (const def of tokenDefs) {
+    const hexId = `${def.q},${def.r}`;
+    if (!board.hexes[hexId]) continue;
+    tribeTokens.push({ hexId, type: def.type, claimedBy: null });
+  }
+
+  // Fog Island: collect the starting fog set. Coords that aren't actually
+  // on the generated board are quietly dropped (matches tribeToken handling).
+  const fogDefs = useLarge && scenario.fogHexes5_6
+    ? scenario.fogHexes5_6
+    : scenario.fogHexes ?? [];
+  const unrevealedFogHexes: HexId[] = [];
+  for (const def of fogDefs) {
+    const hexId = `${def.q},${def.r}`;
+    if (board.hexes[hexId]) unrevealedFogHexes.push(hexId);
+  }
+
+  // Pirate Islands: anchor the fleet on the scenario's designated sea hex.
+  // If the coord doesn't resolve to a board hex (unusual — shouldn't happen
+  // for shipped scenarios), pirateFleet stays undefined.
+  const fleetDef = useLarge && scenario.pirateFleet5_6
+    ? scenario.pirateFleet5_6
+    : scenario.pirateFleet;
+  let pirateFleet: PirateFleet | undefined;
+  if (fleetDef) {
+    const hexId = `${fleetDef.q},${fleetDef.r}`;
+    if (board.hexes[hexId]) {
+      pirateFleet = {
+        hexId,
+        strength: fleetDef.strength,
+        maxStrength: fleetDef.strength,
+        defeatedBy: null,
+      };
+    }
+  }
+
+  // Cloth for Catan: resolve cloth-hex coordinates to live hex ids. Quietly
+  // drop coords that aren't on the generated board.
+  const clothDefs = useLarge && scenario.clothHexes5_6
+    ? scenario.clothHexes5_6
+    : scenario.clothHexes ?? [];
+  const clothHexes: HexId[] = [];
+  for (const def of clothDefs) {
+    const hexId = `${def.q},${def.r}`;
+    if (board.hexes[hexId]) clothHexes.push(hexId);
+  }
+
+  return {
+    board,
+    rngState,
+    islandChips,
+    tribeTokens,
+    unrevealedFogHexes,
+    pirateFleet,
+    clothHexes,
+  };
 }
 
-function hexCenter(
-  graph: BaseGraph,
-  corners: ReturnType<BaseGraph['hexCorners']['get']> & {},
-): { x: number; y: number } {
-  let cx = 0;
-  let cy = 0;
-  for (const vid of corners) {
-    cx += graph.vertices[vid]!.position.x;
-    cy += graph.vertices[vid]!.position.y;
-  }
-  cx /= corners.length;
-  cy /= corners.length;
-  return { x: Math.round(cx * 100) / 100, y: Math.round(cy * 100) / 100 };
-}
-
-// Resolve a port anchor (q, r, direction) to an actual edge id. Direction 0
-// is the upper-right edge (between corners 0 and 1) clockwise around a
-// pointy-top hex. We look up the edge by finding the two corners (i, i+1) of
-// the anchor hex.
-function resolvePorts(
-  portDefs: { q: number; r: number; direction: number; type: Port['type'] }[],
-  graph: BaseGraph,
-): Port[] {
-  const out: Port[] = [];
-  for (const p of portDefs) {
-    const hexId = `${p.q},${p.r}`;
-    const corners = graph.hexCorners.get(hexId);
-    if (!corners) continue;
-    const v1 = corners[p.direction]!;
-    const v2 = corners[(p.direction + 1) % 6]!;
-    const edge = Object.values(graph.edges).find(
-      (e) =>
-        (e.vertices[0] === v1 && e.vertices[1] === v2) ||
-        (e.vertices[0] === v2 && e.vertices[1] === v1),
-    );
-    if (!edge) continue;
-    out.push({ edge: edge.id, type: p.type });
-  }
-  // Dedupe in case two anchors resolved to the same edge.
-  const seen = new Set<string>();
-  return out.filter((p) => (seen.has(p.edge) ? false : (seen.add(p.edge), true)));
+// Pick the modular layout for the current player count. 4p falls back to the
+// 3p layout when the scenario doesn't ship a separate 4p frame (most don't —
+// Heading for New Shores and Through the Desert are the exceptions). Returns
+// `null` when the scenario hasn't migrated to the modular format yet.
+function pickLayout(scenario: Scenario, numPlayers: number): ScenarioLayout | null {
+  if (numPlayers >= 5) return scenario.layout5_6p ?? null;
+  if (numPlayers === 4) return scenario.layout4p ?? scenario.layout3p ?? null;
+  return scenario.layout3p ?? null;
 }

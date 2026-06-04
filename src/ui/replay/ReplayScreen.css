@@ -97,6 +97,22 @@
   transform: translateY(-1px);
 }
 
+.rscreen-pcard.is-partner {
+  box-shadow: 0 0 0 2px #5fa8d9, 0 4px 14px rgba(95, 168, 217, 0.18);
+}
+
+.rscreen-pcard-tag {
+  font-size: 0.65em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--text-soft);
+  margin-left: 6px;
+}
+
 .rscreen-pcard-head {
   display: flex;
   align-items: center;

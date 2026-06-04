@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { DevCardType, GameState } from '@/game/types';
+import { devDeckTotalsFor } from '@/game/createGame';
 
 interface CardInfo {
   type: DevCardType;
@@ -66,23 +67,37 @@ export function DevCardCheatsheet({ game, onClose }: Props) {
     };
   }, [onClose]);
 
-  // Count what's still in the deck (face-down). This is the public info
-  // every player has access to: the deck composition is fixed and the
-  // remaining cards are whatever hasn't been bought yet.
-  const remaining: Record<DevCardType, number> = {
-    knight: 0,
-    roadBuilding: 0,
-    yearOfPlenty: 0,
-    monopoly: 0,
-    victoryPoint: 0,
+  // Per-type counts shown here must NOT leak hidden info. Inspecting
+  // game.devCardDeck directly would reveal which cards are still in the
+  // deck vs. bought-and-held face-down — in particular, "5/6 VP left"
+  // would tell every player exactly how many hidden VP cards their
+  // opponents are sitting on. Instead we display the upper bound on cards
+  // still hidden (in deck + in any face-down hand) using only public
+  // information: starting totals minus what's been publicly revealed.
+  // Currently the only revealed dev-card type is knights (via Largest
+  // Army tracking); everyone else stays at their starting total.
+  const totals = devDeckTotalsFor(game.players.length);
+  const totalKnightsPlayed = game.players.reduce(
+    (sum, p) => sum + p.devCards.playedKnights,
+    0,
+  );
+  const facedown: Record<DevCardType, number> = {
+    knight: Math.max(0, totals.knight - totalKnightsPlayed),
+    roadBuilding: totals.roadBuilding,
+    yearOfPlenty: totals.yearOfPlenty,
+    monopoly: totals.monopoly,
+    victoryPoint: totals.victoryPoint,
   };
-  for (const c of game.devCardDeck) remaining[c]++;
   const deckTotal = game.devCardDeck.length;
+  const grandTotal = (Object.values(totals) as number[]).reduce((a, b) => a + b, 0);
 
   return (
     <div className="cost-cheatsheet is-devcards" ref={ref} role="dialog" aria-label="Dev cards">
       <div className="cost-cheatsheet-title">
-        Dev cards <span className="dev-cheatsheet-deck">({deckTotal} left)</span>
+        Dev cards{' '}
+        <span className="dev-cheatsheet-deck">
+          ({deckTotal}/{grandTotal} left in deck)
+        </span>
       </div>
       <ul className="cost-cheatsheet-list">
         {CARDS.map(({ type, icon, label, effect }) => (
@@ -90,8 +105,15 @@ export function DevCardCheatsheet({ game, onClose }: Props) {
             <span className="cost-cheatsheet-build dev-cheatsheet-card">
               <span aria-hidden>{icon}</span> {label}
             </span>
-            <span className="dev-cheatsheet-count" title={`${remaining[type]} left in deck`}>
-              {remaining[type]}
+            <span
+              className="dev-cheatsheet-count"
+              title={
+                type === 'knight'
+                  ? `${facedown.knight} of ${totals.knight} not yet played (deck + hands)`
+                  : `${facedown[type]} of ${totals[type]} still face-down (deck + hands)`
+              }
+            >
+              {facedown[type]}/{totals[type]}
             </span>
             <span className="dev-cheatsheet-effect">{effect}</span>
           </li>

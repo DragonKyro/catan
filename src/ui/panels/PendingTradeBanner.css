@@ -2,20 +2,21 @@
   background: var(--panel);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   width: max-content;
   max-width: 100%;
+  font-size: 0.85em;
 }
 
 .ptbanner-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ptbanner-swatch {

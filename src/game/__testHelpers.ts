@@ -10,27 +10,11 @@ import type {
 } from './types';
 import { applyAction } from './engine';
 import { addResources } from './resources';
+import { canPlaceInitialSettlement } from './placement';
 
 export function findValidSettlementSpot(state: GameState): VertexId {
   for (const vid of state.board.vertexIds) {
-    const v = state.board.vertices[vid]!;
-    // Skip vertices that touch no land hex (Seafarers scenarios have these).
-    if (!v.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea')) continue;
-    let ok = true;
-    for (const p of state.players) {
-      if (p.settlements.includes(vid) || p.cities.includes(vid)) {
-        ok = false;
-        break;
-      }
-      for (const n of v.neighborVertices) {
-        if (p.settlements.includes(n) || p.cities.includes(n)) {
-          ok = false;
-          break;
-        }
-      }
-      if (!ok) break;
-    }
-    if (ok) return vid;
+    if (canPlaceInitialSettlement(state, vid)) return vid;
   }
   throw new Error('No valid settlement spot found');
 }
@@ -56,8 +40,26 @@ export function findValidRoadFromVertex(state: GameState, vid: VertexId): EdgeId
 export function runSetupPhase(state: GameState): GameState {
   let s = state;
   let safetyCounter = 0;
-  while (s.phase === 'setupRound1' || s.phase === 'setupRound2') {
-    if (++safetyCounter > 50) throw new Error('Setup phase did not terminate');
+  while (
+    s.phase === 'setupRound1' ||
+    s.phase === 'setupRound2' ||
+    s.phase === 'chooseGoldResource'
+  ) {
+    if (++safetyCounter > 80) throw new Error('Setup phase did not terminate');
+    // Seafarers: a gold-adjacent round-2 settlement opens a chooseGoldResource
+    // interlude before the road step. Resolve it by picking arbitrary
+    // resources from the bank so setup can proceed.
+    if (s.phase === 'chooseGoldResource') {
+      const pending = s.goldChoiceState!.pending;
+      const pickerId = Object.keys(pending)[0]!;
+      const picks = pending[pickerId]!;
+      s = applyAction(s, {
+        type: 'chooseGoldResource',
+        playerId: pickerId,
+        resources: Array(picks).fill('wheat' as const),
+      });
+      continue;
+    }
     const currentId = s.playerOrder[s.currentPlayerIndex]!;
     if (s.setupState?.step === 'settlement') {
       const vid = findValidSettlementSpot(s);

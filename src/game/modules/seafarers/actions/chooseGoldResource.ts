@@ -39,13 +39,16 @@ export function handleChooseGoldResource(
   }));
   next = { ...next, bank: subtractResources(next.bank, tally) };
 
-  // Remove this player's pending count. If everyone has picked, advance to main.
+  // Remove this player's pending count. If everyone has picked, resume the
+  // phase recorded in returnTo (defaults to 'main' for the gold-roll case;
+  // 'setupRound2' is used when setup placement triggered the pick).
+  const returnTo = next.goldChoiceState!.returnTo ?? 'main';
   const newPending = { ...next.goldChoiceState!.pending };
   delete newPending[action.playerId];
   if (Object.keys(newPending).length === 0) {
-    next = { ...next, phase: 'main', goldChoiceState: undefined };
+    next = { ...next, phase: returnTo, goldChoiceState: undefined };
   } else {
-    next = { ...next, goldChoiceState: { pending: newPending } };
+    next = { ...next, goldChoiceState: { pending: newPending, returnTo } };
   }
   return next;
 }

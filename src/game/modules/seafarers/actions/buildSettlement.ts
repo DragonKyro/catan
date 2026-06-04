@@ -2,9 +2,13 @@ import type {
   GameState,
   BuildSettlementAction,
   PlaceInitialSettlementAction,
+  PlayerId,
 } from '../../../types';
 import { handleBuildSettlement as baseBuildSettlement } from '../../../actions/build';
 import { handlePlaceInitialSettlement as basePlaceInitialSettlement } from '../../../actions/setup';
+import { updatePlayer } from '../../../helpers';
+import { validateStartingIsland } from '../validation/setupPlacement';
+import { revealAdjacentFog } from './fog';
 
 // After a settlement is placed, check whether it sits on an outer-island
 // chip that hasn't been claimed yet. Award the chip to this player.
@@ -39,14 +43,117 @@ export function handleBuildSettlementWithChips(
   state: GameState,
   action: BuildSettlementAction,
 ): GameState {
-  const next = baseBuildSettlement(state, action);
-  return claimIslandChips(next, action.playerId, action.vertex);
+  let next = baseBuildSettlement(state, action);
+  next = claimIslandChips(next, action.playerId, action.vertex);
+  next = claimTribeTokens(next, action.playerId, action.vertex);
+  const adj = next.board.vertices[action.vertex]?.hexes ?? [];
+  next = revealAdjacentFog(next, adj, action.playerId);
+  return next;
+}
+
+// Forgotten Tribe: claim any unclaimed tribe token whose hex is adjacent
+// to `vertexId`. A single settlement can claim multiple tokens if its
+// vertex touches more than one tribe hex (uncommon but legal). Effects
+// apply immediately at claim time:
+//   - devCard: draw the top of the dev deck into boughtThisTurn (not
+//     playable this turn, matching the bought-card rule)
+//   - victoryPoint: handled by calculateVictoryPoints summing claimed VP
+//     tokens — no player-field update needed at claim time
+//   - commercialHarbor: increment player.commercialHarbors so bank trades
+//     drop to 2:1 for any resource
+function claimTribeTokens(
+  state: GameState,
+  playerId: PlayerId,
+  vertexId: string,
+): GameState {
+  const tokens = state.tribeTokens;
+  if (!tokens || tokens.length === 0) return state;
+  const vertex = state.board.vertices[vertexId];
+  if (!vertex) return state;
+  const touchedHexes = new Set(vertex.hexes);
+
+  let next = state;
+  let deck = next.devCardDeck;
+  const newTokens = tokens.map((token) => {
+    if (token.claimedBy !== null) return token;
+    if (!touchedHexes.has(token.hexId)) return token;
+    if (token.type === 'devCard') {
+      // Empty deck: still mark claimed (token is consumed), but skip the
+      // grant. Matches the standard "no more cards to buy" rule.
+      if (deck.length > 0) {
+        const drawn = deck[0]!;
+        deck = deck.slice(1);
+        next = updatePlayer(next, playerId, (p) => ({
+          ...p,
+          devCards: {
+            ...p.devCards,
+            boughtThisTurn: [...p.devCards.boughtThisTurn, drawn],
+          },
+        }));
+      }
+    } else if (token.type === 'commercialHarbor') {
+      next = updatePlayer(next, playerId, (p) => ({
+        ...p,
+        commercialHarbors: (p.commercialHarbors ?? 0) + 1,
+      }));
+    }
+    // 'victoryPoint': no per-player field update — VP is summed from
+    // `state.tribeTokens` at scoring time.
+    return { ...token, claimedBy: playerId };
+  });
+  return { ...next, tribeTokens: newTokens, devCardDeck: deck };
+}
+
+// Count gold hexes adjacent to a vertex. Each one grants one "any resource"
+// pick at the chooseGoldResource phase.
+function goldPicksFor(state: GameState, vertexId: string): number {
+  const vertex = state.board.vertices[vertexId];
+  if (!vertex) return 0;
+  let n = 0;
+  for (const hexId of vertex.hexes) {
+    if (state.board.hexes[hexId]?.terrain === 'gold') n++;
+  }
+  return n;
 }
 
 export function handlePlaceInitialSettlementWithChips(
   state: GameState,
   action: PlaceInitialSettlementAction,
 ): GameState {
-  const next = basePlaceInitialSettlement(state, action);
-  return claimIslandChips(next, action.playerId, action.vertex);
+  validateStartingIsland(state, action.vertex);
+  const wasRound2 = state.phase === 'setupRound2';
+  let next = basePlaceInitialSettlement(state, action);
+  next = claimIslandChips(next, action.playerId, action.vertex);
+  next = claimTribeTokens(next, action.playerId, action.vertex);
+
+  // Round-2 only: a settlement adjacent to gold grants one free pick per gold
+  // hex (rulebook: "If you place your second settlement adjacent to a Gold
+  // hex you receive one resource of your choice"). Route through the same
+  // chooseGoldResource phase used by gold-roll production, with a returnTo
+  // marker so the handler knows to drop the player back into setup road
+  // placement when picks resolve.
+  if (wasRound2) {
+    const picks = goldPicksFor(state, action.vertex);
+    if (picks > 0) {
+      const existing = next.goldChoiceState?.pending[action.playerId] ?? 0;
+      next = {
+        ...next,
+        phase: 'chooseGoldResource',
+        goldChoiceState: {
+          pending: {
+            ...(next.goldChoiceState?.pending ?? {}),
+            [action.playerId]: existing + picks,
+          },
+          returnTo: 'setupRound2',
+        },
+      };
+    }
+  }
+
+  // Fog reveal runs after the gold-adjacency check so any fog hex that
+  // turned out to be gold stacks into the same pending count (the helper
+  // honours existing goldChoiceState).
+  const adj = next.board.vertices[action.vertex]?.hexes ?? [];
+  next = revealAdjacentFog(next, adj, action.playerId);
+  return next;
 }

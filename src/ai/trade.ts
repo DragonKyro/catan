@@ -114,6 +114,18 @@ function tradeScore(
   return after + needBonus - needPenalty + futureBonus - before;
 }
 
+// Flat per-card penalty for handing ANY resource to a leader (not yet
+// close-to-win). Even non-"dangerous" resources free up the leader's
+// other cards to become buildable, so every card we sell them speeds the
+// game's end. Less than `DANGEROUS_RESOURCE_PENALTY` so beneficial swaps
+// can still happen — but enough that 1:1 trades fall below threshold.
+const LEADER_FLAT_PENALTY = 1.2;
+// Per-card penalty for handing ANY resource to a player on the brink of
+// winning. Combined with the dangerous-resource penalty this makes
+// every plausible trade with a near-winner unattractive — exactly what
+// the user wants ("don't give them the win").
+const WIN_THREAT_FLAT_PENALTY = 4.0;
+
 // Penalty for giving `resources` to a known-threatening opponent. Bigger
 // for win-threats; bonus-race threats still earn a meaningful penalty.
 // `resources` is what WE would be giving up (which they would receive).
@@ -128,6 +140,8 @@ function threatPenaltyForGiving(
   const threats = assessThreats(state);
   const t = threats[recipientId];
   let penalty = 0;
+  let totalGiven = 0;
+  for (const r of RESOURCES) totalGiven += resources[r] ?? 0;
   // Per-resource danger penalty (existing logic).
   if (t && t.dangerousResources.size > 0) {
     const mult = t.closeToWin ? WIN_THREAT_MULTIPLIER : 1;
@@ -138,14 +152,20 @@ function threatPenaltyForGiving(
       }
     }
   }
+  // Flat penalty for handing cards to a runaway leader or near-winner —
+  // EVERY card matters when they're a step from victory, even ones not
+  // on the dangerous-resources list.
+  if (t?.closeToWin) {
+    penalty += totalGiven * WIN_THREAT_FLAT_PENALTY;
+  } else if (t?.isLeader) {
+    penalty += totalGiven * LEADER_FLAT_PENALTY;
+  }
   // Rivalry flat penalty: if we're in a direct LA / LR race with this
   // player, every card we hand them is one more card they can spend
   // racing us. Refuse most trades with rivals; the only exceptions are
   // when our score is so positive that even a heavy penalty leaves it
   // worth doing (e.g., they're offering 3 of something for 1 of ours).
   if (isRival(state, actorId, recipientId)) {
-    let totalGiven = 0;
-    for (const r of RESOURCES) totalGiven += resources[r] ?? 0;
     penalty += totalGiven * 1.5;
   }
   return penalty;
@@ -486,10 +506,16 @@ function tryProposeTradeInternal(
       // Rivalry filter: if this opponent is racing us for LA or LR,
       // skip them entirely. We don't want to fuel a rival's economy.
       if (isRival(state, playerId, op.id)) continue;
+      // Win-threat filter: don't even propose to someone a step away from
+      // winning. No matter how favorable the ratio, handing them cards
+      // accelerates their endgame.
+      if (threats[op.id]?.closeToWin) continue;
       let s = tradeScore(state, op.id, give, receive);
       // Threat penalty.
       const t = threats[op.id];
       if (t) {
+        let totalGiveCards = 0;
+        for (const r of RESOURCES) totalGiveCards += give[r] ?? 0;
         let dangerCount = 0;
         for (const r of RESOURCES) {
           if ((give[r] ?? 0) > 0 && t.dangerousResources.has(r)) {
@@ -499,6 +525,11 @@ function tryProposeTradeInternal(
         if (dangerCount > 0) {
           const mult = t.closeToWin ? WIN_THREAT_MULTIPLIER : 1;
           s -= dangerCount * DANGEROUS_RESOURCE_PENALTY * mult;
+        }
+        // Leader flat penalty (closeToWin is filtered out above, so this
+        // catches the merely-ahead leader without doubling on near-winners).
+        if (t.isLeader) {
+          s -= totalGiveCards * LEADER_FLAT_PENALTY;
         }
       }
       if (s > theirBest) theirBest = s;

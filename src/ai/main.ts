@@ -16,6 +16,14 @@ import { chooseDevCardPlay } from './devcard';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { chooseWinPlan } from './winPaths';
+import { tryBuildShip } from './seafarers/ships';
+import { tryBuildBridge } from './traders/bridges';
+import { tryFishSpend, tryPassBoot } from './traders/fish';
+import { tryHireKnight } from './traders/knights';
+import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
+import { tryAttackPirateFleet } from './seafarers/pirateFleet';
+import { tryBuildWonder } from './seafarers/wonders';
+import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
 // Threshold dropped sharply when we're chasing Longest Road OR have nowhere
@@ -24,9 +32,11 @@ const ROAD_TARGET_THRESHOLD_LR = 1.5;
 const LR_CLAIM_LENGTH = 5;
 
 export interface MainPhaseOptions {
-  // Whether the AI may play a dev card this step. Off during SBP.
+  // Whether the AI may play a dev card this step. Defaults to true. Both
+  // Player 1 and Player 2 may play one dev card per paired turn.
   allowDevCardPlay?: boolean;
-  // Whether the AI may propose a player-to-player trade. Off during SBP.
+  // Whether the AI may propose a player-to-player trade. Defaults to true.
+  // Turned off when the AI is acting as paired-rule Player 2.
   allowPlayerTrade?: boolean;
 }
 
@@ -60,6 +70,23 @@ export function chooseMainPhaseAction(
     if (cardPlay) return cardPlay;
   }
 
+  // 0.5) Pirate Islands: attack the fleet whenever we have an adjacent ship
+  //      and haven't attacked this turn. Costs nothing and is +2 VP on the
+  //      killing blow, so it always precedes resource-spending steps.
+  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const attack = tryAttackPirateFleet(state, playerId);
+    if (attack) return attack;
+  }
+
+  // 0.75) Wonders of Catan: completing a wonder is an instant win, so if
+  //       this build would push a wonder to its max level, do it before
+  //       anything else. The normal-level pass runs further down in the
+  //       priority tree.
+  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const win = tryBuildWonder(state, playerId, { instantWinOnly: true });
+    if (win) return win;
+  }
+
   // 1) BUILD CITY
   if (canAfford(player.resources, COSTS.city) && player.cities.length < 4) {
     let bestVid: VertexId | null = null;
@@ -90,6 +117,45 @@ export function chooseMainPhaseAction(
       }
     }
     if (bestVid) return { type: 'buildSettlement', playerId, vertex: bestVid };
+  }
+
+  // 2.5) BUILD SHIP (Seafarers only). Ships sit between settlement and road
+  //      in priority: like roads they extend the network, but the chip-VP
+  //      payoff at outer-island chip vertices is direct VP and ships cost
+  //      wood+sheep — different resources from roads, so the two compete
+  //      for hand budget less than they look like they would. The
+  //      heuristic gates on actual progress (no loops, no opp-blocked
+  //      endpoints) and a threshold so we don't spam idle ships.
+  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const shipAction = tryBuildShip(state, playerId);
+    if (shipAction) return shipAction;
+  }
+
+  // 2.6) BUILD BRIDGE (Traders & Barbarians / Rivers of Catan). Bridges
+  //      sit between settlement and road for the same reason ships do:
+  //      they extend the network across river edges that roads can't
+  //      occupy, and they pay +3 gold on build which feeds Wealthiest
+  //      Catanian / spending. Same cost as a road but with a higher
+  //      payoff, so the threshold is a notch lower than a road's.
+  if (state.settings.expansions.includes(TRADERS_EXPANSION_ID)) {
+    const bridgeAction = tryBuildBridge(state, playerId);
+    if (bridgeAction) return bridgeAction;
+    // 2.7) FISH SPEND. Drive off the robber if it's on us; take a needed
+    //      resource if we have one in reach. Pass the boot if we hold it
+    //      and someone qualifies. Both are pre-build because they shift
+    //      whether the rest of the priority tree can act (e.g. spending
+    //      4 fish to take wheat may unlock a settlement on this very turn).
+    const fish = tryFishSpend(state, playerId);
+    if (fish) return fish;
+    const boot = tryPassBoot(state, playerId);
+    if (boot) return boot;
+    // 2.8) HIRE KNIGHT (Barbarian Attack). Fires only when a barbarian is
+    //      1-2 hexes from a castle AND the castle's existing defense is
+    //      under the barbarian strength. Higher priority than road
+    //      because losing combat costs a building outright — much worse
+    //      than a missed road segment.
+    const knight = tryHireKnight(state, playerId);
+    if (knight) return knight;
   }
 
   // 3) BUILD ROAD
@@ -149,6 +215,18 @@ export function chooseMainPhaseAction(
     for (const r of RESOURCES) handSize += player.resources[r];
     const burnHand = handSize >= 6 && player.resources.wood >= 1 && player.resources.brick >= 1;
 
+    // VP-locked-out catch-all: when cities are maxed AND the dev card
+    // deck is empty AND there's no reachable settle spot in our current
+    // network, the ONLY remaining VP path is to extend roads toward new
+    // settle territory. Without this we'd see AIs sit on wood+brick at
+    // 6 VP for the rest of the game (the original bug: 7-8p games where
+    // the AI maxed cities, drained the dev deck, and stopped building).
+    const vpLockedOut =
+      state.devCardDeck.length === 0 &&
+      player.cities.length >= 4 &&
+      openSpots === 0 &&
+      player.settlements.length < 5;
+
     // Threshold tiers:
     //   - LR pursuit: very low (any extension is worth ~2 VP)
     //   - Plan wants settlements: 3.5 (weed out marginal extensions)
@@ -158,11 +236,7 @@ export function chooseMainPhaseAction(
     else if (planNeedsSettlements) threshold = 3.5;
     if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
     if (burnHand) threshold = Math.max(1.5, threshold - 1.5);
-    // `openSpots` no longer gates whether we try at all — we always
-    // evaluate candidates and let the quality threshold filter. That
-    // way idle wood/brick gets spent on the best available road if
-    // one is worth building.
-    void openSpots;
+    if (vpLockedOut) threshold = Math.min(threshold, 1.0);
 
     let bestEid: EdgeId | null = null;
     let bestScore = -Infinity;
@@ -206,7 +280,7 @@ export function chooseMainPhaseAction(
         }
         if (blockedAdjacent) break;
       }
-      if (blockedAdjacent && !stationAllowed) continue;
+      if (blockedAdjacent && !stationAllowed && !vpLockedOut) continue;
 
       // Count enemy roads on this vertex's OTHER edges. Heavy enemy
       // presence here means (a) opponents are racing for the same
@@ -263,6 +337,16 @@ export function chooseMainPhaseAction(
     if (bestEid && bestScore >= threshold) {
       return { type: 'buildRoad', playerId, edge: bestEid };
     }
+  }
+
+  // 3.5) BUILD WONDER (normal level). Each level is a guaranteed +1 VP
+  //      and locks the wonder to us so opponents can't race the prereq.
+  //      Lower than direct expansion (city / settle / road→settle) because
+  //      wonders don't add production, but higher than dev cards because
+  //      they're deterministic VP rather than ~0.2 expected VP per draw.
+  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const w = tryBuildWonder(state, playerId);
+    if (w) return w;
   }
 
   // 4) BUY DEV CARD — fallback when no quality road was buildable AND

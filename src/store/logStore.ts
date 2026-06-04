@@ -97,9 +97,87 @@ export type LogEntry =
   | { id: number; kind: 'endTurn'; player: PlayerId }
   | {
       id: number;
+      kind: 'volcanoEruption';
+      // Player whose building was destroyed/downgraded.
+      victim: PlayerId;
+      // 'destroyed' for a settlement that vanished; 'downgraded' for a city
+      // that dropped to a settlement.
+      effect: 'destroyed' | 'downgraded';
+    }
+  // Traders & Barbarians / Barbarian Attack events. Kind names are
+  // prefixed `castle*` to avoid collision with the C&K barbarian-ship
+  // log kinds (which use `barbarianAdvance` for a different shape).
+  | { id: number; kind: 'castleAdvance'; castleIndex: number; from: number; to: number }
+  | {
+      id: number;
+      kind: 'castleDefended';
+      castleIndex: number;
+      winners: PlayerId[];
+    }
+  | {
+      id: number;
+      kind: 'castleOverrun';
+      castleIndex: number;
+      // Null when there's no defender and no building adjacent — rare edge.
+      victim: PlayerId | null;
+      effect: 'destroyed' | 'downgraded' | null;
+    }
+  // Cities & Knights events.
+  | { id: number; kind: 'cityWallBuilt'; player: PlayerId }
+  | { id: number; kind: 'recruitKnight'; player: PlayerId }
+  | { id: number; kind: 'activateKnight'; player: PlayerId }
+  | { id: number; kind: 'promoteKnight'; player: PlayerId }
+  | { id: number; kind: 'moveKnight'; player: PlayerId }
+  | { id: number; kind: 'displaceKnight'; player: PlayerId; victim: PlayerId }
+  | { id: number; kind: 'chaseRobber'; player: PlayerId }
+  | {
+      id: number;
+      kind: 'buildImprovement';
+      player: PlayerId;
+      track: 'science' | 'trade' | 'politics';
+      level: number;
+    }
+  | {
+      id: number;
+      kind: 'metropolisGained';
+      player: PlayerId;
+      track: 'science' | 'trade' | 'politics';
+      permanent: boolean;
+    }
+  | {
+      id: number;
+      kind: 'progressCardDrawn';
+      player: PlayerId;
+      deck: 'science' | 'trade' | 'politics';
+    }
+  | {
+      id: number;
+      kind: 'progressCardPlayed';
+      player: PlayerId;
+      card: string;
+    }
+  | {
+      id: number;
+      kind: 'barbarianAdvance';
+      // Position after the advance, out of total track spaces.
+      position: number;
+      total: number;
+    }
+  | {
+      id: number;
+      kind: 'barbarianAttack';
+      // Outcome of the attack — Phase 1 always 'lost' until knights ship.
+      outcome: 'won' | 'lost' | 'tied';
+      // Players who had a city pillaged this attack.
+      pillaged: PlayerId[];
+    }
+  | { id: number; kind: 'robberActivated' }
+  | {
+      id: number;
       kind: 'turnBegins';
-      // Player whose main turn just started. SBP mini-turns (5-6p
-      // expansion) are intentionally NOT logged here — only revolutions
+      // Player whose main turn just started. Player 2 hand-offs within a
+      // paired turn (5+p) are intentionally NOT logged here — only full
+      // revolutions
       // of true turn-holders.
       player: PlayerId;
       // 1-based turn number across the whole game (every player change
@@ -225,8 +303,9 @@ interface LogStore {
   // game; cleared on reset.
   actions: Action[];
   // 1-based count of real turns logged. Incremented each time `record`
-  // detects a transition into the rollOrPlayKnight phase. SBP mini-turns
-  // don't enter rollOrPlayKnight, so they're correctly excluded.
+  // detects a transition into the rollOrPlayKnight phase. The paired-player
+  // rule (5+p) routes P1→P2 within 'main', so the P1→P2 transition is
+  // correctly excluded — only the P2→next-P1 transition fires this.
   turnNumber: number;
   // Per-player cumulative trade stats — paired with timeline snapshots so
   // the end-game graph can show trade count and net resource flow over time.
@@ -428,6 +507,160 @@ export const useLogStore = create<LogStore>((set, get) => ({
           player: action.playerId,
           dice: action.dice,
         });
+        // Volcano scenario: detect eruption by comparing settlement / city
+        // counts before/after. Eruption fires inline inside the dice handler,
+        // so any settlement/city that vanished from a volcano-adjacent vertex
+        // during this action is an eruption victim.
+        if (after.board.volcanoHex) {
+          const volcanoCorners = new Set(
+            after.board.hexes[after.board.volcanoHex]?.corners ?? [],
+          );
+          for (const beforeP of before.players) {
+            const afterP = after.players.find((p) => p.id === beforeP.id);
+            if (!afterP) continue;
+            // Settlement disappeared (and didn't move to cities) → destroyed.
+            for (const vid of beforeP.settlements) {
+              if (!volcanoCorners.has(vid)) continue;
+              if (
+                !afterP.settlements.includes(vid) &&
+                !afterP.cities.includes(vid)
+              ) {
+                append.push({
+                  id: stamp(),
+                  kind: 'volcanoEruption',
+                  victim: beforeP.id,
+                  effect: 'destroyed',
+                });
+              }
+            }
+            // City became a settlement → downgraded.
+            for (const vid of beforeP.cities) {
+              if (!volcanoCorners.has(vid)) continue;
+              if (
+                !afterP.cities.includes(vid) &&
+                afterP.settlements.includes(vid)
+              ) {
+                append.push({
+                  id: stamp(),
+                  kind: 'volcanoEruption',
+                  victim: beforeP.id,
+                  effect: 'downgraded',
+                });
+              }
+            }
+          }
+        }
+
+        // Cities & Knights: derive barbarian-ship advance and any attack
+        // resolution from before/after barbarian state. Attack-counter
+        // changes are unambiguous; ship-position changes only matter when
+        // there wasn't a wrap-to-0 (which means an attack — handled in the
+        // attack branch below).
+        if (before.barbarian && after.barbarian) {
+          const attacksDelta =
+            after.barbarian.attacksResolved - before.barbarian.attacksResolved;
+          if (attacksDelta > 0) {
+            // An attack just resolved. Detect pillaged cities by diffing each
+            // player's city count.
+            const pillaged: PlayerId[] = [];
+            for (const beforeP of before.players) {
+              const afterP = after.players.find((p) => p.id === beforeP.id);
+              if (!afterP) continue;
+              if (afterP.cities.length < beforeP.cities.length) {
+                pillaged.push(beforeP.id);
+              }
+            }
+            append.push({
+              id: stamp(),
+              kind: 'barbarianAttack',
+              outcome: pillaged.length > 0 ? 'lost' : 'won',
+              pillaged,
+            });
+            if (before.robberActive === false && after.robberActive === true) {
+              append.push({ id: stamp(), kind: 'robberActivated' });
+            }
+          } else if (after.barbarian.position > before.barbarian.position) {
+            // Pure advance — no attack this roll.
+            append.push({
+              id: stamp(),
+              kind: 'barbarianAdvance',
+              position: after.barbarian.position,
+              total: 7,
+            });
+          }
+        }
+        break;
+      }
+      case 'buildCityWall': {
+        append.push({
+          id: stamp(),
+          kind: 'cityWallBuilt',
+          player: action.playerId,
+        });
+        break;
+      }
+      case 'recruitKnight': {
+        append.push({ id: stamp(), kind: 'recruitKnight', player: action.playerId });
+        break;
+      }
+      case 'activateKnight': {
+        append.push({ id: stamp(), kind: 'activateKnight', player: action.playerId });
+        break;
+      }
+      case 'promoteKnight': {
+        append.push({ id: stamp(), kind: 'promoteKnight', player: action.playerId });
+        break;
+      }
+      case 'moveKnight': {
+        append.push({ id: stamp(), kind: 'moveKnight', player: action.playerId });
+        break;
+      }
+      case 'displaceKnight': {
+        // Find the victim from before-state's knight at action.to.
+        const victim = before.knights?.[action.to]?.playerId ?? '';
+        append.push({
+          id: stamp(),
+          kind: 'displaceKnight',
+          player: action.playerId,
+          victim,
+        });
+        break;
+      }
+      case 'chaseRobber': {
+        append.push({ id: stamp(), kind: 'chaseRobber', player: action.playerId });
+        break;
+      }
+      case 'buildCityImprovement': {
+        const beforeP = before.players.find((p) => p.id === action.playerId);
+        const level = (beforeP?.improvements?.[action.track] ?? 0) + 1;
+        append.push({
+          id: stamp(),
+          kind: 'buildImprovement',
+          player: action.playerId,
+          track: action.track,
+          level,
+        });
+        // Metropolis transition?
+        const wasOwner = before.metropolises?.[action.track]?.playerId;
+        const nowOwner = after.metropolises?.[action.track]?.playerId;
+        if (nowOwner === action.playerId && wasOwner !== action.playerId) {
+          append.push({
+            id: stamp(),
+            kind: 'metropolisGained',
+            player: action.playerId,
+            track: action.track,
+            permanent: !!after.metropolises?.[action.track]?.permanent,
+          });
+        }
+        break;
+      }
+      case 'playProgressCard': {
+        append.push({
+          id: stamp(),
+          kind: 'progressCardPlayed',
+          player: action.playerId,
+          card: action.card,
+        });
         break;
       }
       case 'buildSettlement':
@@ -535,6 +768,80 @@ export const useLogStore = create<LogStore>((set, get) => ({
         break;
       case 'endTurn':
         // Turn boundaries aren't logged — too noisy.
+        // Barbarian Attack: castle state changes ARE logged from here.
+        if (before.castles && after.castles) {
+          for (let i = 0; i < before.castles.length; i++) {
+            const b = before.castles[i]!;
+            const a = after.castles[i]!;
+            // Combat resolved this turn (barbarian reset from arrival).
+            if (
+              b.barbarianPosition === b.barbarianPath.length - 1 &&
+              a.barbarianPosition === 0
+            ) {
+              // Win path: defenderVp grew for at least one player.
+              const winners: PlayerId[] = [];
+              for (const pid of Object.keys(a.defenderVp)) {
+                const beforeVp = b.defenderVp[pid] ?? 0;
+                const afterVp = a.defenderVp[pid] ?? 0;
+                if (afterVp > beforeVp) winners.push(pid);
+              }
+              if (winners.length > 0) {
+                append.push({
+                  id: stamp(),
+                  kind: 'castleDefended',
+                  castleIndex: i,
+                  winners,
+                });
+              } else {
+                // Loss path — find the victim by diffing buildings on castle corners.
+                const hex = after.board.hexes[a.hexId];
+                const corners = new Set(hex?.corners ?? []);
+                let victim: PlayerId | null = null;
+                let effect: 'destroyed' | 'downgraded' | null = null;
+                for (const bp of before.players) {
+                  const ap = after.players.find((p) => p.id === bp.id);
+                  if (!ap) continue;
+                  for (const v of bp.settlements) {
+                    if (!corners.has(v)) continue;
+                    if (
+                      !ap.settlements.includes(v) &&
+                      !ap.cities.includes(v)
+                    ) {
+                      victim = bp.id;
+                      effect = 'destroyed';
+                    }
+                  }
+                  for (const v of bp.cities) {
+                    if (!corners.has(v)) continue;
+                    if (
+                      !ap.cities.includes(v) &&
+                      ap.settlements.includes(v)
+                    ) {
+                      victim = bp.id;
+                      effect = 'downgraded';
+                    }
+                  }
+                }
+                append.push({
+                  id: stamp(),
+                  kind: 'castleOverrun',
+                  castleIndex: i,
+                  victim,
+                  effect,
+                });
+              }
+            } else if (a.barbarianPosition > b.barbarianPosition) {
+              // Plain advance.
+              append.push({
+                id: stamp(),
+                kind: 'castleAdvance',
+                castleIndex: i,
+                from: b.barbarianPosition,
+                to: a.barbarianPosition,
+              });
+            }
+          }
+        }
         break;
       case 'rejectTrade':
         // Rejections aren't logged.
@@ -550,8 +857,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // Turn detection: one "turn" = one full revolution of the table.
     // We bump the turn counter only when the active turn-holder wraps
     // back to playerOrder[0] (or on the very first rollOrPlayKnight,
-    // which kicks off turn 1). SBP mini-turns never enter
-    // rollOrPlayKnight, so they don't trigger this either way.
+    // which kicks off turn 1). For 5+ players the paired-player rule
+    // means two seats act per paired turn, but only the second endTurn
+    // advances `turnHolderIndex` — so this transition fires once per
+    // paired turn, same as a 3-4p turn.
     let newTurnNumber: number | null = null;
     if (
       after.phase === 'rollOrPlayKnight' &&
@@ -559,7 +868,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     ) {
       const turnHolderIdx = after.turnHolderIndex ?? after.currentPlayerIndex;
       const isRevolutionStart =
-        turnHolderIdx === 0 && (get().turnNumber === 0 || before.phase === 'main' || before.phase === 'specialBuildPhase' || before.phase === 'setupRound2');
+        turnHolderIdx === 0 && (get().turnNumber === 0 || before.phase === 'main' || before.phase === 'setupRound2');
       if (isRevolutionStart) {
         newTurnNumber = get().turnNumber + 1;
         append.push({

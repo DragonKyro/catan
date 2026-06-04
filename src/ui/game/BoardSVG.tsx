@@ -9,6 +9,21 @@ import { City } from './City';
 import { Road } from './Road';
 import { Ship } from './seafarers/Ship';
 import { PirateMarker } from './seafarers/PirateMarker';
+import { TribeTokenMarker } from './seafarers/TribeTokenMarker';
+import { PirateFleetMarker } from './seafarers/PirateFleetMarker';
+import { ClothHexMarker } from './seafarers/ClothHexMarker';
+import { VolcanoMarker } from './base/VolcanoMarker';
+import { CityWallMarker } from './citiesAndKnights/CityWallMarker';
+import { KnightPiece } from './citiesAndKnights/KnightPiece';
+import { MetropolisMarker } from './citiesAndKnights/MetropolisMarker';
+import { MerchantMarker } from './citiesAndKnights/MerchantMarker';
+import { Bridge } from './traders/Bridge';
+import { RiverEdgeMarker } from './traders/RiverEdgeMarker';
+import { FishingGroundMarker } from './traders/FishingGroundMarker';
+import { Wagon } from './traders/Wagon';
+import { Knight as DefenderKnight } from './traders/Knight';
+import { CastleMarker } from './traders/CastleMarker';
+import { Barbarian } from './traders/Barbarian';
 import './Board.css';
 
 interface Props {
@@ -70,22 +85,28 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill="url(#ocean-waves)" />
 
         <g className="hexes">
-          {board.hexIds.map((hid) => {
-            const hex = board.hexes[hid]!;
-            const isRobbed = board.robberHex === hid;
-            const shouldPulse =
-              pulseToken != null && hex.numberToken === pulseToken && !isRobbed;
-            return (
-              <HexTile
-                key={hid}
-                board={board}
-                hex={hex}
-                isRobberOnHex={isRobbed}
-                clickable={false}
-                pulse={shouldPulse}
-              />
-            );
-          })}
+          {(() => {
+            const foggySet = new Set(game.unrevealedFogHexes ?? []);
+            return board.hexIds.map((hid) => {
+              const hex = board.hexes[hid]!;
+              const isRobbed =
+                board.robberHex === hid && (game.robberActive ?? true);
+              const isFoggy = foggySet.has(hid);
+              const shouldPulse =
+                pulseToken != null && hex.numberToken === pulseToken && !isRobbed && !isFoggy;
+              return (
+                <HexTile
+                  key={hid}
+                  board={board}
+                  hex={hex}
+                  isRobberOnHex={isRobbed}
+                  clickable={false}
+                  pulse={shouldPulse}
+                  foggy={isFoggy}
+                />
+              );
+            });
+          })()}
         </g>
 
         <g className="ports">
@@ -94,6 +115,19 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           ))}
         </g>
 
+        {game.riverEdges && (
+          <g className="river-edges">
+            {game.riverEdges.map((eid) => {
+              // Hide the river decoration once a bridge spans the edge.
+              const hasBridge = game.players.some((p) =>
+                p.bridges?.includes(eid),
+              );
+              if (hasBridge) return null;
+              return <RiverEdgeMarker key={eid} board={board} edge={eid} />;
+            })}
+          </g>
+        )}
+
         <g className="roads">
           {game.players.flatMap((player) =>
             player.roads.map((eid) => (
@@ -101,6 +135,59 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
             )),
           )}
         </g>
+
+        <g className="bridges">
+          {game.players.flatMap((player) =>
+            (player.bridges ?? []).map((eid) => (
+              <Bridge key={eid} board={board} edge={eid} color={player.color} />
+            )),
+          )}
+        </g>
+
+        {game.wagons && (
+          <g className="wagons">
+            {game.wagons.map((w) => (
+              <Wagon key={w.edge} board={board} edge={w.edge} />
+            ))}
+          </g>
+        )}
+
+        {/* T&B / Barbarian Attack: castle markers, defender knights on
+            castle-bordering edges, and barbarian tokens striding along
+            their paths. Rendered before the regular pieces so the knight
+            shields and barbarian skulls sit on top of road / settlement
+            layers. */}
+        {game.castles && (
+          <>
+            <g className="castle-markers">
+              {game.castles.map((c, i) => (
+                <CastleMarker
+                  key={c.id}
+                  board={board}
+                  hexId={c.hexId}
+                  label={`Castle ${i + 1}`}
+                />
+              ))}
+            </g>
+            <g className="defender-knights">
+              {game.players.flatMap((player) =>
+                (player.defenderKnights ?? []).map((eid) => (
+                  <DefenderKnight
+                    key={`${player.id}-${eid}`}
+                    board={board}
+                    edge={eid}
+                    color={player.color}
+                  />
+                )),
+              )}
+            </g>
+            <g className="barbarians">
+              {game.castles.map((c) => (
+                <Barbarian key={c.id} board={board} castle={c} />
+              ))}
+            </g>
+          </>
+        )}
 
         <g className="ships">
           {game.players.flatMap((player) =>
@@ -126,13 +213,53 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           )}
         </g>
 
+        <CityWallMarker game={game} />
+
+        {/* Cities & Knights: knights on intersections + metropolis flags +
+            merchant pawn. */}
+        <g className="knights">
+          {Object.entries(game.knights ?? {}).map(([vid, k]) => {
+            const p = game.players.find((pl) => pl.id === k.playerId);
+            if (!p) return null;
+            return (
+              <KnightPiece
+                key={vid}
+                board={board}
+                vertex={vid}
+                color={p.color}
+                strength={k.strength}
+                active={k.active}
+              />
+            );
+          })}
+        </g>
+        <MetropolisMarker game={game} />
+        <MerchantMarker game={game} />
+
         {/* Interactive ghosts render on top of pieces so the full circle is
             clickable — especially important for city upgrade, where the
             settlement icon would otherwise block clicks at the center. */}
         {overlay}
 
-        <Robber board={board} />
+        {game.fishingGrounds && (
+          <g className="fishing-grounds">
+            {game.fishingGrounds.map((fg) => (
+              <FishingGroundMarker
+                key={fg.vertex}
+                board={board}
+                fg={fg}
+                pulse={pulseToken != null && fg.token === pulseToken}
+              />
+            ))}
+          </g>
+        )}
+
+        <Robber board={board} active={game.robberActive ?? true} />
         <PirateMarker board={board} />
+        <PirateFleetMarker game={game} />
+        <TribeTokenMarker game={game} />
+        <ClothHexMarker game={game} />
+        <VolcanoMarker board={board} />
       </svg>
     </div>
   );

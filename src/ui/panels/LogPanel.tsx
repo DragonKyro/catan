@@ -209,6 +209,81 @@ function entryMatches(
       pushName(entry.player);
       parts.push('end turn');
       break;
+    case 'volcanoEruption':
+      pushName(entry.victim);
+      parts.push(
+        'volcano',
+        entry.effect === 'destroyed'
+          ? 'settlement destroyed'
+          : 'city downgraded',
+      );
+      break;
+    case 'cityWallBuilt':
+      pushName(entry.player);
+      parts.push('build', 'city wall', 'wall');
+      break;
+    case 'recruitKnight':
+      pushName(entry.player);
+      parts.push('recruit', 'knight');
+      break;
+    case 'activateKnight':
+      pushName(entry.player);
+      parts.push('activate', 'knight');
+      break;
+    case 'promoteKnight':
+      pushName(entry.player);
+      parts.push('promote', 'knight');
+      break;
+    case 'moveKnight':
+      pushName(entry.player);
+      parts.push('move', 'knight');
+      break;
+    case 'displaceKnight':
+      pushName(entry.player);
+      pushName(entry.victim);
+      parts.push('displace', 'knight');
+      break;
+    case 'chaseRobber':
+      pushName(entry.player);
+      parts.push('chase', 'robber');
+      break;
+    case 'buildImprovement':
+      pushName(entry.player);
+      parts.push('improvement', entry.track, String(entry.level));
+      break;
+    case 'metropolisGained':
+      pushName(entry.player);
+      parts.push('metropolis', entry.track);
+      break;
+    case 'progressCardDrawn':
+      pushName(entry.player);
+      parts.push('progress card', entry.deck);
+      break;
+    case 'progressCardPlayed':
+      pushName(entry.player);
+      parts.push('progress card', entry.card);
+      break;
+    case 'barbarianAdvance':
+      parts.push('barbarian', 'ship', 'advance', String(entry.position));
+      break;
+    case 'barbarianAttack':
+      parts.push('barbarian', 'attack', entry.outcome);
+      for (const id of entry.pillaged) pushName(id);
+      break;
+    case 'castleAdvance':
+      parts.push('barbarian', 'castle', 'advance', `castle ${entry.castleIndex + 1}`);
+      break;
+    case 'castleDefended':
+      parts.push('castle', 'defended', 'knight');
+      for (const id of entry.winners) pushName(id);
+      break;
+    case 'castleOverrun':
+      parts.push('castle', 'overrun', 'barbarian');
+      if (entry.victim) pushName(entry.victim);
+      break;
+    case 'robberActivated':
+      parts.push('robber', 'active', 'activated');
+      break;
     case 'turnBegins':
       parts.push('turn', `turn ${entry.turnNumber}`);
       break;
@@ -358,6 +433,129 @@ function LogLine({
     case 'endTurn':
       return (
         <div className="log-line log-soft">{pname(entry.player)} ended turn</div>
+      );
+    case 'volcanoEruption':
+      return (
+        <div className="log-line">
+          🌋 {pname(entry.victim)}'s{' '}
+          {entry.effect === 'destroyed'
+            ? 'settlement was destroyed'
+            : 'city was downgraded to a settlement'}
+        </div>
+      );
+    case 'cityWallBuilt':
+      return (
+        <div className="log-line">
+          🧱 {pname(entry.player)} built a city wall
+        </div>
+      );
+    case 'recruitKnight':
+      return <div className="log-line">🛡 {pname(entry.player)} recruited a knight</div>;
+    case 'activateKnight':
+      return <div className="log-line log-soft">⚡ {pname(entry.player)} activated a knight</div>;
+    case 'promoteKnight':
+      return <div className="log-line">⬆ {pname(entry.player)} promoted a knight</div>;
+    case 'moveKnight':
+      return <div className="log-line log-soft">➡ {pname(entry.player)} moved a knight</div>;
+    case 'displaceKnight':
+      return (
+        <div className="log-line">
+          ⚔ {pname(entry.player)} displaced {pname(entry.victim)}'s knight
+        </div>
+      );
+    case 'chaseRobber':
+      return <div className="log-line">🥷 {pname(entry.player)} chased the robber</div>;
+    case 'buildImprovement':
+      return (
+        <div className="log-line">
+          📜 {pname(entry.player)} reached {entry.track} level {entry.level}
+        </div>
+      );
+    case 'metropolisGained':
+      return (
+        <div className="log-line">
+          🏛 {pname(entry.player)} claimed the {entry.track} metropolis{' '}
+          {entry.permanent ? '★ permanent' : '(temporary)'}
+        </div>
+      );
+    case 'progressCardDrawn':
+      return (
+        <div className="log-line log-soft">
+          🃏 {pname(entry.player)} drew a {entry.deck} card
+        </div>
+      );
+    case 'progressCardPlayed':
+      return (
+        <div className="log-line">
+          🃏 {pname(entry.player)} played {entry.card}
+        </div>
+      );
+    case 'barbarianAdvance':
+      return (
+        <div className="log-line log-soft">
+          🚢 Barbarian ship advances ({entry.position}/{entry.total})
+        </div>
+      );
+    case 'castleAdvance':
+      return (
+        <div className="log-line log-soft">
+          🪓 Barbarians advance toward Castle {entry.castleIndex + 1} ({entry.to}/3)
+        </div>
+      );
+    case 'castleDefended':
+      return (
+        <div className="log-line">
+          🛡 Castle {entry.castleIndex + 1} defended —{' '}
+          {entry.winners.map((id, i) => (
+            <span key={id}>
+              {i > 0 ? ', ' : ''}
+              {pname(id)}
+            </span>
+          ))}{' '}
+          earn defender VP
+        </div>
+      );
+    case 'castleOverrun':
+      return (
+        <div className="log-line">
+          🪓 Castle {entry.castleIndex + 1} overrun
+          {entry.victim && (
+            <>
+              {' '}— {pname(entry.victim)}'s{' '}
+              {entry.effect === 'downgraded'
+                ? 'city downgraded'
+                : 'settlement destroyed'}
+            </>
+          )}
+        </div>
+      );
+    case 'barbarianAttack':
+      return (
+        <div className="log-line">
+          ⚔️ Barbarians attacked —{' '}
+          {entry.outcome === 'won'
+            ? 'defenders held the line!'
+            : entry.outcome === 'tied'
+              ? 'a stalemate'
+              : 'the defenders fell'}
+          {entry.pillaged.length > 0 && (
+            <>
+              {' '}— pillaged{' '}
+              {entry.pillaged.map((id, i) => (
+                <span key={id}>
+                  {i > 0 ? ', ' : ''}
+                  {pname(id)}
+                </span>
+              ))}
+            </>
+          )}
+        </div>
+      );
+    case 'robberActivated':
+      return (
+        <div className="log-line log-soft">
+          🥷 Robber lands on the desert — now active on 7-rolls
+        </div>
       );
     case 'turnBegins':
       return (

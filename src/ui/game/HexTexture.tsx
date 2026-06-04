@@ -185,6 +185,93 @@ function Glyph({ terrain }: { terrain: string }) {
           />
         </g>
       );
+    case 'swamp':
+      // Reeds / cattail tufts emerging from murky water.
+      return (
+        <g opacity={0.55}>
+          <line
+            x1={0}
+            y1={2}
+            x2={0}
+            y2={-2.4}
+            stroke="#2b3416"
+            strokeWidth={0.5}
+            strokeLinecap="round"
+          />
+          <ellipse cx={0} cy={-2.6} rx={0.7} ry={1.4} fill="#3a2c12" />
+          <line
+            x1={-1.6}
+            y1={2.2}
+            x2={-1.6}
+            y2={-0.8}
+            stroke="#2b3416"
+            strokeWidth={0.4}
+            strokeLinecap="round"
+          />
+          <ellipse cx={-1.6} cy={-1} rx={0.55} ry={1.1} fill="#3a2c12" />
+        </g>
+      );
+    case 'lake':
+      // A tiny leaping fish silhouette. Two arcs (body + tail) so it
+      // reads as a fish at any orientation without needing realism.
+      return (
+        <g opacity={0.55}>
+          <path
+            d="M-2,0 Q-1,-1.4 1.4,-0.6 Q2.2,0 1.4,0.6 Q-1,1.4 -2,0 Z"
+            fill="#cfe5ff"
+            stroke="#274860"
+            strokeWidth={0.25}
+          />
+          <path d="M-2,0 L-3,-0.8 L-3,0.8 Z" fill="#cfe5ff" />
+        </g>
+      );
+    case 'wateringHole':
+      // Tiny palm-tuft silhouette: trunk plus three fronds. Reads as
+      // "small oasis" at any orientation.
+      return (
+        <g opacity={0.55}>
+          <line
+            x1={0}
+            y1={2}
+            x2={0}
+            y2={-2}
+            stroke="#5a3010"
+            strokeWidth={0.55}
+            strokeLinecap="round"
+          />
+          <path
+            d="M0,-2 Q-2,-2.6 -3,-1.5"
+            fill="none"
+            stroke="#2f5a2a"
+            strokeWidth={0.5}
+            strokeLinecap="round"
+          />
+          <path
+            d="M0,-2 Q2,-2.6 3,-1.5"
+            fill="none"
+            stroke="#2f5a2a"
+            strokeWidth={0.5}
+            strokeLinecap="round"
+          />
+          <path
+            d="M0,-2 Q0,-3.5 0.6,-3.6"
+            fill="none"
+            stroke="#2f5a2a"
+            strokeWidth={0.5}
+            strokeLinecap="round"
+          />
+        </g>
+      );
+    case 'castle':
+      // Crenellated tower silhouette: thin tower with battlement teeth.
+      return (
+        <g opacity={0.65}>
+          <rect x={-1.6} y={-2.4} width={3.2} height={4.4} fill="#3a3f48" />
+          <rect x={-2} y={-2.4} width={0.9} height={1.2} fill="#3a3f48" />
+          <rect x={-0.4} y={-2.4} width={0.8} height={1.2} fill="#3a3f48" />
+          <rect x={1.1} y={-2.4} width={0.9} height={1.2} fill="#3a3f48" />
+        </g>
+      );
     default:
       return null;
   }

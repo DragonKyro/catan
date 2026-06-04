@@ -4,7 +4,14 @@ import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { Button } from '@/ui/shared/Button';
 import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
+import { isPairedPlayer2 } from '@/game/helpers';
 import { SHIP_COST, MAX_SHIPS } from '@/game/modules/seafarers/constants';
+import { hasShipAdjacentToFleet } from '@/game/modules/seafarers/actions/attackPirateFleet';
+import {
+  CITIES_AND_KNIGHTS_EXPANSION_ID,
+  MAX_CITY_WALLS,
+} from '@/game/modules/citiesAndKnights/constants';
+import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import './ActionBar.css';
 
 export function ActionBar() {
@@ -60,9 +67,16 @@ export function ActionBar() {
     return null;
   }
 
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
+  const hasTraders = game.settings.expansions.includes(TRADERS_EXPANSION_ID);
+
   if (phase === 'rollOrPlayKnight') {
+    // Under C&K, dev cards are replaced by progress cards — no "Play Knight"
+    // pre-roll. Phase 8c will introduce the equivalent Alchemy pre-roll.
     const hasKnight =
-      !game.hasPlayedDevCardThisTurn && player.devCards.unplayed.includes('knight');
+      !hasCK &&
+      !game.hasPlayedDevCardThisTurn &&
+      player.devCards.unplayed.includes('knight');
     return wrap(
       <div className="actionbar">
         <div className="actionbar-slot actionbar-slot-wide">
@@ -93,7 +107,7 @@ export function ActionBar() {
     );
   }
 
-  if (phase === 'main' || phase === 'specialBuildPhase') {
+  if (phase === 'main') {
     const inMode = uiMode.kind !== 'idle';
     const cancel = () => setMode({ kind: 'idle' });
     if (inMode) {
@@ -107,7 +121,10 @@ export function ActionBar() {
         </div>,
       );
     }
-    const sbp = phase === 'specialBuildPhase';
+    // 5+ player paired-player rule: when the acting seat is Player 2,
+    // the trade button collapses to a bank-only label and we suppress the
+    // player-trade dialog entry point. P2 can still bank-trade.
+    const pairedP2 = isPairedPlayer2(game);
     return wrap(
       <div className="actionbar">
         <Button
@@ -127,6 +144,31 @@ export function ActionBar() {
             title="Build Ship (1🌲 1🐑)"
           >
             ⛵ Ship
+          </Button>
+        )}
+        {hasTraders && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.bridge) ||
+              (player.bridges?.length ?? 0) >= 3 ||
+              (game.riverEdges?.length ?? 0) === 0
+            }
+            onClick={() => setMode({ kind: 'buildBridge' })}
+            title="Build Bridge (1🌲 1🧱) — required to cross river edges; pays +3 gold"
+          >
+            🌉 Bridge
+          </Button>
+        )}
+        {hasTraders && (game.castles?.length ?? 0) > 0 && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.hireKnight) ||
+              (game.barbarianKnightSupply ?? 0) <= 0
+            }
+            onClick={() => setMode({ kind: 'hireKnight' })}
+            title="Hire Knight (1🌾 1🪨) — place a defender on a castle-adjacent edge"
+          >
+            🛡 Knight
           </Button>
         )}
         <Button
@@ -150,20 +192,116 @@ export function ActionBar() {
         >
           🏛 City
         </Button>
-        <Button
-          disabled={
-            !canAfford(player.resources, COSTS.devCard) ||
-            game.devCardDeck.length === 0
-          }
-          onClick={() => dispatch({ type: 'buyDevCard', playerId: acting })}
-          title="Buy Dev Card (1🐑 1🌾 1🪨)"
-        >
-          🃏 Dev Card
-        </Button>
-        {sbp ? (
-          <div className="actionbar-slot actionbar-sbp-tag" title="Special Build Phase — build between turns. No player trades or dev card plays.">
-            🛠 Build
-          </div>
+        {hasCK && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.cityWall) ||
+              player.cities.length === 0 ||
+              (player.cityWalls ?? 0) >= MAX_CITY_WALLS
+            }
+            onClick={() => setMode({ kind: 'buildCityWall' })}
+            title="Build City Wall (2🧱) — adds +2 to your 7-roll hand limit"
+          >
+            🧱 Wall
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.knight) ||
+              (game.knightSupply?.[acting]?.[1] ?? 0) <= 0
+            }
+            onClick={() => setMode({ kind: 'recruitKnight' })}
+            title="Recruit Knight (1🐑 1🪨)"
+          >
+            🛡 Recruit
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.activateKnight) ||
+              !Object.values(game.knights ?? {}).some(
+                (k) => k.playerId === acting && !k.active,
+              )
+            }
+            onClick={() => setMode({ kind: 'activateKnight' })}
+            title="Activate Knight (1🌾)"
+          >
+            ⚡ Activate
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            disabled={
+              !!game.promotedKnightThisTurn ||
+              !canAfford(player.resources, COSTS.promoteKnight) ||
+              !Object.values(game.knights ?? {}).some(
+                (k) => k.playerId === acting && k.strength < 3,
+              )
+            }
+            onClick={() => setMode({ kind: 'promoteKnight' })}
+            title="Promote Knight (1🐑 1🪨) — once per turn"
+          >
+            ⬆ Promote
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            disabled={
+              !Object.values(game.knights ?? {}).some(
+                (k) => k.playerId === acting && k.active,
+              )
+            }
+            onClick={() => setMode({ kind: 'moveKnight' })}
+            title="Move an active knight (then click destination)"
+          >
+            ➡ Move Knight
+          </Button>
+        )}
+        {hasCK && (
+          <Button
+            onClick={() => openDialog('cityImprovements')}
+            title="Build a city improvement (spends commodities)"
+          >
+            📜 Improve
+          </Button>
+        )}
+        {hasCK && (() => {
+          const p = game.players.find((x) => x.id === acting);
+          const cards = p?.progressCards;
+          const total = cards
+            ? cards.science.length + cards.trade.length + cards.politics.length
+            : 0;
+          return (
+            <Button
+              disabled={total === 0}
+              onClick={() => openDialog('progressCards')}
+              title={`Play a progress card (${total} in hand)`}
+            >
+              🃏 Cards ({total})
+            </Button>
+          );
+        })()}
+        {!hasCK && (
+          <Button
+            disabled={
+              !canAfford(player.resources, COSTS.devCard) ||
+              game.devCardDeck.length === 0
+            }
+            onClick={() => dispatch({ type: 'buyDevCard', playerId: acting })}
+            title="Buy Dev Card (1🐑 1🌾 1🪨)"
+          >
+            🃏 Dev Card
+          </Button>
+        )}
+        {pairedP2 ? (
+          <Button
+            onClick={() => openDialog('bankTrade')}
+            title="Paired-turn Player 2 — bank trades only (no player trades)"
+          >
+            🏦 Bank trade
+          </Button>
         ) : (
           <Button
             onClick={() => openDialog('playerTrade')}
@@ -173,13 +311,58 @@ export function ActionBar() {
             🤝 Trade
           </Button>
         )}
+        {game.wonders && game.wonders.length > 0 && (
+          <Button
+            onClick={() => openDialog('wonders')}
+            title="Build a wonder — finish one to win"
+          >
+            🏛️ Wonder
+          </Button>
+        )}
+        {(player.fishTokens?.length ?? 0) > 0 && (
+          <Button
+            onClick={() => openDialog('spendFish')}
+            title="Spend fish tokens for an effect (drive off robber, take from bank)"
+          >
+            🐟 Spend ({player.fishTokens!.length})
+          </Button>
+        )}
+        {game.oldBootHolder === acting && (
+          <Button
+            onClick={() => openDialog('passBoot')}
+            title="Pass the old boot to any opponent with ≥ your visible VPs"
+          >
+            👢 Pass boot
+          </Button>
+        )}
+        {(() => {
+          const fleet = game.pirateFleet;
+          if (!fleet || fleet.defeatedBy !== null) return null;
+          const adjacent = hasShipAdjacentToFleet(game, acting);
+          const alreadyAttacked = !!game.attackedPirateThisTurn;
+          const disabled = !adjacent || alreadyAttacked;
+          const title = alreadyAttacked
+            ? 'Already attacked this turn'
+            : !adjacent
+              ? 'Need a ship adjacent to the pirate fleet'
+              : `Attack pirate fleet (${fleet.strength}/${fleet.maxStrength})`;
+          return (
+            <Button
+              disabled={disabled}
+              onClick={() => dispatch({ type: 'attackPirateFleet', playerId: acting })}
+              title={title}
+            >
+              ⚔️ Attack ({fleet.strength})
+            </Button>
+          );
+        })()}
         <div className="actionbar-slot actionbar-slot-end">
           <Button
             variant="primary"
             fullWidth
             onClick={() => dispatch({ type: 'endTurn', playerId: acting })}
           >
-            {sbp ? 'End build ▸' : 'End turn ▸'}
+            End turn ▸
           </Button>
         </div>
       </div>,

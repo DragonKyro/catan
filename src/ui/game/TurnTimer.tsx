@@ -174,8 +174,8 @@ function autoFinish(
     return;
   }
 
-  // Main / SBP: just end the turn — the player had their chance.
-  if (initial.phase === 'main' || initial.phase === 'specialBuildPhase') {
+  // Main: just end the turn — the player had their chance.
+  if (initial.phase === 'main') {
     ctx.dispatch({ type: 'endTurn', playerId });
   }
 }

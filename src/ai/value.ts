@@ -26,13 +26,20 @@ export function probabilityDots(token: number | null): number {
 }
 
 export function terrainWeight(t: Terrain): number {
-  if (t === 'desert' || t === 'sea') return 0;
-  // Gold hexes pay any resource on roll — average across the weights.
-  if (t === 'gold') {
-    let sum = 0;
-    for (const r of RESOURCES) sum += RESOURCE_WEIGHT[r];
-    return sum / RESOURCES.length;
-  }
+  if (
+    t === 'desert' ||
+    t === 'sea' ||
+    t === 'swamp' ||
+    t === 'lake' ||
+    t === 'wateringHole' ||
+    t === 'castle'
+  )
+    return 0;
+  // Gold hexes pay any resource on roll — the player chooses, so they
+  // function as a "best available" resource each tick. Weight above the
+  // strongest single-resource value (ore/wheat at 1.3) to reflect that
+  // choice, not the average (averaging undervalues optionality).
+  if (t === 'gold') return 1.6;
   return RESOURCE_WEIGHT[t];
 }
 
@@ -112,7 +119,18 @@ export function vertexScore(
       shoreline += 0.5;
       continue;
     }
+    if (hex.terrain === 'sea') {
+      shoreline += 1;
+      continue;
+    }
     const pips = probabilityDots(hex.numberToken);
+    // Gold pays the player's choice on roll. Bump it further with a small
+    // flat bonus on top of pips*weight because the optionality also smooths
+    // out cards-stuck-without-the-right-resource scenarios.
+    if (hex.terrain === 'gold') {
+      totalPips += pips * terrainWeight('gold') + 1.0;
+      continue;
+    }
     const weight = RESOURCE_WEIGHT[hex.terrain as Resource];
     // Diminishing returns: pips count less if we already have this resource.
     const existingPips = existing[hex.terrain as Resource];
@@ -154,7 +172,145 @@ export function vertexScore(
     else portBonus = 1.2;
   }
 
-  return totalPips + diversityBonus + portBonus + missingBonus - shoreline;
+  // Seafarers: bonus for settling on an outer island whose chip is still
+  // unclaimed. Worth `chip.vp` VP at game end; scale by ~3 so it competes
+  // with strong missing-resource bonuses. Already-claimed chips don't apply
+  // (and our own claimed chips don't double-count — we already have that VP).
+  let chipBonus = 0;
+  if (state.islandChips && state.board.islandOfHex) {
+    const islandIds = new Set<string>();
+    for (const hexId of vertex.hexes) {
+      const id = state.board.islandOfHex[hexId];
+      if (id) islandIds.add(id);
+    }
+    for (const chip of state.islandChips) {
+      if (chip.firstSettler !== null) continue;
+      if (islandIds.has(chip.islandId)) chipBonus += chip.vp * 3;
+    }
+  }
+
+  // Forgotten Tribe: bonus per unclaimed adjacent tribe token. Scaled by
+  // type — VP tokens use the same chip multiplier (× 3), commercial harbor
+  // is a long-term 2:1 trade rate worth a strong port, dev card is a single
+  // ~0.3 VP grant.
+  let tribeBonus = 0;
+  if (state.tribeTokens) {
+    const hexSet = new Set(vertex.hexes);
+    for (const t of state.tribeTokens) {
+      if (t.claimedBy !== null) continue;
+      if (!hexSet.has(t.hexId)) continue;
+      if (t.type === 'victoryPoint') tribeBonus += 3.0;
+      else if (t.type === 'commercialHarbor') tribeBonus += 2.5;
+      else tribeBonus += 1.5; // devCard
+    }
+  }
+
+  // Fog Island: small bonus per adjacent unrevealed fog hex. Reveal grants
+  // +1 of the underlying resource (or a gold pick / nothing for desert), so
+  // this is a one-shot ~1 weight. We don't know the terrain underneath yet —
+  // the rulebook keeps it hidden — so use the average resource weight as a
+  // proxy. Don't double-add the underlying terrain's production bonus; that
+  // path is already counted by the hex loop above.
+  let fogBonus = 0;
+  if (state.unrevealedFogHexes && state.unrevealedFogHexes.length > 0) {
+    const fog = new Set(state.unrevealedFogHexes);
+    for (const hexId of vertex.hexes) {
+      if (fog.has(hexId)) fogBonus += 1.0;
+    }
+  }
+
+  // Cloth for Catan: cloth-producing hexes pay 1 cloth per settle / 2 per
+  // city on roll, and 2 cloth = 1 VP. Treat as a direct VP source: pips ×
+  // 0.5 (VP per cloth) × ~1.4 settle-multiplier ≈ 0.7 × pips. Already-
+  // counted production from the underlying terrain is REPLACED by cloth,
+  // so subtract the resource contribution we added in the hex loop above
+  // to avoid double-paying.
+  let clothBonus = 0;
+  if (state.clothHexes && state.clothHexes.length > 0) {
+    const cloth = new Set(state.clothHexes);
+    for (const hexId of vertex.hexes) {
+      if (!cloth.has(hexId)) continue;
+      const hex = state.board.hexes[hexId]!;
+      const pips = probabilityDots(hex.numberToken);
+      // Strip the resource-production value the loop already added.
+      if (hex.terrain !== 'desert' && hex.terrain !== 'sea') {
+        const w = hex.terrain === 'gold' ? terrainWeight('gold') : RESOURCE_WEIGHT[hex.terrain as Resource];
+        clothBonus -= pips * w;
+      }
+      // Cloth payoff: pips × ~0.7 (see above). Add a flat +1.5 because cloth
+      // VP doesn't compete for board placement like settlements/cities do
+      // and stacks across cities, mirroring the chip-VP bias.
+      clothBonus += pips * 0.7 + 1.5;
+    }
+  }
+
+  // Volcano scenario: heavy penalty for touching the volcano hex. The
+  // engine already forbids it in setup, but the AI still scores main-game
+  // placements (e.g. roads toward an open vertex); a strong negative keeps
+  // it from racing into the eruption zone.
+  let volcanoPenalty = 0;
+  if (state.board.volcanoHex && vertex.hexes.includes(state.board.volcanoHex)) {
+    volcanoPenalty = 3.5;
+  }
+
+  // Traders & Barbarians / Rivers of Catan: each adjacent swamp hex grants
+  // +1 gold on build (and gold drives Wealthiest Catanian / spending). A
+  // small flat bonus is the right scale — it's a one-shot +1 gold worth
+  // roughly +1 VP toward the wealth tile race.
+  let riverGoldBonus = 0;
+  for (const hexId of vertex.hexes) {
+    if (state.board.hexes[hexId]?.terrain === 'swamp') riverGoldBonus += 0.4;
+  }
+
+  // Traders & Barbarians / Barbarian Attack: a small bonus for settling
+  // adjacent to a castle. The defender-VP upside isn't tied to the
+  // building, but castle-adjacent vertices put us in the area where
+  // hire knights matter and they're also relatively safer (no enemy
+  // settles in the sea ring).
+  let castleBonus = 0;
+  if (state.castles?.length) {
+    const castleHexes = new Set(state.castles.map((c) => c.hexId));
+    for (const hexId of vertex.hexes) {
+      if (castleHexes.has(hexId)) castleBonus += 0.5;
+    }
+  }
+
+  // Traders & Barbarians / Fishing on Catan:
+  //   - The lake produces fish tokens on its number. Settlements adjacent
+  //     to the lake catch 1 token per production, cities 2. Worth pips ×
+  //     0.5 (rough average value of a fish token, which is ~2 fish).
+  //   - A fishing ground's anchor vertex earns the same. They're per-
+  //     vertex rather than per-hex, so the bonus is concentrated and
+  //     significant — boost it more aggressively.
+  let fishBonus = 0;
+  if (state.lakeHexId && vertex.hexes.includes(state.lakeHexId)) {
+    const lake = state.board.hexes[state.lakeHexId];
+    if (lake) fishBonus += probabilityDots(lake.numberToken) * 0.5;
+  }
+  if (state.fishingGrounds) {
+    for (const fg of state.fishingGrounds) {
+      if (fg.vertex !== vertexId) continue;
+      // Fishing grounds are EXCLUSIVE to one vertex — extra strong (no
+      // neighbour competition like a regular hex with 6 corners).
+      fishBonus += probabilityDots(fg.token) * 0.9;
+    }
+  }
+
+  return (
+    totalPips +
+    diversityBonus +
+    portBonus +
+    missingBonus +
+    chipBonus +
+    tribeBonus +
+    fogBonus +
+    clothBonus +
+    riverGoldBonus +
+    fishBonus +
+    castleBonus -
+    shoreline -
+    volcanoPenalty
+  );
 }
 
 // "What does this player need most?" — returns weighted shortfall to the

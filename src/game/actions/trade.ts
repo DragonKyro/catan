@@ -11,18 +11,35 @@ import type {
   ResourceBank,
 } from '../types';
 import { RESOURCES } from '../types';
-import { currentPlayerId, updatePlayer, getPlayer } from '../helpers';
+import { currentPlayerId, updatePlayer, getPlayer, isPairedPlayer2 } from '../helpers';
 import { addResources, subtractResources } from '../resources';
 
 export function getBankTradeRate(state: GameState, playerId: string, give: Resource): number {
   const player = getPlayer(state, playerId);
-  if (player.ports.includes(give)) return 2;
-  if (player.ports.includes('generic')) return 3;
-  return 4;
+  let rate = 4;
+  if (player.ports.includes(give)) rate = 2;
+  else if (player.ports.includes('generic')) rate = 3;
+  // Forgotten Tribe: commercial harbor tokens unconditionally cap the rate
+  // at 2:1 for any resource — better than a generic port, equal to a
+  // matching 2:1 port.
+  if ((player.commercialHarbors ?? 0) > 0) rate = Math.min(rate, 2);
+  // C&K Merchant token: 2:1 on the resource the merchant's hex produces.
+  if (state.merchant?.ownerId === playerId) {
+    const hex = state.board.hexes[state.merchant.hexId];
+    if (hex && hex.terrain === give) rate = Math.min(rate, 2);
+  }
+  // C&K Merchant Fleet card (this turn only): 2:1 on the chosen item.
+  if (
+    state.merchantFleetActive?.kind === 'resource' &&
+    state.merchantFleetActive.which === give
+  ) {
+    rate = Math.min(rate, 2);
+  }
+  return rate;
 }
 
 export function handleBankTrade(state: GameState, action: BankTradeAction): GameState {
-  if (state.phase !== 'main' && state.phase !== 'specialBuildPhase') {
+  if (state.phase !== 'main') {
     throw new Error(`Cannot trade in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
@@ -107,6 +124,10 @@ export function handleProposeTrade(
   if (action.playerId !== currentPlayerId(state)) {
     throw new Error('Only the current player can propose a trade');
   }
+  // 5+ player paired-player rule: Player 2 may only trade with the supply.
+  if (isPairedPlayer2(state)) {
+    throw new Error('Player 2 may only trade with the supply, not other players');
+  }
   if (state.pendingTrade) {
     throw new Error('A trade is already pending — cancel it first');
   }
@@ -149,6 +170,13 @@ export function handleAcceptTrade(
   if (!state.pendingTrade) throw new Error('No trade to accept');
   if (action.playerId === state.pendingTrade.proposerId) {
     throw new Error("You can't accept your own trade");
+  }
+  // 5+ player paired-player rule: Player 2 may only trade with the supply.
+  // P2 can't be the acceptor of a player trade. (P1's pending offer was
+  // also cleared on the P1→P2 handoff, but guard anyway in case a stale
+  // offer survives some other path.)
+  if (isPairedPlayer2(state) && action.playerId === currentPlayerId(state)) {
+    throw new Error('Player 2 may only trade with the supply, not other players');
   }
   const acceptor = getPlayer(state, action.playerId);
   const proposer = getPlayer(state, state.pendingTrade.proposerId);
@@ -237,6 +265,12 @@ export function handleCounterTrade(
   if (!state.pendingTrade) throw new Error('No trade to counter');
   if (action.playerId === state.pendingTrade.proposerId) {
     throw new Error("You can't counter your own trade");
+  }
+  // 5+ player paired-player rule: when Player 2 is acting they can't be the
+  // counter-proposer in a player trade. Counters from other players against
+  // P1's offer are still allowed (those happen while P1 is the active seat).
+  if (isPairedPlayer2(state) && action.playerId === currentPlayerId(state)) {
+    throw new Error('Player 2 may only trade with the supply, not other players');
   }
   if (totalOf(action.give) === 0 || totalOf(action.receive) === 0) {
     throw new Error('Counter must have something on both sides');

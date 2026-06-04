@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Action, EdgeId, HexId, PlayerId } from '@/game/types';
+import type { Action, EdgeId, HexId, PlayerId, VertexId } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
@@ -30,6 +30,35 @@ export type UIMode =
   | { kind: 'buildCity' }
   | { kind: 'buildRoad' }
   | { kind: 'buildShip' }
+  // Traders & Barbarians — picking a river edge to span with a bridge.
+  | { kind: 'buildBridge' }
+  // Traders & Barbarians / Merchant Trains — placing a trade wagon after a
+  // vote resolution that named a placer (no clear vote-winner edge).
+  | { kind: 'placeWagon' }
+  // Traders & Barbarians / Barbarian Attack — picking a castle-adjacent
+  // edge to hire a defender knight on.
+  | { kind: 'hireKnight' }
+  // Cities & Knights — picking which of your own cities to put a wall under.
+  | { kind: 'buildCityWall' }
+  // Cities & Knights knight build/action modes.
+  | { kind: 'recruitKnight' }
+  | { kind: 'activateKnight' }
+  | { kind: 'promoteKnight' }
+  // Two-click flow: source own active knight, then destination empty vertex.
+  | { kind: 'moveKnight'; sourceVertex?: VertexId }
+  | { kind: 'displaceKnight'; sourceVertex?: VertexId }
+  // Forced move of a displaced knight (kicks in via state.pendingKnightMove).
+  | { kind: 'displacedKnightMove' }
+  | { kind: 'chaseRobber' }
+  // Cities & Knights — placing a metropolis (one of the player's cities).
+  | { kind: 'placeMetropolis' }
+  // Cities & Knights / Merchant card — pick a land hex adjacent to one of
+  // your buildings.
+  | { kind: 'placeMerchant' }
+  // Cities & Knights / Diplomacy — pick an open road to remove.
+  | { kind: 'removeRoad' }
+  // Cities & Knights / Invention — pick two number-token hexes to swap.
+  | { kind: 'swapTokens'; firstHex?: HexId }
   | { kind: 'placeSetupSettlement' }
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }
@@ -45,7 +74,28 @@ export type DialogName =
   | 'bankTrade'
   | 'playerTrade'
   | 'yearOfPlenty'
-  | 'monopoly';
+  | 'monopoly'
+  | 'wonders'
+  // Traders & Barbarians / Fishing on Catan
+  | 'spendFish'
+  | 'passBoot'
+  // Cities & Knights dialogs.
+  | 'cityImprovements'
+  | 'progressCards'
+  | 'alchemy'
+  | 'smithing'
+  | 'merchantFleet'
+  | 'tradeMonopoly'
+  | 'resourceMonopolyCK'
+  | 'metropolisPlace'
+  | 'progressCardPick'
+  | 'treasonRemove'
+  | 'treasonPlace'
+  | 'commercialHarborOffer'
+  | 'weddingGive'
+  | 'progressCardDiscard'
+  | 'defenderTieDraw'
+  | 'aqueductPick';
 
 interface AppStore {
   game: GameState | null;
@@ -103,6 +153,12 @@ const phaseToMode = (state: GameState): UIMode => {
   }
   if (state.phase === 'moveRobber') return { kind: 'moveRobber' };
   if (state.phase === 'movePirate') return { kind: 'movePirate' };
+  // T&B Merchant Trains: the placer picks an edge.
+  if (state.phase === 'placeWagon') return { kind: 'placeWagon' };
+  // Cities & Knights sub-phases that drive board interactions.
+  if (state.phase === 'displacedKnightMove') return { kind: 'displacedKnightMove' };
+  if (state.phase === 'placeMerchant') return { kind: 'placeMerchant' };
+  if (state.phase === 'removeRoad') return { kind: 'removeRoad' };
   return { kind: 'idle' };
 };
 

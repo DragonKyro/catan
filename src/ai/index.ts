@@ -1,4 +1,5 @@
 import type { Action, GameState, PlayerId } from '@/game/types';
+import { isPairedPlayer2 } from '@/game/helpers';
 import { chooseSetupSettlement, chooseSetupRoad } from './setup';
 import { chooseRobberMove } from './robber';
 import { chooseDiscard } from './discard';
@@ -6,6 +7,10 @@ import { chooseMainPhaseAction } from './main';
 import { chooseDevCardPlay } from './devcard';
 import { chooseGoldResourcePicks } from './seafarers/gold';
 import { choosePirateMove, preferPirate } from './seafarers/pirate';
+import {
+  trySubmitWagonVote,
+  tryPlaceWagon,
+} from './traders/merchantTrains';
 
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
@@ -87,16 +92,21 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
   }
 
   if (state.phase === 'main') {
+    // 5+ player paired-player rule: Player 2 may only trade with the supply
+    // (no player trades), but is otherwise allowed to build, buy + play dev
+    // cards, and bank trade.
+    if (isPairedPlayer2(state)) {
+      return chooseMainPhaseAction(state, playerId, { allowPlayerTrade: false });
+    }
     return chooseMainPhaseAction(state, playerId);
   }
 
-  if (state.phase === 'specialBuildPhase') {
-    // SBP allows build / buy dev card / bank trade only — no dev card play,
-    // no player-to-player trades.
-    return chooseMainPhaseAction(state, playerId, {
-      allowDevCardPlay: false,
-      allowPlayerTrade: false,
-    });
+  // T&B Merchant Trains end-of-turn phases.
+  if (state.phase === 'wagonVoting') {
+    return trySubmitWagonVote(state, playerId);
+  }
+  if (state.phase === 'placeWagon') {
+    return tryPlaceWagon(state, playerId);
   }
 
   return null;

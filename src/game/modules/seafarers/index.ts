@@ -12,6 +12,12 @@ import {
   handleBuildSettlementWithChips,
   handlePlaceInitialSettlementWithChips,
 } from './actions/buildSettlement';
+import {
+  handleBuildRoadWithFog,
+  handlePlaceInitialRoadWithFog,
+} from './actions/buildRoad';
+import { handleBuildWonder } from './actions/buildWonder';
+import { handleAttackPirateFleet } from './actions/attackPirateFleet';
 
 // The Seafarers module. Only action types listed here are routed to this
 // module. The base module continues to handle everything else, so opting
@@ -33,5 +39,9 @@ export const seafarersModule: RuleModule = {
     movePirate: handleMovePirate as never,
     buildSettlement: handleBuildSettlementWithChips as never,
     placeInitialSettlement: handlePlaceInitialSettlementWithChips as never,
+    buildRoad: handleBuildRoadWithFog as never,
+    placeInitialRoad: handlePlaceInitialRoadWithFog as never,
+    buildWonder: handleBuildWonder as never,
+    attackPirateFleet: handleAttackPirateFleet as never,
   },
 };
