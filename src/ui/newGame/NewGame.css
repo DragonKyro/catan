@@ -249,3 +249,21 @@
   mix-blend-mode: difference;
   filter: invert(1);
 }
+
+.newgame-custom-map-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1f242c;
+  border: 1px solid #ffffff20;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #e8edf2;
+}
+
+.newgame-custom-map-error {
+  color: #ff9e9e;
+  font-size: 12px;
+  margin-top: 4px;
+}

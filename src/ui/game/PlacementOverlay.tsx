@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
+import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import {
   canPlaceSettlement,
   canPlaceCity,
@@ -16,6 +17,7 @@ import { playerColorVar } from '@/ui/shared/playerColors';
 
 export function PlacementOverlay() {
   const { game, uiMode, dispatch, setMode } = useGameStore();
+  const role = useNetworkStore((s) => s.role);
   const [hoveredVid, setHoveredVid] = useState<VertexId | null>(null);
   const [hoveredEid, setHoveredEid] = useState<EdgeId | null>(null);
   if (!game) return null;
@@ -24,6 +26,16 @@ export function PlacementOverlay() {
   // and the human shouldn't see "click here" hints they can't use.
   const actingPlayer = game.players.find((p) => p.id === acting);
   if (actingPlayer?.isAI) return null;
+  // Online: only the peer whose UUID owns the acting seat may interact with
+  // the board. Without this gate, modes driven by `game.phase` (setup, robber,
+  // discard, etc.) silently render clickable ghosts on every peer, so any
+  // peer could dispatch the acting player's action and diverge the boards.
+  // Main-phase build modes are already gated implicitly because non-acting
+  // peers can't open them (the ActionBar hides build buttons for them).
+  if (role !== 'solo') {
+    const myPid = getMyPlayerId(game);
+    if (myPid !== acting) return null;
+  }
   const previewColor: PlayerColor = actingPlayer?.color ?? 'white';
 
   if (uiMode.kind === 'buildSettlement' || uiMode.kind === 'placeSetupSettlement') {

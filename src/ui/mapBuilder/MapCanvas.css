@@ -1,0 +1,54 @@
+.map-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-elev1, #0f1218);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.map-canvas-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.map-canvas-ghost {
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  cursor: pointer;
+}
+.map-canvas-ghost:hover {
+  fill: rgba(255, 255, 255, 0.12);
+}
+
+.map-canvas-hex {
+  cursor: pointer;
+}
+.map-canvas-hex:hover polygon {
+  stroke: #ffffffa0;
+  stroke-width: 2.5;
+}
+
+.edge-target {
+  cursor: pointer;
+}
+.edge-target:hover circle {
+  fill: #fff;
+  r: 5;
+}
+
+.map-canvas-error {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(140, 30, 30, 0.85);
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  pointer-events: none;
+}

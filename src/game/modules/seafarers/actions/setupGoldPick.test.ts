@@ -89,14 +89,22 @@ describe('round-2 setup gold pick', () => {
         for (const n of s.board.vertices[v]!.neighborVertices) taken.add(n);
       }
     }
+    const outerIds = new Set(s.islandChips!.map((c) => c.islandId));
     const goldVertex = s.board.vertexIds.find((vid) => {
       if (taken.has(vid)) return false;
       const v = s.board.vertices[vid]!;
-      return v.hexes.some((h) => s.board.hexes[h]?.terrain === 'gold');
+      // Vertex must touch a gold hex AND touch the main island (setup-round
+      // placement is restricted to the main island in this scenario).
+      const touchesGold = v.hexes.some((h) => s.board.hexes[h]?.terrain === 'gold');
+      const touchesMain = v.hexes.some((h) => {
+        const iid = s.board.islandOfHex![h];
+        return iid && !outerIds.has(iid);
+      });
+      return touchesGold && touchesMain;
     });
     if (!goldVertex) {
-      // No reachable gold-adjacent main-island vertex on this seed; nothing
-      // to assert. Skip rather than fail.
+      // No reachable gold-adjacent main-island vertex on this seed (e.g. when
+      // gold is pinned to outer islands only). Nothing to assert here.
       return;
     }
 

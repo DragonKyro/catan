@@ -28,6 +28,7 @@ import { shuffleProgressDecks } from './modules/citiesAndKnights/progress/catalo
 import { getScenario } from './modules/seafarers/board/scenarios';
 import { getTradersScenario } from './modules/traders/board/scenarios';
 import { recalcWealthTiles } from './modules/traders/scoring/wealthTiles';
+import { generateCustomMapBoard } from './customMap/generator';
 import { shuffle } from './rng';
 import { emptyBank, bankFull } from './resources';
 import { emptyCommodities, commoditiesFull } from './commodities';
@@ -154,6 +155,17 @@ export function createGame(opts: CreateGameOptions): GameState {
     }
   }
 
+  // Custom user-authored map. Validate the player count against the map's
+  // declared range here so the failure is surfaced at game-creation time.
+  const customMap = opts.settings?.customMap;
+  if (customMap) {
+    if (numPlayers < customMap.minPlayers || numPlayers > customMap.maxPlayers) {
+      throw new Error(
+        `Custom map "${customMap.name}" supports ${customMap.minPlayers}..${customMap.maxPlayers} players, got ${numPlayers}.`,
+      );
+    }
+  }
+
   // Seafarers has no official 7-8p layout. Until per-scenario 7-8 boards
   // are designed, refuse the combination at the engine boundary so the
   // generator doesn't silently fall back to the 5-6 board for an
@@ -209,6 +221,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   const tradersScenarioId = opts.settings?.tradersScenarioId;
   const tradersVariants = opts.settings?.tradersVariants;
   const scenarioVp = ((): number | undefined => {
+    if (customMap) return customMap.defaultVpToWin;
     if (hasTraders) {
       const sc = getTradersScenario(tradersScenarioId ?? 'riversOfCatan');
       return sc.defaultVpToWin;
@@ -245,6 +258,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     tradersScenarioId: hasTraders ? tradersScenarioId ?? 'riversOfCatan' : undefined,
     tradersVariants: hasTraders ? tradersVariants : undefined,
     turnTimerSec: opts.settings?.turnTimerSec,
+    customMap,
   };
 
   let rng = opts.seed >>> 0;
@@ -262,7 +276,18 @@ export function createGame(opts: CreateGameOptions): GameState {
   let castles: CastleState[] | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
-  if (hasTraders) {
+  if (customMap) {
+    const result = generateCustomMapBoard(customMap, rng);
+    board = result.board;
+    rng = result.rngState;
+    if (customMap.seafarers) {
+      islandChips = result.islandChips.length > 0 ? result.islandChips : undefined;
+      unrevealedFogHexes =
+        result.unrevealedFogHexes.length > 0
+          ? result.unrevealedFogHexes
+          : undefined;
+    }
+  } else if (hasTraders) {
     const result = generateTradersBoard(
       settings.tradersScenarioId,
       rng,

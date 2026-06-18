@@ -4,6 +4,7 @@ import {
   assembleBoardFromDefs,
   assembleBoardFromLayout,
 } from '../../../board/scenarioAssembly';
+import { injectFogPools } from '../../../board/fogPoolInjection';
 import { getScenario } from './scenarios';
 import { identifyIslands } from './islands';
 import type { Scenario, ScenarioLayout } from './types';
@@ -36,7 +37,23 @@ export function generateSeafarersBoard(
   // layout4p / layout5_6p), materialize hexes + ports by drawing terrains,
   // tokens and port types from the pool. Otherwise fall back to the legacy
   // fixed-content `hexes` / `ports` arrays.
-  const layout = pickLayout(scenario, numPlayers);
+  let layout = pickLayout(scenario, numPlayers);
+  // Pre-inject fog cells from the scenario's `fogPools` (if any) so fog
+  // tiles get their terrain + token from a SEPARATE pool than the main
+  // map. Matches what the custom-map generator does — the materializer
+  // then sees fog cells as pinned and skips them from the main draw.
+  const fogHexCoords = useLarge && scenario.fogHexes5_6
+    ? scenario.fogHexes5_6
+    : scenario.fogHexes ?? [];
+  // Only use a fog pool when one is declared for THIS player count.
+  // Falling back across player counts would break fixed-desert positions
+  // and pool sizes between distinct geometries.
+  const fogPoolDef = useLarge ? scenario.fogPools5_6 : scenario.fogPools;
+  if (layout && fogPoolDef && fogHexCoords.length > 0) {
+    const injected = injectFogPools(layout, fogHexCoords, fogPoolDef, rngState);
+    layout = injected.layout;
+    rngState = injected.rngState;
+  }
   const assembled = layout
     ? assembleBoardFromLayout(layout, rngState)
     : assembleBoardFromDefs(
