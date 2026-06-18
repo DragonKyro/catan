@@ -3,10 +3,11 @@ import { Button } from '@/ui/shared/Button';
 import { NewGame } from './NewGame';
 import { OnlineMenu } from './OnlineMenu';
 import { Rulebook } from '@/rulebook/Rulebook';
+import { MapBuilderScreen } from '@/ui/mapBuilder/MapBuilderScreen';
 import { useReplayStore, parseReplay } from '@/store/replayStore';
 import './HomeMenu.css';
 
-type Mode = 'choose' | 'local' | 'online' | 'rules';
+type Mode = 'choose' | 'local' | 'online' | 'rules' | 'builder';
 
 export function HomeMenu() {
   const [mode, setMode] = useState<Mode>('choose');
@@ -39,6 +40,9 @@ export function HomeMenu() {
   if (mode === 'rules') {
     return <Rulebook onClose={() => setMode('choose')} />;
   }
+  if (mode === 'builder') {
+    return <MapBuilderScreen onBack={() => setMode('choose')} />;
+  }
 
   return (
     <div className="home-wrap">
@@ -54,6 +58,9 @@ export function HomeMenu() {
           </Button>
           <Button size="lg" fullWidth onClick={() => setMode('rules')}>
             📖 Rulebook
+          </Button>
+          <Button size="lg" fullWidth onClick={() => setMode('builder')}>
+            🗺 Map builder
           </Button>
           <Button size="lg" fullWidth onClick={() => fileInputRef.current?.click()}>
             🎞 Load replay…

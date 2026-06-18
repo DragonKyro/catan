@@ -489,6 +489,11 @@ export interface GameSettings {
     // port-buildings holds a 2 VP bonus tile. Target VP bumps by 1 when on.
     strongestPorts?: boolean;
   };
+  // User-authored custom map. When set, overrides every other board source
+  // (Seafarers scenario, Fun Map, base) — createGame routes through
+  // `generateCustomMapBoard`. The map's `seafarers` flag determines whether
+  // island chips / fog state are populated.
+  customMap?: import('./customMap/types').CustomMap;
 }
 
 export interface PendingTrade {

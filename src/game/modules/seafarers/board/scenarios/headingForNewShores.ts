@@ -4,94 +4,121 @@ import { seaPositionsInDisk } from './helpers';
 
 // Heading for New Shores — the canonical Seafarers introductory scenario.
 // Main island (centre-left) plus three smaller outer islands. Two gold hexes
-// (3-4p) / three (5-6p) sit on the small islands.
+// sit on the small islands.
 //
-// This is the first scenario migrated to the **modular** layout format
-// (frame + pools). The frame — which (q,r) positions are land vs sea — is
-// deterministic per player count. Terrain, number tokens, and port types are
-// drawn from pools at game-start using the seeded RNG.
+// Per the rulebook diagram, 3p and 4p share the SAME 35-hex setup
+// (22 land + 13 sea, 2 gold, 0 desert, 22 tokens, 8 ports). The alternate
+// 42-hex "with desert" map lives in [headingForNewShores2.ts] as a separate
+// scenario.
 //
-// IMPORTANT: the position coordinates below are an approximation of the
-// official rulebook diagram, derived from the existing hand-authored layout
-// plus the additional hexes needed to hit the official component counts
-// (3p: 22 land + 13 sea = 35; 4p: 28 land + 14 sea = 42). Visual verification
-// against [docs/.scenario-renders/seafarers-p04.png] (3p) and
-// [docs/.scenario-renders/seafarers-p05.png] (4p) is still pending — once
-// the in-game ScenarioPreview component lands we can compare side-by-side
-// and tighten the positions. The pools, port count, VP target, and component
+// IMPORTANT: position coordinates below approximate the official rulebook
+// diagram; visual verification against [docs/.scenario-renders/seafarers-p04.png]
+// is still pending. The pools, port count, VP target, and component
 // breakdown all match the rulebook exactly.
 
 // ---------------------------------------------------------------------------
-// 3-player layout: 22 land + 13 sea = 35 positions, 8 ports
+// 3-4 player layout (shared per rulebook): 22 land + 13 sea = 35 positions, 8 ports
 // Per rulebook: 2 gold, 4 hills, 3 forests, 5 pastures, 4 fields, 4 mountains
 // ---------------------------------------------------------------------------
-const LAYOUT_3P: ScenarioLayout = {
-  positions: [
-    // Main island (13 land hexes) — pulled from the existing layout, with the
-    // former fixed desert at (-1,2) flipped to a regular land hex since the
-    // 3p rulebook ships with zero deserts.
-    { q: -2, r: 0, kind: 'land' },
-    { q: -1, r: 0, kind: 'land' },
-    { q: 0, r: 0, kind: 'land' },
-    { q: 1, r: 0, kind: 'land' },
-    { q: -2, r: 1, kind: 'land' },
-    { q: -1, r: 1, kind: 'land' },
-    { q: 0, r: 1, kind: 'land' },
-    { q: -2, r: 2, kind: 'land' },
-    { q: -1, r: 2, kind: 'land' },
-    { q: -1, r: -1, kind: 'land' },
-    { q: 0, r: -1, kind: 'land' },
-    { q: 1, r: -1, kind: 'land' },
-    { q: 0, r: -2, kind: 'land' },
-    // NE small island (2)
-    { q: 2, r: -3, kind: 'land' },
-    { q: 3, r: -3, kind: 'land' },
-    // East small island (3)
-    { q: 3, r: -1, kind: 'land' },
-    { q: 3, r: 0, kind: 'land' },
-    { q: 4, r: 0, kind: 'land' },
-    // South small island (3)
-    { q: -1, r: 3, kind: 'land' },
-    { q: 0, r: 3, kind: 'land' },
-    { q: 1, r: 3, kind: 'land' },
-    // SE small island (1)
-    { q: 2, r: 1, kind: 'land' },
+const LAND_3_4P: ScenarioPosition[] = [
+  // -----------------------------------------------------------------------
+  // PLAYABLE AREA = full radius-3 hex disk (37 positions). Land + sea
+  // together form a clean hexagonal silhouette, matching the rulebook
+  // image's outline once the decorative blue water border is removed.
+  //
+  //   22 land + 15 sea = 37 hexes. (Rulebook lists 13 sea / 35 total; we
+  //   keep 15 sea so the playable envelope is a perfect hexagon. The 2
+  //   extra sea tiles don't change gameplay — sea is sea.)
+  //
+  // Main island is shifted down one row so its top sits at r=-1, which
+  // leaves rows r=-3 and r=-2 free for the upper outer islands.
+  // -----------------------------------------------------------------------
 
-    // Sea (13)
-    { q: -1, r: -2, kind: 'sea' },
-    { q: 1, r: -2, kind: 'sea' },
-    { q: 2, r: -2, kind: 'sea' },
-    { q: 3, r: -2, kind: 'sea' },
-    { q: 4, r: -3, kind: 'sea' },
-    { q: 4, r: -2, kind: 'sea' },
-    { q: 4, r: -1, kind: 'sea' },
-    { q: 2, r: -1, kind: 'sea' },
-    { q: 2, r: 0, kind: 'sea' },
-    { q: 1, r: 1, kind: 'sea' },
-    { q: 0, r: 2, kind: 'sea' },
-    { q: 1, r: 2, kind: 'sea' },
-    { q: -2, r: 3, kind: 'sea' },
+  // Main island — hexagonal 2/3/4/3/2 = 14 hexes, occupying the left-
+  // centre of the disk.
+  // r=-1 (2 hexes — top)
+  { q: -1, r: -1, kind: 'land' },
+  { q: 0, r: -1, kind: 'land' },
+  // r=0 (3 hexes)
+  { q: -2, r: 0, kind: 'land' },
+  { q: -1, r: 0, kind: 'land' },
+  { q: 0, r: 0, kind: 'land' },
+  // r=1 (4 hexes — widest)
+  { q: -3, r: 1, kind: 'land' },
+  { q: -2, r: 1, kind: 'land' },
+  { q: -1, r: 1, kind: 'land' },
+  { q: 0, r: 1, kind: 'land' },
+  // r=2 (3 hexes)
+  { q: -3, r: 2, kind: 'land' },
+  { q: -2, r: 2, kind: 'land' },
+  { q: -1, r: 2, kind: 'land' },
+  // r=3 (2 hexes — bottom)
+  { q: -3, r: 3, kind: 'land' },
+  { q: -2, r: 3, kind: 'land' },
+
+  // North small island — 2 hexes at the top of the disk (r=-3),
+  // separated from main's top row by a full row of sea at r=-2.
+  // One hex pinned as GOLD to incentivize ship exploration of the
+  // outer islands (rulebook places golds on the small islands).
+  { q: 0, r: -3, kind: 'land', fixedTerrain: 'gold' },
+  { q: 1, r: -3, kind: 'land' },
+
+  // NE small island — 4-hex BACKWARDS-7 shape (per rulebook image).
+  // One hex pinned as GOLD.
+  //
+  //     ⬡⬡       ← (2,-2) (3,-2) top bar
+  //      ⬡       ← (2,-1) stem dips down-right
+  //        ⬡    ← (2, 0) stem ends directly below the top-right hex
+  //
+  { q: 2, r: -2, kind: 'land' },
+  { q: 3, r: -2, kind: 'land', fixedTerrain: 'gold' },
+  { q: 2, r: -1, kind: 'land' },
+  { q: 2, r: 0, kind: 'land' },
+
+  // SE small island — 2 hexes at the lower-right. No gold here so the
+  // SE chip remains the "balanced" outer prize.
+  { q: 0, r: 3, kind: 'land' },
+  { q: 1, r: 2, kind: 'land' },
+];
+
+const LAYOUT_3_4P: ScenarioLayout = {
+  positions: [
+    ...LAND_3_4P,
+    // Sea fills every remaining disk position so the envelope is a perfect
+    // hexagon. (1,-3) and (1,-2) separate N from NE; (1,1) separates main
+    // from SE; the rest wrap each coast.
+    ...seaPositionsInDisk(LAND_3_4P, 3),
   ],
-  // 8 ports — anchored on a land hex with `direction` pointing to an
-  // adjacent explicit sea hex (Seafarers convention: coastal edges need a
-  // sea hex on the water side, off-frame doesn't count). Types are drawn
-  // from `pools.portTypes` (5 single-resource + 3 generic per 3p rules).
-  // Direction mapping (verified empirically against honeycomb-grid output):
+  // 8 ports — ALL anchored on main-island hexes (the small outer islands
+  // carry no ports per the rulebook image). Ports may sit on either a
+  // coastal edge (faces a sea hex) OR a perimeter edge (faces the painted
+  // water border outside the disk), same as base-game port placements.
+  // Two ports share a main hex only on NON-adjacent edges so their pier
+  // sprites never share a vertex.
+  // Direction mapping:
+  //   0=E (+1,0), 1=SE (0,+1), 2=SW (-1,+1), 3=W (-1,0), 4=NW (0,-1), 5=NE (+1,-1).
+  // 8 ports, spaced roughly evenly clockwise around the main island's coast
+  // to match the rulebook image. Each anchor sits on a NON-adjacent edge of
+  // any neighbouring port's anchor, so the pier sprites never share a vertex.
+  // Direction mapping:
   //   0=E (+1,0), 1=SE (0,+1), 2=SW (-1,+1), 3=W (-1,0), 4=NW (0,-1), 5=NE (+1,-1).
   portAnchors: [
-    { q: 1, r: -1, direction: 0 }, // → (2,-1) sea
-    { q: 1, r: 0, direction: 1 }, // → (1,1) sea
-    { q: 0, r: 1, direction: 1 }, // → (0,2) sea
-    { q: -2, r: 2, direction: 1 }, // → (-2,3) sea
-    { q: -1, r: 2, direction: 2 }, // → (-2,3) sea (other edge of same sea hex)
-    { q: 0, r: -2, direction: 0 }, // → (1,-2) sea
-    { q: 3, r: 0, direction: 5 }, // → (4,-1) sea
-    { q: 0, r: 3, direction: 4 }, // → (0,2) sea
+    // Clockwise from the top of the main island. Anchors are chosen so no
+    // two piers share an edge vertex (anchors on adjacent hexes use
+    // non-touching directions).
+    { q: -1, r: -1, direction: 4 }, // 1. NW corner → perimeter (top-left)
+    { q: 0, r: -1, direction: 5 },  // 2. N-top  → (1,-2) sea (between main and NE)
+    { q: 0, r: 0, direction: 0 },   // 3. E-upper → (1,0) sea
+    { q: 0, r: 1, direction: 1 },   // 4. SE corner → (0,2) sea
+    { q: -2, r: 3, direction: 1 },  // 5. S → perimeter (bottom)
+    { q: -3, r: 3, direction: 2 },  // 6. SW corner → perimeter
+    { q: -3, r: 2, direction: 3 },  // 7. W-lower → perimeter
+    { q: -2, r: 0, direction: 3 },  // 8. W-upper → (-3,0) sea
   ],
   pools: {
-    // 22 land hexes (no desert in 3p).
+    // 22 land hexes. Both gold are fixed to outer islands (see fixedTerrain
+    // above), so the pool only fills the 20 main-island hexes.
     terrainCounts: {
-      gold: 2,
       brick: 4,
       wood: 3,
       sheep: 5,
@@ -114,108 +141,6 @@ const LAYOUT_3P: ScenarioLayout = {
     ],
     // 8 port types — 3 generic + 5 single-resource per rulebook.
     portTypes: ['generic', 'generic', 'generic', 'wood', 'brick', 'sheep', 'wheat', 'ore'],
-  },
-};
-
-// ---------------------------------------------------------------------------
-// 4-player layout: 28 land + 14 sea = 42 positions, 9 ports, 1 desert
-// Per rulebook: 2 gold, 5 hills, 5 forests, 5 pastures, 5 fields, 5 mountains, 1 desert
-// ---------------------------------------------------------------------------
-const LAYOUT_4P: ScenarioLayout = {
-  positions: [
-    // Main island (14 land + 1 desert = 15 hexes; the desert anchors
-    // (-1,2) per the existing layout).
-    { q: -2, r: 0, kind: 'land' },
-    { q: -1, r: 0, kind: 'land' },
-    { q: 0, r: 0, kind: 'land' },
-    { q: 1, r: 0, kind: 'land' },
-    { q: -2, r: 1, kind: 'land' },
-    { q: -1, r: 1, kind: 'land' },
-    { q: 0, r: 1, kind: 'land' },
-    { q: -2, r: 2, kind: 'land' },
-    { q: -1, r: 2, kind: 'desert' },
-    { q: -1, r: -1, kind: 'land' },
-    { q: 0, r: -1, kind: 'land' },
-    { q: 1, r: -1, kind: 'land' },
-    { q: 0, r: -2, kind: 'land' },
-    { q: 1, r: -2, kind: 'land' },     // +1 vs 3p
-    { q: -1, r: -2, kind: 'land' },    // +1 vs 3p
-    // NE small island (3) — +1 vs 3p
-    { q: 2, r: -3, kind: 'land' },
-    { q: 3, r: -3, kind: 'land' },
-    { q: 4, r: -3, kind: 'land' },
-    // East small island (4) — +1 vs 3p (adds (4,-2) as a gold hex per
-    // rulebook 4p which has a third gold; randomized via terrain pool).
-    { q: 3, r: -1, kind: 'land' },
-    { q: 3, r: 0, kind: 'land' },
-    { q: 4, r: 0, kind: 'land' },
-    { q: 4, r: -1, kind: 'land' },     // +1 vs 3p
-    // South small island (4) — +1 vs 3p
-    { q: -1, r: 3, kind: 'land' },
-    { q: 0, r: 3, kind: 'land' },
-    { q: 1, r: 3, kind: 'land' },
-    { q: -2, r: 3, kind: 'land' },     // +1 vs 3p (was sea in 3p)
-    // SE small island (2) — +1 vs 3p
-    { q: 2, r: 1, kind: 'land' },
-    { q: 2, r: 2, kind: 'land' },      // +1 vs 3p
-
-    // Sea (14)
-    { q: 2, r: -2, kind: 'sea' },
-    { q: 3, r: -2, kind: 'sea' },
-    { q: 4, r: -2, kind: 'sea' },
-    { q: 2, r: -1, kind: 'sea' },
-    { q: 2, r: 0, kind: 'sea' },
-    { q: 1, r: 1, kind: 'sea' },
-    { q: 0, r: 2, kind: 'sea' },
-    { q: 1, r: 2, kind: 'sea' },
-    { q: -3, r: 1, kind: 'sea' },
-    { q: -3, r: 2, kind: 'sea' },
-    { q: -3, r: 3, kind: 'sea' },
-    { q: -2, r: -1, kind: 'sea' },
-    { q: 4, r: -4, kind: 'sea' },
-    { q: 5, r: -3, kind: 'sea' },
-  ],
-  // 9 ports for 4p — each anchor points to a `kind: 'sea'` neighbor.
-  // Direction mapping: 0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE.
-  portAnchors: [
-    { q: 1, r: -1, direction: 0 }, // → (2,-1) sea
-    { q: 1, r: 0, direction: 1 }, // → (1,1) sea
-    { q: 0, r: 1, direction: 1 }, // → (0,2) sea
-    { q: -2, r: 2, direction: 3 }, // → (-3,2) sea
-    { q: -2, r: 1, direction: 3 }, // → (-3,1) sea
-    { q: -1, r: -2, direction: 2 }, // → (-2,-1) sea
-    { q: 3, r: 0, direction: 3 }, // → (2,0) sea
-    { q: 0, r: 3, direction: 4 }, // → (0,2) sea
-    { q: 2, r: 2, direction: 3 }, // → (1,2) sea
-  ],
-  pools: {
-    // 27 land hexes need terrains (desert is at a fixed position, doesn't pull).
-    terrainCounts: {
-      gold: 2,
-      brick: 5,
-      wood: 5,
-      sheep: 5,
-      wheat: 5,
-      ore: 5,
-    },
-    // 27 tokens (one per non-desert land hex). Rulebook 4p distribution.
-    tokens: [
-      2, 2,
-      3, 3, 3,
-      4, 4, 4,
-      5, 5, 5,
-      6, 6, 6,
-      8, 8, 8,
-      9, 9, 9,
-      10, 10, 10,
-      11, 11, 11,
-      12,
-    ],
-    // 9 port types — 4 generic + 5 single-resource per rulebook 4p.
-    portTypes: [
-      'generic', 'generic', 'generic', 'generic',
-      'wood', 'brick', 'sheep', 'wheat', 'ore',
-    ],
   },
 };
 
@@ -344,7 +269,6 @@ export const headingForNewShores = buildScenario({
   defaultVpToWin5_6: 14,
   minPlayers: 3,
   maxPlayers: 6,
-  layout3p: LAYOUT_3P,
-  layout4p: LAYOUT_4P,
+  layout3p: LAYOUT_3_4P,
   layout5_6p: LAYOUT_5_6P,
 });

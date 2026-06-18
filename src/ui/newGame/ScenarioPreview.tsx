@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { createGame } from '@/game/createGame';
 import { BoardSVG } from '@/ui/game/BoardSVG';
+import type { CustomMap } from '@/game/customMap/types';
 import './ScenarioPreview.css';
 
 interface Props {
@@ -9,6 +10,9 @@ interface Props {
   scenarioId?: string;
   baseScenarioId?: string;
   tradersScenarioId?: string;
+  // When set, the preview renders this custom map instead of any
+  // scenario / expansion selection.
+  customMap?: CustomMap;
   // Optional caption shown under the preview. Defaults to "<scenario name>
   // (<n> players)" when a scenario is selected, otherwise "Base game
   // (<n> players)".
@@ -31,6 +35,7 @@ export function ScenarioPreview({
   scenarioId,
   baseScenarioId,
   tradersScenarioId,
+  customMap,
   caption,
   seed = 12345,
 }: Props) {
@@ -42,19 +47,24 @@ export function ScenarioPreview({
       const game = createGame({
         playerNames: Array.from({ length: numPlayers }, (_, i) => `P${i + 1}`),
         seed,
-        settings: {
-          expansions,
-          scenarioId,
-          baseScenarioId,
-          tradersScenarioId,
-        },
+        settings: customMap
+          ? {
+              expansions: customMap.seafarers ? ['seafarers'] : [],
+              customMap,
+            }
+          : {
+              expansions,
+              scenarioId,
+              baseScenarioId,
+              tradersScenarioId,
+            },
         randomizeTurnOrder: false,
       });
       return { game, error: null as string | null };
     } catch (e) {
       return { game: null, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [numPlayers, expansions, scenarioId, baseScenarioId, tradersScenarioId, seed]);
+  }, [numPlayers, expansions, scenarioId, baseScenarioId, tradersScenarioId, customMap, seed]);
 
   const defaultCaption = scenarioId
     ? `${scenarioId} (${numPlayers}p)`

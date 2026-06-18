@@ -1,5 +1,6 @@
 import type { Scenario } from '../types';
 import { headingForNewShores } from './headingForNewShores';
+import { headingForNewShores2 } from './headingForNewShores2';
 import { fourIslands } from './fourIslands';
 import { fogIsland } from './fogIsland';
 import { throughTheDesert } from './throughTheDesert';
@@ -11,6 +12,7 @@ import { wondersOfCatan } from './wondersOfCatan';
 
 const SCENARIO_LIST: Scenario[] = [
   headingForNewShores,
+  headingForNewShores2,
   fourIslands,
   fogIsland,
   throughTheDesert,

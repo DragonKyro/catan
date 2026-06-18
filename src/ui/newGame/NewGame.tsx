@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { useGameStore } from '@/store/gameStore';
 import type { PlayerKind } from '@/game/createGame';
 import type { PlayerColor } from '@/game/types';
+import type { CustomMap } from '@/game/customMap/types';
+import { parseCustomMap } from '@/game/customMap/parse';
 import {
   PLAYER_COLORS,
   PLAYER_COLOR_HEX,
@@ -52,14 +54,29 @@ export function NewGame({ onBack }: Props = {}) {
   const [turnTimer, setTurnTimer] = useState(0); // seconds; 0 = off
   const [seed, setSeed] = useState('');
   const [expansions, setExpansions] = useState<ExpansionPickerValue>(DEFAULT_EXPANSIONS);
+  const [customMap, setCustomMap] = useState<CustomMap | null>(null);
+  const [customMapError, setCustomMapError] = useState<string | null>(null);
+  const customMapInputRef = useRef<HTMLInputElement | null>(null);
   const newGame = useGameStore((s) => s.newGame);
 
   const scenario = activeScenario(expansions);
   const isFunMap = scenario.kind === 'base' && expansions.baseScenarioId !== 'standard';
-  // Standard's player window covers 2-8 but the lobby still defaults to 3-8.
-  const minPlayers = isFunMap ? scenario.minPlayers : scenario.kind === 'seafarers' ? scenario.minPlayers : 3;
-  const maxPlayers = isFunMap ? scenario.maxPlayers : scenario.kind === 'seafarers' ? scenario.maxPlayers : 8;
-  const recommendedVpValue = recommendedVp(numPlayers, expansions);
+  // Custom map (when loaded) overrides the scenario for player-count + VP.
+  const minPlayers = customMap
+    ? customMap.minPlayers
+    : isFunMap
+      ? scenario.minPlayers
+      : scenario.kind === 'seafarers'
+        ? scenario.minPlayers
+        : 3;
+  const maxPlayers = customMap
+    ? customMap.maxPlayers
+    : isFunMap
+      ? scenario.maxPlayers
+      : scenario.kind === 'seafarers'
+        ? scenario.maxPlayers
+        : 8;
+  const recommendedVpValue = customMap?.defaultVpToWin ?? recommendedVp(numPlayers, expansions);
   const vp = vpOverride ?? recommendedVpValue;
 
   // Auto-bump the seat count when the active scenario doesn't support it
@@ -78,21 +95,48 @@ export function NewGame({ onBack }: Props = {}) {
       seed: finalSeed,
       settings: {
         victoryPointsToWin: vp,
-        expansions: expansionListFrom(expansions),
-        scenarioId: expansions.seafarers ? expansions.scenarioId : undefined,
+        // A loaded custom map overrides all scenario/expansion routing —
+        // we only carry through Seafarers' expansion id when the map opted
+        // into it, so the engine takes the Seafarers code path for fog/etc.
+        expansions: customMap
+          ? customMap.seafarers
+            ? ['seafarers']
+            : []
+          : expansionListFrom(expansions),
+        scenarioId:
+          !customMap && expansions.seafarers ? expansions.scenarioId : undefined,
         baseScenarioId:
-          !expansions.seafarers && !expansions.traders
+          !customMap && !expansions.seafarers && !expansions.traders
             ? expansions.baseScenarioId
             : undefined,
-        tradersScenarioId: expansions.traders
-          ? expansions.tradersScenarioId
-          : undefined,
-        tradersVariants: expansions.traders
-          ? expansions.tradersVariants
-          : undefined,
+        tradersScenarioId:
+          !customMap && expansions.traders ? expansions.tradersScenarioId : undefined,
+        tradersVariants:
+          !customMap && expansions.traders ? expansions.tradersVariants : undefined,
         turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
+        customMap: customMap ?? undefined,
       },
     });
+  };
+
+  const onLoadCustomMap = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setCustomMapError(null);
+    file
+      .text()
+      .then((text) => {
+        const parsed = parseCustomMap(text);
+        setCustomMap(parsed);
+        // Clamp current numPlayers into the new map's window.
+        if (numPlayers < parsed.minPlayers) setNumPlayers(parsed.minPlayers);
+        else if (numPlayers > parsed.maxPlayers) setNumPlayers(parsed.maxPlayers);
+        setVpOverride(null);
+      })
+      .catch((err: Error) => {
+        setCustomMapError(err.message);
+      });
   };
 
   const setType = (i: number, kind: PlayerKind) => {
@@ -119,8 +163,9 @@ export function NewGame({ onBack }: Props = {}) {
     !expansions.seafarers && !expansions.traders
       ? expansions.baseScenarioId
       : undefined;
-  const previewCaption =
-    scenario.kind === 'traders'
+  const previewCaption = customMap
+    ? `${customMap.name} (${numPlayers}p)`
+    : scenario.kind === 'traders'
       ? `${scenario.name} (${numPlayers}p)`
       : isFunMap
         ? `${scenario.name} (${numPlayers}p)`
@@ -301,6 +346,34 @@ export function NewGame({ onBack }: Props = {}) {
           />
         </label>
 
+        <div className="newgame-field">
+          <span>Custom map</span>
+          {customMap ? (
+            <div className="newgame-custom-map-row">
+              <span>📂 {customMap.name}</span>
+              <Button size="sm" variant="ghost" onClick={() => setCustomMap(null)}>
+                Clear
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" onClick={() => customMapInputRef.current?.click()}>
+              Load custom map…
+            </Button>
+          )}
+          <input
+            ref={customMapInputRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={onLoadCustomMap}
+          />
+          {customMapError && (
+            <div className="newgame-custom-map-error" role="alert">
+              {customMapError}
+            </div>
+          )}
+        </div>
+
         <Button variant="primary" size="lg" fullWidth onClick={start}>
           Start game
         </Button>
@@ -315,6 +388,7 @@ export function NewGame({ onBack }: Props = {}) {
           tradersScenarioId={
             expansions.traders ? expansions.tradersScenarioId : undefined
           }
+          customMap={customMap ?? undefined}
           caption={previewCaption}
         />
         <p className="newgame-preview-note">
