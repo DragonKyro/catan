@@ -1,5 +1,6 @@
 import type { BoardState, HexId, IslandChip } from '../types';
 import { assembleBoardFromLayout } from '../board/scenarioAssembly';
+import { injectFogPools } from '../board/fogPoolInjection';
 import { identifyIslands } from '../modules/seafarers/board/islands';
 import type { CustomMap } from './types';
 
@@ -18,14 +19,27 @@ export function generateCustomMapBoard(
   map: CustomMap,
   rngState: number,
 ): CustomMapBoardResult {
-  const assembled = assembleBoardFromLayout(map.layout, rngState);
+  // When the map declares fog, fog cells get their terrain + token from a
+  // SEPARATE pool. We materialise that pool here (using the seeded RNG so
+  // every peer agrees) and inject the result onto the layout as pinned
+  // `fixedTerrain` / `fixedToken` values — the regular materializer then
+  // skips those cells from the main pool.
+  let rng = rngState;
+  let workingLayout = map.layout;
+  if (map.seafarers && map.fogPools && map.fogHexes.length > 0) {
+    const result = injectFogPools(map.layout, map.fogHexes, map.fogPools, rng);
+    workingLayout = result.layout;
+    rng = result.rngState;
+  }
+
+  const assembled = assembleBoardFromLayout(workingLayout, rng);
   const board = assembled.board;
+  rng = assembled.rngState;
 
   let islandChips: IslandChip[] = [];
   const unrevealedFogHexes: HexId[] = [];
 
   if (map.seafarers) {
-    // Guarantee a pirate hex exists (the Seafarers engine assumes it).
     if (!board.pirateHex) {
       board.pirateHex =
         board.hexIds.find((id) => board.hexes[id]!.terrain === 'sea') ??
@@ -34,8 +48,6 @@ export function generateCustomMapBoard(
     board.islandOfHex = {};
     const islands = identifyIslands(board, { desertIsBoundary: false });
     board.islandOfHex = islands.hexToIsland;
-    // 2 VP per outer-island chip — same default the Seafarers builder uses
-    // for scenarios that don't override it.
     islandChips = islands.outerIslandIds.map((id) => ({
       islandId: id,
       vp: 2,
@@ -50,8 +62,9 @@ export function generateCustomMapBoard(
 
   return {
     board,
-    rngState: assembled.rngState,
+    rngState: rng,
     islandChips,
     unrevealedFogHexes,
   };
 }
+

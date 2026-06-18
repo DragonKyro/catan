@@ -2,8 +2,11 @@ import type { Scenario } from '../types';
 import { headingForNewShores } from './headingForNewShores';
 import { headingForNewShores2 } from './headingForNewShores2';
 import { fourIslands } from './fourIslands';
+import { fourIslands2 } from './fourIslands2';
 import { fogIsland } from './fogIsland';
+import { fogIsland2 } from './fogIsland2';
 import { throughTheDesert } from './throughTheDesert';
+import { throughTheDesert2 } from './throughTheDesert2';
 import { newWorld } from './newWorld';
 import { pirateIslands } from './pirateIslands';
 import { forgottenTribe } from './forgottenTribe';
@@ -14,8 +17,11 @@ const SCENARIO_LIST: Scenario[] = [
   headingForNewShores,
   headingForNewShores2,
   fourIslands,
+  fourIslands2,
   fogIsland,
+  fogIsland2,
   throughTheDesert,
+  throughTheDesert2,
   newWorld,
   pirateIslands,
   forgottenTribe,

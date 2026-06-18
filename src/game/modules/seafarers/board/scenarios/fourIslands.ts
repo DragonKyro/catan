@@ -1,155 +1,193 @@
-import type { ScenarioLayout, ScenarioPosition } from '../types';
+import type { ScenarioLayout } from '../types';
 import { buildScenario } from './builder';
-import { seaPositionsInDisk } from './helpers';
 
 // Four Islands — four small clusters with no main island. Per the rulebook,
 // starting settlements are allowed on any cluster (`startingPlacementZone:
 // 'anyIsland'`), and every cluster except the one you start on counts as an
 // outer island (chip VP on first settlement).
 //
-// This file is a structural migration to the modular `ScenarioLayout` schema:
-// the same hex positions / terrain mix / token list / port anchors as the
-// pre-migration version, but expressed as a frame + pool so terrains, tokens
-// and port types are randomized at game-start using the seeded RNG.
-// Pool counts could be tightened to rulebook (see MIGRATION.md) in a
-// follow-up after visual verification against [docs/.scenario-renders/].
+// Layout authored in the map builder; 20 land + 17 sea = 37 hexes inside a
+// radius-4 disk. 9 ports (5×2:1 + 4×3:1), 0 desert + 0 gold (rulebook).
 
-// 16 land hexes spread across 4 clusters.
-const LAND_3_4P: ScenarioPosition[] = [
-  // North cluster (4)
-  { q: -1, r: -2, kind: 'land' },
-  { q: 0, r: -2, kind: 'land' },
-  { q: 1, r: -3, kind: 'land' },
-  { q: 0, r: -3, kind: 'land' },
-  // East cluster (4)
-  { q: 3, r: -1, kind: 'land' },
-  { q: 3, r: 0, kind: 'land' },
-  { q: 2, r: 1, kind: 'land' },
-  { q: 3, r: -2, kind: 'land' },
-  // South cluster (4)
-  { q: -2, r: 3, kind: 'land' },
-  { q: -1, r: 3, kind: 'land' },
-  { q: 0, r: 3, kind: 'land' },
-  { q: -1, r: 2, kind: 'land' },
-  // West cluster (4)
-  { q: -3, r: 1, kind: 'land' },
-  { q: -3, r: 2, kind: 'land' },
-  { q: -2, r: 1, kind: 'land' },
-  { q: -2, r: 0, kind: 'land' },
-];
-
+// ---------------------------------------------------------------------------
+// 3-4 player layout from `four islands.json`.
+// ---------------------------------------------------------------------------
 const LAYOUT_3_4P: ScenarioLayout = {
   positions: [
-    ...LAND_3_4P,
-    // Fill the radius-3 disk so the resulting graph matches what the legacy
-    // `fillSea` produced.
-    ...seaPositionsInDisk(LAND_3_4P, 3),
+    // Land hexes (20).
+    { q: -3, r: 2, kind: 'land' },
+    { q: -3, r: 3, kind: 'land' },
+    { q: -2, r: 2, kind: 'land' },
+    { q: -1, r: 3, kind: 'land' },
+    { q: 0, r: 2, kind: 'land' },
+    { q: 0, r: 3, kind: 'land' },
+    { q: 1, r: 2, kind: 'land' },
+    { q: -4, r: 2, kind: 'land' },
+    { q: -4, r: 3, kind: 'land' },
+    { q: -4, r: 4, kind: 'land' },
+    { q: -3, r: 0, kind: 'land' },
+    { q: -2, r: -1, kind: 'land' },
+    { q: -1, r: -1, kind: 'land' },
+    { q: -2, r: 0, kind: 'land' },
+    { q: 0, r: 0, kind: 'land' },
+    { q: 1, r: -1, kind: 'land' },
+    { q: 1, r: -2, kind: 'land' },
+    { q: 2, r: -2, kind: 'land' },
+    { q: 2, r: -1, kind: 'land' },
+    { q: 1, r: 0, kind: 'land' },
+    // Sea hexes (17).
+    { q: -3, r: 1, kind: 'sea' },
+    { q: -2, r: 1, kind: 'sea' },
+    { q: -2, r: 3, kind: 'sea' },
+    { q: -1, r: 1, kind: 'sea' },
+    { q: -1, r: 2, kind: 'sea' },
+    { q: 0, r: 1, kind: 'sea' },
+    { q: 1, r: 1, kind: 'sea' },
+    { q: -4, r: 1, kind: 'sea' },
+    { q: -3, r: 4, kind: 'sea' },
+    { q: -2, r: 4, kind: 'sea' },
+    { q: -1, r: 4, kind: 'sea' },
+    { q: -1, r: 0, kind: 'sea' },
+    { q: 0, r: -1, kind: 'sea' },
+    { q: 0, r: -2, kind: 'sea' },
+    { q: -1, r: -2, kind: 'sea' },
+    { q: 2, r: 0, kind: 'sea' },
+    { q: 2, r: 1, kind: 'sea' },
   ],
+  // 9 port anchors. Some sit on sea hexes — the engine accepts either side
+  // of a coastal edge and the renderer pushes the marker out into the water.
+  // Direction mapping: 0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE.
   portAnchors: [
-    { q: 0, r: -2, direction: 0 },
-    { q: 3, r: -1, direction: 2 },
-    { q: -1, r: 3, direction: 5 },
-    { q: -3, r: 1, direction: 4 },
-    { q: 1, r: -3, direction: 0 },
-    { q: 0, r: 3, direction: 5 },
+    { q: -4, r: 2, direction: 2 },
+    { q: -3, r: 4, direction: 4 },
+    { q: -4, r: 2, direction: 5 },
+    { q: -1, r: 3, direction: 4 },
+    { q: 1, r: 2, direction: 1 },
+    { q: 1, r: 0, direction: 2 },
+    { q: 2, r: -1, direction: 5 },
+    { q: -1, r: 0, direction: 4 },
+    { q: -3, r: 0, direction: 4 },
   ],
   pools: {
-    // 16 land hexes, mix from the pre-migration data.
+    // 20 land hexes, 4 of each resource — no gold, no desert.
     terrainCounts: {
-      gold: 2,
-      brick: 2,
-      wood: 3,
-      sheep: 3,
-      wheat: 3,
-      ore: 3,
+      wood: 4,
+      brick: 4,
+      sheep: 4,
+      wheat: 4,
+      ore: 4,
     },
-    // 16 tokens — fully symmetric around 7. 2/12: 1, 3/11: 1, 4/10: 2,
-    // 5/9: 2, 6/8: 2.
-    tokens: [2, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 12],
-    // 6 port types: 1 generic + 5 single-resource (one of each).
-    portTypes: ['generic', 'wood', 'brick', 'sheep', 'wheat', 'ore'],
+    // 20 tokens — symmetric around 7. 2/12: 1, 3/11: 2, 4/10: 2, 5/9: 2, 6/8: 3.
+    tokens: [
+      2,
+      3, 3,
+      4, 4,
+      5, 5,
+      6, 6, 6,
+      8, 8, 8,
+      9, 9,
+      10, 10,
+      11, 11,
+      12,
+    ],
+    // 9 port types — 5 single-resource (2:1) + 4 generic (3:1).
+    portTypes: [
+      'wheat', 'brick', 'sheep', 'wood', 'ore',
+      'generic', 'generic', 'generic', 'generic',
+    ],
   },
 };
 
-// 5-6 player variant — per the rulebook this is a distinct scenario called
-// "The Six Islands" (Seafarers 5-6p, p5): 32 land hexes spread across SIX
-// clusters (vs four), no gold, no desert; 32 tokens; 11 ports.
-//
-// We keep this under the `fourIslands` scenario id so the lobby still shows
-// one "Four Islands" entry; the geometry just swaps to Six Islands at 5-6p.
-// Geometry is APPROXIMATE — visual verification against
-// [docs/.scenario-renders/seafarers-56-p05.png] is pending.
-const LAND_5_6P: ScenarioPosition[] = [
-  // Cluster A — NW (6)
-  { q: -3, r: 0, kind: 'land' },
-  { q: -3, r: -1, kind: 'land' },
-  { q: -4, r: 0, kind: 'land' },
-  { q: -4, r: 1, kind: 'land' },
-  { q: -3, r: 1, kind: 'land' },
-  { q: -2, r: 0, kind: 'land' },
-  // Cluster B — N (5)
-  { q: 0, r: -3, kind: 'land' },
-  { q: 0, r: -4, kind: 'land' },
-  { q: 1, r: -4, kind: 'land' },
-  { q: 1, r: -3, kind: 'land' },
-  { q: -1, r: -3, kind: 'land' },
-  // Cluster C — NE (6)
-  { q: 4, r: -3, kind: 'land' },
-  { q: 3, r: -3, kind: 'land' },
-  { q: 4, r: -2, kind: 'land' },
-  { q: 3, r: -2, kind: 'land' },
-  { q: 4, r: -4, kind: 'land' },
-  { q: 2, r: -2, kind: 'land' },
-  // Cluster D — SW (5)
-  { q: -3, r: 3, kind: 'land' },
-  { q: -3, r: 4, kind: 'land' },
-  { q: -4, r: 3, kind: 'land' },
-  { q: -4, r: 4, kind: 'land' },
-  { q: -2, r: 3, kind: 'land' },
-  // Cluster E — S (5)
-  { q: 0, r: 3, kind: 'land' },
-  { q: 0, r: 4, kind: 'land' },
-  { q: -1, r: 4, kind: 'land' },
-  { q: 1, r: 3, kind: 'land' },
-  { q: 1, r: 2, kind: 'land' },
-  // Cluster F — SE (5)
-  { q: 3, r: 0, kind: 'land' },
-  { q: 4, r: 0, kind: 'land' },
-  { q: 4, r: -1, kind: 'land' },
-  { q: 3, r: 1, kind: 'land' },
-  { q: 2, r: 0, kind: 'land' },
-];
-
+// 5-6 player variant — "Six Islands" geometry authored in the map builder.
+// 32 land + 26 sea hexes inside a radius-6 disk, 11 ports, no fixed
+// terrain. Same any-island starting rule as the 3-4p Four Islands map.
 const LAYOUT_5_6P: ScenarioLayout = {
   positions: [
-    ...LAND_5_6P,
-    ...seaPositionsInDisk(LAND_5_6P, 4),
+    // Land hexes (32).
+    { q: -6, r: 5, kind: 'land' },
+    { q: -6, r: 6, kind: 'land' },
+    { q: -5, r: 2, kind: 'land' },
+    { q: -5, r: 4, kind: 'land' },
+    { q: -5, r: 5, kind: 'land' },
+    { q: -5, r: 6, kind: 'land' },
+    { q: -4, r: 1, kind: 'land' },
+    { q: -4, r: 2, kind: 'land' },
+    { q: -3, r: 0, kind: 'land' },
+    { q: -3, r: 1, kind: 'land' },
+    { q: -3, r: 5, kind: 'land' },
+    { q: -3, r: 6, kind: 'land' },
+    { q: -2, r: 0, kind: 'land' },
+    { q: -2, r: 2, kind: 'land' },
+    { q: -2, r: 4, kind: 'land' },
+    { q: -2, r: 5, kind: 'land' },
+    { q: -1, r: 1, kind: 'land' },
+    { q: -1, r: 2, kind: 'land' },
+    { q: -1, r: 4, kind: 'land' },
+    { q: -1, r: 6, kind: 'land' },
+    { q: 0, r: 0, kind: 'land' },
+    { q: 0, r: 1, kind: 'land' },
+    { q: 0, r: 5, kind: 'land' },
+    { q: 0, r: 6, kind: 'land' },
+    { q: 1, r: 4, kind: 'land' },
+    { q: 1, r: 5, kind: 'land' },
+    { q: 2, r: 0, kind: 'land' },
+    { q: 2, r: 1, kind: 'land' },
+    { q: 2, r: 2, kind: 'land' },
+    { q: 2, r: 4, kind: 'land' },
+    { q: 3, r: 0, kind: 'land' },
+    { q: 3, r: 1, kind: 'land' },
+    // Sea hexes (26).
+    { q: -6, r: 3, kind: 'sea' },
+    { q: -6, r: 4, kind: 'sea' },
+    { q: -5, r: 3, kind: 'sea' },
+    { q: -4, r: 3, kind: 'sea' },
+    { q: -4, r: 4, kind: 'sea' },
+    { q: -4, r: 5, kind: 'sea' },
+    { q: -4, r: 6, kind: 'sea' },
+    { q: -3, r: 2, kind: 'sea' },
+    { q: -3, r: 3, kind: 'sea' },
+    { q: -3, r: 4, kind: 'sea' },
+    { q: -2, r: 1, kind: 'sea' },
+    { q: -2, r: 3, kind: 'sea' },
+    { q: -2, r: 6, kind: 'sea' },
+    { q: -1, r: 0, kind: 'sea' },
+    { q: -1, r: 3, kind: 'sea' },
+    { q: -1, r: 5, kind: 'sea' },
+    { q: 0, r: 2, kind: 'sea' },
+    { q: 0, r: 3, kind: 'sea' },
+    { q: 0, r: 4, kind: 'sea' },
+    { q: 1, r: 0, kind: 'sea' },
+    { q: 1, r: 1, kind: 'sea' },
+    { q: 1, r: 2, kind: 'sea' },
+    { q: 1, r: 3, kind: 'sea' },
+    { q: 2, r: 3, kind: 'sea' },
+    { q: 3, r: 2, kind: 'sea' },
+    { q: 3, r: 3, kind: 'sea' },
   ],
-  // 11 ports — each anchor faces an in-disk sea hex (verified coastal).
+  // 11 port anchors. Direction mapping: 0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE.
   portAnchors: [
-    { q: -3, r: 0, direction: 5 }, // → (-2, -1) sea
-    { q: -4, r: 1, direction: 1 }, // → (-4, 2) sea
-    { q: -2, r: 0, direction: 4 }, // → (-2, -1) sea (other edge)
-    { q: 0, r: -3, direction: 1 }, // → (0, -2) sea
-    { q: 1, r: -3, direction: 1 }, // → (1, -2) sea
-    { q: 3, r: -3, direction: 3 }, // → (2, -3) sea
-    { q: 4, r: -2, direction: 2 }, // → (3, -1) sea
-    { q: -3, r: 3, direction: 4 }, // → (-3, 2) sea
-    { q: -2, r: 3, direction: 0 }, // → (-1, 3) sea
-    { q: 0, r: 3, direction: 4 }, // → (0, 2) sea
-    { q: 1, r: 2, direction: 4 }, // → (1, 1) sea
+    { q: -4, r: 2, direction: 2 },
+    { q: -3, r: 2, direction: 4 },
+    { q: -2, r: 0, direction: 4 },
+    { q: 0, r: 0, direction: 5 },
+    { q: 2, r: 1, direction: 2 },
+    { q: 3, r: 0, direction: 5 },
+    { q: 1, r: 5, direction: 0 },
+    { q: -1, r: 6, direction: 2 },
+    { q: -3, r: 5, direction: 2 },
+    { q: -4, r: 5, direction: 2 },
+    { q: -6, r: 5, direction: 3 },
   ],
   pools: {
-    // 32 land hexes — no gold, no desert (Six Islands rulebook).
+    // 32 land hexes — no gold, no desert.
     terrainCounts: {
-      brick: 6,
       wood: 7,
+      brick: 6,
       sheep: 7,
       wheat: 6,
       ore: 6,
     },
-    // 32 tokens — fully symmetric around 7. 2/12: 1 each, 3/11: 3 each,
-    // 4/10: 4 each, 5/9: 4 each, 6/8: 4 each.
+    // 32 tokens — symmetric around 7 except for a single 12.
     tokens: [
       2,
       3, 3, 3,
@@ -162,10 +200,10 @@ const LAYOUT_5_6P: ScenarioLayout = {
       11, 11, 11,
       12,
     ],
-    // 11 ports — 6 generic + 5 single-resource.
+    // 11 generic ports.
     portTypes: [
       'generic', 'generic', 'generic', 'generic', 'generic', 'generic',
-      'wood', 'brick', 'sheep', 'wheat', 'ore',
+      'generic', 'generic', 'generic', 'generic', 'generic',
     ],
   },
 };

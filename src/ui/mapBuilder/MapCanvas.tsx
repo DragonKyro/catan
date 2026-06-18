@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { buildGraphFromCoords } from '@/game/board/graph';
 import { hexagonalDisk } from '@/game/modules/base/scenarios/helpers';
 import { assembleBoardFromLayout } from '@/game/board/scenarioAssembly';
-import { hexPolygonPoints, getEdgeMidpoint, getViewBox } from '@/ui/game/boardLayout';
+import { hexPolygonPoints, getEdgeMidpoint } from '@/ui/game/boardLayout';
 import { PortMarker } from '@/ui/game/PortMarker';
 import type { ScenarioLayout } from '@/game/board/scenarioTypes';
 import type { CustomMap } from '@/game/customMap/types';
@@ -50,7 +50,10 @@ export function MapCanvas({
   onPaintFog,
 }: Props) {
   const { board, error } = useBoardOrSkeleton(map.layout, radius);
-  const vb = getViewBox(board, 90);
+  // Size the viewBox to the full disk envelope (not just painted cells) so
+  // the canvas grows as the user bumps the radius. Otherwise an unfilled
+  // r=5 map would render at the same scale as an r=3 map.
+  const vb = useMemo(() => diskViewBox(radius, 90), [radius]);
 
   // Build the set of land coords for fog rendering.
   const fogSet = useMemo(
@@ -65,10 +68,48 @@ export function MapCanvas({
   // The full disk envelope so clicks on empty cells still register.
   const diskCoords = useMemo(() => hexagonalDisk(radius), [radius]);
 
-  const onHexClick = (q: number, r: number) => {
-    if (tool.kind === 'fog') return onPaintFog(q, r);
-    onPaintHex(q, r);
+  // Drag-paint state. The `painting` ref flips true on mousedown over any
+  // hex / ghost cell and false on mouseup or pointer leave. `lastKey` keeps
+  // us from re-painting the same cell on every mousemove event.
+  const painting = useRef(false);
+  const lastKey = useRef<string | null>(null);
+
+  const paintCell = useCallback(
+    (q: number, r: number) => {
+      const key = `${q},${r}`;
+      if (lastKey.current === key) return;
+      lastKey.current = key;
+      if (tool.kind === 'fog') onPaintFog(q, r);
+      else onPaintHex(q, r);
+    },
+    [tool.kind, onPaintFog, onPaintHex],
+  );
+
+  const onCellPointerDown = (q: number, r: number) => {
+    painting.current = true;
+    lastKey.current = null; // ensure the click itself always paints
+    paintCell(q, r);
   };
+
+  const onCellPointerEnter = (q: number, r: number) => {
+    if (!painting.current) return;
+    paintCell(q, r);
+  };
+
+  const stopPainting = () => {
+    painting.current = false;
+    lastKey.current = null;
+  };
+
+  // Window-level pointerup so a release outside the SVG still ends the drag.
+  useEffect(() => {
+    const onUp = () => {
+      painting.current = false;
+      lastKey.current = null;
+    };
+    window.addEventListener('pointerup', onUp);
+    return () => window.removeEventListener('pointerup', onUp);
+  }, []);
 
   return (
     <div className="map-canvas">
@@ -76,6 +117,8 @@ export function MapCanvas({
         className="map-canvas-svg"
         viewBox={`${vb.x} ${vb.y} ${vb.width} ${vb.height}`}
         preserveAspectRatio="xMidYMid meet"
+        onPointerUp={stopPainting}
+        onPointerLeave={stopPainting}
       >
         <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill="var(--ocean)" />
 
@@ -93,7 +136,8 @@ export function MapCanvas({
                 key={key}
                 className="map-canvas-ghost"
                 points={ghost.points}
-                onClick={() => onHexClick(q, r)}
+                onPointerDown={() => onCellPointerDown(q, r)}
+                onPointerEnter={() => onCellPointerEnter(q, r)}
               />
             );
           })}
@@ -112,7 +156,8 @@ export function MapCanvas({
               <g
                 key={id}
                 className="map-canvas-hex"
-                onClick={() => onHexClick(hex.coord.q, hex.coord.r)}
+                onPointerDown={() => onCellPointerDown(hex.coord.q, hex.coord.r)}
+                onPointerEnter={() => onCellPointerEnter(hex.coord.q, hex.coord.r)}
               >
                 <polygon points={points} fill={fill} stroke="#1a1a1a40" strokeWidth={1.5} />
                 {def?.fixedTerrain && (
@@ -322,6 +367,22 @@ function ghostPolygon(q: number, r: number): { points: string } {
     pts.push(`${x + size * Math.cos(angle)},${y + size * Math.sin(angle)}`);
   }
   return { points: pts.join(' ') };
+}
+
+// ViewBox covering the entire radius-N disk (including unpainted ghost
+// cells) so the canvas scale stays consistent — and grows — as the user
+// changes radius.
+function diskViewBox(radius: number, padding: number) {
+  const size = 50;
+  const w = size * Math.sqrt(3);
+  const halfW = w * (radius + 0.5);
+  const halfH = size * 1.5 * radius + size;
+  return {
+    x: -halfW - padding,
+    y: -halfH - padding,
+    width: 2 * (halfW + padding),
+    height: 2 * (halfH + padding),
+  };
 }
 
 // Avoid relying on neighbourAxial here at runtime to keep the bundle thin;

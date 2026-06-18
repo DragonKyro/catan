@@ -9,6 +9,8 @@ interface Props {
   tool: Tool;
   setTool: (t: Tool) => void;
   seafarers: boolean;
+  // Reset the painted frame to all-sea (keeps map meta intact).
+  onClearAll: () => void;
 }
 
 const TERRAIN_LABEL: Record<string, string> = {
@@ -24,7 +26,7 @@ const TERRAIN_LABEL: Record<string, string> = {
 };
 
 const PORT_LABEL: Record<string, string> = {
-  generic: '3:1',
+  generic: '⚓ 3:1 (any)',
   wood: '🌲 2:1',
   brick: '🧱 2:1',
   sheep: '🐑 2:1',
@@ -32,7 +34,7 @@ const PORT_LABEL: Record<string, string> = {
   ore: '⛰ 2:1',
 };
 
-export function Toolbar({ tool, setTool, seafarers }: Props) {
+export function Toolbar({ tool, setTool, seafarers, onClearAll }: Props) {
   const isActive = (predicate: boolean) => (predicate ? ' mb-tool-active' : '');
 
   return (
@@ -62,6 +64,20 @@ export function Toolbar({ tool, setTool, seafarers }: Props) {
           onClick={() => setTool({ kind: 'erase' })}
         >
           ✕ Erase
+        </button>
+        <button
+          className="mb-tool mb-tool-danger"
+          onClick={() => {
+            if (
+              confirm(
+                'Erase ALL painted hexes, ports, and fog? (Map name and meta are kept.)',
+              )
+            ) {
+              onClearAll();
+            }
+          }}
+        >
+          🗑 Erase all
         </button>
       </section>
 

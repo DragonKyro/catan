@@ -1,182 +1,257 @@
-import type { ScenarioLayout, ScenarioPosition } from '../types';
+import type { ScenarioLayout } from '../types';
 import { buildScenario } from './builder';
-import { seaPositionsInDisk } from './helpers';
 
-// Fog Island — main island plus a chain of "fog" hexes that start hidden
-// (`fogHexes`). They're revealed when a player builds adjacent to them, and
+// Fog Island — main island plus a foggy archipelago. Fog hexes start hidden
+// (`fogHexes`); each one is revealed when a player builds adjacent to it and
 // the revealing player gets one of the revealed resource (gold prompts the
-// choose-resource flow, desert reveals silently).
+// choose-resource flow, desert / sea reveal silently). Terrain + token
+// behind the fog come from a SEPARATE `fogPools` so reveals stay random but
+// don't leak through the main map's pool counts.
 //
-// Structural migration to the modular schema. Same fog-hex coordinates as
-// before so the reveal mechanic keeps working; terrain and tokens at those
-// coords are drawn from the pool at game-start (matches the rulebook's
-// "facedown" semantics — players don't know what's under the fog until they
-// reveal it).
+// Layout authored in the map builder; 14 land + 30 sea inside a radius-4
+// disk, 8 ports, 12 fog hexes. No fixed terrain on the main island.
 
-// 8 non-desert + 1 desert main island + 6 fog hexes = 15 land positions.
+// ---------------------------------------------------------------------------
+// 3-4 player layout from `fog islands.json`.
+// ---------------------------------------------------------------------------
 const FOG_COORDS_3_4P: { q: number; r: number }[] = [
-  { q: 3, r: -2 },
-  { q: 3, r: -1 },
-  { q: 3, r: 0 },
-  { q: 2, r: 1 },
-  { q: 2, r: -3 },
-  { q: 1, r: 2 },
-];
-
-const LAND_3_4P: ScenarioPosition[] = [
-  // Main island (8 land + 1 desert)
-  { q: 0, r: 0, kind: 'land' },
-  { q: 1, r: 0, kind: 'land' },
-  { q: 1, r: -1, kind: 'land' },
-  { q: 0, r: -1, kind: 'land' },
-  { q: -1, r: 0, kind: 'land' },
-  { q: -1, r: 1, kind: 'land' },
-  { q: 0, r: 1, kind: 'land' },
-  { q: -2, r: 1, kind: 'desert' },
-  { q: -2, r: 2, kind: 'land' },
-  // Fog hexes (terrain drawn from pool; identity tracked by FOG_COORDS_3_4P)
-  ...FOG_COORDS_3_4P.map((c) => ({ q: c.q, r: c.r, kind: 'land' as const })),
+  { q: -1, r: 4 },
+  { q: 0, r: 4 },
+  { q: 1, r: 3 },
+  { q: 0, r: 3 },
+  { q: 0, r: 2 },
+  { q: 0, r: 1 },
+  { q: 0, r: 0 },
+  { q: 0, r: -1 },
+  { q: -1, r: -1 },
+  { q: -2, r: -1 },
+  { q: -1, r: -2 },
+  { q: 0, r: -2 },
 ];
 
 const LAYOUT_3_4P: ScenarioLayout = {
   positions: [
-    ...LAND_3_4P,
-    ...seaPositionsInDisk(LAND_3_4P, 3),
+    // Land hexes — west cluster.
+    { q: -3, r: 1, kind: 'land' },
+    { q: -3, r: 2, kind: 'land' },
+    { q: -3, r: 3, kind: 'land' },
+    { q: -3, r: 4, kind: 'land' },
+    { q: -2, r: 1, kind: 'land' },
+    { q: -2, r: 2, kind: 'land' },
+    { q: -2, r: 3, kind: 'land' },
+    // Land hexes — east cluster.
+    { q: 2, r: -2, kind: 'land' },
+    { q: 2, r: -1, kind: 'land' },
+    { q: 2, r: 0, kind: 'land' },
+    { q: 2, r: 1, kind: 'land' },
+    { q: 3, r: -2, kind: 'land' },
+    { q: 3, r: -1, kind: 'land' },
+    { q: 3, r: 0, kind: 'land' },
+    // Sea hexes (and fog cells which are listed as sea here — the generator
+    // re-pins them from `fogPools` at game-start so they reveal as random
+    // terrain).
+    { q: -4, r: 1, kind: 'sea' },
+    { q: -4, r: 2, kind: 'sea' },
+    { q: -4, r: 3, kind: 'sea' },
+    { q: -4, r: 4, kind: 'sea' },
+    { q: -3, r: 0, kind: 'sea' },
+    { q: -2, r: -1, kind: 'sea' },
+    { q: -2, r: 0, kind: 'sea' },
+    { q: -2, r: 4, kind: 'sea' },
+    { q: -1, r: -2, kind: 'sea' },
+    { q: -1, r: -1, kind: 'sea' },
+    { q: -1, r: 0, kind: 'sea' },
+    { q: -1, r: 1, kind: 'sea' },
+    { q: -1, r: 2, kind: 'sea' },
+    { q: -1, r: 3, kind: 'sea' },
+    { q: -1, r: 4, kind: 'sea' },
+    { q: 0, r: -2, kind: 'sea' },
+    { q: 0, r: -1, kind: 'sea' },
+    { q: 0, r: 0, kind: 'sea' },
+    { q: 0, r: 1, kind: 'sea' },
+    { q: 0, r: 2, kind: 'sea' },
+    { q: 0, r: 3, kind: 'sea' },
+    { q: 0, r: 4, kind: 'sea' },
+    { q: 1, r: -2, kind: 'sea' },
+    { q: 1, r: -1, kind: 'sea' },
+    { q: 1, r: 0, kind: 'sea' },
+    { q: 1, r: 1, kind: 'sea' },
+    { q: 1, r: 2, kind: 'sea' },
+    { q: 1, r: 3, kind: 'sea' },
+    { q: 2, r: 2, kind: 'sea' },
+    { q: 3, r: 1, kind: 'sea' },
   ],
+  // 8 ports. Direction mapping: 0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE.
   portAnchors: [
-    { q: 0, r: -1, direction: 5 },
-    { q: 1, r: 0, direction: 1 },
-    { q: 0, r: 1, direction: 2 },
-    { q: -2, r: 2, direction: 3 },
-    { q: -2, r: 1, direction: 4 },
-    { q: -1, r: 0, direction: 4 },
+    { q: -3, r: 4, direction: 3 },
+    { q: -3, r: 2, direction: 2 },
+    { q: -3, r: 1, direction: 2 },
+    { q: -2, r: 4, direction: 4 },
+    { q: 3, r: 1, direction: 3 },
+    { q: 3, r: 0, direction: 5 },
+    { q: 3, r: -2, direction: 0 },
+    { q: 2, r: -2, direction: 5 },
   ],
   pools: {
-    // 14 non-desert land hexes. Two gold (both on the fog chain in the
-    // original layout) — the pool draws random positions so any of the 14
-    // land hexes can end up with gold.
+    // 14 main-island land hexes; no desert / gold (gold lives in the fog
+    // pool). Resource mix matches `fog islands.json`.
     terrainCounts: {
-      gold: 2,
+      wood: 4,
       brick: 2,
-      wood: 3,
-      sheep: 2,
-      wheat: 3,
+      sheep: 4,
+      wheat: 2,
       ore: 2,
     },
-    // 14 tokens (one per non-desert land hex).
-    tokens: [3, 3, 4, 4, 5, 6, 6, 8, 8, 9, 10, 10, 11, 11],
-    portTypes: ['generic', 'generic', 'sheep', 'wheat', 'brick', 'ore'],
+    // 14 tokens — symmetric around 7 with no 2 / 12 (those live in the
+    // fog pool so the foggy archipelago lands the extreme rolls).
+    tokens: [
+      3,
+      4, 4,
+      5, 5,
+      6, 6,
+      8, 8,
+      9, 9,
+      10, 10,
+      11,
+    ],
+    // 8 port types — 5 single-resource + 3 generic.
+    portTypes: [
+      'brick', 'wheat', 'wood', 'sheep', 'ore',
+      'generic', 'generic', 'generic',
+    ],
   },
 };
 
 // ---------------------------------------------------------------------------
-// 5-6 player layout: 38 land (36 non-desert + 2 desert) + 23 sea = 61 disk
-// Rulebook (Seafarers 5-6p, p6): 2 gold + 7 hills + 7 forests + 7 pastures
-// + 7 fields + 6 mountains + 2 deserts = 38 land; 36 tokens; 11 ports.
-//
-// The rulebook treats 18 of these hexes as "facedown" (hidden under fog
-// until revealed) — we encode that via `fogHexes5_6` so the engine reveals
-// them when a player builds adjacent. Visual verification against
-// [docs/.scenario-renders/seafarers-56-p06.png] is pending.
+// 5-6 player layout from `fog islands 56.json`. 24 land + 34 sea + 18 fog
+// inside a radius-6 disk. 11 ports. Fog tiles draw from a separate fog
+// pool with desert/sea/gold mixed in.
 // ---------------------------------------------------------------------------
 const FOG_COORDS_5_6P: { q: number; r: number }[] = [
-  // Eastern archipelago — these start under fog
-  { q: 2, r: -3 },
-  { q: 3, r: -3 },
-  { q: 3, r: -2 },
-  { q: 3, r: -1 },
-  { q: 3, r: 0 },
-  { q: 3, r: 1 },
-  { q: 2, r: 1 },
-  { q: 1, r: 2 },
-  { q: 1, r: 3 },
-  { q: 4, r: -2 },
-  { q: 4, r: -1 },
-  { q: 4, r: 0 },
-];
-
-const LAND_5_6P: ScenarioPosition[] = [
-  // Main island (25 non-desert + 1 desert = 26 hexes)
-  { q: -4, r: 1, kind: 'land' },
-  { q: -4, r: 2, kind: 'land' },
-  { q: -4, r: 3, kind: 'land' },
-  { q: -4, r: 4, kind: 'land' },
-  { q: -3, r: 0, kind: 'land' },
-  { q: -3, r: 1, kind: 'land' },
-  { q: -3, r: 2, kind: 'land' },
-  { q: -3, r: 3, kind: 'land' },
-  { q: -3, r: 4, kind: 'land' },
-  { q: -2, r: 0, kind: 'land' },
-  { q: -2, r: 1, kind: 'desert' },
-  { q: -2, r: 2, kind: 'land' },
-  { q: -2, r: 3, kind: 'land' },
-  { q: -2, r: 4, kind: 'land' },
-  { q: -1, r: -1, kind: 'land' },
-  { q: -1, r: 0, kind: 'land' },
-  { q: -1, r: 1, kind: 'land' },
-  { q: -1, r: 2, kind: 'land' },
-  { q: -1, r: 3, kind: 'land' },
-  { q: -1, r: 4, kind: 'land' },
-  { q: 0, r: -2, kind: 'land' },
-  { q: 0, r: -1, kind: 'land' },
-  { q: 0, r: 0, kind: 'land' },
-  { q: 0, r: 1, kind: 'land' },
-  { q: 0, r: 2, kind: 'land' },
-  { q: 0, r: 3, kind: 'land' },
-  // Fog archipelago (11 non-desert + 1 desert = 12)
-  ...FOG_COORDS_5_6P.map((c) => ({
-    q: c.q,
-    r: c.r,
-    kind: (c.q === 4 && c.r === -1 ? 'desert' : 'land') as 'land' | 'desert',
-  })),
+  { q: -3, r: 6 },
+  { q: -2, r: 6 },
+  { q: -3, r: 5 },
+  { q: -2, r: 5 },
+  { q: -1, r: 5 },
+  { q: -3, r: 4 },
+  { q: -2, r: 4 },
+  { q: -1, r: 4 },
+  { q: -2, r: 3 },
+  { q: -1, r: 3 },
+  { q: -2, r: 2 },
+  { q: -1, r: 2 },
+  { q: 0, r: 2 },
+  { q: -2, r: 1 },
+  { q: -1, r: 1 },
+  { q: 0, r: 1 },
+  { q: -1, r: 0 },
+  { q: 0, r: 0 },
 ];
 
 const LAYOUT_5_6P: ScenarioLayout = {
   positions: [
-    ...LAND_5_6P,
-    ...seaPositionsInDisk(LAND_5_6P, 4),
+    // Main-island land hexes (24).
+    { q: -6, r: 4, kind: 'land' },
+    { q: -6, r: 5, kind: 'land' },
+    { q: -6, r: 6, kind: 'land' },
+    { q: -5, r: 2, kind: 'land' },
+    { q: -5, r: 3, kind: 'land' },
+    { q: -5, r: 4, kind: 'land' },
+    { q: -5, r: 5, kind: 'land' },
+    { q: -5, r: 6, kind: 'land' },
+    { q: -4, r: 1, kind: 'land' },
+    { q: -4, r: 2, kind: 'land' },
+    { q: -4, r: 3, kind: 'land' },
+    { q: -3, r: 0, kind: 'land' },
+    { q: 0, r: 6, kind: 'land' },
+    { q: 1, r: 3, kind: 'land' },
+    { q: 1, r: 4, kind: 'land' },
+    { q: 1, r: 5, kind: 'land' },
+    { q: 2, r: 0, kind: 'land' },
+    { q: 2, r: 1, kind: 'land' },
+    { q: 2, r: 2, kind: 'land' },
+    { q: 2, r: 3, kind: 'land' },
+    { q: 2, r: 4, kind: 'land' },
+    { q: 3, r: 0, kind: 'land' },
+    { q: 3, r: 1, kind: 'land' },
+    { q: 3, r: 2, kind: 'land' },
+    // Sea hexes (34) — fog cells are listed as sea here; the Seafarers
+    // generator re-pins them from `fogPools5_6` at game-start.
+    { q: -6, r: 3, kind: 'sea' },
+    { q: -4, r: 4, kind: 'sea' },
+    { q: -4, r: 5, kind: 'sea' },
+    { q: -4, r: 6, kind: 'sea' },
+    { q: -3, r: 1, kind: 'sea' },
+    { q: -3, r: 2, kind: 'sea' },
+    { q: -3, r: 3, kind: 'sea' },
+    { q: -3, r: 4, kind: 'sea' },
+    { q: -3, r: 5, kind: 'sea' },
+    { q: -3, r: 6, kind: 'sea' },
+    { q: -2, r: 0, kind: 'sea' },
+    { q: -2, r: 1, kind: 'sea' },
+    { q: -2, r: 2, kind: 'sea' },
+    { q: -2, r: 3, kind: 'sea' },
+    { q: -2, r: 4, kind: 'sea' },
+    { q: -2, r: 5, kind: 'sea' },
+    { q: -2, r: 6, kind: 'sea' },
+    { q: -1, r: 0, kind: 'sea' },
+    { q: -1, r: 1, kind: 'sea' },
+    { q: -1, r: 2, kind: 'sea' },
+    { q: -1, r: 3, kind: 'sea' },
+    { q: -1, r: 4, kind: 'sea' },
+    { q: -1, r: 5, kind: 'sea' },
+    { q: -1, r: 6, kind: 'sea' },
+    { q: 0, r: 0, kind: 'sea' },
+    { q: 0, r: 1, kind: 'sea' },
+    { q: 0, r: 2, kind: 'sea' },
+    { q: 0, r: 3, kind: 'sea' },
+    { q: 0, r: 4, kind: 'sea' },
+    { q: 0, r: 5, kind: 'sea' },
+    { q: 1, r: 0, kind: 'sea' },
+    { q: 1, r: 1, kind: 'sea' },
+    { q: 1, r: 2, kind: 'sea' },
+    { q: 3, r: 3, kind: 'sea' },
   ],
-  // 11 ports — each anchor faces an in-disk sea hex.
   portAnchors: [
-    { q: -4, r: 1, direction: 4 }, // → (-4, 0) sea
-    { q: -3, r: 0, direction: 4 }, // → (-3, -1) sea
-    { q: -1, r: -1, direction: 4 }, // → (-1, -2) sea
-    { q: 0, r: -2, direction: 4 }, // → (0, -3) sea
-    { q: -1, r: 4, direction: 0 }, // → (0, 4) sea
-    { q: 0, r: 3, direction: 1 }, // → (0, 4) sea (other edge)
-    { q: 2, r: -3, direction: 4 }, // → (2, -4) sea
-    { q: 3, r: -3, direction: 5 }, // → (4, -4) sea
-    { q: 3, r: 1, direction: 2 }, // → (2, 2) sea
-    { q: 1, r: 3, direction: 5 }, // → (2, 2) sea (other edge)
-    { q: 1, r: 2, direction: 4 }, // → (1, 1) sea
+    { q: -6, r: 5, direction: 3 },
+    { q: -5, r: 3, direction: 3 },
+    { q: -4, r: 1, direction: 4 },
+    { q: -3, r: 2, direction: 3 },
+    { q: -4, r: 5, direction: 2 },
+    { q: 1, r: 5, direction: 3 },
+    { q: 2, r: 4, direction: 1 },
+    { q: 3, r: 3, direction: 2 },
+    { q: 3, r: 2, direction: 5 },
+    { q: 2, r: 1, direction: 2 },
+    { q: 2, r: 0, direction: 5 },
   ],
   pools: {
-    // 36 non-desert land hexes (2 deserts are fixed positions).
+    // 24 main-island land hexes; no desert / gold (those live in the fog
+    // pool).
     terrainCounts: {
-      gold: 2,
-      brick: 7,
-      wood: 7,
-      sheep: 7,
-      wheat: 7,
-      ore: 6,
+      wood: 5,
+      brick: 5,
+      sheep: 5,
+      wheat: 5,
+      ore: 4,
     },
-    // 36 tokens — fully symmetric around 7. 2/12: 2, 3/11: 3, 4/10: 4,
-    // 5/9: 4, 6/8: 5.
+    // 24 tokens — one per main-island land hex.
     tokens: [
-      2, 2,
-      3, 3, 3,
-      4, 4, 4, 4,
-      5, 5, 5, 5,
-      6, 6, 6, 6, 6,
-      8, 8, 8, 8, 8,
-      9, 9, 9, 9,
-      10, 10, 10, 10,
-      11, 11, 11,
-      12, 12,
+      2,
+      3, 3,
+      4, 4, 4,
+      5, 5, 5,
+      6, 6, 6,
+      8, 8, 8,
+      9, 9, 9,
+      10, 10, 10,
+      11, 11,
+      12,
     ],
+    // 11 port types — 6 generic + 5 single-resource.
     portTypes: [
       'generic', 'generic', 'generic', 'generic', 'generic', 'generic',
-      'wood', 'brick', 'sheep', 'wheat', 'ore',
+      'brick', 'wheat', 'ore', 'sheep', 'wood',
     ],
   },
 };
@@ -191,6 +266,37 @@ export const fogIsland = buildScenario({
   maxPlayers: 6,
   fogHexes: FOG_COORDS_3_4P,
   fogHexes5_6: FOG_COORDS_5_6P,
+  // Fog pool from `fog islands.json`. 12 fog tiles: 2 gold + 1 wood +
+  // 1 sheep + 2 ore + 2 wheat + 2 brick + 2 sea = 12. 10 producing tiles
+  // (12 - 2 sea) → 10 tokens.
+  fogPools: {
+    terrainCounts: {
+      gold: 2,
+      wood: 1,
+      sheep: 1,
+      ore: 2,
+      wheat: 2,
+      brick: 2,
+      sea: 2,
+    },
+    tokens: [2, 3, 4, 5, 6, 8, 9, 10, 11, 12],
+  },
+  // 5-6p fog pool from `fog islands 56.json`. 18 fog tiles: 2 wood + 2
+  // sheep + 2 wheat + 1 desert + 3 sea + 2 brick + 3 ore + 3 gold = 18.
+  // 14 producing tiles (18 − 1 desert − 3 sea) → 14 tokens.
+  fogPools5_6: {
+    terrainCounts: {
+      wood: 2,
+      sheep: 2,
+      wheat: 2,
+      desert: 1,
+      sea: 3,
+      brick: 2,
+      ore: 3,
+      gold: 3,
+    },
+    tokens: [2, 3, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 11, 12],
+  },
   layout3p: LAYOUT_3_4P,
   layout5_6p: LAYOUT_5_6P,
 });

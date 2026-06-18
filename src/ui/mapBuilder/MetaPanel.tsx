@@ -90,11 +90,12 @@ export function MetaPanel({ map, onUpdate, radius, onRadiusChange, derived }: Pr
 
       <h3>Disk radius</h3>
       <div className="mb-radius-buttons">
-        {[3, 4, 5].map((r) => (
+        {[3, 4, 5, 6].map((r) => (
           <button
             key={r}
             className={'mb-radius-btn' + (radius === r ? ' mb-radius-active' : '')}
             onClick={() => onRadiusChange(r)}
+            title={r >= 5 ? 'For 5-6 player maps' : undefined}
           >
             r={r}
           </button>

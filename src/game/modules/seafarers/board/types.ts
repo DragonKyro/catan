@@ -73,6 +73,11 @@ export interface Scenario {
   // ship is built adjacent to them.
   fogHexes?: { q: number; r: number }[];
   fogHexes5_6?: { q: number; r: number }[];
+  // Optional separate pool used to populate fog cells with random terrain
+  // and tokens. When set, fog cells skip the main `layout.pools` and draw
+  // from here instead (matching the "facedown chits" rulebook semantics).
+  fogPools?: import('../../../board/fogPoolInjection').FogPoolDef;
+  fogPools5_6?: import('../../../board/fogPoolInjection').FogPoolDef;
   // Pirate Islands: starting fleet anchor + strength. The fleet sits on
   // this sea hex; players attack it via the `attackPirateFleet` action
   // and the +2 VP defeat bonus goes to whoever lands the killing blow.

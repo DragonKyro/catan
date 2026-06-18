@@ -57,12 +57,20 @@ describe('parseCustomMap', () => {
     );
   });
 
-  it('rejects a port anchor that is not on land', () => {
+  it('rejects a port anchor whose edge has no land side', () => {
     const map = sampleCustomMap();
     map.layout.portAnchors[0] = { q: 99, r: 99, direction: 0 };
     expect(() => parseCustomMap(serializeCustomMap(map))).toThrowError(
-      /not on a land hex/,
+      /doesn't border a land hex/,
     );
+  });
+
+  it('accepts a port anchor on the sea side of a coastal edge', () => {
+    const map = sampleCustomMap();
+    // (-2, 0) is land; its W neighbour (-3, 0) is sea. Anchor on the sea
+    // hex pointing E (back at the land) should validate.
+    map.layout.portAnchors[0] = { q: -3, r: 0, direction: 0 };
+    expect(() => parseCustomMap(serializeCustomMap(map))).not.toThrow();
   });
 
   it('rejects fog hexes that are not land', () => {

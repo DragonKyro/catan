@@ -1,4 +1,10 @@
 import type { ScenarioLayout } from '../board/scenarioTypes';
+import type { FogPoolDef } from '../board/fogPoolInjection';
+
+// Terrain + token pool consumed by fog tiles. Reuses the shared shape
+// from the board layer so the custom-map generator and the Seafarers
+// generator inject fog pools identically.
+export type FogPools = FogPoolDef;
 
 // Custom user-authored map. Persisted as JSON via `serializeCustomMap` and
 // loaded via `parseCustomMap`. The `layout` field is the existing
@@ -21,8 +27,15 @@ export interface CustomMap {
   // a base-game scenario.
   seafarers: boolean;
   // Seafarers-only: hexes that start under fog. Each entry must reference a
-  // land hex listed in `layout.positions`.
+  // land hex listed in `layout.positions`. They take their terrain + token
+  // from `fogPools` (NOT from `layout.pools`) at game start, so reveals
+  // surface random-but-fair resources without leaking the main map's pool.
   fogHexes: { q: number; r: number }[];
+  // Seafarers-only: separate terrain + token pool used to populate fog
+  // tiles. `fogPools.terrainCounts` sums to `fogHexes.length`; tokens
+  // length equals fogHexes.length minus pool-drawn non-producing
+  // terrains (desert / etc.), same rule as the main pool.
+  fogPools?: FogPools;
   // The actual board layout (positions, port anchors, pools). See
   // [src/game/board/scenarioTypes.ts] for the shape.
   layout: ScenarioLayout;

@@ -9,6 +9,7 @@ import { MapCanvas } from './MapCanvas';
 import { Toolbar } from './Toolbar';
 import { MetaPanel } from './MetaPanel';
 import { PoolTunerPanel } from './PoolTunerPanel';
+import { FogPoolTunerPanel } from './FogPoolTunerPanel';
 import './MapBuilder.css';
 
 interface Props {
@@ -131,11 +132,6 @@ export function MapBuilderScreen({ onBack }: Props) {
           {loadError}
         </div>
       )}
-      <Toolbar
-        tool={builder.tool}
-        setTool={builder.setTool}
-        seafarers={builder.map.seafarers}
-      />
       <div className="map-builder-body">
         <div className="map-builder-canvas-wrap">
           <MapCanvas
@@ -162,8 +158,21 @@ export function MapBuilderScreen({ onBack }: Props) {
             seafarers={builder.map.seafarers}
             onAutofill={onAutofill}
           />
+          {builder.map.seafarers && (
+            <FogPoolTunerPanel
+              pools={builder.map.fogPools}
+              onPoolsChange={builder.updateFogPools}
+              derived={builder.derived}
+            />
+          )}
         </aside>
       </div>
+      <Toolbar
+        tool={builder.tool}
+        setTool={builder.setTool}
+        seafarers={builder.map.seafarers}
+        onClearAll={builder.clearMap}
+      />
     </div>
   );
 }

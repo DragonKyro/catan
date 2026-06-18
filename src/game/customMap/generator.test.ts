@@ -42,12 +42,26 @@ describe('generateCustomMapBoard', () => {
     map.fogHexes = [{ q: -2, r: 0 }];
     const r = generateCustomMapBoard(map, 99);
     expect(r.unrevealedFogHexes).toEqual(['-2,0']);
-    // Twin Peaks has two clusters separated by desert; the desert is a
-    // boundary in T&B / Through-The-Desert but NOT in custom-map Seafarers
-    // (we keep the default desertIsBoundary=false). So both peaks are one
-    // island after the bridge desert, or in this map's case the desert
-    // hex actually IS land-connected so we have one main island — still
-    // some outer-island chip count is fine.
     expect(r.islandChips.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('draws fog tiles from a separate fogPools', () => {
+    const map = sampleCustomMap();
+    map.seafarers = true;
+    // Move one land hex out of the main pool, into fog.
+    map.fogHexes = [{ q: -2, r: 0 }];
+    map.fogPools = {
+      terrainCounts: { gold: 1 },
+      tokens: [11],
+    };
+    // Shrink the main pool by one (since (-2,0) no longer draws from it).
+    map.layout.pools.terrainCounts.wood = 2;
+    map.layout.pools.tokens = [2, 3, 4, 5, 6, 6, 8, 9, 10, 12];
+    const r = generateCustomMapBoard(map, 7);
+    // The fog cell should be gold with token 11 — drawn from fogPools.
+    const fogHex = r.board.hexes['-2,0']!;
+    expect(fogHex.terrain).toBe('gold');
+    expect(fogHex.numberToken).toBe(11);
+    expect(r.unrevealedFogHexes).toContain('-2,0');
   });
 });

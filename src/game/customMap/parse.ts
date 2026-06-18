@@ -75,8 +75,18 @@ export function parseCustomMap(json: string): CustomMap {
   const layout = parseLayout(r.layout as Partial<ScenarioLayout>);
 
   // Cross-field validation.
-  validateLayout(layout);
+  validateLayout(layout, fogHexes);
   validateFogHexes(fogHexes, layout);
+
+  let fogPools: import('./types').FogPools | undefined;
+  if (r.fogPools != null) {
+    fogPools = parseFogPools(r.fogPools as Partial<import('./types').FogPools>);
+    validateFogPools(fogPools, fogHexes.length);
+  } else if (fogHexes.length > 0) {
+    throw new Error(
+      'Map has fog hexes but no fogPools — declare a separate terrain + token pool for fog tiles.',
+    );
+  }
 
   return {
     schema: CUSTOM_MAP_SCHEMA,
@@ -90,8 +100,65 @@ export function parseCustomMap(json: string): CustomMap {
       typeof r.defaultVpToWin === 'number' ? r.defaultVpToWin : undefined,
     seafarers: r.seafarers,
     fogHexes,
+    fogPools,
     layout,
   };
+}
+
+function parseFogPools(
+  raw: Partial<import('./types').FogPools>,
+): import('./types').FogPools {
+  if (!raw.terrainCounts || typeof raw.terrainCounts !== 'object') {
+    throw new Error('fogPools missing terrainCounts.');
+  }
+  const terrainCounts: Partial<Record<Terrain, number>> = {};
+  for (const [k, v] of Object.entries(raw.terrainCounts)) {
+    if (!VALID_TERRAIN.includes(k as Terrain)) {
+      throw new Error(`fogPools.terrainCounts has invalid key "${k}".`);
+    }
+    if (typeof v !== 'number' || v < 0) {
+      throw new Error(`fogPools.terrainCounts.${k} must be a non-negative number.`);
+    }
+    if (v > 0) terrainCounts[k as Terrain] = v;
+  }
+  if (!Array.isArray(raw.tokens)) throw new Error('fogPools missing tokens array.');
+  const tokens = raw.tokens.map((n, i) => {
+    if (typeof n !== 'number' || n < 2 || n > 12 || n === 7) {
+      throw new Error(`fogPools.tokens[${i}] must be 2..6 or 8..12 (got ${n}).`);
+    }
+    return n;
+  });
+  return { terrainCounts, tokens };
+}
+
+function validateFogPools(
+  pools: import('./types').FogPools,
+  fogCount: number,
+): void {
+  const terrainTotal = Object.values(pools.terrainCounts).reduce(
+    (a, b) => a + (b ?? 0),
+    0,
+  );
+  if (terrainTotal !== fogCount) {
+    throw new Error(
+      `fogPools.terrainCounts sums to ${terrainTotal} but there are ${fogCount} fog hexes.`,
+    );
+  }
+  // Sea, desert, and other non-producing terrains drawn from the fog pool
+  // don't take a token (sea reveals as open water; desert reveals as the
+  // desert terrain itself).
+  const nonProducing =
+    (pools.terrainCounts.sea ?? 0) +
+    (pools.terrainCounts.desert ?? 0) +
+    (pools.terrainCounts.swamp ?? 0) +
+    (pools.terrainCounts.wateringHole ?? 0) +
+    (pools.terrainCounts.castle ?? 0);
+  const expectedTokens = fogCount - nonProducing;
+  if (pools.tokens.length !== expectedTokens) {
+    throw new Error(
+      `fogPools.tokens has ${pools.tokens.length} entries but ${expectedTokens} fog tiles need a token.`,
+    );
+  }
 }
 
 function parseLayout(raw: Partial<ScenarioLayout>): ScenarioLayout {
@@ -184,7 +251,13 @@ function parsePools(raw: Partial<ScenarioPools>): ScenarioPools {
 // Cross-field invariants matching the materializer's expectations. Surfacing
 // them here gives a friendly error instead of an opaque mismatch deep in
 // `materializeLayout`.
-export function validateLayout(layout: ScenarioLayout): void {
+//
+// `fogHexes` (when provided) are excluded from the main pool counts because
+// they take terrain + token from a separate `fogPools` at game start.
+export function validateLayout(
+  layout: ScenarioLayout,
+  fogHexes: { q: number; r: number }[] = [],
+): void {
   const seen = new Set<string>();
   for (const p of layout.positions) {
     const k = `${p.q},${p.r}`;
@@ -194,8 +267,11 @@ export function validateLayout(layout: ScenarioLayout): void {
   const landCount = layout.positions.filter((p) => p.kind === 'land').length;
   if (landCount === 0) throw new Error('Map has no land hexes.');
 
+  const fogKeys = new Set(fogHexes.map((f) => `${f.q},${f.r}`));
+  const isFog = (p: { q: number; r: number }) => fogKeys.has(`${p.q},${p.r}`);
+
   const poolDrawnTerrainCount = layout.positions.filter(
-    (p) => p.kind === 'land' && !p.fixedTerrain,
+    (p) => p.kind === 'land' && !p.fixedTerrain && !isFog(p),
   ).length;
   const terrainPoolTotal = Object.values(layout.pools.terrainCounts).reduce(
     (a, b) => a + (b ?? 0),
@@ -211,21 +287,27 @@ export function validateLayout(layout: ScenarioLayout): void {
   // Token pool must match the count of positions that will be tokenized AND
   // not have a fixedToken. The materializer applies fixed tokens first, then
   // draws the rest from the pool — see [src/game/board/layoutMaterializer.ts].
+  // Fog cells are excluded — they get their token from `fogPools`.
   let tokenSlots = 0;
   for (const p of layout.positions) {
+    if (isFog(p)) continue;
     if (p.fixedToken != null) continue;
     if (p.kind === 'sea') continue;
-    // Desert participates only with forceToken.
     if (p.kind === 'desert' && !p.forceToken) continue;
-    // Pool-drawn land hexes assigned to non-producing terrains (swamp / etc.)
-    // skip the token, but those aren't producible from the builder; the
-    // materializer's filter is what actually enforces this.
     const terrain = p.fixedTerrain;
     if (terrain === 'swamp' || terrain === 'wateringHole' || terrain === 'castle' || terrain === 'desert') {
       continue;
     }
     if (p.kind === 'land' || (p.kind === 'desert' && p.forceToken)) tokenSlots++;
   }
+  // Pool-drawn cells that will land on a non-producing terrain don't take a
+  // token — subtract them from the expected count.
+  const nonProducingPoolDraws =
+    (layout.pools.terrainCounts.desert ?? 0) +
+    (layout.pools.terrainCounts.swamp ?? 0) +
+    (layout.pools.terrainCounts.wateringHole ?? 0) +
+    (layout.pools.terrainCounts.castle ?? 0);
+  tokenSlots = Math.max(0, tokenSlots - nonProducingPoolDraws);
   if (layout.pools.tokens.length !== tokenSlots) {
     throw new Error(
       `Token pool size ${layout.pools.tokens.length} doesn't match ${tokenSlots} hexes awaiting a number. ` +
@@ -239,22 +321,25 @@ export function validateLayout(layout: ScenarioLayout): void {
     );
   }
 
+  // A port lives on an edge between a land hex and a sea / off-disk hex.
+  // The anchor can sit on EITHER side of that edge (the builder lets users
+  // click from the sea side too) — what matters is that exactly one of the
+  // two hexes is land. We reject only when both sides are non-land.
   const landKeys = new Set(
     layout.positions.filter((p) => p.kind === 'land').map((p) => `${p.q},${p.r}`),
   );
-  const posKeys = new Set(layout.positions.map((p) => `${p.q},${p.r}`));
   for (const a of layout.portAnchors) {
-    const key = `${a.q},${a.r}`;
-    if (!landKeys.has(key)) {
-      throw new Error(`Port anchor at (${a.q}, ${a.r}) is not on a land hex.`);
-    }
-    const dir = a.direction;
-    const neighbour = neighbourAxial(a.q, a.r, dir);
-    const nKey = `${neighbour.q},${neighbour.r}`;
-    const nPos = layout.positions.find((p) => p.q === neighbour.q && p.r === neighbour.r);
-    if (posKeys.has(nKey) && nPos && nPos.kind === 'land') {
+    const here = landKeys.has(`${a.q},${a.r}`);
+    const n = neighbourAxial(a.q, a.r, a.direction);
+    const there = landKeys.has(`${n.q},${n.r}`);
+    if (!here && !there) {
       throw new Error(
-        `Port at (${a.q}, ${a.r}) dir ${dir} points into another land hex — ports must face sea or off-board.`,
+        `Port at (${a.q}, ${a.r}) dir ${a.direction} doesn't border a land hex on either side.`,
+      );
+    }
+    if (here && there) {
+      throw new Error(
+        `Port at (${a.q}, ${a.r}) dir ${a.direction} sits between two land hexes — ports must face sea or off-board.`,
       );
     }
   }

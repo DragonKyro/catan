@@ -1,7 +1,7 @@
 import type { CustomMap } from './types';
 import { CUSTOM_MAP_FILE_VERSION, CUSTOM_MAP_SCHEMA } from './types';
 import type { ScenarioPosition } from '../board/scenarioTypes';
-import { seaPositionsInDisk } from '../modules/base/scenarios/helpers';
+import { hexagonalDisk, seaPositionsInDisk } from '../modules/base/scenarios/helpers';
 
 // Starter map shown when the user opens the builder fresh. A pair of
 // small islands joined by a narrow strait — small enough to fit comfortably
@@ -57,6 +57,38 @@ export function sampleCustomMap(): CustomMap {
         // 11 tokens — one of each non-7 number plus an extra 6.
         tokens: [2, 3, 4, 5, 6, 6, 8, 9, 10, 11, 12],
         portTypes: ['generic', 'generic', 'generic', 'wheat', 'ore'],
+      },
+    },
+  };
+}
+
+// Blank starter map used when the user first opens the builder: every disk
+// cell is sea, no ports, no pools needed. Painting any cell turns it into
+// land; the user fills the pools via the side panel.
+export function emptyCustomMap(radius = 3): CustomMap {
+  const positions: ScenarioPosition[] = hexagonalDisk(radius).map((c) => ({
+    q: c.q,
+    r: c.r,
+    kind: 'sea',
+  }));
+  return {
+    schema: CUSTOM_MAP_SCHEMA,
+    version: CUSTOM_MAP_FILE_VERSION,
+    id: 'untitled-map',
+    name: 'Untitled map',
+    description: '',
+    minPlayers: 3,
+    maxPlayers: 4,
+    defaultVpToWin: 10,
+    seafarers: false,
+    fogHexes: [],
+    layout: {
+      positions,
+      portAnchors: [],
+      pools: {
+        terrainCounts: {},
+        tokens: [],
+        portTypes: [],
       },
     },
   };

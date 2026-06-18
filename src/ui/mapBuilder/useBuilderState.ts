@@ -4,9 +4,10 @@ import type {
   ScenarioLayout,
   ScenarioPosition,
 } from '@/game/board/scenarioTypes';
-import { sampleCustomMap } from '@/game/customMap/sample';
+import { emptyCustomMap } from '@/game/customMap/sample';
 import type { CustomMap } from '@/game/customMap/types';
 import { neighbourAxial } from '@/game/customMap/parse';
+import { hexagonalDisk } from '@/game/modules/base/scenarios/helpers';
 
 // Toolbar selection. Discriminates the painting brush:
 //   - 'erase'   → remove the hex / port at the click target
@@ -46,9 +47,53 @@ function cloneLayout(layout: ScenarioLayout): ScenarioLayout {
 }
 
 export function useBuilderState(initial?: CustomMap) {
-  const [map, setMap] = useState<CustomMap>(() => initial ?? sampleCustomMap());
+  const [map, setMap] = useState<CustomMap>(() => initial ?? emptyCustomMap(3));
   const [tool, setTool] = useState<Tool>(DEFAULT_TOOL);
-  const [radius, setRadius] = useState<number>(3);
+  const [radius, setRadiusInternal] = useState<number>(3);
+
+  // Changing the disk radius reshapes the painted frame to fit:
+  //   - Drops any position whose (q,r) is now outside the disk.
+  //   - Drops port anchors / fog hexes attached to dropped positions.
+  //   - Fills the remaining empty disk cells with `kind: 'sea'` so the
+  //     user doesn't have to paint sea over every newly-visible cell.
+  const setRadius = useCallback((next: number) => {
+    setRadiusInternal(next);
+    setMap((prev) => {
+      const inDisk = (q: number, r: number) =>
+        Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) <= next;
+
+      const keptPositions = prev.layout.positions.filter((p) => inDisk(p.q, p.r));
+      const occupied = new Set(keptPositions.map((p) => `${p.q},${p.r}`));
+      const additions: ScenarioPosition[] = [];
+      for (const c of hexagonalDisk(next)) {
+        if (!occupied.has(`${c.q},${c.r}`)) {
+          additions.push({ q: c.q, r: c.r, kind: 'sea' });
+        }
+      }
+
+      const keptAnchorIndices: number[] = [];
+      const keptAnchors = prev.layout.portAnchors.filter((a, i) => {
+        if (!inDisk(a.q, a.r)) return false;
+        keptAnchorIndices.push(i);
+        return true;
+      });
+      const keptPortTypes = keptAnchorIndices.map(
+        (i) => prev.layout.pools.portTypes[i]!,
+      );
+      const keptFog = prev.fogHexes.filter((f) => inDisk(f.q, f.r));
+
+      return {
+        ...prev,
+        fogHexes: keptFog,
+        layout: {
+          ...prev.layout,
+          positions: [...keptPositions, ...additions],
+          portAnchors: keptAnchors,
+          pools: { ...prev.layout.pools, portTypes: keptPortTypes },
+        },
+      };
+    });
+  }, []);
 
   const layout = map.layout;
 
@@ -109,6 +154,23 @@ export function useBuilderState(initial?: CustomMap) {
   // Replace whole map state (used by File→Load and meta edits).
   const replaceMap = useCallback((next: CustomMap) => setMap(next), []);
 
+  // Reset the painted frame to all-sea at the current radius, keep meta.
+  const clearMap = useCallback(() => {
+    setMap((prev) => {
+      const fresh = emptyCustomMap(radius);
+      return {
+        ...fresh,
+        id: prev.id,
+        name: prev.name,
+        description: prev.description,
+        minPlayers: prev.minPlayers,
+        maxPlayers: prev.maxPlayers,
+        defaultVpToWin: prev.defaultVpToWin,
+        seafarers: prev.seafarers,
+      };
+    });
+  }, [radius]);
+
   const updateMeta = useCallback(
     (
       patch: Partial<Pick<CustomMap, 'name' | 'description' | 'id' | 'minPlayers' | 'maxPlayers' | 'defaultVpToWin' | 'seafarers'>>,
@@ -128,20 +190,61 @@ export function useBuilderState(initial?: CustomMap) {
     [],
   );
 
-  // Derived counts surfaced in the side panel.
+  const updateFogPools = useCallback(
+    (
+      mutator: (
+        pools: import('@/game/customMap/types').FogPools,
+      ) => import('@/game/customMap/types').FogPools,
+    ) => {
+      setMap((prev) => ({
+        ...prev,
+        fogPools: mutator(prev.fogPools ?? { terrainCounts: {}, tokens: [] }),
+      }));
+    },
+    [],
+  );
+
+  // Derived counts surfaced in the side panel. Fog cells are excluded
+  // from the main pool counts — they come from `fogPools` instead.
   const derived = useMemo(() => {
+    const fogKeys = new Set(map.fogHexes.map((f) => `${f.q},${f.r}`));
+    const isFog = (p: { q: number; r: number }) => fogKeys.has(`${p.q},${p.r}`);
     const landAll = layout.positions.filter((p) => p.kind === 'land');
-    const poolDrawnTerrain = landAll.filter((p) => !p.fixedTerrain).length;
-    const tokenSlots = layout.positions.filter((p) => {
-      if (p.fixedToken != null) return false;
-      if (p.kind === 'sea') return false;
-      if (p.kind === 'desert' && !p.forceToken) return false;
-      const t = p.fixedTerrain;
-      if (t === 'desert' || t === 'swamp' || t === 'wateringHole' || t === 'castle') {
-        return false;
-      }
-      return true;
-    }).length;
+    const poolDrawnTerrain = landAll.filter(
+      (p) => !p.fixedTerrain && !isFog(p),
+    ).length;
+    const nonProducingPoolDraws =
+      (layout.pools.terrainCounts.desert ?? 0) +
+      (layout.pools.terrainCounts.swamp ?? 0) +
+      (layout.pools.terrainCounts.wateringHole ?? 0) +
+      (layout.pools.terrainCounts.castle ?? 0);
+    const tokenSlots = Math.max(
+      0,
+      layout.positions.filter((p) => {
+        if (isFog(p)) return false;
+        if (p.fixedToken != null) return false;
+        if (p.kind === 'sea') return false;
+        if (p.kind === 'desert' && !p.forceToken) return false;
+        const t = p.fixedTerrain;
+        if (t === 'desert' || t === 'swamp' || t === 'wateringHole' || t === 'castle') {
+          return false;
+        }
+        return true;
+      }).length - nonProducingPoolDraws,
+    );
+
+    // Fog pool stats (Seafarers only).
+    const fogCount = map.fogHexes.length;
+    const fogTerrainTotal = Object.values(map.fogPools?.terrainCounts ?? {}).reduce(
+      (a, b) => a + (b ?? 0),
+      0,
+    );
+    const fogNonProducing =
+      (map.fogPools?.terrainCounts.sea ?? 0) +
+      (map.fogPools?.terrainCounts.desert ?? 0) +
+      (map.fogPools?.terrainCounts.swamp ?? 0);
+    const fogTokenTotal = map.fogPools?.tokens.length ?? 0;
+    const fogTokenSlots = Math.max(0, fogCount - fogNonProducing);
     const terrainPoolTotal = Object.values(layout.pools.terrainCounts).reduce(
       (a, b) => a + (b ?? 0),
       0,
@@ -156,8 +259,12 @@ export function useBuilderState(initial?: CustomMap) {
       tokenSlots,
       tokenPoolTotal: layout.pools.tokens.length,
       portPoolTotal: layout.pools.portTypes.length,
+      fogCount,
+      fogTerrainTotal,
+      fogTokenTotal,
+      fogTokenSlots,
     };
-  }, [layout]);
+  }, [layout, map.fogHexes, map.fogPools]);
 
   return {
     map,
@@ -169,8 +276,10 @@ export function useBuilderState(initial?: CustomMap) {
     togglePort,
     toggleFog,
     replaceMap,
+    clearMap,
     updateMeta,
     updatePools,
+    updateFogPools,
     derived,
     // Helper exposed for the canvas — given (q, r, direction), what's the
     // neighbour axial coord? The canvas uses this to highlight whether a

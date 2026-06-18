@@ -35,6 +35,9 @@ export interface ScenarioBlueprint {
   // adjacent build).
   fogHexes?: { q: number; r: number }[];
   fogHexes5_6?: { q: number; r: number }[];
+  // Optional. Separate terrain + token pool consumed by fog cells.
+  fogPools?: import('../../../../board/fogPoolInjection').FogPoolDef;
+  fogPools5_6?: import('../../../../board/fogPoolInjection').FogPoolDef;
   // Optional. Pirate Islands fleet anchor + initial strength.
   pirateFleet?: { q: number; r: number; strength: number };
   pirateFleet5_6?: { q: number; r: number; strength: number };
@@ -109,6 +112,8 @@ export function buildScenario(bp: ScenarioBlueprint): Scenario {
   if (bp.tribeTokens5_6) scenario.tribeTokens5_6 = bp.tribeTokens5_6;
   if (bp.fogHexes) scenario.fogHexes = bp.fogHexes;
   if (bp.fogHexes5_6) scenario.fogHexes5_6 = bp.fogHexes5_6;
+  if (bp.fogPools) scenario.fogPools = bp.fogPools;
+  if (bp.fogPools5_6) scenario.fogPools5_6 = bp.fogPools5_6;
   if (bp.pirateFleet) scenario.pirateFleet = bp.pirateFleet;
   if (bp.pirateFleet5_6) scenario.pirateFleet5_6 = bp.pirateFleet5_6;
   if (bp.clothHexes) scenario.clothHexes = bp.clothHexes;
