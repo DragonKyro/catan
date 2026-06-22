@@ -39,7 +39,7 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 
 ### Notable mechanics
 
-- **Online multiplayer with no backend.** WebRTC peer-to-peer over Trystero (BitTorrent-tracker signaling). Create a room, share a 4-character code, friends join. Full state replication; randomness baked into actions so all peers reduce to the same state. Drop out and rejoin mid-game with the same code — your seat is preserved via `localStorage` UUID. Late joiners without a saved UUID become read-only spectators.
+- **Online multiplayer with no backend.** WebRTC peer-to-peer over Trystero (Nostr-relay signaling — works on cellular and corporate networks where BitTorrent trackers are blocked). Create a room, share a 4-character code, friends join. Full state replication; randomness baked into actions so all peers reduce to the same state. Drop out and rejoin mid-game with the same code — your seat is preserved via `localStorage` UUID. Late joiners without a saved UUID become read-only spectators.
 - **End-of-game match graph.** Tabbed line charts (VP, resources earned per-player and per-resource, hand size, knights, longest road, trade count, trade efficiency) and bar charts (dice frequency, cumulative bank circulation). Hover snaps to the nearest timeline step with an x-unified crosshair; x-axis is labeled in turn numbers.
 - **End-of-game replay.** Scrub through your finished game step by step, or auto-play at 0.5×–4×. Slider stops only on board-changing actions; rolls and trades fold in but skip.
 - **Heuristic AI with encoded win plans.** Six 10-VP templates (city+army, sprawl+road, etc.); AI scores each by resource cost + production mismatch and picks the cheapest reachable plan. Threat model flags opponents close to win, longest road, or largest army, and refuses trades that hand them the resource they need. In Seafarers it values outer-island chip VP, weights gold above any single resource, and builds ships toward unclaimed chips.
@@ -51,6 +51,16 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 
 Two browser windows in the same incognito session share `localStorage`, which gives them the same identity UUID and breaks seat assignment. Append `?fresh` to the URL of each test window to force a per-tab UUID via `sessionStorage` instead.
 
+### Connection logic (and why it used to be flaky)
+
+The multiplayer used to work only intermittently — particularly between phones on cellular. Three things were wrong, all fixed now:
+
+1. **Wrong transport.** The previous build used `trystero/torrent`, which discovers peers via BitTorrent trackers and DHT. Most mobile carriers and many home routers block or rate-limit BitTorrent traffic outright, so two phones on cellular usually never even saw each other. Replaced with `trystero/nostr`, which signals over WebSocket (port 443) to public Nostr relays. WebSocket on 443 passes through cellular, corporate proxies, hotel WiFi, etc. — basically anywhere HTTPS works.
+2. **No real join timeout.** The old `joinRoom` had a 100 ms timer that did literally nothing, so a guest who couldn't reach the host sat on "Connecting…" forever. Now if no host answers within 15 seconds the connection flips to an `error` state with a clear message and a Try Again button.
+3. **Lobby/start channel race.** The `lobby` and `start` Trystero channels are independent, so on a slow link the guest could receive `start` before the final `lobby` broadcast. The seat→UUID map was pulled from `lobby` at start time, so a lost race left the map empty and every subsequent action got dropped with a silent `UUID/seat mismatch` warning — the game looked frozen. Fixed by embedding `seatUuids` directly in the `start` payload so it's race-proof.
+
+If you're forking this for your own P2P project, the takeaway is: **prefer `trystero/nostr` (or `trystero/mqtt`) over `trystero/torrent`** for anything that needs to work on mobile, and **never let two channels race for invariants** — bundle the invariant into the payload that establishes it.
+
 ## Tech stack
 
 - **TypeScript** + **Vite** + **React**
@@ -58,7 +68,7 @@ Two browser windows in the same incognito session share `localStorage`, which gi
 - **honeycomb-grid** for hex math
 - **Zustand** for state management
 - **Vitest** for tests
-- **Trystero** (BitTorrent-tracker signaling) for WebRTC peer-to-peer multiplayer
+- **Trystero** (Nostr-relay signaling, WebSocket on port 443) for WebRTC peer-to-peer multiplayer
 
 ## Local development
 

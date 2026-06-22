@@ -12,9 +12,10 @@
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 12px;
-  min-width: 360px;
-  max-width: min(560px, 90vw);
+  min-width: min(360px, 92vw);
+  max-width: min(560px, 96vw);
   max-height: 88vh;
+  max-height: 88dvh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
@@ -78,10 +79,42 @@
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: 12px;
-  min-width: 320px;
+  min-width: min(320px, 92vw);
   max-width: min(640px, 92vw);
   max-height: 60vh;
+  max-height: 60dvh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+}
+
+/* Phone: modal dialogs slide up from the bottom as a sheet. Docked
+   dialogs stay anchored to the bottom of the board but get extra
+   breathing room. */
+@media (max-width: 767px) {
+  .dialog-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .dialog {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    max-height: 88dvh;
+    border-radius: 12px 12px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .dialog-dock {
+    bottom: 8px;
+    max-width: calc(100vw - 16px);
+  }
+
+  .dialog-docked {
+    max-width: calc(100vw - 16px);
+    max-height: 70dvh;
+  }
 }

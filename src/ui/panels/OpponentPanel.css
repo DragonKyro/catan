@@ -121,3 +121,17 @@
 }
 .opp-dot.online { background: var(--success); }
 .opp-dot.offline { background: #707070; }
+
+@media (max-width: 767px) {
+  .opp {
+    padding: 6px 8px;
+  }
+
+  .opp-head {
+    flex-wrap: wrap;
+  }
+
+  .opp-tag {
+    margin-left: 0;
+  }
+}
