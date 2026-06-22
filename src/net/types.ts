@@ -1,6 +1,11 @@
 import type { Action, GameState, PlayerColor } from '@/game/types';
 
-export type ConnectionState = 'disconnected' | 'connecting' | 'lobby' | 'in-game';
+export type ConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'lobby'
+  | 'in-game'
+  | 'error';
 export type LocalRole = 'solo' | 'host' | 'guest' | 'spectator';
 
 export interface LobbySeat {
@@ -31,6 +36,14 @@ export interface ChatMessage {
 export interface HelloMessage {
   uuid: string;
   displayName: string;
+}
+
+export interface StartMessage {
+  gameState: GameState;
+  // Seat → UUID mapping captured at start, so receivers don't depend on the
+  // 'lobby' and 'start' channels arriving in order.
+  seatUuids: (string | null)[];
+  hostUuid: string;
 }
 
 export interface ActionEnvelope {

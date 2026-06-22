@@ -25,9 +25,14 @@ const DEFAULT_VP = 10;
 const MAX_SEATS = 8;
 const MIN_SEATS = 3;
 const SYSTEM_NAME = 'System';
+// How long a guest waits to see ANY peer (host or another guest) before
+// giving up. Mobile/cellular peer discovery via Nostr relays usually settles
+// in a couple of seconds, but allow plenty of headroom.
+const JOIN_TIMEOUT_MS = 15000;
 
 interface NetStore {
   connection: ConnectionState;
+  errorMessage: string | null;
   role: LocalRole;
   myUuid: string;
   myDisplayName: string;
@@ -42,6 +47,7 @@ interface NetStore {
   createRoom: (name: string) => void;
   joinRoom: (code: string, name: string) => void;
   leaveRoom: () => void;
+  clearError: () => void;
 
   hostAddAISeat: () => void;
   hostRemoveSeat: (slot: number) => void;
@@ -58,6 +64,14 @@ interface NetStore {
 // avoid serializing Trystero callbacks etc.
 let bindings: RoomBindings | null = null;
 let seatToUuid: (string | null)[] = []; // index = playerId 'pN' slot
+let joinTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function clearJoinTimeout(): void {
+  if (joinTimeoutId !== null) {
+    clearTimeout(joinTimeoutId);
+    joinTimeoutId = null;
+  }
+}
 
 function emptyLobby(): LobbyState {
   return { seats: [], victoryPointsToWin: DEFAULT_VP, seed: Math.floor(Math.random() * 0xffffffff) };
@@ -159,21 +173,31 @@ export const useNetworkStore = create<NetStore>((set, get) => {
     });
 
     b.recvLobby((state) => {
+      clearJoinTimeout();
       // Authoritative from host — overwrite ours.
       set({
         lobby: state,
         hostUuid: state.seats[0]?.uuid ?? null,
         connection: get().connection === 'connecting' ? 'lobby' : get().connection,
+        errorMessage: null,
       });
     });
 
-    b.recvStart((initialState) => {
-      // Host kicked off the game; cache seat→UUID mapping then enter.
-      cacheSeatToUuidFromLobby(get().lobby);
-      useGameStore.getState().setGameState(initialState);
+    b.recvStart((msg) => {
+      clearJoinTimeout();
+      // Carry the seat→UUID mapping directly from the start payload so we
+      // don't depend on the 'lobby' channel landing first (the two channels
+      // are unordered and the lobby broadcast can lose the race with start).
+      seatToUuid = msg.seatUuids.slice();
+      const me = get().myUuid;
+      const isPlayer = seatToUuid.some((u) => u === me);
+      useGameStore.getState().setGameState(msg.gameState);
       set({
         connection: 'in-game',
-        chat: [...get().chat, sysMessage('Game started', get().myUuid)],
+        role: isPlayer ? 'guest' : 'spectator',
+        hostUuid: msg.hostUuid,
+        chat: [...get().chat, sysMessage('Game started', me)],
+        errorMessage: null,
       });
     });
 
@@ -188,6 +212,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
     });
 
     b.recvSnapshot((msg) => {
+      clearJoinTimeout();
       // Snapshot is authoritative — use its seat mapping.
       seatToUuid = msg.seatUuids.slice();
       const me = get().myUuid;
@@ -198,6 +223,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         role: isPlayer ? 'guest' : 'spectator',
         hostUuid: msg.hostUuid,
         chat: [...msg.chat, sysMessage(isPlayer ? 'Rejoined game' : 'Spectating', me)],
+        errorMessage: null,
       });
     });
 
@@ -259,6 +285,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
 
   return {
     connection: 'disconnected',
+    errorMessage: null,
     role: 'solo',
     myUuid,
     myDisplayName: myDisplayName || 'Player',
@@ -283,8 +310,18 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         victoryPointsToWin: DEFAULT_VP,
         seed: Math.floor(Math.random() * 0xffffffff),
       };
-      const b = bindRoom(code);
-      attachBindings(b, true);
+      try {
+        const b = bindRoom(code);
+        attachBindings(b, true);
+      } catch (err) {
+        console.error('[net] failed to create room', err);
+        set({
+          connection: 'error',
+          errorMessage:
+            'Could not reach the matchmaking relays. Check your internet connection.',
+        });
+        return;
+      }
       set({
         connection: 'lobby',
         role: 'host',
@@ -294,33 +331,56 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         lobby: initialLobby,
         onlineUuids: new Set([uuid]),
         chat: [],
+        errorMessage: null,
       });
     },
 
     joinRoom: (code, name) => {
       saveDisplayName(name);
-      const b = bindRoom(code.toUpperCase());
-      attachBindings(b, false);
+      const upper = code.toUpperCase();
+      try {
+        const b = bindRoom(upper);
+        attachBindings(b, false);
+      } catch (err) {
+        console.error('[net] failed to join room', err);
+        set({
+          connection: 'error',
+          errorMessage:
+            'Could not reach the matchmaking relays. Check your internet connection.',
+        });
+        return;
+      }
       set({
         connection: 'connecting',
         role: 'guest',
         myDisplayName: name,
-        roomCode: code.toUpperCase(),
+        roomCode: upper,
         chat: [],
+        errorMessage: null,
       });
-      // Send hello to whatever peers we discover; we'll get the lobby back.
-      // Onpeerjoin handlers will send the hello automatically when peers arrive.
-      // Defer flipping to 'lobby' until we've actually seen the lobby state.
-      // Allow a small grace period; if a lobby arrives, recvLobby handles it.
-      setTimeout(() => {
+      // Real timeout: if no host has answered with a lobby/start/snapshot
+      // before this fires, surface a clear error instead of hanging forever.
+      clearJoinTimeout();
+      joinTimeoutId = setTimeout(() => {
+        joinTimeoutId = null;
         if (get().connection === 'connecting') {
-          // No peers yet — treat as a "no such room" timeout but still let user wait.
-          // We don't error out; we just wait. The UI will show "connecting".
+          try {
+            bindings?.leave();
+          } catch {
+            /* ignore */
+          }
+          bindings = null;
+          set({
+            connection: 'error',
+            errorMessage:
+              "Couldn't find that room. Double-check the code and make sure the host has Create Room open in another tab/device.",
+          });
         }
-      }, 100);
+      }, JOIN_TIMEOUT_MS);
     },
 
     leaveRoom: () => {
+      clearJoinTimeout();
       try {
         bindings?.leave();
       } catch {
@@ -330,6 +390,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
       seatToUuid = [];
       set({
         connection: 'disconnected',
+        errorMessage: null,
         role: 'solo',
         roomCode: null,
         hostUuid: null,
@@ -338,6 +399,10 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         onlineUuids: new Set([get().myUuid]),
         chat: [],
       });
+    },
+
+    clearError: () => {
+      set({ connection: 'disconnected', errorMessage: null });
     },
 
     hostAddAISeat: () => {
@@ -392,7 +457,11 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         connection: 'in-game',
         chat: [...get().chat, sysMessage('Game started', get().myUuid)],
       });
-      bindings?.sendStart(game);
+      bindings?.sendStart({
+        gameState: game,
+        seatUuids: seatToUuid.slice(),
+        hostUuid: get().myUuid,
+      });
     },
 
     sendChat: (text) => {

@@ -16,9 +16,33 @@ export function LobbyScreen() {
     hostSetVP,
     hostStartGame,
     leaveRoom,
+    clearError,
     connection,
+    errorMessage,
   } = useNetworkStore();
   const [copied, setCopied] = useState(false);
+
+  if (connection === 'error') {
+    return (
+      <div className="lobby-wrap">
+        <div className="lobby-card">
+          <header className="lobby-header">
+            <Button variant="ghost" size="sm" onClick={clearError}>
+              ← Back
+            </Button>
+            <div className="lobby-roomcode-wrap" />
+            <div style={{ width: 60 }} />
+          </header>
+          <div className="lobby-status" style={{ whiteSpace: 'pre-wrap' }}>
+            {errorMessage ?? 'Connection error.'}
+          </div>
+          <Button variant="primary" size="lg" fullWidth onClick={clearError}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const isHost = role === 'host';
   const canStart = lobby.seats.length >= 3 && lobby.seats.length <= 8;
