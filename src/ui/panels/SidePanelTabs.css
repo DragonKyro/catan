@@ -4,8 +4,19 @@
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
-  flex: 0 0 240px;
+  flex: 1 1 auto;
+  min-height: 200px;
   overflow: hidden;
+}
+
+/* The fixed 240px height only makes sense in the desktop layout where the
+   side panel is a tall column. Stacked layouts (tablet + phone) let it
+   size to content. */
+@media (min-width: 901px) {
+  .sidetabs {
+    flex: 0 0 240px;
+    min-height: 0;
+  }
 }
 
 .sidetabs-bar {

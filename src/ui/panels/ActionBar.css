@@ -274,3 +274,42 @@
   min-width: 340px;
   max-width: 420px;
 }
+
+/* Phone: relax the fixed 320px bar to fill the available width with
+   a 2-column grid, and bump auxiliary buttons up to 40px touch targets. */
+@media (max-width: 767px) {
+  .actionbar {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(40px, 1fr);
+  }
+
+  .actionbar-slot-wide {
+    grid-column: span 2;
+  }
+
+  .actionbar-slot-end {
+    grid-column: span 2;
+  }
+
+  .actionbar-wrap {
+    flex-wrap: wrap;
+  }
+
+  .actionbar-costs-btn,
+  .actionbar-devcards-btn,
+  .actionbar-undo-btn {
+    min-width: 40px;
+    min-height: 40px;
+    width: auto;
+  }
+
+  .cost-cheatsheet {
+    max-width: calc(100vw - 24px);
+  }
+
+  .cost-cheatsheet.is-devcards {
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+  }
+}

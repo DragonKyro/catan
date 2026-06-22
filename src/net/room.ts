@@ -1,13 +1,19 @@
-import { joinRoom, type Room } from 'trystero/torrent';
+// Trystero's `nostr` strategy uses WebSocket connections to public Nostr
+// relays on port 443 for peer discovery. This works on mobile carriers,
+// corporate networks, hotel WiFi, and anywhere else that allows HTTPS — which
+// is virtually everywhere. The previous `torrent` strategy used BitTorrent
+// trackers, which most mobile carriers and many home routers block, causing
+// the "two phones can't find each other" symptom.
+import { joinRoom, type Room } from 'trystero/nostr';
 import type {
   HelloMessage,
   LobbyState,
+  StartMessage,
   ActionEnvelope,
   SnapshotMessage,
   SnapshotRequestMessage,
   ChatMessage,
 } from './types';
-import type { GameState } from '@/game/types';
 
 const APP_ID = 'catan-friends-v1';
 
@@ -17,8 +23,8 @@ export interface RoomBindings {
   recvHello: (cb: (msg: HelloMessage, peerId: string) => void) => void;
   sendLobby: (state: LobbyState, target?: string) => void;
   recvLobby: (cb: (state: LobbyState, peerId: string) => void) => void;
-  sendStart: (state: GameState) => void;
-  recvStart: (cb: (state: GameState, peerId: string) => void) => void;
+  sendStart: (msg: StartMessage) => void;
+  recvStart: (cb: (msg: StartMessage, peerId: string) => void) => void;
   sendAction: (envelope: ActionEnvelope) => void;
   recvAction: (cb: (envelope: ActionEnvelope, peerId: string) => void) => void;
   sendSnapshotRequest: (msg: SnapshotRequestMessage, target?: string) => void;
@@ -57,8 +63,8 @@ export function bindRoom(roomCode: string): RoomBindings {
     recvHello: (cb) => recvHello((data, peerId) => cb(data as HelloMessage, peerId)),
     sendLobby: (s, t) => void sendLobby(s as never, t),
     recvLobby: (cb) => recvLobby((data, peerId) => cb(data as LobbyState, peerId)),
-    sendStart: (s) => void sendStart(s as never),
-    recvStart: (cb) => recvStart((data, peerId) => cb(data as GameState, peerId)),
+    sendStart: (m) => void sendStart(m as never),
+    recvStart: (cb) => recvStart((data, peerId) => cb(data as StartMessage, peerId)),
     sendAction: (e) => void sendAction(e as never),
     recvAction: (cb) =>
       recvAction((data, peerId) => cb(data as ActionEnvelope, peerId)),

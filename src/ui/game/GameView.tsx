@@ -52,6 +52,7 @@ export function GameView() {
   const [showQuit, setShowQuit] = useState(false);
   const [showCosts, setShowCosts] = useState(false);
   const [showDevCards, setShowDevCards] = useState(false);
+  const [sideOpen, setSideOpen] = useState(false);
 
   const isGameOver = game.phase === 'gameOver';
 
@@ -99,6 +100,16 @@ export function GameView() {
           {game.pendingTrade && <PendingTradeBanner />}
         </div>
         <div className="gameview-topctrls">
+          <button
+            type="button"
+            className="gameview-topctrl-btn gameview-topctrl-mobile"
+            onClick={() => setSideOpen((s) => !s)}
+            aria-label="Show players, log, and chat"
+            aria-expanded={sideOpen}
+            title="Players / Log / Chat"
+          >
+            ☰
+          </button>
           <button
             type="button"
             className="gameview-topctrl-btn"
@@ -186,7 +197,14 @@ export function GameView() {
         <ActionBar />
       </section>
 
-      <aside className="gameview-side">
+      {sideOpen && (
+        <div
+          className="gameview-side-scrim"
+          onClick={() => setSideOpen(false)}
+          aria-hidden
+        />
+      )}
+      <aside className={`gameview-side${sideOpen ? ' is-open' : ''}`}>
         <SidePanelTabs showChat={isOnline} />
         <OpponentPanel />
         <BankPanel />

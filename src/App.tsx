@@ -29,8 +29,13 @@ export default function App() {
       </div>
     );
   }
-  // In a network session before game starts → lobby (or "connecting" placeholder).
-  if (connection === 'lobby' || connection === 'connecting') {
+  // In a network session before game starts → lobby (or "connecting"/"error"
+  // placeholder; the lobby screen knows how to render each).
+  if (
+    connection === 'lobby' ||
+    connection === 'connecting' ||
+    connection === 'error'
+  ) {
     return (
       <div className="app-root">
         <LobbyScreen />

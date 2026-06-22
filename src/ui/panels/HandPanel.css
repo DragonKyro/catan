@@ -164,3 +164,56 @@
   margin-left: 6px;
   border-style: solid;
 }
+
+/* Phone: stack the header above the resources/cards instead of beside.
+   The flag badge row can grow to 10+ emojis, so let it scroll
+   horizontally inside the header rather than wrapping or overflowing
+   into the resource chips. */
+@media (max-width: 767px) {
+  .hand {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      "head"
+      "resources"
+      "commodities"
+      "cards";
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .hand-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-right: 0;
+    padding-bottom: 6px;
+    border-right: none;
+    border-bottom: 1px solid var(--panel-border);
+    white-space: normal;
+  }
+
+  .hand-header h3 {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .hand-header h3::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hand-flag {
+    flex-shrink: 0;
+  }
+
+  .hand-progress-cards {
+    grid-column: 1;
+  }
+}
