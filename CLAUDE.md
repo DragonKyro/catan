@@ -136,6 +136,18 @@ Self-contained module under `src/game/modules/traders/`. Scenarios live in `src/
 - **Wonders of Catan action** (`src/ai/seafarers/wonders.ts`): `tryBuildWonder` runs in two passes — instant-win-only at priority 0.75 (before city, since completing a wonder wins immediately) and any-level at priority 3.5 (between road and dev card). Picks a wonder we already meet the prereq for and can afford; favors the one with the most levels already built (commitment), then the most affordable from current hand, then the one fewest opponents could race us on.
 - One competent difficulty level. No state in the AI; no memory between turns (per-turn trade history lives on `GameState`, not the AI).
 
+## Learned agent (in progress, `src/ai/nn/`)
+
+Neural-network AI for the **base game only** (`supportsNeuralAi(settings)`: no expansions, standard board, no T&B variants), modeled on card-collecting's SSP / Sushi Go pipeline. Expansions and Fun Maps keep the heuristic. Built so far: knowledge tracker, observation, encoder, action space, reward, and the trainer (`training/`, see below). Not yet: the TypeScript network runtime, frozen AI levels, UI wiring. Same purity contract as the rest of `src/ai/`.
+- `knowledge.ts` — per-seat card counter folded forward one action at a time (`observeTransition(k, before, action, after)`, or `knowledgeFromHistory(initial, actions, viewerId)` from logStore's log). Keeps weighted joint hypotheses over every hand: a steal the viewer didn't take part in branches by what the victim could have lost; later public changes prune (a spend, a trade offer showing what the offerer holds, a monopoly revealing exact counts). Also records rolls, dev buys, and face-up dev plays. Must start at game creation. `MAX_HYPOTHESES` 2048 (peaks seen: ~200 at 4p, ~1300 at 8p); `repairs` must stay 0.
+- `observation.ts` — `observe(state, viewerId, knowledge, { draft })` is the ONLY place the pipeline reads `GameState`. It reads opponents' resources only as hand-size totals and opponents' dev cards only as counts; it never reads deck order or RNG. Seats by offset in turn order (0 = viewer). `decision` is what the viewer must answer now; multi-part answers (discard one card at a time, robber hex then victim, Road Building edges) carry a `CatanDraft`. `observation.test.ts` scrambles every hidden field and asserts the observation and features don't change — keep it passing.
+- `board.ts` — canonical hex / vertex / edge order (geometric) plus topology index arrays, cached per board shape. Sizes: 19/54/72 at 3–4p, 30/80/109 at 5–6p, 37/96/132 at 7–8p.
+- `encode.ts` — encoder v1: per-hex (29), per-vertex (38), per-edge (11) feature rows plus a 371-float global vector. Board pieces carry an owner seat slot (me / next1–3 / far). Placement bits re-derive the base rules; `encode.test.ts` checks them against the engine's predicates. **Bump `ENCODER_VERSION` on any layout change** (the dims are pinned in tests).
+- `reward.ts` — terminal reward = win + placement + VP share, centred on the table mean (4p, 10/8/6/4 VP → +1.15 / −0.12 / −0.38 / −0.65). Step-capped matches take −0.5 per seat. `vpPotential` gives optional potential-based shaping.
+- `actions.ts` — action space v1: board-relative slots `[vertices][edges][hexes][119 globals]` (264 at 4p) so a graph net's per-entity logits line up with them. `legalMask(obs)`, `decodeSlot(obs, slot)` → reducer action or the next `CatanDraft`. Player trades are a fixed menu of 1:1 / 2:1 / 1:2 offers (≤ 2 a turn, never repeated in a turn, only when some opponent could hold the ask); no counter-offers. `actions.test.ts` is a two-way oracle against the reducer. **Bump `ACTION_SPACE_VERSION` on any slot change.**
+- `agent.ts` — `actWithPolicy(state, id, knowledge, policy)` runs a slot policy through the draft loop to one reducer action (the future AIDriver hook).
+- `testSupport.ts` — seeded heuristic-vs-heuristic games with every seat's knowledge tracked, plus `scrambleHidden`. Caution: the heuristic AI can stall forever (every settlement upgraded, no road worth building), so sims and training envs need a step cap.
+
 ## UI conventions
 
 - **Layout**: GameView is a CSS grid — board (top-left), bottom strip (bottom-left, holds `HandPanel` + `ActionBar`), side panel (right, full height, holds `SidePanelTabs` + `OpponentPanel` + `BankPanel`). The right pane's shape is intentionally stable across turns so attention stays on the board.
@@ -155,6 +167,10 @@ Self-contained module under `src/game/modules/traders/`. Scenarios live in `src/
 - **Game log**: `LogPanel` reads from `logStore.entries`. Steal entries deliberately omit the stolen resource (private info). Trade offers, rejections, cancellations, and per-roll resource gains are NOT logged — only completed trades and the roll itself. Revolution-based turn markers (`── Turn N ──`) tick over when the table cycles back to the first player in `playerOrder`. For 5+p paired turns the P1→P2 hand-off doesn't increment the counter; only the P2→next-P1 transition does. Auto-scroll only fires when the user is already at the bottom (`wasAtBottomRef`); chat has the same behavior.
 - **Match graph**: `MatchGraph` reads `logStore.timeline` (per-step `vp`, `handTotal`, `gainedTotal`, `gainedByResource`, `knightsPlayed`, `longestRoadLength`, `tradesCount`, `tradesGiven`/`tradesReceived`, plus `turnNumber`) and `logStore.stats` (roll counts, resourcesInCirculation). Tabbed line charts (VP, resources earned, hand, knights, longest road, trades count, trade efficiency, by-player, by-resource) plus two game-wide bar charts (dice frequency, circulation). X-axis is labeled in turn numbers (thinned to ~10 labels); hover snaps to the nearest timeline step and shows an x-unified crosshair + tooltip including `Turn N · step M`. Embedded in `GameOverDialog`, which also offers a `Replay` tab.
 - **Replay**: `Replay.tsx` plays the finished game forward. It steps through a filtered list of *board-changing* actions (builds, ships, robber/pirate moves, dev-card plays) while reconstructing `replayState` from the full action list, so resources/VPs stay correct even though rolls / trades / end-turns aren't stops on the slider.
+
+## Training (`training/`, offline, never shipped)
+
+PPO from scratch against the real engine, mirroring card-collecting's `training/ssp/`. Node processes (`training/catan/vec-env.ts` behind `env-server.ts`, bundled by `npm run train:build`) run the matches, heuristic seats and encoding; Python (`train.py`, `model.py`) runs every network seat on the GPU. Batch replies over stdio are a JSON line plus raw feature bytes. Worker kinds: self-play (4 learner seats), vs three heuristic AIs, vs three past checkpoints. Workers alternate in two groups so env time and GPU time overlap. The network is a graph net (hex / vertex / edge messages + a global vector, ~0.5M params, bf16 trunk); its policy files (`catan/gnn@1`) carry every tensor and both versions. Evals run in background processes every 100 updates (vs heuristic, vs 500 updates earlier) → `progress.md`. Rough speed on the dev box (10-core Xeon w5-2445 + RTX A2000): ~4.9 s per update of ~14k decisions.
 
 ## Non-goals (do not implement)
 
@@ -180,6 +196,10 @@ Self-contained module under `src/game/modules/traders/`. Scenarios live in `src/
 - `npm run test` — Vitest watch
 - `npm run test:run` — Vitest single run
 - `npm run typecheck` — `tsc` (no emit)
+- `npm run train:build` — bundle the training env server to `training/dist/catan-env.mjs`
+- `python training/catan/train.py --run <name> [--resume]` — train the base-game agent (conda env `train`; outputs in `training/runs/catan/<name>/`, git-ignored; `progress.md` is the eval table). See `training/README.md`
+- `python training/catan/evaluate.py match A B --games 400` — seat-rotated eval (`heuristic`, a policy .json, a run dir, or `RUN@N`)
+- `python -m pytest training/catan -q` — Python-side training tests
 
 ## Deployment
 
