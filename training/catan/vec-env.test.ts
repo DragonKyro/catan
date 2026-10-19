@@ -59,6 +59,47 @@ describe('CatanVecEnv', () => {
       + `heuristic wins ${done.filter((e) => e.winnerSeat !== null && e.roles[e.winnerSeat] === 'heuristic').length}/${done.length}`);
   }, 120_000);
 
+  it('teacher labels let four learner seats play the heuristic\'s game', () => {
+    const env = new CatanVecEnv({ numEnvs: 8, seed: 9, seats: ['learner', 'learner', 'learner', 'learner'], teacher: true });
+    const slots = env.shape.slots;
+    let batch = env.reset();
+    const done: Episode[] = [];
+    let rows = 0;
+    let labelled = 0;
+    while (done.length < 12) {
+      const actions = Array.from({ length: 8 }, (_, i) => {
+        rows++;
+        const t = batch.teacher[i]!;
+        if (t >= 0) {
+          labelled++;
+          expect(batch.mask[i * slots + t]).toBe(1);
+          return t;
+        }
+        for (let k = 0; k < slots; k++) if (batch.mask[i * slots + k]) return k;
+        return 0;
+      });
+      batch = env.step(actions);
+      done.push(...batch.episodes);
+    }
+    expect(labelled / rows).toBeGreaterThan(0.95);
+    const finished = done.filter((e) => !e.truncated);
+    expect(finished.length).toBeGreaterThanOrEqual(10);
+    const turns = finished.reduce((s, e) => s + e.turns, 0) / finished.length;
+    expect(turns).toBeGreaterThan(50);
+    expect(turns).toBeLessThan(130);
+    console.log(`teacher-forced: ${(100 * labelled / rows).toFixed(1)}% of decisions labelled, ${turns.toFixed(0)} turns per match`);
+  }, 120_000);
+
+  it('charges the refused-offer penalty to the offerer, and counts refusals', () => {
+    const { done } = run(['learner', 'heuristic', 'heuristic', 'heuristic'], 8, { vpShaping: 0, refusedOfferPenalty: 0.01 });
+    const refused = done.reduce((n, e) => n + (e.actions.offerRefused ?? [0, 0, 0, 0]).reduce((a, b) => a + b, 0), 0);
+    expect(refused).toBeGreaterThan(0);
+    for (const e of done) {
+      // Terminal rewards stay centred; the penalty is extra, so it never shows in e.reward.
+      expect(e.reward.reduce((a, b) => a + b, 0)).toBeCloseTo(e.truncated ? -2 : 0, 6);
+    }
+  }, 120_000);
+
   it('quota plays a fixed set of matches, then idles', () => {
     const { done } = run(['learner', 'opponent', 'opponent', 'opponent'], 1000, { quota: 1, maxTurns: 60 });
     expect(done).toHaveLength(8);

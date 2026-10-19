@@ -49,6 +49,7 @@ class Batch:
     edges: np.ndarray  # (n, E, edge_dim) float32
     glob: np.ndarray  # (n, global_dim) float32
     mask: np.ndarray  # (n, slots) bool -- True = legal
+    teacher: np.ndarray  # (n,) int64 -- the heuristic's slot for learner rows, -1 = none (teacher off)
     reward: np.ndarray  # (n, players) float32 -- per-seat reward since the previous batch
     done: np.ndarray  # (n,) bool -- a match ended; row i is already the next match's first decision
     episodes: list  # summaries of the matches that ended
@@ -121,6 +122,7 @@ class CatanEnv:
             edges=f32("edges", sh["edges"], d["edge"]),
             glob=f32("global", d["global"]),
             mask=np.frombuffer(r["raw"]["mask"], dtype=np.uint8).reshape(n, sh["slots"]).astype(bool),
+            teacher=np.frombuffer(r["raw"]["teacher"], dtype="<i2").astype(np.int64),
             reward=np.asarray(r["reward"], dtype=np.float32).reshape(n, self.players),
             done=np.asarray(r["done"], dtype=bool),
             episodes=r["episodes"],
@@ -137,9 +139,13 @@ class CatanEnv:
         victory_points: int = 10,
         quota: int = 0,
         reward: dict | None = None,
+        teacher: bool = False,
+        refused_offer_penalty: float = 0.0,
     ) -> Batch:
         """seats: a role per seat, 'learner' | 'opponent' | 'heuristic' (rotated one
-        seat per match). quota: matches per env before it idles (0 = forever)."""
+        seat per match). quota: matches per env before it idles (0 = forever).
+        teacher: label learner rows with the heuristic's slot (Batch.teacher).
+        refused_offer_penalty: charged to a seat whose offer everyone rejects."""
         options = {
             "numEnvs": num_envs,
             "seed": seed,
@@ -150,6 +156,8 @@ class CatanEnv:
             "vpShaping": vp_shaping,
             "victoryPoints": victory_points,
             "quota": quota,
+            "teacher": teacher,
+            "refusedOfferPenalty": refused_offer_penalty,
         }
         if reward is not None:
             options["reward"] = reward
@@ -165,9 +173,14 @@ class CatanEnv:
     def recv_batch(self) -> Batch:
         return self._batch(self._recv())
 
-    def configure(self, seats: list[str]) -> None:
-        """New seat roles for matches that start from now on."""
-        self._call({"cmd": "configure", "options": {"seats": seats}})
+    def configure(self, seats: list[str] | None = None, teacher: bool | None = None) -> None:
+        """New seat roles for matches that start from now on; teacher labels on / off."""
+        options: dict = {}
+        if seats is not None:
+            options["seats"] = seats
+        if teacher is not None:
+            options["teacher"] = teacher
+        self._call({"cmd": "configure", "options": options})
 
     def close(self) -> None:
         if self._proc.poll() is None:

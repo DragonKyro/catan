@@ -38,3 +38,4 @@ training/dist/
 training/runs/
 __pycache__/
 .pytest_cache/
+training/dist-analysis/

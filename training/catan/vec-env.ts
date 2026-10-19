@@ -26,23 +26,36 @@
 //     whenever a seat's VP changes, and −vpShaping × VP / target at the end,
 //     so the shaping sums to zero over a match.
 //
+//   - optional: refusedOfferPenalty, charged to a seat whose trade offer
+//     everyone rejected (a tiny cost, so hopeless offers stop being free).
+//
 // Pending trade offers are answered seat by seat in turn order after the
 // offerer (heuristic seats via shouldAcceptTrade) until someone accepts or
 // everyone has rejected.
+//
+// With `teacher` on, every learner row also carries the slot the heuristic AI
+// would pick for that decision (teacher.ts; −1 where it has none) — the
+// imitation target for the trainer's warm start.
+//
+// Fault tolerance (a training run is hours of matches; one bad move must not
+// end it): a heuristic move the engine rejects is replaced by a random legal
+// move for that seat (`Episode.fallbacks`); any other error abandons just
+// that match (`Episode.aborted`, no terminal reward) and starts a new one.
+// Both are reported on stderr, throttled.
 
 import type { Action, GameState, PlayerId } from '@/game/types';
-import { RESOURCES } from '@/game/types';
 import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
-import { rollDice } from '@/game/rng';
+import { nextRng, rollDice } from '@/game/rng';
 import { calculateVictoryPoints } from '@/game/scoring/points';
-import { chooseAction, shouldAcceptTrade } from '@/ai/index';
 import { initialKnowledge, observeTransition, type CatanKnowledge } from '@/ai/nn/knowledge';
 import { observe, type CatanDraft, type CatanObservation } from '@/ai/nn/observation';
 import { EDGE_DIM, GLOBAL_DIM, HEX_DIM, VERTEX_DIM, analyseBoard, encodeObservation } from '@/ai/nn/encode';
 import { decodeSlot, legalMask, slotLayout } from '@/ai/nn/actions';
+import { actWithPolicy } from '@/ai/nn/agent';
 import { DEFAULT_REWARD_WEIGHTS, finalStandings, terminalRewards, type RewardWeights } from '@/ai/nn/reward';
+import { heuristicAction, teacherSlot } from './teacher';
 
 export type SeatRole = 'learner' | 'opponent' | 'heuristic';
 const ROLE_CODE: Record<SeatRole, number> = { learner: 0, opponent: 1, heuristic: 2 };
@@ -62,6 +75,10 @@ export interface VecEnvOptions {
   reward: RewardWeights;
   /** Matches each env plays before going idle (0 = forever). */
   quota: number;
+  /** Label learner rows with the heuristic's choice (`VecBatch.teacher`). */
+  teacher: boolean;
+  /** Charged to a seat whenever an offer of theirs is rejected by everyone. */
+  refusedOfferPenalty: number;
 }
 
 export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
@@ -75,6 +92,8 @@ export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
   victoryPoints: 10,
   reward: DEFAULT_REWARD_WEIGHTS,
   quota: 0,
+  teacher: false,
+  refusedOfferPenalty: 0,
 };
 
 export interface Episode {
@@ -89,6 +108,13 @@ export interface Episode {
   turns: number;
   steps: number;
   truncated: boolean;
+  /** Heuristic moves the engine rejected, replaced by a random legal move. */
+  fallbacks: number;
+  /** The match was abandoned after an error (no terminal reward). */
+  aborted: boolean;
+  /** Per seat, how often each action type was played, plus `tradeDone`
+   *  (player trades completed, either side) and `offerTaken` (own offers accepted). */
+  actions: Record<string, number[]>;
 }
 
 /** Buffers are reused by the next reset / step — copy anything you keep. */
@@ -103,6 +129,8 @@ export interface VecBatch {
   global: Float32Array;
   /** numEnvs × numSlots, 1 = legal. */
   mask: Uint8Array;
+  /** The heuristic's slot for learner row i, or −1 (always −1 unless `teacher` is on). */
+  teacher: Int16Array;
   /** numEnvs × players. */
   reward: Float32Array;
   done: Uint8Array;
@@ -114,11 +142,16 @@ interface EnvSlot {
   seed: number;
   episode: number;
   roles: SeatRole[];
-  knowledge: Array<CatanKnowledge | null>;
+  /** Every seat's knowledge (heuristic seats need theirs for a fallback move). */
+  knowledge: CatanKnowledge[];
   dice: number;
+  /** RNG for fallback moves. */
+  rng: number;
   vp: number[];
   steps: number;
   turns: number;
+  fallbacks: number;
+  actions: Record<string, number[]>;
   /** Seat whose decision is pending, its draft, and what it was shown (decoded against on the next step). */
   seat: number;
   draft: CatanDraft | null;
@@ -138,6 +171,14 @@ export function boardShape(players: number): BoardShape {
   const obs = observe(s, 'p0', initialKnowledge(s, 'p0'));
   const L = slotLayout(obs);
   return { hexes: L.hexes, vertices: L.vertices, edges: L.edges, slots: L.total };
+}
+
+/** stderr, at most a few lines per distinct problem (then every 100th). */
+const reported = new Map<string, number>();
+function report(kind: string, message: string): void {
+  const n = (reported.get(kind) ?? 0) + 1;
+  reported.set(kind, n);
+  if (n <= 3 || n % 100 === 0) process.stderr.write(`[catan-env] ${kind} (×${n}): ${message}\n`);
 }
 
 export class CatanVecEnv {
@@ -161,18 +202,20 @@ export class CatanVecEnv {
       edges: new Float32Array(n * sh.edges * EDGE_DIM),
       global: new Float32Array(n * GLOBAL_DIM),
       mask: new Uint8Array(n * sh.slots),
+      teacher: new Int16Array(n),
       reward: new Float32Array(n * players),
       done: new Uint8Array(n),
       episodes: [],
     };
   }
 
-  /** Change the seat roles for matches that start from now on. */
-  configure(update: { seats?: SeatRole[] }): void {
+  /** Change the seat roles for matches that start from now on, and/or turn teacher labels on or off. */
+  configure(update: { seats?: SeatRole[]; teacher?: boolean }): void {
     if (update.seats) {
       validateSeats(update.seats, this.opts.players);
       this.opts.seats = update.seats.slice();
     }
+    if (update.teacher !== undefined) this.opts.teacher = update.teacher;
   }
 
   reset(): VecBatch {
@@ -180,7 +223,7 @@ export class CatanVecEnv {
     this.envs.length = 0;
     for (let i = 0; i < this.opts.numEnvs; i++) {
       this.envs.push(this.startMatch(i, 0));
-      this.advance(i);
+      this.guarded(i, () => this.advance(i));
     }
     return this.finishBatch();
   }
@@ -193,17 +236,37 @@ export class CatanVecEnv {
     for (let i = 0; i < this.envs.length; i++) {
       const env = this.envs[i]!;
       if (env.idle) continue;
-      const { obs, mask } = env.shown!;
-      const decoded = decodeSlot(obs, slots[i]!, () => [1, 1], mask);
-      if (decoded.kind === 'draft') {
-        env.draft = decoded.draft;
-        continue;
-      }
-      env.draft = null;
-      this.apply(i, decoded.action);
-      this.advance(i);
+      this.guarded(i, () => {
+        const { obs, mask } = env.shown!;
+        const decoded = decodeSlot(obs, slots[i]!, () => [1, 1], mask);
+        if (decoded.kind === 'draft') {
+          env.draft = decoded.draft;
+          return;
+        }
+        env.draft = null;
+        this.apply(i, decoded.action);
+        this.advance(i);
+      });
     }
     return this.finishBatch();
+  }
+
+  /** Run `f` on env i; on an error, abandon that match, start a fresh one and
+   *  run `recover` on it (by default: play it up to its first network decision). */
+  private guarded(i: number, f: () => void, recover: () => void = () => this.advance(i)): void {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        f();
+        return;
+      } catch (e) {
+        if (attempt >= 3) throw e; // a fresh match failing over and over is a real bug
+        const env = this.envs[i]!;
+        report('match aborted', `env ${i} seed ${env.seed} phase ${env.state.phase}: ${(e as Error).stack ?? e}`);
+        this.endMatch(i, true, true);
+        this.envs[i] = this.startMatch(i, env.episode + 1);
+        f = recover;
+      }
+    }
   }
 
   private startMatch(i: number, episode: number): EnvSlot {
@@ -222,11 +285,14 @@ export class CatanVecEnv {
       seed,
       episode,
       roles,
-      knowledge: state.players.map((p, k) => (roles[k] === 'heuristic' ? null : initialKnowledge(state, p.id))),
+      knowledge: state.players.map((p) => initialKnowledge(state, p.id)),
       dice: (seed ^ 0x9e3779b9) >>> 0,
+      rng: (seed ^ 0x85ebca6b) >>> 0,
       vp: state.players.map(() => 0),
       steps: 0,
       turns: 0,
+      fallbacks: 0,
+      actions: {},
       seat: 0,
       draft: null,
       shown: null,
@@ -236,15 +302,18 @@ export class CatanVecEnv {
 
   private apply(i: number, action: Action): void {
     const env = this.envs[i]!;
+    let dice = env.dice;
     if (action.type === 'rollDice') {
-      const [dice, next] = rollDice(env.dice);
-      env.dice = next;
-      action = { ...action, dice };
-      env.turns++;
+      const [rolled, next] = rollDice(env.dice);
+      dice = next;
+      action = { ...action, dice: rolled };
     }
     const before = env.state;
     const after = applyAction(before, action);
-    env.knowledge = env.knowledge.map((k) => (k ? observeTransition(k, before, action, after) : null));
+    // Only a move the engine accepted advances the dice and counters.
+    if (action.type === 'rollDice') env.turns++;
+    env.dice = dice;
+    env.knowledge = env.knowledge.map((k) => observeTransition(k, before, action, after));
     if (this.opts.vpShaping !== 0) {
       const P = this.opts.players;
       after.players.forEach((p, s) => {
@@ -255,8 +324,48 @@ export class CatanVecEnv {
         }
       });
     }
+    const count = (key: string, id: PlayerId) => {
+      const row = (env.actions[key] ??= after.players.map(() => 0));
+      row[after.players.findIndex((p) => p.id === id)]! += 1;
+    };
+    count(action.type, action.playerId);
+    if (action.type === 'acceptTrade' && before.pendingTrade) {
+      count('tradeDone', action.playerId);
+      count('tradeDone', before.pendingTrade.proposerId);
+      count('offerTaken', before.pendingTrade.proposerId);
+    }
+    if (action.type === 'rejectTrade' && before.pendingTrade && !after.pendingTrade) {
+      // The last answer was a rejection too: nobody took the offer.
+      const proposer = before.pendingTrade.proposerId;
+      count('offerRefused', proposer);
+      const s = after.players.findIndex((p) => p.id === proposer);
+      this.batch.reward[i * this.opts.players + s]! -= this.opts.refusedOfferPenalty;
+    }
     env.state = after;
     env.steps++;
+  }
+
+  /** A heuristic seat's move; one the engine rejects is replaced by a random legal move. */
+  private heuristicMove(i: number, seat: number, id: PlayerId): void {
+    const env = this.envs[i]!;
+    const action = heuristicAction(env.state, id);
+    try {
+      this.apply(i, action);
+      return;
+    } catch (e) {
+      report(`heuristic ${action.type} rejected`, `${(e as Error).message} — ${JSON.stringify(action)}`);
+    }
+    env.fallbacks++;
+    const random = (_f: unknown, mask: Uint8Array) => {
+      const legal: number[] = [];
+      for (let k = 0; k < mask.length; k++) if (mask[k]) legal.push(k);
+      const [u, next] = nextRng(env.rng);
+      env.rng = next;
+      return legal[Math.floor(u * legal.length)]!;
+    };
+    const fallback = actWithPolicy(env.state, id, env.knowledge[seat]!, random, () => [1, 1]);
+    if (!fallback) throw new Error(`no fallback move for heuristic seat ${id} in ${env.state.phase}`);
+    this.apply(i, fallback);
   }
 
   /** Run env i forward to the next network decision, resetting finished matches. */
@@ -267,7 +376,7 @@ export class CatanVecEnv {
       const s = env.state;
       const over = s.phase === 'gameOver';
       if (over || env.turns >= this.opts.maxTurns || env.steps >= this.opts.maxSteps) {
-        this.endMatch(i, !over);
+        this.endMatch(i, !over, false);
         if (this.opts.quota > 0 && env.episode + 1 >= this.opts.quota) {
           env.idle = true;
           return;
@@ -281,11 +390,11 @@ export class CatanVecEnv {
         env.seat = seat;
         return;
       }
-      this.apply(i, heuristicAction(s, id));
+      this.heuristicMove(i, seat, id);
     }
   }
 
-  private endMatch(i: number, truncated: boolean): void {
+  private endMatch(i: number, truncated: boolean, aborted: boolean): void {
     const env = this.envs[i]!;
     const s = truncated ? { ...env.state, winner: null } : env.state;
     const P = this.opts.players;
@@ -293,7 +402,7 @@ export class CatanVecEnv {
     const standings = finalStandings(s);
     const r = this.batch.reward;
     s.players.forEach((p, k) => {
-      r[i * P + k]! += rewards[p.id]!;
+      if (!aborted) r[i * P + k]! += rewards[p.id]!;
       if (this.opts.vpShaping !== 0) r[i * P + k]! -= (this.opts.vpShaping * env.vp[k]!) / this.opts.victoryPoints;
     });
     this.batch.done[i] = 1;
@@ -304,10 +413,13 @@ export class CatanVecEnv {
       winnerSeat: truncated ? null : s.players.findIndex((p) => p.id === s.winner),
       vp: standings.map((x) => x.vp),
       rank: standings.map((x) => x.rank),
-      reward: s.players.map((p) => rewards[p.id]!),
+      reward: s.players.map((p) => (aborted ? 0 : rewards[p.id]!)),
       turns: env.turns,
       steps: env.steps,
       truncated,
+      fallbacks: env.fallbacks,
+      aborted,
+      actions: env.actions,
     });
   }
 
@@ -318,35 +430,46 @@ export class CatanVecEnv {
   }
 
   private finishBatch(): VecBatch {
+    for (let i = 0; i < this.envs.length; i++) {
+      this.guarded(i, () => this.writeRow(i), () => {
+        this.advance(i);
+        this.writeRow(i);
+      });
+    }
+    return this.batch;
+  }
+
+  /** Observe env i's pending decision into row i of the batch. */
+  private writeRow(i: number): void {
     const b = this.batch;
     const sh = this.shape;
-    this.envs.forEach((env, i) => {
-      b.seat[i] = env.seat;
-      if (env.idle) {
-        b.role[i] = -1;
-        b.mask.fill(0, i * sh.slots, (i + 1) * sh.slots);
-        return;
-      }
-      const id = env.state.players[env.seat]!.id;
-      const obs = observe(env.state, id, env.knowledge[env.seat]!, { draft: env.draft });
-      const facts = analyseBoard(obs);
-      const mask = legalMask(obs, facts);
-      if (!mask.some((x) => x === 1)) {
-        throw new Error(`env ${i}: ${id} has no legal slot (phase ${env.state.phase}, decision ${JSON.stringify(obs.decision)})`);
-      }
-      env.shown = { obs, mask };
-      const f = encodeObservation(obs, facts);
-      if (f.numHexes !== sh.hexes || f.numVertices !== sh.vertices || f.numEdges !== sh.edges) {
-        throw new Error(`env ${i}: board shape changed`);
-      }
-      b.role[i] = ROLE_CODE[env.roles[env.seat]!];
-      b.hexes.set(f.hexes, i * sh.hexes * HEX_DIM);
-      b.vertices.set(f.vertices, i * sh.vertices * VERTEX_DIM);
-      b.edges.set(f.edges, i * sh.edges * EDGE_DIM);
-      b.global.set(f.global, i * GLOBAL_DIM);
-      b.mask.set(mask, i * sh.slots);
-    });
-    return b;
+    const env = this.envs[i]!;
+    b.seat[i] = env.seat;
+    b.teacher[i] = -1;
+    if (env.idle) {
+      b.role[i] = -1;
+      b.mask.fill(0, i * sh.slots, (i + 1) * sh.slots);
+      return;
+    }
+    const id = env.state.players[env.seat]!.id;
+    const obs = observe(env.state, id, env.knowledge[env.seat]!, { draft: env.draft });
+    const facts = analyseBoard(obs);
+    const mask = legalMask(obs, facts);
+    if (!mask.some((x) => x === 1)) {
+      throw new Error(`${id} has no legal slot (phase ${env.state.phase}, decision ${JSON.stringify(obs.decision)})`);
+    }
+    env.shown = { obs, mask };
+    const f = encodeObservation(obs, facts);
+    if (f.numHexes !== sh.hexes || f.numVertices !== sh.vertices || f.numEdges !== sh.edges) {
+      throw new Error('board shape changed');
+    }
+    b.role[i] = ROLE_CODE[env.roles[env.seat]!];
+    if (this.opts.teacher && env.roles[env.seat] === 'learner') b.teacher[i] = teacherSlot(env.state, id, obs, mask);
+    b.hexes.set(f.hexes, i * sh.hexes * HEX_DIM);
+    b.vertices.set(f.vertices, i * sh.vertices * VERTEX_DIM);
+    b.edges.set(f.edges, i * sh.edges * EDGE_DIM);
+    b.global.set(f.global, i * GLOBAL_DIM);
+    b.mask.set(mask, i * sh.slots);
   }
 }
 
@@ -370,15 +493,4 @@ function decidingSeat(s: GameState): PlayerId {
     }
   }
   return getActingPlayerId(s);
-}
-
-function heuristicAction(s: GameState, id: PlayerId): Action {
-  const pt = s.pendingTrade;
-  if (pt) {
-    const me = s.players.find((p) => p.id === id)!;
-    const canPay = RESOURCES.every((r) => me.resources[r] >= (pt.receive[r] ?? 0));
-    if (canPay && shouldAcceptTrade(s, id)) return { type: 'acceptTrade', playerId: id };
-    return pt.proposerId !== s.playerOrder[s.currentPlayerIndex] ? { type: 'cancelTrade', playerId: id } : { type: 'rejectTrade', playerId: id };
-  }
-  return chooseAction(s, id) ?? { type: 'endTurn', playerId: id };
 }

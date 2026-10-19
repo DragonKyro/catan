@@ -6,12 +6,14 @@
 //      "globalSlots":[…],"layouts":{hex,vertex,edge,global},"topology":{…},
 //      "encoderVersion":…,"actionSpaceVersion":…}
 //   → {"cmd":"reset","options":{numEnvs, seed, players, seats, maxTurns, maxSteps,
-//      vpShaping, victoryPoints, reward, quota}}
+//      vpShaping, victoryPoints, reward, quota, teacher, refusedOfferPenalty}}
 //   → {"cmd":"step","actions":[slot, …]}          (one per env)
 //   ← {"ok":true,"n":…,"seat":[…],"role":[…],"reward":[…],"done":[…],"episodes":[…],
-//      "binary":[["hexes",bytes],["vertices",bytes],["edges",bytes],["global",bytes],["mask",bytes]]}
-//     followed by those raw bytes, in that order: f32 little-endian features, u8 mask
-//   → {"cmd":"configure","options":{seats}}       ← {"ok":true}
+//      "binary":[["hexes",bytes],["vertices",bytes],["edges",bytes],["global",bytes],["mask",bytes],
+//      ["teacher",bytes]]}
+//     followed by those raw bytes, in that order: f32 little-endian features, u8 mask,
+//     i16 teacher slot per row (−1 = none)
+//   → {"cmd":"configure","options":{seats?, teacher?}}  ← {"ok":true}
 //   → {"cmd":"close"}
 //   ← {"ok":false,"error":"…"}                       (on any failure)
 //
@@ -44,6 +46,7 @@ class BatchReply {
     const b = this.b;
     const arrays: Array<[string, ArrayBufferView]> = [
       ['hexes', b.hexes], ['vertices', b.vertices], ['edges', b.edges], ['global', b.global], ['mask', b.mask],
+      ['teacher', b.teacher],
     ];
     const header = {
       ok: true,

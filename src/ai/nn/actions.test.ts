@@ -9,7 +9,7 @@ import { COSTS, RESOURCES } from '@/game/types';
 import { boardIndex } from './board';
 import { sampleGames, type Sample } from './testSupport';
 import { observe, type CatanDraft } from './observation';
-import { ACTION_SPACE_VERSION, GLOBAL_SLOTS, decodeSlot, legalMask, slotLayout, slotNames } from './actions';
+import { ACTION_SPACE_VERSION, GLOBAL_SLOTS, decodeSlot, legalMask, slotForAction, slotLayout, slotNames } from './actions';
 import { actWithPolicy } from './agent';
 import type { CatanKnowledge } from './knowledge';
 
@@ -76,6 +76,24 @@ describe('catan action space', () => {
       'endTurn', 'discard', 'moveRobber', 'proposeTrade', 'acceptTrade', 'rejectTrade']) {
       expect(kinds).toContain(t);
     }
+  });
+
+  it('slotForAction inverts decodeSlot', () => {
+    let checked = 0;
+    for (const s of SAMPLES) {
+      for (const p of deciders(s)) {
+        const obs = observe(s.state, p.id, s.knowledge[p.id]!);
+        const mask = legalMask(obs);
+        for (let slot = 0; slot < mask.length; slot++) {
+          if (!mask[slot]) continue;
+          const d = decodeSlot(obs, slot);
+          if (d.kind !== 'action') continue;
+          expect(slotForAction(obs, d.action), JSON.stringify(d.action)).toBe(slot);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(2000);
   });
 
   it('masks in every build, bank trade and year of plenty the engine allows', () => {

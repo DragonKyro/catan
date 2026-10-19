@@ -11,13 +11,22 @@ and exits after the current update (the file is removed on the next start).
 
 Each update:
   1. Collect `--rollout` decisions from every env — `--workers` node processes
-     × `--envs-per-worker` matches. Three kinds of worker:
+     × `--envs-per-worker` matches. Kinds of worker:
        self       all four seats are the learner
        heuristic  one learner seat, three seats of the hand-written AI (src/ai)
-       past       one learner seat, three seats of a past checkpoint drawn from
-                  the newest `--pool` (heuristic seats until a checkpoint exists)
-     The lone learner seat rotates round the table match by match.
-  2. PPO on every finished transition, per (match, seat) stream.
+       mixed      one learner, one heuristic, two past checkpoints at one table
+       past       one learner seat, three past checkpoints
+     Past checkpoints are drawn from the newest `--pool` (heuristic seats until
+     a checkpoint exists). The lone learner seat rotates round the table.
+  2. The first `--bc-updates` imitate the heuristic (supervised: `--bc-epochs`
+     at `--bc-lr`). The env labels each learner decision with the heuristic's
+     slot and the policy learns to predict it, the value head learning from
+     the games' rewards. At first the heuristic also plays those moves; in the
+     last `--bc-dagger` of imitation the network plays its own (DAgger), so it
+     learns the heuristic's answer in the positions its own mistakes lead to.
+     After that, PPO on every finished transition, per (match, seat) stream,
+     plus a decaying pull toward the heuristic's choice (`--bc-anchor`, to 0
+     over `--bc-anchor-updates`) so the switch keeps what imitation taught.
   3. Every `--save-every`: a resumable checkpoint (ckpt/update_N.pt) and an
      exported policy (policies/update_N.json, all kept) — the opponent pool,
      evals and the game's future AI levels read these.
@@ -25,6 +34,13 @@ Each update:
      seat-rotated matches of the new policy vs three heuristic AIs and vs
      three copies of the checkpoint `--eval-past-gap` saves earlier → tensorboard
      `eval/*`, evals.jsonl, and progress.md (latest 10 checkpoints, then all).
+  5. Guard: when an eval vs the heuristic comes in clearly below the best so
+     far (its whole 95% CI under the best score), one self-play worker moves
+     to heuristic tables (up to `--guard-max-shift`); it moves back once the
+     score is within 3 points of the best again.
+
+An offer every other player rejects costs its offerer `--refused-offer-penalty`
+(tiny next to a VP or a place), so hopeless offers stop being free.
 
 Reported every update (train.log): throughput, PPO health (KL, clip fraction,
 entropy, explained variance), the learner's recent results per worker kind
@@ -87,9 +103,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     game.add_argument("--workers", type=int, default=default_workers(), help="node env processes")
     game.add_argument("--envs-per-worker", type=int, default=32)
     game.add_argument("--rollout", type=int, default=32, help="decisions per env per update")
-    game.add_argument("--self-play", type=float, default=0.5, help="share of workers in self-play")
-    game.add_argument("--vs-heuristic", type=float, default=0.25,
-                      help="share of workers with three heuristic-AI seats; the rest face past checkpoints")
+    game.add_argument("--self-play", type=float, default=0.3, help="share of workers in self-play")
+    game.add_argument("--vs-heuristic", type=float, default=0.35, help="share of workers with three heuristic-AI seats")
+    game.add_argument("--mixed", type=float, default=0.35,
+                      help="share with one heuristic + two past checkpoints per table; the rest face past checkpoints")
     game.add_argument("--pool", type=int, default=20, help="newest checkpoints past opponents are drawn from")
     game.add_argument("--pool-refresh", type=int, default=10, help="updates between past-opponent re-draws")
     game.add_argument("--past-opponents", type=int, default=2,
@@ -97,6 +114,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     game.add_argument("--max-turns", type=int, default=200, help="dice rolls before a match is cut off")
     game.add_argument("--vp-shaping", type=float, default=0.5,
                       help="potential-based shaping: this × ΔVP / target per VP change (sums to zero per match)")
+    game.add_argument("--refused-offer-penalty", type=float, default=0.002,
+                      help="charged when everyone rejects an offer (a VP of shaping is 0.05, a place 0.17)")
 
     learn = p.add_argument_group("learning")
     learn.add_argument("--width", type=int, default=64)
@@ -111,6 +130,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     learn.add_argument("--ent-coef", type=float, default=0.01)
     learn.add_argument("--vf-coef", type=float, default=0.5)
     learn.add_argument("--max-grad-norm", type=float, default=0.5)
+    learn.add_argument("--bc-updates", type=int, default=25, help="first N updates imitate the heuristic (0 = none)")
+    learn.add_argument("--bc-epochs", type=int, default=10, help="epochs per imitation update (supervised, so more is safe)")
+    learn.add_argument("--bc-lr", type=float, default=1e-3, help="learning rate during imitation")
+    learn.add_argument("--bc-dagger", type=float, default=0.4,
+                       help="last share of imitation where the network plays (still learning the heuristic's labels)")
+    learn.add_argument("--bc-anchor", type=float, default=0.3,
+                       help="after imitation, weight of a pull toward the heuristic's choice ...")
+    learn.add_argument("--bc-anchor-updates", type=int, default=300,
+                       help="... decaying linearly to 0 over this many updates")
+    learn.add_argument("--guard-max-shift", type=int, default=2,
+                       help="self-play workers the guard may move to heuristic tables (0 = no guard)")
 
     save = p.add_argument_group("checkpoints / eval")
     save.add_argument("--save-every", type=int, default=100)
@@ -119,6 +149,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     save.add_argument("--eval-games", type=int, default=400)
     save.add_argument("--eval-workers", type=int, default=3)
     save.add_argument("--eval-past-gap", type=int, default=5, help="compare with the checkpoint this many saves back")
+    save.add_argument("--eval-past-every", type=int, default=0,
+                      help="updates between evals vs the earlier checkpoint (0 = every --eval-every)")
     return p.parse_args(argv)
 
 
@@ -126,24 +158,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 @dataclass
 class Worker:
-    role: str  # 'self' | 'heuristic' | 'past'
+    role: str  # 'self' | 'heuristic' | 'mixed' | 'past'
     env: CatanEnv
     batch: Batch | None = None
     opponent: CatanNet | None = None
     opponent_name: str = ""
 
 
-def worker_roles(n: int, self_share: float, heuristic_share: float) -> list[str]:
+def worker_roles(n: int, self_share: float, heuristic_share: float, mixed_share: float) -> list[str]:
     n_self = min(n, max(0, round(n * self_share)))
     n_heur = min(n - n_self, max(0, round(n * heuristic_share)))
-    return ["self"] * n_self + ["heuristic"] * n_heur + ["past"] * (n - n_self - n_heur)
+    n_mixed = min(n - n_self - n_heur, max(0, round(n * mixed_share)))
+    return ["self"] * n_self + ["heuristic"] * n_heur + ["mixed"] * n_mixed + ["past"] * (n - n_self - n_heur - n_mixed)
 
 
 def seats_for(role: str, players: int, has_pool: bool) -> list[str]:
     if role == "self":
         return ["learner"] * players
-    other = "opponent" if role == "past" and has_pool else "heuristic"
-    return ["learner"] + [other] * (players - 1)
+    if role == "heuristic" or not has_pool:
+        return ["learner"] + ["heuristic"] * (players - 1)
+    if role == "mixed":
+        return ["learner", "heuristic"] + ["opponent"] * (players - 2)
+    return ["learner"] + ["opponent"] * (players - 1)
 
 
 def build_typescript() -> None:
@@ -176,7 +212,7 @@ class Rollout:
     when the rollout ends — it is carried into the next update instead of
     being trained on."""
 
-    FIELDS = ("hexes", "vertices", "edges", "glob", "mask", "action", "logp", "value", "reward", "done")
+    FIELDS = ("hexes", "vertices", "edges", "glob", "mask", "action", "logp", "value", "teacher", "reward", "done")
 
     def __init__(self, capacity: int, shape: dict, dims: dict):
         H, V, E = shape["hexes"], shape["vertices"], shape["edges"]
@@ -188,6 +224,7 @@ class Rollout:
         self.action = np.zeros(capacity, np.int64)
         self.logp = np.zeros(capacity, np.float32)
         self.value = np.zeros(capacity, np.float32)
+        self.teacher = np.full(capacity, -1, np.int64)
         self.reward = np.zeros(capacity, np.float32)
         self.done = np.zeros(capacity, bool)
         self.next = np.full(capacity, -1, np.int64)
@@ -289,6 +326,8 @@ class Trainer:
     learner_decisions: int = 0
     episodes: int = 0
     train_seconds: float = 0.0
+    guard_best: float = 0.0
+    guard_workers: list[int] = field(default_factory=list)
 
     def setup(self) -> None:
         a = self.args
@@ -326,6 +365,8 @@ class Trainer:
             self.update, self.decisions, self.episodes = ck["update"], ck["decisions"], ck["episodes"]
             self.learner_decisions = ck.get("learner_decisions", 0)
             self.train_seconds = ck.get("train_seconds", 0.0)
+            self.guard_best = ck.get("guard_best", 0.0)
+            self.guard_workers = list(ck.get("guard_workers", []))
             print(f"resumed {name} at update {self.update} ({self.decisions:,} decisions, "
                   f"{fmt_duration(self.train_seconds)} trained)")
         else:
@@ -339,14 +380,17 @@ class Trainer:
             json.dump({**vars(a), **self.versions, "dims": self.dims, "shape": self.shape,
                        "arch": self.net.arch, "params": n_params}, f, indent=2)
 
-        has_pool = bool(ev.list_policies(self.run_dir))
-        roles = worker_roles(a.workers, a.self_play, a.vs_heuristic)
+        roles = worker_roles(a.workers, a.self_play, a.vs_heuristic, a.mixed)
+        for k in self.guard_workers:  # self-play workers the guard had moved to heuristic tables
+            roles[k] = "heuristic"
+        self.teacher_on = self.update < self.teacher_until()
         for w, role in enumerate(roles):
             env = CatanEnv(players=a.players)
             seed = a.seed * 10_007 + w * 7_919 + self.update * 104_729
             worker = Worker(role, env)
             worker.batch = env.reset(num_envs=a.envs_per_worker, seed=seed, seats=seats_for(role, a.players, False),
-                                     max_turns=a.max_turns, vp_shaping=a.vp_shaping)
+                                     max_turns=a.max_turns, vp_shaping=a.vp_shaping, teacher=self.teacher_on,
+                                     refused_offer_penalty=a.refused_offer_penalty)
             self.workers.append(worker)
         self.n_envs = a.workers * a.envs_per_worker
         self.slices = [slice(i * a.envs_per_worker, (i + 1) * a.envs_per_worker) for i in range(a.workers)]
@@ -357,15 +401,27 @@ class Trainer:
               f" x {a.envs_per_worker} envs, {a.players} players | board {self.shape['hexes']} hexes, "
               f"{self.shape['slots']} slots | net {a.width}x{a.rounds} ({n_params:,} params) | device {self.device}"
               f"{' bf16' if self.net.amp and self.device.type == 'cuda' else ''}", flush=True)
-        if has_pool:
-            print("  (past checkpoints found — past workers switch from heuristic seats at the first refresh)")
+        if self.update < a.bc_updates:
+            fade = (f", with a pull toward it fading out by update {self.teacher_until()}" if a.bc_anchor > 0 else "")
+            print(f"  imitating the heuristic until update {a.bc_updates}, then PPO{fade}")
+        if self.guard_workers:
+            print(f"  guard: workers {self.guard_workers} on heuristic tables "
+                  f"(best vs heuristic {100 * self.guard_best:.1f}%)")
 
         # Up to one carried (still pending) transition per seat, plus a decision per env per step.
         self.buf = Rollout(self.n_envs * (a.rollout + a.players), self.shape, self.dims)
         self.last = np.full((self.n_envs, a.players), -1, np.int64)
         self.carry: dict | None = None
         self.carry_streams: np.ndarray | None = None
-        self.writer = SummaryWriter(os.path.join(self.run_dir, "tb"))
+        # On resume, drop what was logged after the checkpoint (it is about to be redone).
+        self.writer = SummaryWriter(os.path.join(self.run_dir, "tb"), purge_step=self.update + 1 if ckpts else None)
+        metrics_path = os.path.join(self.run_dir, "metrics.jsonl")
+        if ckpts and os.path.isfile(metrics_path):
+            with open(metrics_path, encoding="utf-8") as f:
+                kept = [line for line in f if json.loads(line)["update"] <= self.update]
+            with open(metrics_path, "w", encoding="utf-8") as f:
+                f.writelines(kept)
+        self.fallbacks = self.aborted = 0
         self.evaluator = (Evaluator(a.eval_games, a.eval_workers, a.device, a.max_turns, a.players)
                           if a.eval_every > 0 else None)
         self.window: dict[str, collections.deque] = collections.defaultdict(lambda: collections.deque(maxlen=400))
@@ -384,6 +440,32 @@ class Trainer:
             for u, res in self.eval_results.items():
                 self.eval_expected[u] = list(res)
                 self.progress_shown.add(u)
+
+    # ------------------------------------------------------------ phases
+
+    @property
+    def imitating(self) -> bool:
+        return self.update < self.args.bc_updates
+
+    @property
+    def teacher_forcing(self) -> bool:
+        """The heuristic picks the learner's moves — the first part of imitation. In
+        the last `--bc-dagger` of it the network plays and still learns the
+        heuristic's labels, so it also learns its way back from its own mistakes."""
+        a = self.args
+        return self.update < a.bc_updates - round(a.bc_dagger * a.bc_updates)
+
+    def anchor_weight(self) -> float:
+        """The pull toward the heuristic's choice, for the update being trained."""
+        a = self.args
+        if self.imitating or a.bc_anchor <= 0 or a.bc_anchor_updates <= 0:
+            return 0.0
+        return a.bc_anchor * max(0.0, 1 - (self.update - a.bc_updates) / a.bc_anchor_updates)
+
+    def teacher_until(self) -> int:
+        """First update that needs no teacher labels."""
+        a = self.args
+        return a.bc_updates + (a.bc_anchor_updates if a.bc_anchor > 0 else 0)
 
     # ------------------------------------------------------------ collection
 
@@ -428,15 +510,20 @@ class Trainer:
         mask = np.concatenate([b.mask for b in batches])
         actions = np.zeros(len(envs), np.int64)
 
+        teacher = np.concatenate([b.teacher for b in batches])
         learner = np.flatnonzero(role == ROLE_LEARNER)
         if len(learner):
             obs = to_device([p[learner] for p in parts], dev)
             action, logp, value = sample(self.net, obs, torch.from_numpy(mask[learner]).to(dev))
             action_np = action.cpu().numpy()
+            if self.teacher_forcing:
+                # The heuristic plays (where its move exists in the action space).
+                t = teacher[learner]
+                action_np = np.where(t >= 0, t, action_np)
             actions[learner] = action_np
             rows = buf.add(hexes=parts[0][learner], vertices=parts[1][learner], edges=parts[2][learner],
                            glob=parts[3][learner], mask=mask[learner], action=action_np,
-                           logp=logp.cpu().numpy(), value=value.cpu().numpy())
+                           logp=logp.cpu().numpy(), value=value.cpu().numpy(), teacher=teacher[learner])
             env_ids, seats = envs[learner], seat[learner]
             prev = last[env_ids, seats]
             linked = prev >= 0
@@ -489,11 +576,18 @@ class Trainer:
                 self.record_episode(w.role, ep)
 
     def record_episode(self, role: str, ep: dict) -> None:
+        self.fallbacks += ep.get("fallbacks", 0)
+        if ep.get("aborted"):
+            self.aborted += 1
+            return
+        if self.teacher_forcing:
+            return  # the heuristic picked the learner's moves: these results aren't the network's
         self.window["all"].append({"turns": ep["turns"], "truncated": ep["truncated"]})
         if role == "self":
             return
         seat = ep["roles"].index("learner")
-        kind = "past" if "opponent" in ep["roles"] else "heuristic"
+        roles = ep["roles"]
+        kind = ("mixed" if "heuristic" in roles else "past") if "opponent" in roles else "heuristic"
         self.window[kind].append({
             "win": float(ep["winnerSeat"] == seat), "rank": ep["rank"][seat], "vp": ep["vp"][seat],
             "truncated": ep["truncated"],
@@ -526,25 +620,39 @@ class Trainer:
         old_logp = torch.from_numpy(buf.logp[idx]).to(dev)
         advantage = torch.from_numpy(adv[idx]).to(dev)
         returns = advantage + torch.from_numpy(buf.value[idx]).to(dev)
+        teacher = torch.from_numpy(buf.teacher[idx]).to(dev)
+        anchor = self.anchor_weight()
         # Normalised once over the whole update (a tiny last minibatch has no usable std).
         norm_adv = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
         n = len(idx)
         stats = collections.defaultdict(list)
         self.net.train()
-        for _ in range(a.epochs):
+        for _ in range(a.bc_epochs if self.imitating else a.epochs):
             perm = torch.randperm(n, device=dev)
             for start in range(0, n, a.minibatch):
                 b = perm[start:start + a.minibatch]
                 logits, value = self.net(hexes[b], vertices[b], edges[b], glob[b])
                 logp_all = F.log_softmax(masked_logits(logits, mask[b]), dim=-1)
                 entropy = -(logp_all.exp() * logp_all).sum(-1).mean()
-                new_logp = logp_all.gather(1, action[b, None]).squeeze(1)
-                log_ratio = new_logp - old_logp[b]
-                ratio = log_ratio.exp()
-                adv_b = norm_adv[b]
-                pi_loss = -torch.min(ratio * adv_b, ratio.clamp(1 - a.clip, 1 + a.clip) * adv_b).mean()
-                stats["approx_kl"].append(((ratio - 1) - log_ratio).mean().item())
-                stats["clipfrac"].append(((ratio - 1).abs() > a.clip).float().mean().item())
+                labelled = teacher[b] >= 0
+                imitation = (F.nll_loss(logp_all[labelled], teacher[b][labelled]) if labelled.any()
+                             else logp_all.new_zeros(()))
+                if labelled.any():
+                    stats["teacher_agreement"].append(
+                        (logp_all[labelled].argmax(-1) == teacher[b][labelled]).float().mean().item())
+                if self.imitating:
+                    pi_loss = imitation
+                else:
+                    new_logp = logp_all.gather(1, action[b, None]).squeeze(1)
+                    log_ratio = new_logp - old_logp[b]
+                    ratio = log_ratio.exp()
+                    adv_b = norm_adv[b]
+                    pi_loss = -torch.min(ratio * adv_b, ratio.clamp(1 - a.clip, 1 + a.clip) * adv_b).mean()
+                    stats["approx_kl"].append(((ratio - 1) - log_ratio).mean().item())
+                    stats["clipfrac"].append(((ratio - 1).abs() > a.clip).float().mean().item())
+                    if anchor > 0:
+                        pi_loss = pi_loss + anchor * imitation
+                        stats["anchor_loss"].append(imitation.item())
                 v_loss = 0.5 * (value - returns[b]).pow(2).mean()
                 loss = pi_loss + a.vf_coef * v_loss - a.ent_coef * entropy
                 if not torch.isfinite(loss):
@@ -562,6 +670,8 @@ class Trainer:
         ret_np, val_np = returns.cpu().numpy(), buf.value[idx]
         out["explained_variance"] = float(1 - np.var(ret_np - val_np) / (np.var(ret_np) + 1e-8))
         out["transitions"] = n
+        out["anchor_weight"] = anchor
+        out["imitation"] = 1.0 if self.imitating else 0.0
         return out
 
     # ------------------------------------------------------------ checkpoints
@@ -570,26 +680,30 @@ class Trainer:
         a, u = self.args, self.update
         state = {"update": u, "decisions": self.decisions, "learner_decisions": self.learner_decisions,
                  "episodes": self.episodes, "train_seconds": self.train_seconds, "versions": self.versions,
-                 "args": vars(a)}
+                 "guard_best": self.guard_best, "guard_workers": self.guard_workers, "args": vars(a)}
         ckpt_dir = os.path.join(self.run_dir, "ckpt")
         save_checkpoint(os.path.join(ckpt_dir, f"update_{u:06d}.pt"), self.net, self.opt, state)
         for old in sorted(f for f in os.listdir(ckpt_dir) if f.endswith(".pt"))[:-a.keep_ckpt]:
             os.remove(os.path.join(ckpt_dir, old))
         path = os.path.join(self.run_dir, "policies", f"update_{u:06d}.json")
         export_policy(self.net, path, self.versions,
-                      meta={"run": os.path.basename(self.run_dir), "update": u, "decisions": self.decisions})
+                      meta={"run": os.path.basename(self.run_dir), "update": u, "decisions": self.decisions,
+                            "phase": "imitation" if u <= a.bc_updates else "ppo"})
         return path
 
     def eval_jobs(self) -> list[tuple[str, str]]:
         jobs = [("heuristic", "heuristic")]
-        past = ev.list_policies(self.run_dir)
-        if len(past) > self.args.eval_past_gap:
-            jobs.append(("past", past[-1 - self.args.eval_past_gap][1]))
+        # By update number, not position: a crash-time save adds an off-cycle policy.
+        a = self.args
+        every = a.eval_past_every or a.eval_every
+        earlier = dict(ev.list_policies(self.run_dir)).get(self.update - a.eval_past_gap * a.save_every)
+        if earlier and self.update % every == 0:
+            jobs.append(("past", earlier))
         return jobs
 
     def refresh_past_opponents(self) -> None:
         pool = [p for _, p in ev.list_policies(self.run_dir)][-self.args.pool:]
-        past = [w for w in self.workers if w.role == "past"]
+        past = [w for w in self.workers if w.role in ("past", "mixed")]
         if not pool or not past:
             return
         picks = [random.choice(pool) for _ in range(max(1, self.args.past_opponents))]
@@ -600,7 +714,7 @@ class Trainer:
             nets.append((net, os.path.basename(path)))
         for k, w in enumerate(past):
             if w.opponent is None:
-                w.env.configure(seats_for("past", self.args.players, True))
+                w.env.configure(seats=seats_for(w.role, self.args.players, True))
             w.opponent, w.opponent_name = nets[k % len(nets)]
 
     # ------------------------------------------------------------ logging
@@ -624,31 +738,48 @@ class Trainer:
         line = {"update": u, "decisions": self.decisions, "episodes": self.episodes, "seconds": seconds,
                 "hours": self.train_seconds / 3600, **stats}
         parts = []
-        for kind in ("heuristic", "past"):
+        imitated = stats.get("imitation", 0) > 0  # the update just trained (self.update has moved on)
+        if imitated:
+            parts.append(f"imitating: agrees with heuristic {100 * stats.get('teacher_agreement', 0):.0f}%")
+        elif stats.get("anchor_weight", 0) > 0:
+            parts.append(f"anchor {stats['anchor_weight']:.2f}, agrees {100 * stats.get('teacher_agreement', 0):.0f}%")
+        for kind in ("heuristic", "mixed", "past"):
             s = self.summary(kind)
             if s:
                 for k, v in s.items():
                     w.add_scalar(f"train_vs_{kind}/{k}", v, u)
                     line[f"vs_{kind}_{k}"] = v
-                parts.append(f"{kind[:4]}: win {100 * s['win']:3.0f}% place {s['rank']:.2f} vp {s['vp']:4.1f}")
+                label = "heur" if kind == "heuristic" else kind
+                parts.append(f"{label}: win {100 * s['win']:3.0f}% place {s['rank']:.2f} vp {s['vp']:4.1f}")
         allm = self.summary("all")
         if allm:
             w.add_scalar("train/match_turns", allm["turns"], u)
             w.add_scalar("train/match_truncated", allm["truncated"], u)
             line["match_turns"], line["match_truncated"] = allm["turns"], allm["truncated"]
             parts.append(f"{allm['turns']:3.0f} turns, {100 * allm['truncated']:.0f}% cut")
+        if self.fallbacks or self.aborted:
+            # Env faults since this process started (details on stderr, i.e. in the log).
+            w.add_scalar("faults/heuristic_fallbacks", self.fallbacks, u)
+            w.add_scalar("faults/aborted_matches", self.aborted, u)
+            line["fallbacks"], line["aborted"] = self.fallbacks, self.aborted
+            parts.append(f"faults: {self.fallbacks} heuristic fallbacks, {self.aborted} aborted")
         with open(os.path.join(self.run_dir, "metrics.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(line) + "\n")
         self.update_seconds.append(seconds)
         eta = np.mean(self.update_seconds) * (a.updates - u)
-        head = (f"pi {stats['policy_loss']:+.3f} kl {stats['approx_kl']:.4f} clip {stats['clipfrac']:.2f} "
-                f"v {stats['value_loss']:.3f} ent {stats['entropy']:.2f} ev {stats['explained_variance']:+.2f}")
+        if imitated:
+            head = (f"imitation loss {stats['policy_loss']:.3f} v {stats['value_loss']:.3f} "
+                    f"ent {stats['entropy']:.2f} ev {stats['explained_variance']:+.2f}")
+        else:
+            head = (f"pi {stats['policy_loss']:+.3f} kl {stats['approx_kl']:.4f} clip {stats['clipfrac']:.2f} "
+                    f"v {stats['value_loss']:.3f} ent {stats['entropy']:.2f} ev {stats['explained_variance']:+.2f}")
         print(f"u {u:5d} | {self.decisions / 1e6:6.2f}M dec | {rate / 1e3:4.1f}k/s | {head} | {' | '.join(parts)} | "
               f"{seconds:.1f}s/u, ETA {fmt_duration(eta)}", flush=True)
 
     def log_evals(self) -> None:
         if not self.evaluator:
             return
+        landed = False
         for update, tag, opponent, s, err in self.evaluator.drain():
             if err:
                 print(f"  eval u{update} vs {tag} failed: {err}", flush=True)
@@ -671,24 +802,56 @@ class Trainer:
                   f"place {s['meanRank']:.2f} vp {s['meanVp']:.1f} turns {s['meanTurns']:.0f} "
                   f"over {s['games']} matches", flush=True)
             self.eval_results.setdefault(update, {})[tag] = row
+            landed = True
+            if tag == "heuristic":
+                self.guard(update, s)
         complete = [u for u, tags in self.eval_expected.items()
                     if u not in self.progress_shown and all(t in self.eval_results.get(u, {}) for t in tags)]
         if complete:
             self.progress_shown.update(complete)
             print(self.progress_table(last=10), flush=True)
-            self.write_progress()
+        if landed:
+            self.write_progress()  # each result as it lands; a checkpoint's other cells fill in later
+
+    # ------------------------------------------------------------ guard
+
+    def guard(self, update: int, s: dict) -> None:
+        """Keep the heuristic in view when results against it slip (see the module doc)."""
+        a = self.args
+        lo, hi = s["winCi95"]
+        win = s["winRate"]
+        best = self.guard_best
+        self.guard_best = max(best, win)
+        if a.guard_max_shift <= 0:
+            return
+        if hi < best and len(self.guard_workers) < a.guard_max_shift:
+            selfplay = [k for k, w in enumerate(self.workers) if w.role == "self"]
+            if len(selfplay) > 1:
+                k = selfplay[-1]
+                self.workers[k].role = "heuristic"
+                self.workers[k].env.configure(seats=seats_for("heuristic", a.players, True))
+                self.guard_workers.append(k)
+                print(f"  guard: u{update} vs heuristic {100 * win:.1f}% [{100 * lo:.1f}-{100 * hi:.1f}] is below the best "
+                      f"{100 * best:.1f}% — worker {k} moves from self-play to heuristic tables", flush=True)
+        elif win >= best - 0.03 and self.guard_workers:
+            k = self.guard_workers.pop()
+            self.workers[k].role = "self"
+            self.workers[k].env.configure(seats=seats_for("self", a.players, True))
+            print(f"  guard: u{update} vs heuristic {100 * win:.1f}% is back near the best {100 * best:.1f}% — "
+                  f"worker {k} returns to self-play", flush=True)
 
     # ------------------------------------------------------------ progress table
 
-    def progress_table(self, last: int | None = None) -> str:
-        """Markdown table of the evaluated checkpoints (the newest `last` of them)."""
+    def progress_table(self, last: int | None = None, partial: bool = False) -> str:
+        """Markdown table of the evaluated checkpoints (the newest `last` of them);
+        with `partial`, also those whose evals are still coming in."""
         a = self.args
-        done = sorted(u for u in self.eval_results if u in self.progress_shown)
+        done = sorted(u for u in self.eval_results if partial or u in self.progress_shown)
         rows = done[-last:] if last else done
         gap = a.eval_past_gap * a.save_every
-        lines = ["| update | hours | decisions | vs heuristic: win (95% CI) | place | VP | turns "
-                 f"| vs {gap} updates earlier: win (95% CI) | place |",
-                 "|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        lines = ["| update | hours | decisions | vs heuristic: win (95% CI) | place | VP | turns | offers (taken) "
+                 f"| trades | vs {gap} updates earlier: win (95% CI) | place |",
+                 "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
         def win(x: dict | None) -> str:
             return f"{100 * x['winRate']:.1f}% ({100 * x['winCi95'][0]:.1f}-{100 * x['winCi95'][1]:.1f})" if x else ""
 
@@ -700,8 +863,10 @@ class Trainer:
             h, p = r.get("heuristic"), r.get("past")
             hours = next((x["hours"] for x in r.values() if x.get("hours") is not None), None)
             dec = next((x["decisions"] for x in r.values() if x.get("decisions") is not None), None)
-            cells = [str(u), "" if hours is None else f"{hours:.1f}", "" if dec is None else f"{dec / 1e6:.1f}M",
+            cells = [f"{u} (imitation)" if u <= a.bc_updates else str(u), "" if hours is None else f"{hours:.1f}", "" if dec is None else f"{dec / 1e6:.1f}M",
                      win(h), num(h, "meanRank", ".2f"), num(h, "meanVp", ".1f"), num(h, "meanTurns", ".0f"),
+                     (f"{h['offersPerGame']:.1f} ({100 * h['offerTakenRate']:.0f}%)" if h and "offersPerGame" in h else ""),
+                     (f"{h['tradesPerGame']:.1f}" if h and "tradesPerGame" in h else ""),
                      win(p), num(p, "meanRank", ".2f")]
             lines.append("| " + " | ".join(cells) + " |")
         heur = [u for u in done if "heuristic" in self.eval_results[u]]
@@ -721,16 +886,16 @@ class Trainer:
                f"Each checkpoint plays {a.eval_games} greedy matches as one seat against three heuristic AIs, and "
                f"{a.eval_games} against three copies of the checkpoint {a.eval_past_gap * a.save_every} updates "
                f"earlier; its seat rotates round the table. Win 25% = parity with each opponent seat; place 1 = first, "
-               f"{a.players} = last (2.5 = average). Updated {time.strftime('%Y-%m-%d %H:%M')}, update "
+               f"{a.players} = last (2.5 = average); offers / trades are the agent's per match vs the heuristics. Updated {time.strftime('%Y-%m-%d %H:%M')}, update "
                f"{self.update}/{a.updates}, {self.train_seconds / 3600:.1f} h trained.",
                "",
                "## Latest 10 checkpoints",
                "",
-               self.progress_table(last=10),
+               self.progress_table(last=10, partial=True),
                "",
                "## Every checkpoint",
                "",
-               self.progress_table()]
+               self.progress_table(partial=True)]
         path = os.path.join(self.run_dir, "progress.md")
         with open(path + ".tmp", "w", encoding="utf-8") as f:
             f.write("\n".join(doc) + "\n")
@@ -751,9 +916,10 @@ class Trainer:
                     if self.update % a.save_every:
                         self.save()
                     break
-                if a.anneal_lr:
-                    for g in self.opt.param_groups:
-                        g["lr"] = a.lr * (1 - self.update / a.updates)
+                # Imitation is supervised: a higher rate is safe there (and more epochs, see learn).
+                lr = a.bc_lr if self.imitating else a.lr * (1 - self.update / a.updates if a.anneal_lr else 1)
+                for g in self.opt.param_groups:
+                    g["lr"] = lr
                 t0 = time.perf_counter()
                 d0 = self.decisions
                 pending = self.collect()
@@ -776,6 +942,12 @@ class Trainer:
                             print("  (eval skipped - previous evals still running)", flush=True)
                 if self.update % a.pool_refresh == 0 or self.update == a.save_every:
                     self.refresh_past_opponents()  # (also right after the first checkpoint lands)
+                if self.update == a.bc_updates and a.bc_updates > 0:
+                    print(f"imitation done at update {self.update} - PPO from here", flush=True)
+                if self.teacher_on and self.update >= self.teacher_until():
+                    for w in self.workers:
+                        w.env.configure(teacher=False)
+                    self.teacher_on = False
                 self.log_evals()
         except KeyboardInterrupt:
             print(f"\ninterrupted - saving update {self.update}", flush=True)
@@ -783,6 +955,13 @@ class Trainer:
             self.close(finish_evals=False)
             return
         except BaseException:
+            # Keep the progress since the last save; a restart with --resume picks it up.
+            try:
+                if self.update % a.save_every:
+                    self.save()
+                    print(f"crashed - saved update {self.update} first", flush=True)
+            except Exception:  # noqa: BLE001
+                pass
             self.close(finish_evals=False)
             raise
         self.close(finish_evals=True)

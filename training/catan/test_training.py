@@ -61,17 +61,52 @@ def test_random_bridge_keeps_masks_and_features_sane():
 
 
 def test_train_checkpoint_resume_evaluate(tmp_path):
+    # 1 imitation update, then PPO with the anchor fading over 2; one worker of each kind.
     common = ["--runs-dir", str(tmp_path), "--run", "t", "--workers", "3", "--envs-per-worker", "4",
               "--rollout", "8", "--save-every", "1", "--eval-every", "0", "--no-build", "--width", "32",
-              "--rounds", "2", "--minibatch", "64", "--device", "cpu", "--pool-refresh", "1"]
+              "--rounds", "2", "--minibatch", "64", "--device", "cpu", "--pool-refresh", "1",
+              "--bc-updates", "1", "--bc-anchor-updates", "2"]
     run_dir = train.main(["--updates", "2", *common])
     pols = ev.list_policies(run_dir)
     assert [u for u, _ in pols] == [1, 2]
     train.main(["--updates", "3", "--resume", *common])
     assert [u for u, _ in ev.list_policies(run_dir)] == [1, 2, 3]
     with open(os.path.join(run_dir, "metrics.jsonl"), encoding="utf-8") as f:
-        assert [json.loads(line)["update"] for line in f] == [1, 2, 3]
+        rows = [json.loads(line) for line in f]
+    assert [r["update"] for r in rows] == [1, 2, 3]
+    assert "approx_kl" not in rows[0] and 0 < rows[0]["teacher_agreement"] <= 1  # imitation
+    assert rows[1]["anchor_weight"] > rows[2]["anchor_weight"] > 0  # PPO, anchor fading
+    with open(os.path.join(run_dir, "config.json"), encoding="utf-8") as f:
+        assert json.load(f)["mixed"] == 0.35
     s = ev.evaluate(run_dir, "heuristic", games=4, workers=2, max_turns=40, device="cpu")
     assert s["games"] == 4 and 0 <= s["winRate"] <= 1 and 1 <= s["meanRank"] <= 4
     s = ev.evaluate(f"{run_dir}@3", f"{run_dir}@1", games=4, workers=1, max_turns=40, device="cpu")
     assert s["games"] == 4
+
+
+class _FakeEnv:
+    def __init__(self):
+        self.seats = None
+
+    def configure(self, seats=None, teacher=None):
+        self.seats = seats
+
+
+def test_guard_moves_self_play_to_heuristic_tables_and_back():
+    t = train.Trainer(train.parse_args(["--players", "4", "--guard-max-shift", "2"]))
+    t.workers = [train.Worker(role, _FakeEnv()) for role in ("self", "self", "self", "heuristic")]
+    result = lambda win, lo, hi: {"winRate": win, "winCi95": [lo, hi]}  # noqa: E731
+    t.guard(5, result(0.20, 0.15, 0.25))
+    assert t.guard_best == 0.20 and t.guard_workers == []
+    t.guard(10, result(0.18, 0.13, 0.23))  # within noise: CI reaches the best
+    assert t.guard_workers == []
+    t.guard(15, result(0.08, 0.05, 0.12))  # clearly worse
+    assert t.guard_workers == [2] and t.workers[2].role == "heuristic"
+    assert t.workers[2].env.seats == ["learner", "heuristic", "heuristic", "heuristic"]
+    t.guard(20, result(0.07, 0.04, 0.11))
+    assert t.guard_workers == [2, 1]
+    t.guard(25, result(0.06, 0.03, 0.10))  # at --guard-max-shift
+    assert t.guard_workers == [2, 1]
+    t.guard(30, result(0.19, 0.14, 0.24))  # back near the best
+    assert t.guard_workers == [2] and t.workers[1].role == "self"
+    assert t.workers[1].env.seats == ["learner"] * 4

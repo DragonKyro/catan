@@ -56,7 +56,11 @@ export function chooseDevCardPlay(state: GameState, playerId: PlayerId): Action 
         const need = needs.byResource[r];
         for (let i = 0; i < need && wanted.length < 2; i++) wanted.push(r);
       }
-      if (wanted.length === 2 && state.bank[wanted[0]!] >= 1 && state.bank[wanted[1]!] >= 1) {
+      // Two of the same resource needs two in the bank.
+      const bankHas = wanted[0] === wanted[1]
+        ? state.bank[wanted[0]!] >= 2
+        : state.bank[wanted[0]!] >= 1 && state.bank[wanted[1]!] >= 1;
+      if (wanted.length === 2 && bankHas) {
         return {
           type: 'playYearOfPlenty',
           playerId,

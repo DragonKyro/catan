@@ -137,6 +137,12 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
     seat = [ep["roles"].index("learner") for ep in episodes]
     wins = sum(ep["winnerSeat"] == s for ep, s in zip(episodes, seat))
     n = len(episodes)
+
+    def per_game(key: str) -> float:
+        """A's mean count of one action kind per match (vec-env Episode.actions)."""
+        return float(np.mean([ep.get("actions", {}).get(key, [0] * players)[s] for ep, s in zip(episodes, seat)]))
+
+    offers = per_game("proposeTrade")
     return {
         "a": path_a,
         "b": path_b,
@@ -148,6 +154,12 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         "meanVp": float(np.mean([ep["vp"][s] for ep, s in zip(episodes, seat)])),
         "meanTurns": float(np.mean([ep["turns"] for ep in episodes])),
         "truncated": sum(ep["truncated"] for ep in episodes) / n if n else 0.0,
+        # How A plays: offers per match and the share someone took, trades done, builds.
+        "offersPerGame": offers,
+        "offerTakenRate": per_game("offerTaken") / offers if offers else 0.0,
+        "tradesPerGame": per_game("tradeDone"),
+        "citiesPerGame": per_game("buildCity"),
+        "settlementsPerGame": per_game("buildSettlement"),
         "seconds": seconds,
     }
 
@@ -157,7 +169,10 @@ def report(s: dict) -> str:
     return (f"A {s['a']}\nB {s['b']} (every other seat)\n"
             f"{s['games']} matches in {s['seconds']:.0f}s: A wins {100 * s['winRate']:.1f}% [{100 * lo:.1f}-{100 * hi:.1f}] "
             f"(parity 25% at 4 players) | place {s['meanRank']:.2f} | VP {s['meanVp']:.1f} | "
-            f"{s['meanTurns']:.0f} turns | {100 * s['truncated']:.1f}% cut off")
+            f"{s['meanTurns']:.0f} turns | {100 * s['truncated']:.1f}% cut off\n"
+            f"A per match: {s['offersPerGame']:.1f} offers ({100 * s['offerTakenRate']:.0f}% taken), "
+            f"{s['tradesPerGame']:.1f} player trades, {s['citiesPerGame']:.1f} cities, "
+            f"{s['settlementsPerGame']:.1f} settlements")
 
 
 def main(argv: list[str] | None = None) -> None:

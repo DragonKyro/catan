@@ -36,21 +36,48 @@ To stop a run you can't Ctrl+C (one started in the background), create an
 empty `training/runs/catan/<run>/STOP`; it saves and exits after the current
 update. Run the same command with `--resume` to carry on.
 
-PPO from scratch. Each update collects `--rollout` (32) decisions from every
-match: `--workers` (default cores − 6, max 14) node processes ×
-`--envs-per-worker` (32) matches, ~14k decisions. Workers come in three kinds:
+Each update collects `--rollout` (32) decisions from every match:
+`--workers` (default cores − 6, max 14) node processes × `--envs-per-worker`
+(32) matches, ~14k decisions.
 
-- **self** (`--self-play`, half): all four seats are the network being trained.
-- **heuristic** (`--vs-heuristic`, a quarter): one learner seat, three seats of
-  the hand-written AI in `src/ai`.
-- **past** (the rest): one learner seat, three seats of a checkpoint drawn from
-  the newest `--pool` (20), re-drawn every `--pool-refresh` (10) updates
-  (`--past-opponents` distinct ones at a time). Heuristic seats until the first
-  checkpoint exists.
+**Imitation first.** The first `--bc-updates` (25) learn to copy the
+heuristic AI. The env labels every learner decision with the heuristic's slot
+(`teacher.ts`); the policy is trained to predict it (`--bc-epochs` 10 at
+`--bc-lr` 1e-3) and the value head on the games' rewards. The heuristic plays
+those moves at first; in the last `--bc-dagger` (40%) of imitation the
+network plays its own moves and still learns the heuristic's labels (DAgger),
+so it also learns what to do after its own mistakes. The log shows how often
+it agrees with the heuristic.
 
-The lone learner seat rotates round the table match by match. Networks always
-run in this Python process (GPU-batched); heuristic seats play inside node.
-Workers run in two interleaved groups so env time and GPU time overlap.
+**Then PPO**, plus a pull toward the heuristic's choice (`--bc-anchor` 0.3)
+that fades to 0 over `--bc-anchor-updates` (300), so the switch keeps what
+imitation taught. Workers come in four kinds:
+
+- **self** (`--self-play`, 30%): all four seats are the network being trained.
+- **heuristic** (`--vs-heuristic`, 35%): one learner seat, three seats of the
+  hand-written AI in `src/ai`.
+- **mixed** (`--mixed`, 35%): one learner, one heuristic, two past checkpoints
+  at the same table.
+- **past** (the rest, 0 by default): one learner seat, three past checkpoints.
+
+Past checkpoints come from the newest `--pool` (20), re-drawn every
+`--pool-refresh` (10) updates (`--past-opponents` distinct ones at a time);
+heuristic seats until the first checkpoint exists. The lone learner seat
+rotates round the table match by match. Networks always run in this Python
+process (GPU-batched); heuristic seats play inside node. Workers run in two
+interleaved groups so env time and GPU time overlap.
+
+**Guard.** Self-play can drift toward habits that only beat copies of itself
+(the first run did: it stopped accepting trades and lost ground to the
+heuristic). When an eval vs the heuristic lands with its whole 95% interval
+below the best score so far, one self-play worker moves to heuristic tables
+(up to `--guard-max-shift`, 2); it moves back once the score is within 3
+points of the best. The log says when it acts.
+
+**Hopeless offers cost a little.** An offer every other player rejects costs
+its offerer `--refused-offer-penalty` (0.002; a VP of shaping is 0.05, a place
+0.17), so it stops being free to fish with offers nobody will take. The cap of
+2 offers a turn already rules out endless offering.
 
 Reward (`src/ai/nn/reward.ts`): at match end, win + placement + VP share,
 centred on the table (10/8/6/4 VP → +1.15 / −0.12 / −0.38 / −0.65); a match
@@ -115,6 +142,18 @@ python training/catan/evaluate.py progress training/runs/catan/main --vs heurist
 Agents: `heuristic`, a policy `.json`, a run directory (its latest policy), or
 `RUN@N`. Agent A takes one seat (rotating), agent B every other seat.
 
+### How it plays: `analyze`
+
+```sh
+python training/catan/analyze.py training/runs/catan/main --vs heuristic --games 400
+```
+
+Per game, for A's seat and the average opponent seat: results, builds, dev
+cards, and every kind of trade (bank / port trades, offers made and taken,
+offers accepted vs rejected, player trades completed). Builds its own env
+bundle in `training/dist-analysis/`, so it's safe to run during training
+(though it shares the CPU and GPU with it).
+
 ## Pieces
 
 | File | Role |
@@ -122,6 +161,7 @@ Agents: `heuristic`, a policy `.json`, a run directory (its latest policy), or
 | `catan/train.py` | PPO trainer, worker kinds, opponent pool, checkpoints, background evals, progress table |
 | `catan/model.py` | graph policy/value network, policy-file export / load, checkpoint I/O |
 | `catan/evaluate.py` | seat-rotated eval API + CLI (`match`, `progress`) |
+| `catan/analyze.py` | per-game action habits (builds, dev cards, trades) of a policy vs its opponents |
 | `catan/env_client.py` | Python `CatanEnv` client, plus a random-agent smoke test |
 | `catan/bench_model.py` | network speed / memory on this GPU |
 | `catan/test_training.py` | pytest: export round trip, topology, bridge, train → resume → evaluate |

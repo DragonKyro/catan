@@ -290,6 +290,71 @@ export function decodeSlot(
   throw new Error(`decodeSlot: no meaning for ${name} in ${d.type}`);
 }
 
+/** The slot that plays `action` for the viewer's current decision — for a
+ *  multi-part answer, the slot of its next part — or −1 if the action space
+ *  can't express it (an offer outside the menu, a discard the draft has
+ *  already left). The inverse of decodeSlot; legality isn't checked. */
+export function slotForAction(obs: CatanObservation, action: Action): number {
+  const L = slotLayout(obs);
+  const E0 = L.vertices;
+  const H0 = E0 + L.edges;
+  const G0 = H0 + L.hexes;
+  const idx = obs.index;
+  const d = obs.decision;
+  const at = (base: number, i: number | undefined) => (i === undefined || i < 0 ? -1 : base + i);
+  switch (action.type) {
+    case 'placeInitialSettlement':
+    case 'buildSettlement':
+    case 'buildCity':
+      return at(0, idx.vertexIndex.get(action.vertex));
+    case 'placeInitialRoad':
+    case 'buildRoad':
+      return at(E0, idx.edgeIndex.get(action.edge));
+    case 'rollDice':
+      return G0 + globalSlot('roll');
+    case 'endTurn':
+      return G0 + globalSlot('endTurn');
+    case 'buyDevCard':
+      return G0 + globalSlot('buyDev');
+    case 'playKnight':
+      return G0 + globalSlot('playKnight');
+    case 'playRoadBuilding': {
+      if (d?.type !== 'roadBuilding') return G0 + globalSlot('playRoadBuilding');
+      if (d.placed.some((e, k) => action.edges[k] !== e)) return -1;
+      const next = action.edges[d.placed.length];
+      return next === undefined ? -1 : at(E0, idx.edgeIndex.get(next));
+    }
+    case 'playYearOfPlenty': {
+      const [a, b] = action.resources;
+      return at(G0 + PAIR_BASE, PAIRS.findIndex(([x, y]) => (x === a && y === b) || (x === b && y === a)));
+    }
+    case 'playMonopoly':
+      return at(G0 + MONOPOLY_BASE, RESOURCES.indexOf(action.resource));
+    case 'bankTrade':
+      return at(G0 + BANK_BASE, SWAPS.findIndex(([give, get]) => give === action.give && get === action.receive));
+    case 'proposeTrade':
+      return at(G0 + OFFER_BASE, OFFERS.findIndex((o) => sameOffer(o, action)));
+    case 'acceptTrade':
+      return G0 + globalSlot('accept');
+    case 'rejectTrade':
+    case 'cancelTrade':
+      return G0 + globalSlot('reject');
+    case 'discard': {
+      if (d?.type !== 'discard') return -1;
+      if (RESOURCES.some((r) => d.chosen[r] > (action.resources[r] ?? 0))) return -1;
+      return at(G0 + DISCARD_BASE, RESOURCES.findIndex((r) => (action.resources[r] ?? 0) > d.chosen[r]));
+    }
+    case 'moveRobber': {
+      if (d?.type !== 'robberVictim') return at(H0, idx.hexIndex.get(action.hex));
+      if (action.hex !== d.hex || action.stealFrom === null) return -1;
+      const off = obs.players.find((p) => p.id === action.stealFrom)?.offset;
+      return off === undefined || off < 1 || off > MAX_VICTIM_OFFSET ? -1 : G0 + VICTIM_BASE + off - 1;
+    }
+    default:
+      return -1;
+  }
+}
+
 /** After choosing `placed`, finish the card if no further road fits (or two are down). */
 function roadBuildingStep(obs: CatanObservation, placed: EdgeId[]): Decoded {
   const playerId = obs.viewerId;
