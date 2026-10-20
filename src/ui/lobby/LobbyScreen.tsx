@@ -1,10 +1,87 @@
-import { useState } from 'react';
-import { useNetworkStore } from '@/store/networkStore';
+import { useEffect, useState } from 'react';
+import { useNetworkStore, type JoinFailure } from '@/store/networkStore';
+import type { RelayStatus } from '@/net';
+import { deviceLabel } from '@/net/diagnostics';
 import { Button } from '@/ui/shared/Button';
 import { ChatPanel } from '@/ui/chat/ChatPanel';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL } from '@/ai/nn';
 import './LobbyScreen.css';
+
+/** The relay connections, re-read every second (the store's value isn't reactive). */
+function useRelayStatus(): RelayStatus {
+  const read = useNetworkStore((s) => s.relayStatus);
+  const [status, setStatus] = useState(read);
+  useEffect(() => {
+    const t = setInterval(() => setStatus(read()), 1000);
+    return () => clearInterval(t);
+  }, [read]);
+  return status;
+}
+
+const relaysText = (r: RelayStatus) => `relays ${r.connected}/${r.total} connected · ${deviceLabel()}`;
+
+function failureDetails(f: JoinFailure): string {
+  return `code ${f.code} · relays ${f.relays.connected}/${f.relays.total} · other devices seen ${f.peersSeen}`
+    + ` · waited ${Math.round(f.waitedMs / 1000)}s · ${deviceLabel()}`;
+}
+
+/** A guest looking for the host — never shown as an (empty) lobby. */
+function SearchingCard() {
+  const { roomCode, joinStartedAt, leaveRoom } = useNetworkStore();
+  const relays = useRelayStatus();
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const waited = joinStartedAt ? Math.max(0, Math.floor((now - joinStartedAt) / 1000)) : 0;
+  return (
+    <div className="lobby-wrap lobby-wrap-single">
+      <div className="lobby-card">
+        <header className="lobby-header">
+          <Button variant="ghost" size="sm" onClick={leaveRoom}>← Cancel</Button>
+          <div className="lobby-roomcode-wrap">
+            <span className="lobby-roomcode-label">Looking for room</span>
+            <div className="lobby-roomcode lobby-roomcode-static">{roomCode}</div>
+          </div>
+          <div style={{ width: 60 }} />
+        </header>
+        <div className="lobby-status">Waiting for the host's device to answer… {waited}s</div>
+        <p className="lobby-debug">{relaysText(relays)}</p>
+      </div>
+    </div>
+  );
+}
+
+function ErrorCard() {
+  const { errorMessage, joinFailure, clearError, retryJoin } = useNetworkStore();
+  return (
+    <div className="lobby-wrap lobby-wrap-single">
+      <div className="lobby-card">
+        <header className="lobby-header">
+          <Button variant="ghost" size="sm" onClick={clearError}>
+            ← Back
+          </Button>
+          <div className="lobby-roomcode-wrap" />
+          <div style={{ width: 60 }} />
+        </header>
+        {joinFailure && (
+          <h3 className="lobby-error-title">
+            {joinFailure.reason === 'noRelays' ? "Can't reach the matchmaking relays" : `Room ${joinFailure.code} not found`}
+          </h3>
+        )}
+        <div className="lobby-status" style={{ whiteSpace: 'pre-wrap' }}>
+          {errorMessage ?? 'Connection error.'}
+        </div>
+        {joinFailure && <p className="lobby-debug">{failureDetails(joinFailure)}</p>}
+        <Button variant="primary" size="lg" fullWidth onClick={joinFailure ? retryJoin : clearError}>
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function LobbyScreen() {
   const {
@@ -18,33 +95,13 @@ export function LobbyScreen() {
     hostSetAiLevel,
     hostStartGame,
     leaveRoom,
-    clearError,
     connection,
-    errorMessage,
   } = useNetworkStore();
   const [copied, setCopied] = useState(false);
+  const relays = useRelayStatus();
 
-  if (connection === 'error') {
-    return (
-      <div className="lobby-wrap">
-        <div className="lobby-card">
-          <header className="lobby-header">
-            <Button variant="ghost" size="sm" onClick={clearError}>
-              ← Back
-            </Button>
-            <div className="lobby-roomcode-wrap" />
-            <div style={{ width: 60 }} />
-          </header>
-          <div className="lobby-status" style={{ whiteSpace: 'pre-wrap' }}>
-            {errorMessage ?? 'Connection error.'}
-          </div>
-          <Button variant="primary" size="lg" fullWidth onClick={clearError}>
-            Try again
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  if (connection === 'error') return <ErrorCard />;
+  if (connection === 'connecting') return <SearchingCard />;
 
   const isHost = role === 'host';
   const canStart = lobby.seats.length >= 3 && lobby.seats.length <= 8;
@@ -74,10 +131,6 @@ export function LobbyScreen() {
           </div>
           <div style={{ width: 60 }} />
         </header>
-
-        {connection === 'connecting' && (
-          <div className="lobby-status">Connecting to room…</div>
-        )}
 
         <div className="lobby-seats">
           <h3>Players ({lobby.seats.length} / 8)</h3>
@@ -155,6 +208,8 @@ export function LobbyScreen() {
             Start game
           </Button>
         )}
+
+        <p className="lobby-debug">{relaysText(relays)}</p>
       </div>
 
       <div className="lobby-chat-wrap">

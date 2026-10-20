@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { useNetworkStore } from '@/store/networkStore';
+import { NetworkTest } from './NetworkTest';
 import './OnlineMenu.css';
 
 interface Props {
@@ -14,10 +15,15 @@ export function OnlineMenu({ onBack }: Props) {
 
   const [name, setName] = useState(myDisplayName || '');
   const [code, setCode] = useState('');
-  const [view, setView] = useState<'choose' | 'join'>('choose');
+  const [view, setView] = useState<'choose' | 'join' | 'test'>('choose');
 
   const nameOk = name.trim().length > 0;
   const codeOk = code.trim().length >= 3;
+  const join = () => {
+    if (nameOk && codeOk) joinRoom(code.trim(), name.trim());
+  };
+
+  if (view === 'test') return <NetworkTest onBack={() => setView('choose')} />;
 
   return (
     <div className="online-wrap">
@@ -54,6 +60,9 @@ export function OnlineMenu({ onBack }: Props) {
             <Button size="lg" fullWidth disabled={!nameOk} onClick={() => setView('join')}>
               Join with a code
             </Button>
+            <Button variant="ghost" size="sm" fullWidth onClick={() => setView('test')}>
+              Network test (check this device's connection)
+            </Button>
           </div>
         )}
 
@@ -65,8 +74,15 @@ export function OnlineMenu({ onBack }: Props) {
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                onKeyDown={(e) => e.key === 'Enter' && join()}
                 placeholder="e.g. ABCD"
                 maxLength={6}
+                // Phone keyboards must not "correct" a room code into a word.
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                enterKeyHint="go"
                 style={{ letterSpacing: '0.3em', textTransform: 'uppercase' }}
               />
             </label>
@@ -76,7 +92,7 @@ export function OnlineMenu({ onBack }: Props) {
                 size="lg"
                 fullWidth
                 disabled={!nameOk || !codeOk}
-                onClick={() => joinRoom(code.trim(), name.trim())}
+                onClick={join}
               >
                 Join room
               </Button>

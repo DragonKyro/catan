@@ -108,3 +108,59 @@
   padding: 1px 4px;
   font-size: 0.95em;
 }
+
+/* Network test */
+.nettest-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.nettest-section h3 {
+  margin: 0;
+  font-size: 0.78em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.nettest-line {
+  margin: 0;
+}
+
+.nettest-note,
+.nettest-soft {
+  margin: 0;
+  font-size: 0.85em;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
+.nettest-relays,
+.nettest-peers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85em;
+}
+
+.nettest-relays {
+  font-family: ui-monospace, monospace;
+}
+
+.nettest-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #707070;
+}
+
+.nettest-dot.online { background: var(--success); }
+.nettest-dot.pending { background: var(--accent); }
+.nettest-dot.offline { background: #c0392b; }
