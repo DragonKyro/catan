@@ -82,6 +82,25 @@ def test_train_checkpoint_resume_evaluate(tmp_path):
     assert s["games"] == 4 and 0 <= s["winRate"] <= 1 and 1 <= s["meanRank"] <= 4
     s = ev.evaluate(f"{run_dir}@3", f"{run_dir}@1", games=4, workers=1, max_turns=40, device="cpu")
     assert s["games"] == 4
+    # The 4-way table: two A seats, a heuristic, B; A's numbers are per A seat.
+    s = ev.evaluate(f"{run_dir}@3", f"{run_dir}@1", games=4, workers=1, max_turns=40, device="cpu", lineup="AAHB")
+    assert s["lineup"] == "AAHB" and s["games"] == 4 and 0 <= s["winRate"] <= 0.5
+
+    # Carry on from a policy file with a fixed opponent, every table kind, and a decaying rate.
+    more = ["--runs-dir", str(tmp_path), "--run", "t", "--envs-per-worker", "4", "--rollout", "8",
+            "--save-every", "1", "--eval-every", "0", "--no-build", "--minibatch", "64", "--device", "cpu",
+            "--resume", "--init-from", f"{run_dir}@2", "--fixed-opponent", f"{run_dir}@1",
+            "--mix", "heuristic=1,past=1,self=1,blend=1", "--updates", "4", "--anneal-lr", "--anneal-from", "2",
+            "--bc-updates", "1", "--bc-anchor-updates", "2"]
+    for f in os.listdir(os.path.join(run_dir, "ckpt")):
+        os.remove(os.path.join(run_dir, "ckpt", f))  # nothing to resume: --init-from applies
+    train.main(more)
+    with open(os.path.join(run_dir, "metrics.jsonl"), encoding="utf-8") as f:
+        rows = [json.loads(line) for line in f]
+    assert [r["update"] for r in rows] == [1, 2, 3, 4]  # update 3 of the first run was dropped and redone
+    assert rows[2]["lr"] > rows[3]["lr"] > 0
+    with open(os.path.join(run_dir, "config.json"), encoding="utf-8") as f:
+        assert json.load(f)["workers"] == 4
 
 
 class _FakeEnv:
@@ -110,3 +129,20 @@ def test_guard_moves_self_play_to_heuristic_tables_and_back():
     t.guard(30, result(0.19, 0.14, 0.24))  # back near the best
     assert t.guard_workers == [2] and t.workers[1].role == "self"
     assert t.workers[1].env.seats == ["learner"] * 4
+
+
+def test_background_evals_with_a_fixed_opponent(tmp_path):
+    """The eval path end to end: save → three eval subprocesses (heuristic, fixed, 4-way) → evals.jsonl → progress.md."""
+    common = ["--runs-dir", str(tmp_path), "--run", "e", "--envs-per-worker", "2", "--rollout", "4",
+              "--save-every", "1", "--no-build", "--width", "16", "--rounds", "1", "--minibatch", "64",
+              "--device", "cpu", "--bc-updates", "0", "--bc-anchor", "0", "--max-turns", "30"]
+    run_dir = train.main(["--updates", "1", "--eval-every", "0", "--mix", "heuristic=1,self=1", *common])
+    train.main(["--updates", "2", "--resume", "--eval-every", "1", "--eval-games", "2", "--eval-workers", "1",
+                "--fixed-opponent", f"{run_dir}@1", "--mix", "heuristic=1,past=1,blend=1", "--opponent-play", "greedy",
+                *common])
+    with open(os.path.join(run_dir, "evals.jsonl"), encoding="utf-8") as f:
+        tags = {(r["update"], r["vs"], r.get("lineup")) for r in map(json.loads, f)}
+    assert {(2, "heuristic", "ABBB"), (2, "fixed", "ABBB"), (2, "blend", "AAHB")} <= tags
+    with open(os.path.join(run_dir, "progress.md"), encoding="utf-8") as f:
+        doc = f.read()
+    assert "vs 3× u1" in doc and "4-way" in doc

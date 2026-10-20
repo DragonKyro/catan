@@ -11,6 +11,11 @@ cap.
 Agents: `heuristic`, a policy .json, a run directory (its latest policy) or
 RUN@N (the policy saved at update N).
 
+`--lineup` sets the table, one letter per seat: A (agent A), B (agent B), H (a
+heuristic AI); default A then B everywhere else. With A in several seats, A's
+numbers are per A seat (win 25% is still parity), e.g. AAHB = two A seats, a
+heuristic and B.
+
     python training/catan/evaluate.py match training/runs/catan/main heuristic --games 400
     python training/catan/evaluate.py match training/runs/catan/main@5000 training/runs/catan/main@1000
     python training/catan/evaluate.py progress training/runs/catan/main --vs heuristic --every 1000
@@ -86,8 +91,12 @@ def _greedy(net: CatanNet, parts: list[np.ndarray], mask: np.ndarray, rows: np.n
 
 
 def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, players: int = 4,
-             seed: int = EVAL_SEED, max_turns: int = 200, device: str | None = None) -> dict:
-    """A in one seat vs B in every other seat, `games` fresh deals."""
+             seed: int = EVAL_SEED, max_turns: int = 200, device: str | None = None,
+             lineup: str | None = None) -> dict:
+    """`games` fresh deals at the `lineup` table (default A in one seat, B in every other)."""
+    lineup = (lineup or "A" + "B" * (players - 1)).upper()
+    if len(lineup) != players or set(lineup) - set("ABH") or "A" not in lineup:
+        raise ValueError(f"lineup {lineup!r}: one of A / B / H per seat ({players}), at least one A")
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     torch.backends.cuda.matmul.allow_tf32 = True
     path_a, path_b = resolve(a), resolve(b)
@@ -105,8 +114,9 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
             return n
 
         net_a = net(path_a)
-        net_b = None if path_b == HEURISTIC else net(path_b)
-        seats = ["learner"] + [HEURISTIC if net_b is None else "opponent"] * (players - 1)
+        net_b = None if path_b == HEURISTIC or "B" not in lineup else net(path_b)
+        role_of = {"A": "learner", "B": "opponent" if net_b is not None else HEURISTIC, "H": HEURISTIC}
+        seats = [role_of[c] for c in lineup]
         batches = [env.reset(num_envs=n, seed=seed + 1_000_003 * w, seats=seats, max_turns=max_turns, quota=1)
                    for w, (env, n) in enumerate(zip(envs, per))]
         episodes: list = []
@@ -134,24 +144,27 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         for env in envs:
             env.close()
 
-    seat = [ep["roles"].index("learner") for ep in episodes]
-    wins = sum(ep["winnerSeat"] == s for ep, s in zip(episodes, seat))
+    # Every A seat of every match is one sample.
+    samples = [(ep, s) for ep in episodes for s, r in enumerate(ep["roles"]) if r == "learner"]
+    wins = sum(ep["winnerSeat"] == s for ep, s in samples)
     n = len(episodes)
+    k = len(samples)
 
     def per_game(key: str) -> float:
-        """A's mean count of one action kind per match (vec-env Episode.actions)."""
-        return float(np.mean([ep.get("actions", {}).get(key, [0] * players)[s] for ep, s in zip(episodes, seat)]))
+        """A's mean count of one action kind per match and seat (vec-env Episode.actions)."""
+        return float(np.mean([ep.get("actions", {}).get(key, [0] * players)[s] for ep, s in samples]))
 
     offers = per_game("proposeTrade")
     return {
         "a": path_a,
         "b": path_b,
+        "lineup": lineup,
         "games": n,
         "wins": wins,
-        "winRate": wins / n if n else 0.0,
-        "winCi95": list(wilson(wins, n)),
-        "meanRank": float(np.mean([ep["rank"][s] for ep, s in zip(episodes, seat)])),
-        "meanVp": float(np.mean([ep["vp"][s] for ep, s in zip(episodes, seat)])),
+        "winRate": wins / k if k else 0.0,
+        "winCi95": list(wilson(wins, k)),
+        "meanRank": float(np.mean([ep["rank"][s] for ep, s in samples])),
+        "meanVp": float(np.mean([ep["vp"][s] for ep, s in samples])),
         "meanTurns": float(np.mean([ep["turns"] for ep in episodes])),
         "truncated": sum(ep["truncated"] for ep in episodes) / n if n else 0.0,
         # How A plays: offers per match and the share someone took, trades done, builds.
@@ -166,9 +179,9 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
 
 def report(s: dict) -> str:
     lo, hi = s["winCi95"]
-    return (f"A {s['a']}\nB {s['b']} (every other seat)\n"
+    return (f"A {s['a']}\nB {s['b']}\ntable {s['lineup']} (A = agent A, B = agent B, H = heuristic)\n"
             f"{s['games']} matches in {s['seconds']:.0f}s: A wins {100 * s['winRate']:.1f}% [{100 * lo:.1f}-{100 * hi:.1f}] "
-            f"(parity 25% at 4 players) | place {s['meanRank']:.2f} | VP {s['meanVp']:.1f} | "
+            f"(parity {100 / len(s['lineup']):.0f}%) | place {s['meanRank']:.2f} | VP {s['meanVp']:.1f} | "
             f"{s['meanTurns']:.0f} turns | {100 * s['truncated']:.1f}% cut off\n"
             f"A per match: {s['offersPerGame']:.1f} offers ({100 * s['offerTakenRate']:.0f}% taken), "
             f"{s['tradesPerGame']:.1f} player trades, {s['citiesPerGame']:.1f} cities, "
@@ -191,6 +204,7 @@ def main(argv: list[str] | None = None) -> None:
     m.add_argument("a")
     m.add_argument("b", nargs="?", default=HEURISTIC)
     m.add_argument("--json", action="store_true", help="print the summary as one JSON line")
+    m.add_argument("--lineup", default=None, help="one of A / B / H per seat, e.g. AAHB (default ABBB)")
     common(m)
     pr = sub.add_parser("progress", help="a run's checkpoints vs one opponent")
     pr.add_argument("run")
@@ -202,7 +216,7 @@ def main(argv: list[str] | None = None) -> None:
     kw = dict(games=args.games, workers=args.workers, players=args.players, seed=args.seed,
               max_turns=args.max_turns, device=args.device)
     if args.cmd == "match":
-        s = evaluate(args.a, args.b, **kw)
+        s = evaluate(args.a, args.b, lineup=args.lineup, **kw)
         print(json.dumps(s) if args.json else report(s), flush=True)
         return
     print(f"| update | win vs {args.vs} (95% CI) | place | VP | turns |\n|---:|---:|---:|---:|---:|")

@@ -16,8 +16,11 @@ Each update:
        heuristic  one learner seat, three seats of the hand-written AI (src/ai)
        mixed      one learner, one heuristic, two past checkpoints at one table
        past       one learner seat, three past checkpoints
+       blend      two learner seats, one heuristic, one past checkpoint (4-way)
      Past checkpoints are drawn from the newest `--pool` (heuristic seats until
-     a checkpoint exists). The lone learner seat rotates round the table.
+     a checkpoint exists), or are all `--fixed-opponent` when that is set.
+     `--mix kind=count,...` sets the workers directly (instead of the shares).
+     Learner seats rotate round the table match by match.
   2. The first `--bc-updates` imitate the heuristic (supervised: `--bc-epochs`
      at `--bc-lr`). The env labels each learner decision with the heuristic's
      slot and the policy learns to predict it, the value head learning from
@@ -41,6 +44,11 @@ Each update:
 
 An offer every other player rejects costs its offerer `--refused-offer-penalty`
 (tiny next to a VP or a place), so hopeless offers stop being free.
+
+`--init-from POLICY` starts from a policy file's weights (fresh optimizer),
+numbering updates on from the update it was saved at; `--anneal-lr` with
+`--anneal-from N` decays the learning rate linearly from --lr at update N to 0
+at --updates.
 
 Reported every update (train.log): throughput, PPO health (KL, clip fraction,
 entropy, explained variance), the learner's recent results per worker kind
@@ -107,8 +115,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     game.add_argument("--vs-heuristic", type=float, default=0.35, help="share of workers with three heuristic-AI seats")
     game.add_argument("--mixed", type=float, default=0.35,
                       help="share with one heuristic + two past checkpoints per table; the rest face past checkpoints")
+    game.add_argument("--mix", default="",
+                      help="workers by kind, e.g. heuristic=4,past=4,self=3,blend=3 (overrides the shares)")
+    game.add_argument("--fixed-opponent", default=None, metavar="POLICY",
+                      help="every past-checkpoint seat plays this policy (a .json, RUN@N, ...) instead of the pool")
     game.add_argument("--pool", type=int, default=20, help="newest checkpoints past opponents are drawn from")
     game.add_argument("--pool-refresh", type=int, default=10, help="updates between past-opponent re-draws")
+    game.add_argument("--opponent-play", choices=("sample", "greedy"), default="sample",
+                      help="how past-checkpoint seats pick: sampled for variety, or their top move (as in evals)")
     game.add_argument("--past-opponents", type=int, default=2,
                       help="distinct past checkpoints in play at once (shared round-robin by past workers)")
     game.add_argument("--max-turns", type=int, default=200, help="dice rolls before a match is cut off")
@@ -121,7 +135,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     learn.add_argument("--width", type=int, default=64)
     learn.add_argument("--rounds", type=int, default=4, help="message-passing rounds")
     learn.add_argument("--lr", type=float, default=3e-4)
-    learn.add_argument("--anneal-lr", action="store_true", help="decay lr linearly to 0 at --updates")
+    learn.add_argument("--anneal-lr", action="store_true", help="decay lr linearly to 0 at --updates ...")
+    learn.add_argument("--anneal-from", type=int, default=0, help="... starting from --lr at this update")
+    learn.add_argument("--init-from", default=None, metavar="POLICY",
+                       help="start from this policy file's weights (when there is no checkpoint to resume)")
     learn.add_argument("--epochs", type=int, default=4)
     learn.add_argument("--minibatch", type=int, default=2048)
     learn.add_argument("--gamma", type=float, default=0.997)
@@ -158,7 +175,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 @dataclass
 class Worker:
-    role: str  # 'self' | 'heuristic' | 'mixed' | 'past'
+    role: str  # 'self' | 'heuristic' | 'mixed' | 'past' | 'blend'
     env: CatanEnv
     batch: Batch | None = None
     opponent: CatanNet | None = None
@@ -172,9 +189,25 @@ def worker_roles(n: int, self_share: float, heuristic_share: float, mixed_share:
     return ["self"] * n_self + ["heuristic"] * n_heur + ["mixed"] * n_mixed + ["past"] * (n - n_self - n_heur - n_mixed)
 
 
+KINDS = ("self", "heuristic", "mixed", "past", "blend")
+
+
+def parse_mix(spec: str) -> list[str]:
+    """'heuristic=4,self=3' → ['heuristic'] * 4 + ['self'] * 3."""
+    roles: list[str] = []
+    for part in spec.split(","):
+        kind, _, count = part.strip().partition("=")
+        if kind not in KINDS or not count.isdigit():
+            raise SystemExit(f"--mix: bad entry {part!r} (kinds: {', '.join(KINDS)})")
+        roles += [kind] * int(count)
+    return roles
+
+
 def seats_for(role: str, players: int, has_pool: bool) -> list[str]:
     if role == "self":
         return ["learner"] * players
+    if role == "blend":
+        return ["learner", "learner", "heuristic"] + ["opponent" if has_pool else "heuristic"] * (players - 3)
     if role == "heuristic" or not has_pool:
         return ["learner"] + ["heuristic"] * (players - 1)
     if role == "mixed":
@@ -267,10 +300,12 @@ class Evaluator:
             job = self.jobs.get()
             if job is None:
                 return
-            update, tag, policy, opponent = job
+            update, tag, policy, opponent, lineup = job
             cmd = [sys.executable, "-u", os.path.join(HERE, "evaluate.py"), "match", policy, opponent,
                    "--games", str(self.games), "--workers", str(self.workers), "--device", self.device,
                    "--max-turns", str(self.max_turns), "--players", str(self.players), "--json"]
+            if lineup:
+                cmd += ["--lineup", lineup]
             try:
                 out = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, encoding="utf-8")
                 if out.returncode != 0:
@@ -280,13 +315,13 @@ class Evaluator:
             except Exception as e:  # noqa: BLE001 — reported, training carries on
                 self.results.put((update, tag, opponent, None, str(e)))
 
-    def submit(self, update: int, policy: str, jobs: list[tuple[str, str]]) -> bool:
-        """Queue one eval cycle of (tag, opponent) jobs; refuse while the
+    def submit(self, update: int, policy: str, jobs: list[tuple[str, str, str | None]]) -> bool:
+        """Queue one eval cycle of (tag, opponent, lineup) jobs; refuse while the
         previous cycle hasn't fully started."""
         if self.jobs.qsize() > 0:
             return False
-        for tag, opponent in jobs:
-            self.jobs.put((update, tag, policy, opponent))
+        for tag, opponent, lineup in jobs:
+            self.jobs.put((update, tag, policy, opponent, lineup))
         return True
 
     def drain(self) -> list[tuple]:
@@ -369,29 +404,56 @@ class Trainer:
             self.guard_workers = list(ck.get("guard_workers", []))
             print(f"resumed {name} at update {self.update} ({self.decisions:,} decisions, "
                   f"{fmt_duration(self.train_seconds)} trained)")
+        elif a.init_from:
+            path = ev.resolve(a.init_from)
+            self.net = load_policy(path, self.versions, self.device)
+            self.opt = torch.optim.Adam(self.net.parameters(), lr=a.lr, eps=1e-5)
+            with open(path, encoding="utf-8") as f:
+                meta = json.load(f).get("meta", {})
+            self.update, self.decisions = meta.get("update", 0), meta.get("decisions", 0)
+            for row in self.read_jsonl("metrics.jsonl"):
+                if row["update"] == self.update:
+                    self.train_seconds, self.episodes = row.get("hours", 0) * 3600, row.get("episodes", 0)
+            print(f"initialised {name} from {path} (update {self.update}, fresh optimizer)")
         else:
             self.net = CatanNet(self.dims, self.num_globals, a.width, a.rounds).to(self.device)
             self.opt = torch.optim.Adam(self.net.parameters(), lr=a.lr, eps=1e-5)
+        restarted = bool(ckpts) or bool(a.init_from)
+        self.net.train(False)
         self.net.topology = self.topology
         self.net.amp = not a.no_amp
         n_params = sum(p.numel() for p in self.net.parameters())
 
-        with open(os.path.join(self.run_dir, "config.json"), "w", encoding="utf-8") as f:
-            json.dump({**vars(a), **self.versions, "dims": self.dims, "shape": self.shape,
-                       "arch": self.net.arch, "params": n_params}, f, indent=2)
 
-        roles = worker_roles(a.workers, a.self_play, a.vs_heuristic, a.mixed)
+        roles = parse_mix(a.mix) if a.mix else worker_roles(a.workers, a.self_play, a.vs_heuristic, a.mixed)
+        a.workers = len(roles)
         for k in self.guard_workers:  # self-play workers the guard had moved to heuristic tables
             roles[k] = "heuristic"
+        self.fixed_path = ev.resolve(a.fixed_opponent) if a.fixed_opponent else None
+        self.fixed_label = ""
+        fixed = None
+        if self.fixed_path:
+            fixed = load_policy(self.fixed_path, self.versions, self.device)
+            fixed.topology, fixed.amp = self.topology, self.net.amp
+            with open(self.fixed_path, encoding="utf-8") as f:
+                u = json.load(f).get("meta", {}).get("update")
+            self.fixed_label = f"u{u}" if u is not None else os.path.basename(self.fixed_path)
         self.teacher_on = self.update < self.teacher_until()
         for w, role in enumerate(roles):
             env = CatanEnv(players=a.players)
             seed = a.seed * 10_007 + w * 7_919 + self.update * 104_729
             worker = Worker(role, env)
-            worker.batch = env.reset(num_envs=a.envs_per_worker, seed=seed, seats=seats_for(role, a.players, False),
+            if fixed is not None and role in ("past", "mixed", "blend"):
+                worker.opponent, worker.opponent_name = fixed, self.fixed_label
+            worker.batch = env.reset(num_envs=a.envs_per_worker, seed=seed,
+                                     seats=seats_for(role, a.players, fixed is not None),
                                      max_turns=a.max_turns, vp_shaping=a.vp_shaping, teacher=self.teacher_on,
                                      refused_offer_penalty=a.refused_offer_penalty)
             self.workers.append(worker)
+        # After the workers: --mix decides how many there are.
+        with open(os.path.join(self.run_dir, "config.json"), "w", encoding="utf-8") as f:
+            json.dump({**vars(a), **self.versions, "dims": self.dims, "shape": self.shape,
+                       "arch": self.net.arch, "params": n_params}, f, indent=2)
         self.n_envs = a.workers * a.envs_per_worker
         self.slices = [slice(i * a.envs_per_worker, (i + 1) * a.envs_per_worker) for i in range(a.workers)]
         # Two interleaved groups (each a mix of worker kinds) for pipelined collection.
@@ -399,7 +461,7 @@ class Trainer:
         self.in_flight = [False] * a.workers
         print(f"run {self.run_dir}\n  {a.workers} workers ({', '.join(f'{roles.count(r)} {r}' for r in dict.fromkeys(roles))})"
               f" x {a.envs_per_worker} envs, {a.players} players | board {self.shape['hexes']} hexes, "
-              f"{self.shape['slots']} slots | net {a.width}x{a.rounds} ({n_params:,} params) | device {self.device}"
+              f"{self.shape['slots']} slots | net {self.net.width}x{self.net.n_rounds} ({n_params:,} params) | device {self.device}"
               f"{' bf16' if self.net.amp and self.device.type == 'cuda' else ''}", flush=True)
         if self.update < a.bc_updates:
             fade = (f", with a pull toward it fading out by update {self.teacher_until()}" if a.bc_anchor > 0 else "")
@@ -407,20 +469,25 @@ class Trainer:
         if self.guard_workers:
             print(f"  guard: workers {self.guard_workers} on heuristic tables "
                   f"(best vs heuristic {100 * self.guard_best:.1f}%)")
+        if self.fixed_path:
+            print(f"  past-checkpoint seats all play {self.fixed_label} ({self.fixed_path})")
+        if a.anneal_lr:
+            print(f"  learning rate {a.lr:g} at update {a.anneal_from}, decaying linearly to 0 at {a.updates}")
 
         # Up to one carried (still pending) transition per seat, plus a decision per env per step.
         self.buf = Rollout(self.n_envs * (a.rollout + a.players), self.shape, self.dims)
         self.last = np.full((self.n_envs, a.players), -1, np.int64)
         self.carry: dict | None = None
         self.carry_streams: np.ndarray | None = None
-        # On resume, drop what was logged after the checkpoint (it is about to be redone).
-        self.writer = SummaryWriter(os.path.join(self.run_dir, "tb"), purge_step=self.update + 1 if ckpts else None)
-        metrics_path = os.path.join(self.run_dir, "metrics.jsonl")
-        if ckpts and os.path.isfile(metrics_path):
-            with open(metrics_path, encoding="utf-8") as f:
-                kept = [line for line in f if json.loads(line)["update"] <= self.update]
-            with open(metrics_path, "w", encoding="utf-8") as f:
-                f.writelines(kept)
+        # On a resume / re-start, drop what was logged after this update (it is about to be redone).
+        self.writer = SummaryWriter(os.path.join(self.run_dir, "tb"), purge_step=self.update + 1 if restarted else None)
+        if restarted:
+            for name_ in ("metrics.jsonl", "evals.jsonl"):
+                path_ = os.path.join(self.run_dir, name_)
+                if os.path.isfile(path_):
+                    kept = [r for r in self.read_jsonl(name_) if r["update"] <= self.update]
+                    with open(path_, "w", encoding="utf-8") as f:
+                        f.writelines(json.dumps(r) + "\n" for r in kept)
         self.fallbacks = self.aborted = 0
         self.evaluator = (Evaluator(a.eval_games, a.eval_workers, a.device, a.max_turns, a.players)
                           if a.eval_every > 0 else None)
@@ -430,16 +497,22 @@ class Trainer:
         self.eval_results: dict[int, dict[str, dict]] = {}
         self.eval_meta: dict[int, dict] = {}
         self.progress_shown: set[int] = set()
-        evals_path = os.path.join(self.run_dir, "evals.jsonl")
-        if a.resume and os.path.isfile(evals_path):
-            with open(evals_path, encoding="utf-8") as f:
-                for line in f:
-                    r = json.loads(line)
-                    self.eval_results.setdefault(r["update"], {})[r["vs"]] = r
-                    self.eval_meta[r["update"]] = {"hours": r.get("hours"), "decisions": r.get("decisions")}
+        if restarted:
+            for r in self.read_jsonl("evals.jsonl"):
+                self.eval_results.setdefault(r["update"], {})[r["vs"]] = r
+                self.eval_meta[r["update"]] = {"hours": r.get("hours"), "decisions": r.get("decisions")}
             for u, res in self.eval_results.items():
                 self.eval_expected[u] = list(res)
                 self.progress_shown.add(u)
+            if self.eval_results:
+                self.write_progress()
+
+    def read_jsonl(self, name: str) -> list[dict]:
+        path = os.path.join(self.run_dir, name)
+        if not os.path.isfile(path):
+            return []
+        with open(path, encoding="utf-8") as f:
+            return [json.loads(line) for line in f if line.strip()]
 
     # ------------------------------------------------------------ phases
 
@@ -545,7 +618,13 @@ class Trainer:
         for key, chunks in by_net.items():
             idx = np.concatenate(chunks)
             obs = to_device([p[idx] for p in parts], dev)
-            action, _, _ = sample(nets[key], obs, torch.from_numpy(mask[idx]).to(dev))
+            m = torch.from_numpy(mask[idx]).to(dev)
+            if self.args.opponent_play == "greedy":
+                # Its best move, as in the evals (and as the shipped AI will play).
+                with torch.no_grad():
+                    action = masked_logits(nets[key](*obs)[0], m).argmax(-1)
+            else:
+                action, _, _ = sample(nets[key], obs, m)
             actions[idx] = action.cpu().numpy()
 
         at = 0
@@ -585,13 +664,14 @@ class Trainer:
         self.window["all"].append({"turns": ep["turns"], "truncated": ep["truncated"]})
         if role == "self":
             return
-        seat = ep["roles"].index("learner")
-        roles = ep["roles"]
-        kind = ("mixed" if "heuristic" in roles else "past") if "opponent" in roles else "heuristic"
-        self.window[kind].append({
-            "win": float(ep["winnerSeat"] == seat), "rank": ep["rank"][seat], "vp": ep["vp"][seat],
-            "truncated": ep["truncated"],
-        })
+        # A table's opponents were set when its match began; "opponent" seats mean the pool / fixed net.
+        kind = role if "opponent" in ep["roles"] or role == "heuristic" else "heuristic"
+        for seat, r in enumerate(ep["roles"]):
+            if r == "learner":
+                self.window[kind].append({
+                    "win": float(ep["winnerSeat"] == seat), "rank": ep["rank"][seat], "vp": ep["vp"][seat],
+                    "truncated": ep["truncated"],
+                })
 
     def advantages(self, pending: np.ndarray) -> np.ndarray:
         a, buf = self.args, self.buf
@@ -691,19 +771,27 @@ class Trainer:
                             "phase": "imitation" if u <= a.bc_updates else "ppo"})
         return path
 
-    def eval_jobs(self) -> list[tuple[str, str]]:
-        jobs = [("heuristic", "heuristic")]
+    def eval_jobs(self) -> list[tuple[str, str, str | None]]:
+        jobs: list[tuple[str, str, str | None]] = [("heuristic", "heuristic", None)]
+        if self.fixed_path:
+            # The tables the learner trains at: vs three of the fixed policy, and the 4-way one if in the mix.
+            jobs.append(("fixed", self.fixed_path, None))
+            if any(w.role == "blend" for w in self.workers):
+                jobs.append(("blend", self.fixed_path, "AAHB"))
+            return jobs
         # By update number, not position: a crash-time save adds an off-cycle policy.
         a = self.args
         every = a.eval_past_every or a.eval_every
         earlier = dict(ev.list_policies(self.run_dir)).get(self.update - a.eval_past_gap * a.save_every)
         if earlier and self.update % every == 0:
-            jobs.append(("past", earlier))
+            jobs.append(("past", earlier, None))
         return jobs
 
     def refresh_past_opponents(self) -> None:
+        if self.fixed_path:
+            return  # every past-checkpoint seat plays the fixed policy
         pool = [p for _, p in ev.list_policies(self.run_dir)][-self.args.pool:]
-        past = [w for w in self.workers if w.role in ("past", "mixed")]
+        past = [w for w in self.workers if w.role in ("past", "mixed", "blend")]
         if not pool or not past:
             return
         picks = [random.choice(pool) for _ in range(max(1, self.args.past_opponents))]
@@ -718,6 +806,14 @@ class Trainer:
             w.opponent, w.opponent_name = nets[k % len(nets)]
 
     # ------------------------------------------------------------ logging
+
+    def label(self, kind: str) -> str:
+        """Short name of a table kind in the log."""
+        if kind == "heuristic":
+            return "heur"
+        if kind == "past" and self.fixed_label:
+            return f"vs {self.fixed_label}"
+        return {"blend": "4-way"}.get(kind, kind)
 
     def summary(self, kind: str) -> dict | None:
         rows = self.window.get(kind)
@@ -736,21 +832,21 @@ class Trainer:
         w.add_scalar("progress/episodes", self.episodes, u)
         w.add_scalar("progress/hours", self.train_seconds / 3600, u)
         line = {"update": u, "decisions": self.decisions, "episodes": self.episodes, "seconds": seconds,
-                "hours": self.train_seconds / 3600, **stats}
+                "hours": self.train_seconds / 3600, "lr": getattr(self, "current_lr", a.lr), **stats}
+        w.add_scalar("learn/lr", line["lr"], u)
         parts = []
         imitated = stats.get("imitation", 0) > 0  # the update just trained (self.update has moved on)
         if imitated:
             parts.append(f"imitating: agrees with heuristic {100 * stats.get('teacher_agreement', 0):.0f}%")
         elif stats.get("anchor_weight", 0) > 0:
             parts.append(f"anchor {stats['anchor_weight']:.2f}, agrees {100 * stats.get('teacher_agreement', 0):.0f}%")
-        for kind in ("heuristic", "mixed", "past"):
+        for kind in ("heuristic", "past", "blend", "mixed"):
             s = self.summary(kind)
             if s:
                 for k, v in s.items():
                     w.add_scalar(f"train_vs_{kind}/{k}", v, u)
                     line[f"vs_{kind}_{k}"] = v
-                label = "heur" if kind == "heuristic" else kind
-                parts.append(f"{label}: win {100 * s['win']:3.0f}% place {s['rank']:.2f} vp {s['vp']:4.1f}")
+                parts.append(f"{self.label(kind)}: win {100 * s['win']:3.0f}% place {s['rank']:.2f} vp {s['vp']:4.1f}")
         allm = self.summary("all")
         if allm:
             w.add_scalar("train/match_turns", allm["turns"], u)
@@ -773,7 +869,8 @@ class Trainer:
         else:
             head = (f"pi {stats['policy_loss']:+.3f} kl {stats['approx_kl']:.4f} clip {stats['clipfrac']:.2f} "
                     f"v {stats['value_loss']:.3f} ent {stats['entropy']:.2f} ev {stats['explained_variance']:+.2f}")
-        print(f"u {u:5d} | {self.decisions / 1e6:6.2f}M dec | {rate / 1e3:4.1f}k/s | {head} | {' | '.join(parts)} | "
+        lr_note = f" lr {line['lr']:.1e}" if a.anneal_lr else ""
+        print(f"u {u:5d} | {self.decisions / 1e6:6.2f}M dec | {rate / 1e3:4.1f}k/s | {head}{lr_note} | {' | '.join(parts)} | "
               f"{seconds:.1f}s/u, ETA {fmt_duration(eta)}", flush=True)
 
     def log_evals(self) -> None:
@@ -849,9 +946,13 @@ class Trainer:
         done = sorted(u for u in self.eval_results if partial or u in self.progress_shown)
         rows = done[-last:] if last else done
         gap = a.eval_past_gap * a.save_every
-        lines = ["| update | hours | decisions | vs heuristic: win (95% CI) | place | VP | turns | offers (taken) "
-                 f"| trades | vs {gap} updates earlier: win (95% CI) | place |",
-                 "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        tags = {t for u in rows for t in self.eval_results[u]}
+        names = {"past": f"vs {gap} updates earlier", "fixed": f"vs 3× {self.fixed_label or 'fixed'}",
+                 "blend": f"4-way (2× agent, heuristic, {self.fixed_label or 'fixed'})"}
+        extra = [t for t in ("past", "fixed", "blend") if t in tags]
+        head = "| update | hours | decisions | vs heuristic: win (95% CI) | place | VP | turns | offers (taken) | trades |"
+        head += "".join(f" {names[t]}: win (95% CI) | place |" for t in extra)
+        lines = [head, "|" + "---:|" * (9 + 2 * len(extra))]
         def win(x: dict | None) -> str:
             return f"{100 * x['winRate']:.1f}% ({100 * x['winCi95'][0]:.1f}-{100 * x['winCi95'][1]:.1f})" if x else ""
 
@@ -860,14 +961,16 @@ class Trainer:
 
         for u in rows:
             r = self.eval_results[u]
-            h, p = r.get("heuristic"), r.get("past")
+            h = r.get("heuristic")
             hours = next((x["hours"] for x in r.values() if x.get("hours") is not None), None)
             dec = next((x["decisions"] for x in r.values() if x.get("decisions") is not None), None)
             cells = [f"{u} (imitation)" if u <= a.bc_updates else str(u), "" if hours is None else f"{hours:.1f}", "" if dec is None else f"{dec / 1e6:.1f}M",
                      win(h), num(h, "meanRank", ".2f"), num(h, "meanVp", ".1f"), num(h, "meanTurns", ".0f"),
                      (f"{h['offersPerGame']:.1f} ({100 * h['offerTakenRate']:.0f}%)" if h and "offersPerGame" in h else ""),
                      (f"{h['tradesPerGame']:.1f}" if h and "tradesPerGame" in h else ""),
-                     win(p), num(p, "meanRank", ".2f")]
+                     ]
+            for t in extra:
+                cells += [win(r.get(t)), num(r.get(t), "meanRank", ".2f")]
             lines.append("| " + " | ".join(cells) + " |")
         heur = [u for u in done if "heuristic" in self.eval_results[u]]
         if heur:
@@ -882,10 +985,11 @@ class Trainer:
         doc = [f"# {os.path.basename(self.run_dir)} progress",
                "",
                f"Base-game Catan, {a.players} players. Encoder v{v['encoderVersion']}, action space "
-               f"v{v['actionSpaceVersion']} ({self.shape['slots']} slots), graph net {a.width}x{a.rounds}. "
-               f"Each checkpoint plays {a.eval_games} greedy matches as one seat against three heuristic AIs, and "
-               f"{a.eval_games} against three copies of the checkpoint {a.eval_past_gap * a.save_every} updates "
-               f"earlier; its seat rotates round the table. Win 25% = parity with each opponent seat; place 1 = first, "
+               f"v{v['actionSpaceVersion']} ({self.shape['slots']} slots), graph net {self.net.width}x{self.net.n_rounds}. "
+               f"Each checkpoint plays {a.eval_games} greedy matches per table: as one seat against three heuristic "
+               f"AIs, and (columns further right) against three copies of an earlier policy or at the 4-way table, "
+               f"where it holds two seats and its win % is per seat. Seats rotate round the table. "
+               f"Win 25% = parity with each opponent seat; place 1 = first, "
                f"{a.players} = last (2.5 = average); offers / trades are the agent's per match vs the heuristics. Updated {time.strftime('%Y-%m-%d %H:%M')}, update "
                f"{self.update}/{a.updates}, {self.train_seconds / 3600:.1f} h trained.",
                "",
@@ -917,7 +1021,10 @@ class Trainer:
                         self.save()
                     break
                 # Imitation is supervised: a higher rate is safe there (and more epochs, see learn).
-                lr = a.bc_lr if self.imitating else a.lr * (1 - self.update / a.updates if a.anneal_lr else 1)
+                span = max(1, a.updates - a.anneal_from)
+                decay = min(1.0, max(0.0, 1 - (self.update - a.anneal_from) / span)) if a.anneal_lr else 1.0
+                lr = a.bc_lr if self.imitating else a.lr * decay
+                self.current_lr = lr
                 for g in self.opt.param_groups:
                     g["lr"] = lr
                 t0 = time.perf_counter()
@@ -937,7 +1044,7 @@ class Trainer:
                         jobs = self.eval_jobs()
                         self.eval_meta[self.update] = {"hours": self.train_seconds / 3600, "decisions": self.decisions}
                         if self.evaluator.submit(self.update, policy, jobs):
-                            self.eval_expected[self.update] = [tag for tag, _ in jobs]
+                            self.eval_expected[self.update] = [job[0] for job in jobs]
                         else:
                             print("  (eval skipped - previous evals still running)", flush=True)
                 if self.update % a.pool_refresh == 0 or self.update == a.save_every:
