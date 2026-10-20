@@ -133,7 +133,7 @@ export function LobbyScreen() {
             >
               {AI_LEVEL_IDS.map((id) => (
                 <option key={id} value={id}>
-                  {AI_LEVELS[id].label} — {AI_LEVELS[id].blurb}
+                  {AI_LEVELS[id].label}
                 </option>
               ))}
             </select>

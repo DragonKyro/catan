@@ -347,17 +347,13 @@ export function NewGame({ onBack }: Props = {}) {
 
         {hasAiSeat && neuralAi && (
           <label className="newgame-field">
-            <span>
-              AI difficulty
-              <span className="newgame-vp-hint"> — {AI_LEVELS[aiLevel].blurb}</span>
-            </span>
+            <span>AI difficulty</span>
             <div className="newgame-segmented">
               {AI_LEVEL_IDS.map((id) => (
                 <button
                   key={id}
                   type="button"
                   className={`newgame-seg${aiLevel === id ? ' active' : ''}`}
-                  title={AI_LEVELS[id].blurb}
                   onClick={() => setAiLevel(id)}
                 >
                   {AI_LEVELS[id].label}

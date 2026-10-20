@@ -23,10 +23,10 @@ import { CatanPolicyNet, type CatanPolicyFile } from './runtime';
 export const AI_LEVEL_IDS: readonly AiLevel[] = ['easy', 'normal', 'hard'];
 export const DEFAULT_AI_LEVEL: AiLevel = 'normal';
 
-export const AI_LEVELS: Record<AiLevel, { label: string; blurb: string; url: string; file: string }> = {
-  easy: { label: 'Easy', blurb: 'about as strong as the classic AI', url: easyUrl, file: 'easy-update100.json' },
-  normal: { label: 'Normal', blurb: 'a solid player', url: normalUrl, file: 'normal-update1000.json' },
-  hard: { label: 'Hard', blurb: 'wins most games against the classic AI', url: hardUrl, file: 'hard-update10000.json' },
+export const AI_LEVELS: Record<AiLevel, { label: string; url: string; file: string }> = {
+  easy: { label: 'Easy', url: easyUrl, file: 'easy-update100.json' },
+  normal: { label: 'Normal', url: normalUrl, file: 'normal-update1000.json' },
+  hard: { label: 'Hard', url: hardUrl, file: 'hard-update10000.json' },
 };
 
 const loading = new Map<AiLevel, Promise<CatanPolicyNet>>();
