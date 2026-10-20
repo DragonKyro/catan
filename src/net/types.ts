@@ -1,4 +1,4 @@
-import type { Action, GameState, PlayerColor } from '@/game/types';
+import type { Action, GameState, PlayerColor, AiLevel } from '@/game/types';
 
 export type ConnectionState =
   | 'disconnected'
@@ -20,6 +20,8 @@ export interface LobbyState {
   seats: LobbySeat[];
   victoryPointsToWin: number;
   seed: number;
+  /** AI seats' strength (the online lobby is base game only). Absent from older hosts. */
+  aiLevel?: AiLevel;
 }
 
 export interface ChatMessage {

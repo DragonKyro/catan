@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { Action, GameState, PlayerColor, PlayerId } from '@/game/types';
+import type { Action, AiLevel, GameState, PlayerColor, PlayerId } from '@/game/types';
 import { createGame } from '@/game/createGame';
+import { DEFAULT_AI_LEVEL } from '@/ai/nn/levels';
 import {
   bindRoom,
   type RoomBindings,
@@ -52,6 +53,7 @@ interface NetStore {
   hostAddAISeat: () => void;
   hostRemoveSeat: (slot: number) => void;
   hostSetVP: (vp: number) => void;
+  hostSetAiLevel: (level: AiLevel) => void;
   hostStartGame: () => void;
 
   sendChat: (text: string) => void;
@@ -308,6 +310,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
       const initialLobby: LobbyState = {
         seats: [{ uuid, name, isAI: false, color: DEFAULT_COLORS[0]! }],
         victoryPointsToWin: DEFAULT_VP,
+        aiLevel: DEFAULT_AI_LEVEL,
         seed: Math.floor(Math.random() * 0xffffffff),
       };
       try {
@@ -441,6 +444,13 @@ export const useNetworkStore = create<NetStore>((set, get) => {
       bindings?.sendLobby(newLobby);
     },
 
+    hostSetAiLevel: (level) => {
+      if (get().role !== 'host') return;
+      const newLobby = { ...get().lobby, aiLevel: level };
+      set({ lobby: newLobby });
+      bindings?.sendLobby(newLobby);
+    },
+
     hostStartGame: () => {
       if (get().role !== 'host') return;
       const lobby = get().lobby;
@@ -450,7 +460,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         playerNames: lobby.seats.map((s) => s.name),
         playerTypes: lobby.seats.map((s) => (s.isAI ? 'ai' : 'human')),
         seed: lobby.seed,
-        settings: { victoryPointsToWin: lobby.victoryPointsToWin },
+        settings: { victoryPointsToWin: lobby.victoryPointsToWin, aiLevel: lobby.aiLevel ?? DEFAULT_AI_LEVEL },
       });
       useGameStore.getState().setGameState(game);
       set({

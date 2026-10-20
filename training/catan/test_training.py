@@ -146,3 +146,29 @@ def test_background_evals_with_a_fixed_opponent(tmp_path):
     with open(os.path.join(run_dir, "progress.md"), encoding="utf-8") as f:
         doc = f.read()
     assert "vs 3× u1" in doc and "4-way" in doc
+
+
+def test_typescript_runtime_matches_pytorch(tmp_path):
+    """src/ai/nn/runtime.ts (what the game plays) against model.py, on real mid-game positions."""
+    shipped = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ai", "nn", "policies", "hard-update10000.json")
+    with CatanEnv() as env:
+        rng = np.random.default_rng(3)
+        batch = env.reset(num_envs=6, seed=11, seats=["learner"] * 4)
+        for _ in range(60):
+            batch = env.step(random_actions(batch.mask, rng))
+        rand = os.path.join(tmp_path, "random.json")
+        net = CatanNet(env.dims, len(env.global_slots))
+        net.topology = Topology(env.topology, env.shape)
+        export_policy(net, rand, env.versions)
+        x = [torch.from_numpy(np.ascontiguousarray(getattr(batch, k))) for k in ("hexes", "vertices", "edges", "glob")]
+        for path in [rand] + ([shipped] if os.path.isfile(shipped) else []):
+            ref_net = load_policy(path, env.versions)
+            ref_net.topology, ref_net.amp = Topology(env.topology, env.shape), False
+            with torch.no_grad():
+                ref = ref_net(*x)[0].numpy()
+            ts = np.asarray(env._call({"cmd": "policyLogits", "path": os.path.abspath(path)})["logits"], np.float32)
+            assert ts.shape == ref.shape
+            assert np.abs(ts - ref).max() < 1e-3 * max(1.0, np.abs(ref).max())
+            legal_ts = np.where(batch.mask, ts, -np.inf).argmax(1)
+            legal_ref = np.where(batch.mask, ref, -np.inf).argmax(1)
+            assert (legal_ts == legal_ref).all()

@@ -14,6 +14,8 @@
 //     followed by those raw bytes, in that order: f32 little-endian features, u8 mask,
 //     i16 teacher slot per row (−1 = none)
 //   → {"cmd":"configure","options":{seats?, teacher?}}  ← {"ok":true}
+//   → {"cmd":"policyLogits","path":"<policy.json>"}
+//   ← {"ok":true,"logits":[[…], …]}   (the TS runtime on every env's pending row — parity checks)
 //   → {"cmd":"close"}
 //   ← {"ok":false,"error":"…"}                       (on any failure)
 //
@@ -27,6 +29,7 @@
 //
 // Nothing else is written to stdout; diagnostics go to stderr.
 
+import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { createGame } from '@/game/createGame';
 import { boardIndex } from '@/ai/nn/board';
@@ -34,6 +37,7 @@ import { ACTION_SPACE_VERSION, GLOBAL_SLOTS } from '@/ai/nn/actions';
 import {
   EDGE_DIM, EDGE_LAYOUT, ENCODER_VERSION, GLOBAL_DIM, GLOBAL_LAYOUT, HEX_DIM, HEX_LAYOUT, VERTEX_DIM, VERTEX_LAYOUT,
 } from '@/ai/nn/encode';
+import { CatanPolicyNet, type CatanPolicyFile } from '@/ai/nn/runtime';
 import { CatanVecEnv, boardShape, type VecBatch, type VecEnvOptions } from './vec-env';
 
 const bytes = (a: ArrayBufferView) => Buffer.from(a.buffer, a.byteOffset, a.byteLength);
@@ -92,6 +96,7 @@ interface Request {
   players?: number;
   options?: Partial<VecEnvOptions>;
   actions?: number[];
+  path?: string;
 }
 
 function handle(msg: Request): object | BatchReply {
@@ -109,6 +114,12 @@ function handle(msg: Request): object | BatchReply {
       if (!env) throw new Error('configure before reset');
       env.configure(msg.options ?? {});
       return { ok: true };
+    case 'policyLogits': {
+      if (!env) throw new Error('policyLogits before reset');
+      if (!msg.path) throw new Error('policyLogits needs "path"');
+      const net = new CatanPolicyNet(JSON.parse(readFileSync(msg.path, 'utf8')) as CatanPolicyFile);
+      return { ok: true, logits: env.policyLogits(net) };
+    }
     case 'close':
       process.exit(0);
     default:

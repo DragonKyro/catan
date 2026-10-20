@@ -164,7 +164,7 @@ bundle in `training/dist-analysis/`, so it's safe to run during training
 | `catan/analyze.py` | per-game action habits (builds, dev cards, trades) of a policy vs its opponents |
 | `catan/env_client.py` | Python `CatanEnv` client, plus a random-agent smoke test |
 | `catan/bench_model.py` | network speed / memory on this GPU |
-| `catan/test_training.py` | pytest: export round trip, topology, bridge, train → resume → evaluate |
+| `catan/test_training.py` | pytest: export round trip, topology, bridge, train → resume → evaluate, TS runtime parity |
 | `catan/vec-env.ts` | `CatanVecEnv`: N matches, seat roles, heuristic seats, rewards, auto-reset, quotas for evals |
 | `catan/env-server.ts` | stdio wrapper around `CatanVecEnv` (protocol in the file header; batch replies carry raw bytes) |
 | `catan/vec-env.test.ts` | vitest: random self-play and vs-heuristic matches, rotation, quotas |
@@ -174,4 +174,15 @@ bundle in `training/dist-analysis/`, so it's safe to run during training
 `ENCODER_VERSION` (`src/ai/nn/encode.ts`) and `ACTION_SPACE_VERSION`
 (`src/ai/nn/actions.ts`) are pinned by tests with the feature / slot sizes.
 Checkpoints and policy files record both and refuse to load on a mismatch —
-retrain after changing either.
+retrain after changing either. The app's frozen levels (`src/ai/nn/policies/`) are
+checked the same way by `src/ai/nn/levels.test.ts`, so a version bump means
+re-freezing all three.
+
+## Shipping a policy
+
+The game's Easy / Normal / Hard AIs are plain policy files copied out of a run:
+`runs/catan/<run>/policies/update_NNNNNN.json` → `src/ai/nn/policies/`, then
+point `AI_LEVELS` in `src/ai/nn/levels.ts` at the new file. The browser runs
+them with `src/ai/nn/runtime.ts`, a TypeScript port of the network's forward
+pass; `test_typescript_runtime_matches_pytorch` checks it gives the same logits
+as PyTorch. Checkpoints (`ckpt/`) are only for resuming training.

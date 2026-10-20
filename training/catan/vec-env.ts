@@ -54,6 +54,7 @@ import { observe, type CatanDraft, type CatanObservation } from '@/ai/nn/observa
 import { EDGE_DIM, GLOBAL_DIM, HEX_DIM, VERTEX_DIM, analyseBoard, encodeObservation } from '@/ai/nn/encode';
 import { decodeSlot, legalMask, slotLayout } from '@/ai/nn/actions';
 import { actWithPolicy } from '@/ai/nn/agent';
+import type { CatanPolicyNet } from '@/ai/nn/runtime';
 import { DEFAULT_REWARD_WEIGHTS, finalStandings, terminalRewards, type RewardWeights } from '@/ai/nn/reward';
 import { heuristicAction, teacherSlot } from './teacher';
 
@@ -249,6 +250,12 @@ export class CatanVecEnv {
       });
     }
     return this.finishBatch();
+  }
+
+  /** The TypeScript runtime's logits for every env's pending row ([] if idle) — parity checks against PyTorch. */
+  policyLogits(net: CatanPolicyNet): number[][] {
+    return this.envs.map((env) => (env.idle || !env.shown
+      ? [] : Array.from(net.logits(encodeObservation(env.shown.obs), env.shown.obs.index))));
   }
 
   /** Run `f` on env i; on an error, abandon that match, start a fresh one and

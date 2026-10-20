@@ -3,6 +3,7 @@ import { useNetworkStore } from '@/store/networkStore';
 import { Button } from '@/ui/shared/Button';
 import { ChatPanel } from '@/ui/chat/ChatPanel';
 import { playerColorVar } from '@/ui/shared/playerColors';
+import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL } from '@/ai/nn';
 import './LobbyScreen.css';
 
 export function LobbyScreen() {
@@ -14,6 +15,7 @@ export function LobbyScreen() {
     hostAddAISeat,
     hostRemoveSeat,
     hostSetVP,
+    hostSetAiLevel,
     hostStartGame,
     leaveRoom,
     clearError,
@@ -121,6 +123,24 @@ export function LobbyScreen() {
             />
           </label>
         )}
+
+        {lobby.seats.some((s) => s.isAI) && (isHost ? (
+          <label className="lobby-vp">
+            <span>AI difficulty</span>
+            <select
+              value={lobby.aiLevel ?? DEFAULT_AI_LEVEL}
+              onChange={(e) => hostSetAiLevel(e.target.value as keyof typeof AI_LEVELS)}
+            >
+              {AI_LEVEL_IDS.map((id) => (
+                <option key={id} value={id}>
+                  {AI_LEVELS[id].label} — {AI_LEVELS[id].blurb}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <p className="lobby-status">AI difficulty: {AI_LEVELS[lobby.aiLevel ?? DEFAULT_AI_LEVEL].label}</p>
+        ))}
 
         {!isHost && <p className="lobby-status">Waiting for host to start…</p>}
 

@@ -157,6 +157,17 @@
   text-align: center;
 }
 
+.lobby-vp select {
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 1em;
+  font-family: inherit;
+  max-width: 60%;
+}
+
 .lobby-chat-wrap {
   display: flex;
   flex-direction: column;

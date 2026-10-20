@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { useGameStore } from '@/store/gameStore';
 import type { PlayerKind } from '@/game/createGame';
-import type { PlayerColor } from '@/game/types';
+import type { AiLevel, PlayerColor } from '@/game/types';
+import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL, supportsNeuralAi } from '@/ai/nn';
 import type { CustomMap } from '@/game/customMap/types';
 import { parseCustomMap } from '@/game/customMap/parse';
 import {
@@ -52,6 +53,7 @@ export function NewGame({ onBack }: Props = {}) {
   // respecting an explicit override.
   const [vpOverride, setVpOverride] = useState<number | null>(null);
   const [turnTimer, setTurnTimer] = useState(0); // seconds; 0 = off
+  const [aiLevel, setAiLevel] = useState<AiLevel>(DEFAULT_AI_LEVEL);
   const [seed, setSeed] = useState('');
   const [expansions, setExpansions] = useState<ExpansionPickerValue>(DEFAULT_EXPANSIONS);
   const [customMap, setCustomMap] = useState<CustomMap | null>(null);
@@ -77,6 +79,12 @@ export function NewGame({ onBack }: Props = {}) {
         ? scenario.maxPlayers
         : 8;
   const recommendedVpValue = customMap?.defaultVpToWin ?? recommendedVp(numPlayers, expansions);
+  // Trained-network AI levels exist for the base game on the standard board only.
+  const neuralAi = !customMap && supportsNeuralAi({
+    expansions: expansionListFrom(expansions),
+    baseScenarioId: expansions.seafarers || expansions.traders ? undefined : expansions.baseScenarioId,
+  });
+  const hasAiSeat = types.slice(0, numPlayers).includes('ai');
   const vp = vpOverride ?? recommendedVpValue;
 
   // Auto-bump the seat count when the active scenario doesn't support it
@@ -114,6 +122,7 @@ export function NewGame({ onBack }: Props = {}) {
         tradersVariants:
           !customMap && expansions.traders ? expansions.tradersVariants : undefined,
         turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
+        aiLevel: neuralAi ? aiLevel : undefined,
         customMap: customMap ?? undefined,
       },
     });
@@ -335,6 +344,28 @@ export function NewGame({ onBack }: Props = {}) {
             ))}
           </div>
         </label>
+
+        {hasAiSeat && neuralAi && (
+          <label className="newgame-field">
+            <span>
+              AI difficulty
+              <span className="newgame-vp-hint"> — {AI_LEVELS[aiLevel].blurb}</span>
+            </span>
+            <div className="newgame-segmented">
+              {AI_LEVEL_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`newgame-seg${aiLevel === id ? ' active' : ''}`}
+                  title={AI_LEVELS[id].blurb}
+                  onClick={() => setAiLevel(id)}
+                >
+                  {AI_LEVELS[id].label}
+                </button>
+              ))}
+            </div>
+          </label>
+        )}
 
         <label className="newgame-field">
           <span>Seed (optional)</span>

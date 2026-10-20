@@ -37,7 +37,9 @@ import {
 } from './knowledge';
 
 /** Rule sets the learned agent is trained for: the base game on the standard board, any player count. */
-export function supportsNeuralAi(settings: GameSettings): boolean {
+export function supportsNeuralAi(
+  settings: Pick<GameSettings, 'expansions' | 'baseScenarioId' | 'customMap' | 'tradersVariants'>,
+): boolean {
   return settings.expansions.length === 0
     && (settings.baseScenarioId ?? 'standard') === 'standard'
     && !settings.customMap

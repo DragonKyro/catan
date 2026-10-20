@@ -455,6 +455,8 @@ export interface RobberMoveContext {
   returnTo: 'main' | 'rollOrPlayKnight';
 }
 
+export type AiLevel = 'easy' | 'normal' | 'hard';
+
 export interface GameSettings {
   numPlayers: number;
   victoryPointsToWin: number;
@@ -473,6 +475,10 @@ export interface GameSettings {
   // AI defaults, then ends the turn. AI seats ignore this — they pace
   // themselves via AIDriver.
   turnTimerSec?: number;
+  // Strength of every AI seat in a base game (standard board, no
+  // expansions): a trained network from src/ai/nn (easy / normal / hard).
+  // Other rule sets — and a base game without it — use the heuristic AI.
+  aiLevel?: AiLevel;
   // Traders & Barbarians: scenario picker (currently only 'riversOfCatan').
   // Only consulted when expansions includes the T&B id. Mutually exclusive
   // with `scenarioId` (Seafarers) and `baseScenarioId` (Fun Maps).

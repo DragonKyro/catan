@@ -258,6 +258,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     tradersScenarioId: hasTraders ? tradersScenarioId ?? 'riversOfCatan' : undefined,
     tradersVariants: hasTraders ? tradersVariants : undefined,
     turnTimerSec: opts.settings?.turnTimerSec,
+    aiLevel: opts.settings?.aiLevel,
     customMap,
   };
 
