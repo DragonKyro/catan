@@ -102,16 +102,6 @@ export function GameView() {
         <div className="gameview-topctrls">
           <button
             type="button"
-            className="gameview-topctrl-btn gameview-topctrl-mobile"
-            onClick={() => setSideOpen((s) => !s)}
-            aria-label="Show players, log, and chat"
-            aria-expanded={sideOpen}
-            title="Players / Log / Chat"
-          >
-            ☰
-          </button>
-          <button
-            type="button"
             className="gameview-topctrl-btn"
             onClick={() => setShowRules(true)}
             aria-label="Open rulebook"
@@ -163,6 +153,17 @@ export function GameView() {
             )}
           </div>
         </div>
+        {/* Compact screens: the side panel (players, scores, log, chat) is a
+            drawer, opened from here. Hidden by CSS on large screens. */}
+        <button
+          type="button"
+          className="gameview-players-btn"
+          onClick={() => setSideOpen(true)}
+          aria-label="Show players, scores, log, and chat"
+          aria-expanded={sideOpen}
+        >
+          <span aria-hidden>☰</span> Players
+        </button>
         {/* Trade-building dialogs (propose / counter / bank) anchor to the
             left side of the board — the board middle stays viewable. */}
         {(tradeDialog || bankTradeDialog) && (
@@ -205,6 +206,12 @@ export function GameView() {
         />
       )}
       <aside className={`gameview-side${sideOpen ? ' is-open' : ''}`}>
+        <div className="gameview-side-head">
+          <span>Players</span>
+          <button type="button" className="gameview-side-close" onClick={() => setSideOpen(false)}>
+            ✕ Close
+          </button>
+        </div>
         <SidePanelTabs showChat={isOnline} />
         <OpponentPanel />
         <BankPanel />
