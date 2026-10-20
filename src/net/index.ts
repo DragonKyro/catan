@@ -1,3 +1,3 @@
 export * from './types';
 export * from './identity';
-export { bindRoom, type RoomBindings } from './room';
+export { bindRoom, relayStatus, type RelayStatus, type RoomBindings } from './room';

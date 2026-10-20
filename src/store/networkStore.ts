@@ -1,8 +1,11 @@
 import { create } from 'zustand';
-import type { Action, GameState, PlayerColor, PlayerId } from '@/game/types';
+import type { Action, AiLevel, GameState, PlayerColor, PlayerId } from '@/game/types';
 import { createGame } from '@/game/createGame';
+import { DEFAULT_AI_LEVEL } from '@/ai/nn/levels';
 import {
   bindRoom,
+  relayStatus,
+  type RelayStatus,
   type RoomBindings,
   type LobbyState,
   type LobbySeat,
@@ -25,10 +28,34 @@ const DEFAULT_VP = 10;
 const MAX_SEATS = 8;
 const MIN_SEATS = 3;
 const SYSTEM_NAME = 'System';
-// How long a guest waits to see ANY peer (host or another guest) before
-// giving up. Mobile/cellular peer discovery via Nostr relays usually settles
-// in a couple of seconds, but allow plenty of headroom.
-const JOIN_TIMEOUT_MS = 15000;
+// How long a guest looks for the host before reporting the room as not
+// found. Discovery via the Nostr relays usually takes a few seconds; the rest
+// is headroom for a host whose phone is just coming back from the background.
+export const JOIN_TIMEOUT_MS = 25000;
+
+/** Why a guest's join gave up, for the error screen (and debugging). */
+export interface JoinFailure {
+  code: string;
+  /** noRelays: this device reached no relay, so it couldn't look at all.
+   *  noHost:   other devices answered on this code, but none is hosting.
+   *  notFound: relays reached, nobody answered. */
+  reason: 'noRelays' | 'noHost' | 'notFound';
+  relays: RelayStatus;
+  peersSeen: number;
+  waitedMs: number;
+}
+
+const JOIN_FAILURE_TEXT: Record<JoinFailure['reason'], (code: string) => string> = {
+  notFound: (code) =>
+    `No room with code ${code} was found. Check the code, and make sure the host still has the room open `
+    + 'with the screen on (phones pause web pages in the background).',
+  noHost: (code) =>
+    `Found other devices using code ${code}, but none of them is hosting a room. `
+    + 'The host may have left, or the code is wrong.',
+  noRelays: () =>
+    "This device couldn't reach any of the matchmaking relays, so it couldn't look for the room. "
+    + 'Check its internet connection; some Wi-Fi and work networks block them (try mobile data).',
+};
 
 interface NetStore {
   connection: ConnectionState;
@@ -38,6 +65,9 @@ interface NetStore {
   myDisplayName: string;
   roomCode: string | null;
   hostUuid: string | null;
+  /** Set while a guest is looking for a room. */
+  joinStartedAt: number | null;
+  joinFailure: JoinFailure | null;
   lobby: LobbyState;
   uuidByPeerId: Record<string, string>;
   onlineUuids: Set<string>;
@@ -46,12 +76,17 @@ interface NetStore {
   setDisplayName: (name: string) => void;
   createRoom: (name: string) => void;
   joinRoom: (code: string, name: string) => void;
+  /** Look for the room of the last failed join again. */
+  retryJoin: () => void;
   leaveRoom: () => void;
+  /** This page's relay connections right now (not reactive; poll it). */
+  relayStatus: () => RelayStatus;
   clearError: () => void;
 
   hostAddAISeat: () => void;
   hostRemoveSeat: (slot: number) => void;
   hostSetVP: (vp: number) => void;
+  hostSetAiLevel: (level: AiLevel) => void;
   hostStartGame: () => void;
 
   sendChat: (text: string) => void;
@@ -65,6 +100,8 @@ interface NetStore {
 let bindings: RoomBindings | null = null;
 let seatToUuid: (string | null)[] = []; // index = playerId 'pN' slot
 let joinTimeoutId: ReturnType<typeof setTimeout> | null = null;
+// Peers that connected while this guest was still looking for the host.
+let peersSeenWhileJoining = 0;
 
 function clearJoinTimeout(): void {
   if (joinTimeoutId !== null) {
@@ -180,6 +217,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         hostUuid: state.seats[0]?.uuid ?? null,
         connection: get().connection === 'connecting' ? 'lobby' : get().connection,
         errorMessage: null,
+        joinStartedAt: null,
       });
     });
 
@@ -198,6 +236,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         hostUuid: msg.hostUuid,
         chat: [...get().chat, sysMessage('Game started', me)],
         errorMessage: null,
+        joinStartedAt: null,
       });
     });
 
@@ -224,6 +263,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         hostUuid: msg.hostUuid,
         chat: [...msg.chat, sysMessage(isPlayer ? 'Rejoined game' : 'Spectating', me)],
         errorMessage: null,
+        joinStartedAt: null,
       });
     });
 
@@ -248,6 +288,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
     });
 
     b.onPeerJoin((peerId) => {
+      if (get().connection === 'connecting') peersSeenWhileJoining++;
       // Send our hello so they can map us.
       b.sendHello({ uuid: get().myUuid, displayName: get().myDisplayName }, peerId);
       // Also send current lobby state if host.
@@ -291,6 +332,8 @@ export const useNetworkStore = create<NetStore>((set, get) => {
     myDisplayName: myDisplayName || 'Player',
     roomCode: null,
     hostUuid: null,
+    joinStartedAt: null,
+    joinFailure: null,
     lobby: emptyLobby(),
     uuidByPeerId: {},
     onlineUuids: new Set(),
@@ -308,6 +351,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
       const initialLobby: LobbyState = {
         seats: [{ uuid, name, isAI: false, color: DEFAULT_COLORS[0]! }],
         victoryPointsToWin: DEFAULT_VP,
+        aiLevel: DEFAULT_AI_LEVEL,
         seed: Math.floor(Math.random() * 0xffffffff),
       };
       try {
@@ -328,6 +372,8 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         myDisplayName: name,
         roomCode: code,
         hostUuid: uuid,
+        joinStartedAt: null,
+        joinFailure: null,
         lobby: initialLobby,
         onlineUuids: new Set([uuid]),
         chat: [],
@@ -337,7 +383,15 @@ export const useNetworkStore = create<NetStore>((set, get) => {
 
     joinRoom: (code, name) => {
       saveDisplayName(name);
-      const upper = code.toUpperCase();
+      const upper = code.trim().toUpperCase();
+      clearJoinTimeout();
+      try {
+        bindings?.leave();
+      } catch {
+        /* ignore */
+      }
+      bindings = null;
+      peersSeenWhileJoining = 0;
       try {
         const b = bindRoom(upper);
         attachBindings(b, false);
@@ -350,34 +404,53 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         });
         return;
       }
+      const startedAt = Date.now();
       set({
         connection: 'connecting',
         role: 'guest',
         myDisplayName: name,
         roomCode: upper,
+        lobby: emptyLobby(),
         chat: [],
         errorMessage: null,
+        joinStartedAt: startedAt,
+        joinFailure: null,
       });
-      // Real timeout: if no host has answered with a lobby/start/snapshot
-      // before this fires, surface a clear error instead of hanging forever.
-      clearJoinTimeout();
+      // If no host has answered with a lobby/start/snapshot by then, report
+      // the room as not found (with what this device could see) rather than
+      // sitting in an empty-looking room.
       joinTimeoutId = setTimeout(() => {
         joinTimeoutId = null;
-        if (get().connection === 'connecting') {
-          try {
-            bindings?.leave();
-          } catch {
-            /* ignore */
-          }
-          bindings = null;
-          set({
-            connection: 'error',
-            errorMessage:
-              "Couldn't find that room. Double-check the code and make sure the host has Create Room open in another tab/device.",
-          });
+        if (get().connection !== 'connecting') return;
+        const relays = bindings?.relayStatus() ?? relayStatus();
+        const failure: JoinFailure = {
+          code: upper,
+          reason: relays.connected === 0 ? 'noRelays' : peersSeenWhileJoining > 0 ? 'noHost' : 'notFound',
+          relays,
+          peersSeen: peersSeenWhileJoining,
+          waitedMs: Date.now() - startedAt,
+        };
+        try {
+          bindings?.leave();
+        } catch {
+          /* ignore */
         }
+        bindings = null;
+        set({
+          connection: 'error',
+          errorMessage: JOIN_FAILURE_TEXT[failure.reason](upper),
+          joinFailure: failure,
+          joinStartedAt: null,
+        });
       }, JOIN_TIMEOUT_MS);
     },
+
+    retryJoin: () => {
+      const code = get().joinFailure?.code ?? get().roomCode;
+      if (code) get().joinRoom(code, get().myDisplayName);
+    },
+
+    relayStatus: () => bindings?.relayStatus() ?? relayStatus(),
 
     leaveRoom: () => {
       clearJoinTimeout();
@@ -394,6 +467,8 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         role: 'solo',
         roomCode: null,
         hostUuid: null,
+        joinStartedAt: null,
+        joinFailure: null,
         lobby: emptyLobby(),
         uuidByPeerId: {},
         onlineUuids: new Set([get().myUuid]),
@@ -402,7 +477,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
     },
 
     clearError: () => {
-      set({ connection: 'disconnected', errorMessage: null });
+      set({ connection: 'disconnected', errorMessage: null, joinFailure: null, roomCode: null });
     },
 
     hostAddAISeat: () => {
@@ -441,6 +516,13 @@ export const useNetworkStore = create<NetStore>((set, get) => {
       bindings?.sendLobby(newLobby);
     },
 
+    hostSetAiLevel: (level) => {
+      if (get().role !== 'host') return;
+      const newLobby = { ...get().lobby, aiLevel: level };
+      set({ lobby: newLobby });
+      bindings?.sendLobby(newLobby);
+    },
+
     hostStartGame: () => {
       if (get().role !== 'host') return;
       const lobby = get().lobby;
@@ -450,7 +532,7 @@ export const useNetworkStore = create<NetStore>((set, get) => {
         playerNames: lobby.seats.map((s) => s.name),
         playerTypes: lobby.seats.map((s) => (s.isAI ? 'ai' : 'human')),
         seed: lobby.seed,
-        settings: { victoryPointsToWin: lobby.victoryPointsToWin },
+        settings: { victoryPointsToWin: lobby.victoryPointsToWin, aiLevel: lobby.aiLevel ?? DEFAULT_AI_LEVEL },
       });
       useGameStore.getState().setGameState(game);
       set({

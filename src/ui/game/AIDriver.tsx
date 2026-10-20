@@ -1,9 +1,42 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useNetworkStore } from '@/store/networkStore';
+import { useLogStore } from '@/store/logStore';
 import { getActingPlayerId } from '@/game/helpers';
+import type { Action, GameState, PlayerId } from '@/game/types';
 import { chooseAction, shouldAcceptTrade } from '@/ai';
 import { tryCounterTrade, tryExtractCounter } from '@/ai/trade';
+import { KnowledgeSession, chooseNeuralAction, loadAiLevel, loadedAiLevel, neuralLevel } from '@/ai/nn';
+
+// Each AI seat's knowledge (card counting etc.) for the trained-network AI,
+// replayed from the game log. One game is driven at a time.
+const knowledge = new KnowledgeSession();
+let warned: string | null = null;
+
+/** The trained network's move for `playerId` in a base game with an AI level
+ *  set, or undefined when the heuristic AI should decide (other rule sets, the
+ *  network still loading, a log that can't be replayed, or nothing to decide). */
+function neuralAction(game: GameState, playerId: PlayerId): Action | undefined {
+  const level = neuralLevel(game);
+  const net = level ? loadedAiLevel(level) : null;
+  if (!net) return undefined;
+  const log = useLogStore.getState();
+  const seats = game.players.filter((p) => p.isAI).map((p) => p.id);
+  const known = knowledge.sync(log.initialState, log.actions, game, seats);
+  if (!known) {
+    if (knowledge.problem && knowledge.problem !== warned) {
+      warned = knowledge.problem;
+      console.warn(`[AIDriver] trained AI unavailable, using the classic AI: ${warned}`);
+    }
+    return undefined;
+  }
+  try {
+    return chooseNeuralAction(game, playerId, known[playerId]!, net) ?? undefined;
+  } catch (e) {
+    console.warn('[AIDriver] trained AI failed, using the classic AI for this move:', (e as Error).message);
+    return undefined;
+  }
+}
 
 const AI_ACTION_DELAY_MS = 450;
 // Initial pause before any AI evaluates a pending trade — gives the human
@@ -28,11 +61,32 @@ export function AIDriver() {
   const role = useNetworkStore((s) => s.role);
   const canDriveAI = role === 'solo' || role === 'host';
 
+  // Trained-network AI: fetch the level's policy file once, and hold the AI
+  // seats until it's in (a failed fetch falls back to the classic AI).
+  const level = game ? neuralLevel(game) : null;
+  const [loadTick, setLoadTick] = useState(0);
+  const [loadFailed, setLoadFailed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canDriveAI || !level || loadedAiLevel(level)) return;
+    let live = true;
+    loadAiLevel(level)
+      .then(() => live && setLoadTick((t) => t + 1))
+      .catch((e) => {
+        console.warn(`[AIDriver] could not load the ${level} AI, using the classic AI:`, (e as Error).message);
+        if (live) setLoadFailed(level);
+      });
+    return () => {
+      live = false;
+    };
+  }, [level, canDriveAI]);
+  const waitingForNet = level !== null && loadFailed !== level && !loadedAiLevel(level);
+
   // Main turn-loop driver
   useEffect(() => {
     if (!canDriveAI) return;
     if (!game) return;
     if (game.winner) return;
+    if (waitingForNet) return;
     if (handoffPending) return;
     if (pendingRobberHex) return;
     // Dialog open by a human — don't step the AI; but if the only "dialog"
@@ -67,7 +121,9 @@ export function AIDriver() {
     }
 
     const t = setTimeout(() => {
-      const action = chooseAction(game, acting);
+      // The trained network where it applies; the classic AI otherwise (and
+      // for the proposer's wait on its own offer, which ends in a cancel).
+      const action = neuralAction(game, acting) ?? chooseAction(game, acting);
       if (action) {
         dispatch(action);
       } else {
@@ -75,7 +131,7 @@ export function AIDriver() {
       }
     }, delay);
     return () => clearTimeout(t);
-  }, [game, handoffPending, dialog, pendingRobberHex, dispatch, canDriveAI]);
+  }, [game, handoffPending, dialog, pendingRobberHex, dispatch, canDriveAI, waitingForNet, loadTick]);
 
   // Trade-evaluator driver: when a NEW trade (or counter) appears, schedule
   // every eligible AI responder ONCE — all firing roughly in parallel after
@@ -135,6 +191,12 @@ export function AIDriver() {
           latest.playerOrder[latest.currentPlayerIndex] ?? null;
         const liveIsCounter = latest.pendingTrade.proposerId !== liveCurrent;
         if (liveIsCounter && p.id !== liveCurrent) return;
+        // A trained network answers accept / reject (it doesn't counter).
+        const answer = neuralAction(latest, p.id);
+        if (answer) {
+          dispatch(answer);
+          return;
+        }
         // Before plain-accepting, see if we can squeeze one more card
         // out of a desperate proposer. Only on initial trades (not on
         // counters, to avoid counter-chain loops).

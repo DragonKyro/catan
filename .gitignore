@@ -32,3 +32,10 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Training (offline, never shipped)
+training/dist/
+training/runs/
+__pycache__/
+.pytest_cache/
+training/dist-analysis/
