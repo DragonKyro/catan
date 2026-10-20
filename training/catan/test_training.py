@@ -131,6 +131,16 @@ def test_guard_moves_self_play_to_heuristic_tables_and_back():
     assert t.workers[1].env.seats == ["learner"] * 4
 
 
+def test_prune_checkpoints_keeps_the_latest_and_the_milestones(tmp_path):
+    names = [f"update_{u:06d}.pt" for u in (900, 1000, 1100, 1900, 2000, 2057, 2100, 2200)]
+    for name in names:
+        (tmp_path / name).write_bytes(b"")
+    train.prune_checkpoints(str(tmp_path), keep_latest=1, keep_every=1000)
+    assert sorted(os.listdir(tmp_path)) == ["update_001000.pt", "update_002000.pt", "update_002200.pt"]
+    train.prune_checkpoints(str(tmp_path), keep_latest=1)
+    assert os.listdir(tmp_path) == ["update_002200.pt"]
+
+
 def test_background_evals_with_a_fixed_opponent(tmp_path):
     """The eval path end to end: save → three eval subprocesses (heuristic, fixed, 4-way) → evals.jsonl → progress.md."""
     common = ["--runs-dir", str(tmp_path), "--run", "e", "--envs-per-worker", "2", "--rollout", "4",

@@ -162,6 +162,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     save = p.add_argument_group("checkpoints / eval")
     save.add_argument("--save-every", type=int, default=100)
     save.add_argument("--keep-ckpt", type=int, default=5, help="resumable .pt files to keep (policies are all kept)")
+    save.add_argument("--keep-ckpt-every", type=int, default=0,
+                      help="also keep every checkpoint at a multiple of this many updates (0 = only the latest --keep-ckpt)")
     save.add_argument("--eval-every", type=int, default=100, help="0 = no background eval (multiple of --save-every)")
     save.add_argument("--eval-games", type=int, default=400)
     save.add_argument("--eval-workers", type=int, default=3)
@@ -344,6 +346,15 @@ class Evaluator:
 
 
 # ---------------------------------------------------------------- trainer
+
+def prune_checkpoints(ckpt_dir: str, keep_latest: int, keep_every: int = 0) -> None:
+    """Delete all but the newest `keep_latest` checkpoints, sparing updates that are multiples of `keep_every`."""
+    for old in sorted(f for f in os.listdir(ckpt_dir) if f.endswith(".pt"))[:-keep_latest]:
+        update = old.removeprefix("update_").removesuffix(".pt")
+        if keep_every and update.isdigit() and int(update) % keep_every == 0:
+            continue
+        os.remove(os.path.join(ckpt_dir, old))
+
 
 def fmt_duration(seconds: float) -> str:
     seconds = max(0, int(seconds))
@@ -763,8 +774,7 @@ class Trainer:
                  "guard_best": self.guard_best, "guard_workers": self.guard_workers, "args": vars(a)}
         ckpt_dir = os.path.join(self.run_dir, "ckpt")
         save_checkpoint(os.path.join(ckpt_dir, f"update_{u:06d}.pt"), self.net, self.opt, state)
-        for old in sorted(f for f in os.listdir(ckpt_dir) if f.endswith(".pt"))[:-a.keep_ckpt]:
-            os.remove(os.path.join(ckpt_dir, old))
+        prune_checkpoints(ckpt_dir, a.keep_ckpt, a.keep_ckpt_every)
         path = os.path.join(self.run_dir, "policies", f"update_{u:06d}.json")
         export_policy(self.net, path, self.versions,
                       meta={"run": os.path.basename(self.run_dir), "update": u, "decisions": self.decisions,

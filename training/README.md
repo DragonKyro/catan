@@ -108,7 +108,8 @@ u  1234 |  17.69M dec | 2.9k/s | pi -0.004 kl 0.0061 clip 0.07 v 0.031 ent 1.42 
 - PPO health: `kl` (should stay ≲ 0.02), `clip` (≲ 0.2), `ent` (falls slowly),
   `ev` (value explained variance, rises toward 1).
 
-Every `--save-every` (100) updates: `ckpt/update_N.pt` (newest `--keep-ckpt`
+Every `--save-every` (100) updates: `ckpt/update_N.pt` (newest `--keep-ckpt`, plus
+multiples of `--keep-ckpt-every` if set,
 kept) and `policies/update_N.json` (all kept). Every `--eval-every` (100), in
 background processes: `--eval-games` (400) greedy matches vs three heuristic
 AIs, and vs three copies of the checkpoint 500 updates earlier, on fixed deals
