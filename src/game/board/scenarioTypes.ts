@@ -63,11 +63,14 @@ export interface ScenarioPosition {
   noToken?: boolean;
 }
 
-// Port anchor without a type — the type is drawn from `ScenarioPools.portTypes`.
+// Port anchor. The type is drawn from `ScenarioPools.portTypes` unless the
+// anchor pins one with `fixedType` (a harbor printed on the frame, e.g. the
+// Traders & Barbarians maps); the pool then covers only the unpinned anchors.
 export interface ScenarioPortAnchor {
   q: number;
   r: number;
   direction: 0 | 1 | 2 | 3 | 4 | 5;
+  fixedType?: PortType;
 }
 
 export interface ScenarioPools {

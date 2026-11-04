@@ -129,18 +129,23 @@ export function materializeLayout(
   }
 
   // ----- Port type assignment -----
-  if (layout.pools.portTypes.length !== layout.portAnchors.length) {
+  // Pinned anchors keep their `fixedType`; the pool fills the rest in anchor
+  // order. With no pinned anchors this is exactly the old full shuffle, so
+  // existing boards are unchanged.
+  const freeAnchors = layout.portAnchors.filter((a) => !a.fixedType).length;
+  if (layout.pools.portTypes.length !== freeAnchors) {
     throw new Error(
-      `Scenario layout port pool mismatch: ${layout.portAnchors.length} anchors but ${layout.pools.portTypes.length} types`,
+      `Scenario layout port pool mismatch: ${freeAnchors} unpinned anchors but ${layout.pools.portTypes.length} types`,
     );
   }
   let shuffledPorts: Port['type'][];
   [shuffledPorts, rng] = shuffle(rng, layout.pools.portTypes);
-  const portDefs: ScenarioPortDef[] = layout.portAnchors.map((a, i) => ({
+  let nextFree = 0;
+  const portDefs: ScenarioPortDef[] = layout.portAnchors.map((a) => ({
     q: a.q,
     r: a.r,
     direction: a.direction,
-    type: shuffledPorts[i]!,
+    type: a.fixedType ?? shuffledPorts[nextFree++]!,
   }));
 
   return { hexDefs, portDefs, rngState: rng };
