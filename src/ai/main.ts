@@ -20,6 +20,7 @@ import { tryBuildShip, tryMoveShip } from './seafarers/ships';
 import { tryBuildBridge } from './traders/bridges';
 import { tryFishSpend, tryPassBoot } from './traders/fish';
 import { tryHireKnight } from './traders/knights';
+import { tryCoinAction } from './traders/coins';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { tryBuildWonder } from './seafarers/wonders';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
@@ -135,6 +136,10 @@ export function chooseMainPhaseAction(
   if (state.settings.expansions.includes(TRADERS_EXPANSION_ID)) {
     const bridgeAction = tryBuildBridge(state, playerId);
     if (bridgeAction) return bridgeAction;
+    // 2.65) COINS (Rivers of Catan): 2 gold for a missing card, or buy gold
+    //       to escape the Poor tile / take Wealthiest / shelter a big hand.
+    const coins = tryCoinAction(state, playerId);
+    if (coins) return coins;
     // 2.7) FISH SPEND. Drive off the robber if it's on us; take a needed
     //      resource if we have one in reach. Pass the boot if we hold it
     //      and someone qualifies. Both are pre-build because they shift

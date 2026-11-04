@@ -2,46 +2,18 @@ import type { Action, GameState, PlayerId, Resource } from '@/game/types';
 import { RESOURCES, COSTS } from '@/game/types';
 import { totalResources } from '@/game/resources';
 import { getBankTradeRate } from '@/game/actions/trade';
-import { recalcWealthTiles } from '@/game/modules/traders/scoring/wealthTiles';
 import {
   GOLD_PER_RESOURCE,
   MAX_GOLD_SPENDS_PER_TURN,
-  POOR_CATANIAN_VP,
-  WEALTHIEST_CATANIAN_VP,
 } from '@/game/modules/traders/constants';
 import { canPlaceSettlement } from '@/game/placement';
 import { reportNeeds, RESOURCE_WEIGHT } from '../value';
+import { wealthVpSwing } from './gold';
 
 // Heuristic coin play (Rivers of Catan, and any scenario with
 // `state.coinsInPlay`). Gold is a currency for spending (2 gold = 1 card of
 // choice, twice a turn) and, in Rivers, a scoreboard: the unique richest
 // player gets +1 VP and everyone tied for poorest gets -2 VP.
-
-// VP change for `playerId` from the wealth tiles if their gold moved by
-// `delta` (0 outside Rivers).
-export function wealthVpSwing(state: GameState, playerId: PlayerId, delta: number): number {
-  if (!state.wealthTiles) return 0;
-  const before = wealthVp(state.wealthTiles, playerId);
-  const players = state.players.map((p) =>
-    p.id === playerId ? { id: p.id, gold: Math.max(0, (p.gold ?? 0) + delta) } : { id: p.id, gold: p.gold ?? 0 },
-  );
-  const after = wealthVp(recalcWealthTiles({ players }), playerId);
-  return after - before;
-}
-
-function wealthVp(tiles: { wealthiest: PlayerId | null; poor: PlayerId[] }, pid: PlayerId): number {
-  let vp = 0;
-  if (tiles.wealthiest === pid) vp += WEALTHIEST_CATANIAN_VP;
-  if (tiles.poor.includes(pid)) vp += POOR_CATANIAN_VP;
-  return vp;
-}
-
-// Value of `delta` more gold for this player in vertex-score units: half a
-// card per coin (2 gold buy a card), plus the wealth-tile swing. Tile swings
-// are discounted because the race moves every turn.
-export function goldValue(state: GameState, playerId: PlayerId, delta: number): number {
-  return 0.6 * delta + 1.2 * wealthVpSwing(state, playerId, delta);
-}
 
 // One coin action, or null. Spends gold on a missing card for the current
 // build goal when that doesn't cost wealth-tile VP (or the build it finishes

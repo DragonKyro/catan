@@ -1,7 +1,7 @@
 import type { GameState, PlayerId, VertexId } from '@/game/types';
 import { hexPips, numberPips } from '@/game/board/hexNumbers';
 import { vertexIsOnRiverTile } from '@/game/modules/traders/coins/gold';
-import { goldValue } from './coins';
+import { goldValue } from './gold';
 
 // Traders & Barbarians terms in the AI's vertex score.
 //

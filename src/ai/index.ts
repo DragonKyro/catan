@@ -17,6 +17,7 @@ import {
   trySubmitWagonVote,
   tryPlaceWagon,
 } from './traders/merchantTrains';
+import { chooseFishSwap } from './traders/fish';
 
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
@@ -116,6 +117,11 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
       return chooseMainPhaseAction(state, playerId, { allowPlayerTrade: false });
     }
     return chooseMainPhaseAction(state, playerId);
+  }
+
+  // T&B Fishing on Catan: swap a token after a capped catch.
+  if (state.phase === 'fishSwap') {
+    return state.fishSwap?.queue[0] === playerId ? chooseFishSwap(state, playerId) : null;
   }
 
   // T&B Merchant Trains end-of-turn phases.

@@ -1,18 +1,18 @@
-import type { Action, GameState, PlayerId } from '@/game/types';
+import type { Action, GameState, PlayerId, VertexId } from '@/game/types';
 import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import { canPlaceBridge } from '@/game/placement';
+import { BRIDGE_GOLD_REWARD, MAX_BRIDGES } from '@/game/modules/traders/constants';
 import { vertexScore } from '../value';
+import { goldValue } from './gold';
 
-// Threshold: a bridge target vertex (the unblocked far-side endpoint) must
-// score at least this much for us to bother spanning the river. Below the
-// road threshold (4.5) because bridges pay +3 gold on build — even an
-// average crossing is worth it.
+// A bridge must lead somewhere: its far end (or a corner one step past it)
+// must score at least this as a settlement spot, after counting the 3 gold
+// it pays. Below the road threshold (4.5) because of that gold.
 const BRIDGE_TARGET_THRESHOLD = 3.5;
 
-// Attempt to build a bridge. Returns an action when a high-value river
-// crossing is available; null otherwise. Skips when the player is out of
-// bridge tokens, can't afford the cost, or no river edge is on the map.
+// Rivers of Catan: build a bridge (2 brick + 1 lumber, +3 gold) across a
+// river toward a good settlement spot.
 export function tryBuildBridge(
   state: GameState,
   playerId: PlayerId,
@@ -21,7 +21,8 @@ export function tryBuildBridge(
   if (!player) return null;
   if ((state.riverEdges?.length ?? 0) === 0) return null;
   if (!canAfford(player.resources, COSTS.bridge)) return null;
-  if ((player.bridges?.length ?? 0) >= 3) return null;
+  if ((player.bridges?.length ?? 0) >= MAX_BRIDGES) return null;
+  const goldBonus = goldValue(state, playerId, BRIDGE_GOLD_REWARD);
 
   let bestEdge: string | null = null;
   let bestScore = -Infinity;
@@ -29,24 +30,48 @@ export function tryBuildBridge(
     if (!canPlaceBridge(state, playerId, eid)) continue;
     const edge = state.board.edges[eid];
     if (!edge) continue;
-    // Score = max vertex score across the two endpoints. Picks the side
-    // we'd actually want to settle. Skip endpoints already controlled by us
-    // (no expansion benefit) unless the other side is good.
     let edgeScore = -Infinity;
     for (const vid of edge.vertices) {
-      const occupied = state.players.some(
-        (p) => p.settlements.includes(vid) || p.cities.includes(vid),
-      );
-      if (occupied) continue;
-      const score = vertexScore(state, vid, playerId);
-      if (score > edgeScore) edgeScore = score;
+      if (ownsOrTouches(state, playerId, vid)) continue;
+      edgeScore = Math.max(edgeScore, reachScore(state, playerId, vid));
     }
     if (edgeScore > bestScore) {
       bestScore = edgeScore;
       bestEdge = eid;
     }
   }
-  if (!bestEdge) return null;
-  if (bestScore < BRIDGE_TARGET_THRESHOLD) return null;
+  if (!bestEdge || bestScore === -Infinity) return null;
+  if (bestScore + goldBonus < BRIDGE_TARGET_THRESHOLD) return null;
   return { type: 'buildBridge', playerId, edge: bestEdge };
+}
+
+// Settlement value of a bridge's far end: the corner itself if a settlement
+// could go there, else the best corner one road further (discounted).
+function reachScore(state: GameState, playerId: PlayerId, vid: VertexId): number {
+  if (settleable(state, vid)) return vertexScore(state, vid, playerId);
+  if (taken(state, vid)) return -Infinity;
+  let best = -Infinity;
+  for (const n of state.board.vertices[vid]!.neighborVertices) {
+    if (settleable(state, n)) best = Math.max(best, vertexScore(state, n, playerId) - 1.5);
+  }
+  return best;
+}
+
+function taken(state: GameState, vid: VertexId): boolean {
+  return state.players.some((p) => p.settlements.includes(vid) || p.cities.includes(vid));
+}
+
+// Free corner on land that respects the distance rule.
+function settleable(state: GameState, vid: VertexId): boolean {
+  const v = state.board.vertices[vid];
+  if (!v || taken(state, vid)) return false;
+  if (v.neighborVertices.some((n) => taken(state, n))) return false;
+  return v.hexes.some((h) => state.board.hexes[h]?.terrain !== 'sea');
+}
+
+function ownsOrTouches(state: GameState, playerId: PlayerId, vid: VertexId): boolean {
+  const player = state.players.find((p) => p.id === playerId)!;
+  if (player.settlements.includes(vid) || player.cities.includes(vid)) return true;
+  const v = state.board.vertices[vid]!;
+  return v.edges.some((e) => player.roads.includes(e) || (player.bridges ?? []).includes(e));
 }
