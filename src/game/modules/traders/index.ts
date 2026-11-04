@@ -10,7 +10,17 @@ import { handleSpendFish } from './actions/spendFish';
 import { handlePassOldBoot } from './actions/passOldBoot';
 import { handleSubmitWagonVote, handlePlaceWagon } from './merchantTrains/voting';
 import { handleEndTurnTraders } from './turn';
-import { handleHireKnight } from './actions/hireKnight';
+import {
+  handleBuyDevCardTraders,
+  handleDiscardBarbarianAttack,
+  handleRollDiceBarbarianAttack,
+  withBarbarianLandingOnCity,
+  withBarbarianLandingOnSettlement,
+  withBarbarianSetupCity,
+} from './barbarianAttack/hooks';
+import { handleResolveBarbarianCard } from './barbarianAttack/cards';
+import { handleMoveBarbarianKnight } from './barbarianAttack/turn';
+import { handleStealResource } from '../seafarers/pirateIslands';
 import { validateMoveRobberFriendlyRobber } from './variants/friendlyRobber';
 import { TRADERS_EXPANSION_ID } from './constants';
 
@@ -31,22 +41,27 @@ export const tradersModule: RuleModule = {
   handlers: {
     buildBridge: handleBuildBridge as never,
     buildRoad: handleBuildRoadWithRiverGold as never,
-    buildSettlement: handleBuildSettlementWithRiverGold as never,
-    buildCity: handleBuildCityWithStrongestPortsRefresh as never,
-    placeInitialSettlement: handlePlaceInitialSettlementWithRiverGold as never,
+    buildSettlement: withBarbarianLandingOnSettlement(handleBuildSettlementWithRiverGold) as never,
+    buildCity: withBarbarianLandingOnCity(handleBuildCityWithStrongestPortsRefresh) as never,
+    placeInitialSettlement: withBarbarianSetupCity(handlePlaceInitialSettlementWithRiverGold) as never,
     placeInitialRoad: handlePlaceInitialRoadWithRiverGold as never,
     spendFish: handleSpendFish as never,
     passOldBoot: handlePassOldBoot as never,
     submitWagonVote: handleSubmitWagonVote as never,
     placeWagon: handlePlaceWagon as never,
-    hireKnight: handleHireKnight as never,
     endTurn: handleEndTurnTraders as never,
+    // Barbarian Attack (each passes through to base outside the scenario).
+    rollDice: handleRollDiceBarbarianAttack as never,
+    discard: handleDiscardBarbarianAttack as never,
+    buyDevCard: handleBuyDevCardTraders as never,
+    stealResource: handleStealResource as never,
+    resolveBarbarianCard: handleResolveBarbarianCard as never,
+    moveBarbarianKnight: handleMoveBarbarianKnight as never,
   },
   validators: {
     moveRobber: combineRobberValidators(
       validateMoveRobberFriendlyRobber,
       validateMoveRobberFishingScenario,
-      validateMoveRobberCastle,
     ),
   },
 };
@@ -79,20 +94,5 @@ function validateMoveRobberFishingScenario(
   _state: GameState,
   _action: MoveRobberAction,
 ): string | null {
-  return null;
-}
-
-// Barbarian Attack: the robber cannot sit on a castle hex (rulebook —
-// the castle is a defended position, not a steal target). Sea-ring
-// position is already gated by the base robber validator, but this
-// makes the ban explicit.
-function validateMoveRobberCastle(
-  state: GameState,
-  action: MoveRobberAction,
-): string | null {
-  if (!state.castles?.length) return null;
-  if (state.castles.some((c) => c.hexId === action.hex)) {
-    return 'Cannot place the robber on a castle hex';
-  }
   return null;
 }

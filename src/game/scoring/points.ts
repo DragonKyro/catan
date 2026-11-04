@@ -2,7 +2,7 @@ import type { GameState, PlayerId } from '../types';
 import { calculateWealthTilesVp } from '../modules/traders/scoring/wealthTiles';
 import { calculateStrongestPortsVp } from '../modules/traders/scoring/strongestPorts';
 import { calculateMerchantTrainsVp } from '../modules/traders/scoring/merchantTrains';
-import { calculateBarbarianDefenderVp } from '../modules/traders/scoring/barbarianAttack';
+import { calculateBarbarianAttackVp } from '../modules/traders/barbarianAttack/scoring';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../modules/citiesAndKnights/constants';
 import { calculateIslandBonusVp } from '../modules/seafarers/islandBonus';
 import { calculateTribeVp } from '../modules/seafarers/tribe';
@@ -104,9 +104,9 @@ export function calculateVictoryPoints(
   vp += calculateStrongestPortsVp(state, playerId);
   // Traders & Barbarians / Merchant Trains: +1 per building between 2 wagons.
   vp += calculateMerchantTrainsVp(state, playerId);
-  // Traders & Barbarians / Barbarian Attack: visible +1 per knight per won
-  // defense, accumulated on `state.castles[i].defenderVp`.
-  vp += calculateBarbarianDefenderVp(state, playerId);
+  // Traders & Barbarians / Barbarian Attack: 1 VP per 2 prisoners; conquered
+  // buildings are worth nothing.
+  vp += calculateBarbarianAttackVp(state, playerId);
   return vp;
 }
 

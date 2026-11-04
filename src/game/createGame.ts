@@ -1,4 +1,4 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, CastleState } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, BarbarianAttackState } from './types';
 import { wondersForPlayerCount } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import {
@@ -16,8 +16,9 @@ import {
   TRADERS_SCENARIO_MERCHANT_TRAINS,
   TRADERS_SCENARIO_BARBARIAN_ATTACK,
   MERCHANT_WAGON_SUPPLY,
-  BARBARIAN_KNIGHT_SUPPLY,
 } from './modules/traders/constants';
+import type { BarbarianBoardSetup } from './modules/traders/barbarianAttack/board';
+import { initialBarbarianAttackState } from './modules/traders/barbarianAttack/init';
 import {
   getBaseScenario,
   DEFAULT_BASE_SCENARIO_ID,
@@ -288,7 +289,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let lakeHexId: HexId | undefined;
   let fishingGrounds: FishingGround[] | undefined;
   let wateringHoleHexId: HexId | undefined;
-  let castles: CastleState[] | undefined;
+  let barbarianBoard: BarbarianBoardSetup | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (customMap) {
@@ -315,7 +316,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     fishingGrounds =
       result.fishingGrounds.length > 0 ? result.fishingGrounds : undefined;
     wateringHoleHexId = result.wateringHoleHexId ?? undefined;
-    castles = result.castles.length > 0 ? result.castles : undefined;
+    barbarianBoard = result.barbarianAttack ?? undefined;
   } else if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
     seafarers = result;
@@ -403,10 +404,6 @@ export function createGame(opts: CreateGameOptions): GameState {
     ...(hasTraders ? { gold: 0, bridges: [] } : {}),
     ...(hasTraders && settings.tradersScenarioId === TRADERS_SCENARIO_FISHING
       ? { fishTokens: [] as Array<'one' | 'two' | 'three'> }
-      : {}),
-    ...(hasTraders &&
-    settings.tradersScenarioId === TRADERS_SCENARIO_BARBARIAN_ATTACK
-      ? { defenderKnights: [] as EdgeId[] }
       : {}),
   }));
 
@@ -528,16 +525,21 @@ export function createGame(opts: CreateGameOptions): GameState {
     robberActive = false;
   }
 
-  // Barbarian Attack seeding. Castle states already come from the generator;
-  // initialize the shared knight supply. Each castle's `defenderVp` map is
-  // empty until a successful defense lands. Resolved-state-only scenario —
-  // no off-board robber tweak; the regular desert robber rule applies.
+  // Barbarian Attack seeding: barbarians on the 2 and the 12, the
+  // scenario's own 26-card deck (the base development cards, the Largest
+  // Army tile and the robber stay in the box), and coins in play.
   const isBarbarianAttack =
     hasTraders &&
     settings.tradersScenarioId === TRADERS_SCENARIO_BARBARIAN_ATTACK;
-  let barbarianKnightSupply: number | undefined;
-  if (isBarbarianAttack) {
-    barbarianKnightSupply = BARBARIAN_KNIGHT_SUPPLY;
+  let barbarianAttack: BarbarianAttackState | undefined;
+  if (isBarbarianAttack && barbarianBoard) {
+    [barbarianAttack, rng] = initialBarbarianAttackState(
+      barbarianBoard,
+      players.map((p) => p.id),
+      rng,
+    );
+    devCardDeck = [];
+    robberActive = false;
   }
 
   // Pirate Islands has no robber at all.
@@ -590,7 +592,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     metropolises,
     progressDecks,
     riverEdges,
-    wealthTiles: wealthTilesInit,
+    // Barbarian Attack uses coins but has no Wealthiest / Poor tiles.
+    wealthTiles: isBarbarianAttack ? undefined : wealthTilesInit,
     strongestPorts: strongestPortsInit,
     lakeHexId,
     fishingGrounds,
@@ -600,7 +603,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     wateringHoleHexId,
     wagons,
     wagonSupply,
-    castles,
-    barbarianKnightSupply,
+    ...(barbarianAttack
+      ? { barbarianAttack, coinsInPlay: true, noLargestArmy: true }
+      : {}),
   };
 }

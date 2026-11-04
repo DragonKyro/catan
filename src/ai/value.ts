@@ -12,6 +12,7 @@ import { getPortAtVertex } from '@/game/board/adjacency';
 import { islandBonusAt } from '@/game/modules/seafarers/islandBonus';
 import { canPlaceSettlement } from '@/game/placement';
 import { hasShipGoal } from './seafarers/ships';
+import { barbarianVertexPenalty } from './traders/barbarianAttack';
 
 // Resource weights tuned for typical Catan economy. Ore/wheat slightly
 // scarce; sheep slightly abundant.
@@ -138,6 +139,9 @@ export function vertexScore(
       totalPips += pips * terrainWeight('gold') + 1.0;
       continue;
     }
+    // Swamp / lake / watering hole / castle (T&B) produce no resource; their
+    // own bonuses are scored below. (Reading them as a resource gave NaN.)
+    if (!(RESOURCES as readonly string[]).includes(hex.terrain)) continue;
     const weight = RESOURCE_WEIGHT[hex.terrain as Resource];
     // Diminishing returns: pips count less if we already have this resource.
     const existingPips = existing[hex.terrain as Resource];
@@ -238,18 +242,10 @@ export function vertexScore(
     if (state.board.hexes[hexId]?.terrain === 'swamp') riverGoldBonus += 0.4;
   }
 
-  // Traders & Barbarians / Barbarian Attack: a small bonus for settling
-  // adjacent to a castle. The defender-VP upside isn't tied to the
-  // building, but castle-adjacent vertices put us in the area where
-  // hire knights matter and they're also relatively safer (no enemy
-  // settles in the sea ring).
-  let castleBonus = 0;
-  if (state.castles?.length) {
-    const castleHexes = new Set(state.castles.map((c) => c.hexId));
-    for (const hexId of vertex.hexes) {
-      if (castleHexes.has(hexId)) castleBonus += 0.5;
-    }
-  }
+  // Traders & Barbarians / Barbarian Attack: coastal hexes lose production
+  // to landing barbarians, and a building touching no inner hex can be
+  // conquered.
+  const barbarianPenalty = barbarianVertexPenalty(state, vertexId);
 
   // Traders & Barbarians / Fishing on Catan:
   //   - The lake produces fish tokens on its number. Settlements adjacent
@@ -281,8 +277,8 @@ export function vertexScore(
     fogBonus +
     clothBonus +
     riverGoldBonus +
-    fishBonus +
-    castleBonus -
+    fishBonus -
+    barbarianPenalty -
     shoreline -
     volcanoPenalty -
     fleetPenalty

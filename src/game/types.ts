@@ -331,11 +331,6 @@ export interface Player {
   // the rulebook. Not a resource — doesn't count toward 7-roll discard,
   // can't be stolen by robber, can't be traded.
   fishTokens?: Array<'one' | 'two' | 'three'>;
-  // Traders & Barbarians / Barbarian Attack: edges where this player has
-  // hired a defender knight. T&B knights are simple stationary pieces
-  // (no levels, no activation) — distinct from the C&K knight system
-  // which uses `state.knights` keyed by vertex.
-  defenderKnights?: EdgeId[];
 }
 
 // ----- Traders & Barbarians / Fishing on Catan -----
@@ -398,19 +393,89 @@ export interface PendingWagonPlacement {
 
 // ----- Traders & Barbarians / Barbarian Attack -----
 
-// One castle on the board. Three of these per Barbarian Attack scenario.
-// `barbarianPath` walks from an outer sea hex inward to the castle; the
-// barbarian piece advances along it one hex per endTurn. Combat resolves
-// when `barbarianPosition === barbarianPath.length - 1`.
-export interface CastleState {
-  id: string;
-  hexId: HexId;
-  barbarianPath: HexId[];
-  barbarianPosition: number;
-  barbarianStrength: number;
-  // VP accumulated by each player from successful defenses at this castle.
-  // 1 VP per knight a player brought to a winning defense.
-  defenderVp: Record<PlayerId, number>;
+// The scenario's own 26-card development deck (rulebook p.15). A bought card
+// is played at once.
+export type BarbarianCardType = 'capture' | 'knighthood' | 'swiftKnight' | 'treason';
+
+// Treason moves one barbarian. `from: null` = from the supply (only when the
+// coastal hexes don't hold enough barbarians to move).
+export interface BarbarianTreasonMove {
+  from: HexId | null;
+  to: HexId;
+}
+
+// Knight-loss die faces → the castle tile's three edge colours. Purple = the
+// edges parallel to a hex's NW and SE edges ("/"), green = parallel to NE and
+// SW ("\"), brown = the vertical W / E edges.
+export type BarbarianEdgeColor = 'purple' | 'green' | 'brown';
+
+// One victory over the barbarians on a coastal hex (expel step), kept for
+// the log and the scenario panel.
+export interface BarbarianExpelResult {
+  hex: HexId;
+  barbarians: number;
+  // Knights on the hex's edges, per involved player.
+  knights: Record<PlayerId, number>;
+  prisoners: Record<PlayerId, number>;
+  // Involved players who got no prisoner (3 gold each instead).
+  consolation: PlayerId[];
+  // Tie-break dice (2d6 sums), in the order rolled, when any were needed.
+  rolls?: Record<PlayerId, number[]>;
+  // The hex was conquered and is now liberated.
+  liberated: boolean;
+  lossDie: number;
+  lossColor: BarbarianEdgeColor;
+  knightsLost: Record<PlayerId, number>;
+}
+
+export type BarbarianAttackEvent =
+  | {
+      kind: 'landing';
+      playerId: PlayerId;
+      // The accepted rolls (7s and repeats were re-rolled), in order.
+      rolls: Array<{ dice: [number, number]; hex: HexId; placed: boolean; conquered: boolean }>;
+      // The supply ran out before the third roll.
+      supplyEmpty: boolean;
+    }
+  | {
+      kind: 'cardDrawn';
+      playerId: PlayerId;
+      card: BarbarianCardType;
+      // Capture cards drawn first and discarded (no barbarian to capture).
+      skippedCaptures: number;
+      // The card could not be used (no knight left / no free castle edge /
+      // no legal Treason move) and was discarded.
+      wasted: boolean;
+    }
+  | { kind: 'expel'; playerId: PlayerId; results: BarbarianExpelResult[] };
+
+export interface BarbarianAttackState {
+  // Barbarians standing on each coastal hex (0-3). Missing key = 0. Three
+  // barbarians = the hex is conquered.
+  barbarians: Record<HexId, number>;
+  // Barbarians next to the board. 36 total = supply + on hexes + prisoners.
+  supply: number;
+  // The 12 coastal hexes in expel order: clockwise from the 4 next to the
+  // castle, ending with the castle hex.
+  coastalHexes: HexId[];
+  castleHex: HexId;
+  // Knights on edges. One knight per edge.
+  knights: Record<EdgeId, PlayerId>;
+  // Barbarians taken prisoner, per player. Every 2 = 1 VP.
+  prisoners: Record<PlayerId, number>;
+  // Face-down development deck (drawn from the end) and the discard pile
+  // (reshuffled with the seeded RNG when the deck runs out).
+  deck: BarbarianCardType[];
+  discard: BarbarianCardType[];
+  // A bought card waiting for its choice (phase 'barbarianCard').
+  pendingCard?: { playerId: PlayerId; card: BarbarianCardType };
+  // End-of-turn knight movement (phase 'barbarianKnightMoves'): edges where
+  // a knight already moved this turn sits.
+  movedKnights?: EdgeId[];
+  // Events produced by the most recent action that produced any (landing
+  // rolls, card draws, expel results). `seq` increments each time so the log
+  // can tell a new batch from an old one.
+  lastEvents?: { seq: number; events: BarbarianAttackEvent[] };
 }
 
 // ============================================================================
@@ -431,6 +496,10 @@ export type GamePhase =
   // Traders & Barbarians / Merchant Trains: end-of-turn voting + placement.
   | 'wagonVoting'
   | 'placeWagon'
+  // Traders & Barbarians / Barbarian Attack: the choice for a development
+  // card played on purchase, and the end-of-turn knight movement step.
+  | 'barbarianCard'
+  | 'barbarianKnightMoves'
   // Seafarers extension phases.
   | 'chooseRobberOrPirate'
   | 'movePirate'
@@ -800,13 +869,12 @@ export interface GameState {
   // Pending placement — present iff phase is 'placeWagon'. Resolved by a
   // `placeWagon` action.
   pendingWagonPlacement?: PendingWagonPlacement;
-  // Barbarian Attack: three castles + their barbarian advance state. Empty /
-  // undefined when the scenario isn't active.
-  castles?: CastleState[];
-  // Shared supply of defender knights left in the bag. Decrements on
-  // hireKnight; refunded when knights die in combat. Distinct from
-  // `state.knightSupply` (C&K, per-player by strength).
-  barbarianKnightSupply?: number;
+  // Traders & Barbarians scenarios that use coins (Rivers of Catan, Barbarian Attack, Traders & Barbarians)
+  coinsInPlay?: boolean;
+  // Traders & Barbarians / Barbarian Attack: barbarians on the coast, knights
+  // on edges, prisoners and the scenario's development deck. Undefined in
+  // every other game.
+  barbarianAttack?: BarbarianAttackState;
 }
 
 // Seafarers island bonus. Every player earns an island's bonus once, on
@@ -1151,13 +1219,26 @@ export interface PlaceWagonAction extends ActionBase {
   edge: EdgeId;
 }
 
-// Barbarian Attack: hire a defender knight on an edge adjacent to a
-// castle. Cost: 1 wheat + 1 ore. Knight is consumed from the shared
-// `state.barbarianKnightSupply`; the edge must be unoccupied and the
-// player must have a connecting road/settlement/city/defender-knight.
-export interface HireKnightAction extends ActionBase {
-  type: 'hireKnight';
-  edge: EdgeId;
+// Barbarian Attack: the choice for the development card just bought
+// (phase 'barbarianCard'). Capture names a coastal hex with a barbarian;
+// Knighthood a free castle edge; Swift Knight any edge without a knight;
+// Treason the two barbarian moves.
+export interface ResolveBarbarianCardAction extends ActionBase {
+  type: 'resolveBarbarianCard';
+  hex?: HexId;
+  edge?: EdgeId;
+  moves?: BarbarianTreasonMove[];
+}
+
+// Barbarian Attack, end of turn (phase 'barbarianKnightMoves'): move one of
+// your knights up to 3 edges, or up to 5 when `boost` pays 1 wheat. Each
+// knight moves at most once a turn. `endTurn` finishes the step and expels
+// the barbarians.
+export interface MoveBarbarianKnightAction extends ActionBase {
+  type: 'moveBarbarianKnight';
+  from: EdgeId;
+  to: EdgeId;
+  boost?: boolean;
 }
 
 // ----------------------------------------------------------------------------
@@ -1361,7 +1442,8 @@ export type Action =
   | PassOldBootAction
   | SubmitWagonVoteAction
   | PlaceWagonAction
-  | HireKnightAction
+  | ResolveBarbarianCardAction
+  | MoveBarbarianKnightAction
   | BuildCityWallAction
   | DiscardCKAction
   | RecruitKnightAction
@@ -1401,8 +1483,7 @@ export const COSTS: Record<
   | 'knight'
   | 'activateKnight'
   | 'promoteKnight'
-  | 'cityMedicine'
-  | 'hireKnight',
+  | 'cityMedicine',
   Partial<ResourceBank>
 > = {
   road: { wood: 1, brick: 1 },
@@ -1423,9 +1504,4 @@ export const COSTS: Record<
   // column of the rulebook's player aid; the visible payoff is +3 gold on
   // build, so a road-equivalent cost keeps the math balanced.
   bridge: { wood: 1, brick: 1 },
-  // Traders & Barbarians / Barbarian Attack: hire a defender knight.
-  // Rulebook is 1 wool + 1 wheat + 1 ore; we drop wool so the wool
-  // economy stays free for Merchant Trains-style bids in the combo
-  // scenario down the line.
-  hireKnight: { wheat: 1, ore: 1 },
 };
