@@ -1,4 +1,4 @@
-import type { Action, GameState } from '@/game/types';
+import type { Action, GameSettings, GameState } from '@/game/types';
 import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
@@ -17,13 +17,18 @@ export interface SimResult {
   counts: Record<string, number>;
 }
 
-export function simulateCK(players: number, seed: number, maxSteps = 8000): SimResult {
+export function simulateCK(
+  players: number,
+  seed: number,
+  maxSteps = 8000,
+  settings: Partial<GameSettings> = {},
+): SimResult {
   const names = Array.from({ length: players }, (_, i) => `AI-${i}`);
   let s: GameState = createGame({
     playerNames: names,
     playerTypes: names.map(() => 'ai' as const),
     seed,
-    settings: { expansions: [CITIES_AND_KNIGHTS_EXPANSION_ID] },
+    settings: { ...settings, expansions: [CITIES_AND_KNIGHTS_EXPANSION_ID] },
   });
   let rng = seed >>> 0;
   const die = () => {

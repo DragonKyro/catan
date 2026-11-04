@@ -13,7 +13,7 @@ import { ckBankTradeRate } from '@/game/modules/citiesAndKnights/trade';
 import { handLimitOnSeven } from '@/game/modules/citiesAndKnights/production';
 import { MAX_IMPROVEMENT_LEVEL } from '@/game/modules/citiesAndKnights/constants';
 import { assessThreats } from '../threats';
-import { commoditiesOf, firstLegal, handSizeCK, playerById } from './common';
+import { commoditiesOf, firstLegal, handSizeCK, playerById, rollsBeforeOurNextTurn } from './common';
 import { ckReportNeeds, focusTrack, isCommodity, unitValue, type CardKind } from './value';
 
 // Commodity trades for the Cities & Knights AI: bank trades with a
@@ -198,8 +198,7 @@ export function tryHandLimitTrade(state: GameState, playerId: PlayerId): Action 
   const hand = handSizeCK(p);
   const limit = handLimitOnSeven(state, playerId);
   if (hand <= limit) return null;
-  const rolls = Math.max(2, state.players.length);
-  const pSeven = 1 - (5 / 6) ** rolls;
+  const pSeven = 1 - (5 / 6) ** rollsBeforeOurNextTurn(state);
   const have = holding(state, playerId);
   const needs = ckReportNeeds(state, playerId);
   let best: { give: CardKind; receive: CardKind; score: number } | null = null;

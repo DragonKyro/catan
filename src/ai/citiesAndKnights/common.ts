@@ -8,6 +8,7 @@ import type {
   VertexId,
 } from '@/game/types';
 import { applyAction } from '@/game/engine';
+import { usesPairedRules } from '@/game/helpers';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { totalResources } from '@/game/resources';
 import { totalCommodities } from '@/game/commodities';
@@ -115,4 +116,13 @@ export function commodityOfTerrain(terrain: string | undefined): Commodity | nul
   if (terrain === 'sheep') return 'cloth';
   if (terrain === 'ore') return 'coin';
   return null;
+}
+
+// Dice rolls (each one a 7 with probability 1/6, a barbarian ship with
+// probability 1/2) before this seat's next Action phase. 3-4 players: every
+// seat rolls once. 5-6 players (paired turns): we act as Player 1 and again
+// as Player 2 each round, so about half the table rolls in between.
+export function rollsBeforeOurNextTurn(state: GameState): number {
+  const n = state.players.length;
+  return Math.max(2, usesPairedRules(state) ? Math.ceil(n / 2) : n);
 }

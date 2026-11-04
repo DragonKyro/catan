@@ -7,7 +7,7 @@ import {
   defenderStrengthByPlayer,
 } from '@/game/modules/citiesAndKnights/barbarian';
 import { vertexHasMetropolis } from '@/game/modules/citiesAndKnights/improvements/state';
-import { playerById } from './common';
+import { playerById, rollsBeforeOurNextTurn } from './common';
 
 // How the next barbarian attack looks from one seat's point of view. Every
 // number here is public: ship position, cities on the board, knights.
@@ -71,7 +71,7 @@ export function barbarianOutlook(
 ): BarbarianOutlook {
   const position = state.barbarian?.position ?? 0;
   const stepsLeft = Math.max(1, BARBARIAN_TRACK_LENGTH - position);
-  const rolls = Math.max(2, state.players.length);
+  const rolls = rollsBeforeOurNextTurn(state);
   const pAttackSoon = binomialTail(rolls, stepsLeft);
   const pAttackTwoRounds = binomialTail(2 * rolls, stepsLeft);
   const active = defenderStrengthByPlayer(state);

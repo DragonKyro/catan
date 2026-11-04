@@ -30,6 +30,18 @@ describe('heuristic AIs play Cities & Knights', () => {
     }, 120_000);
   }
 
+  it('finishes 5- and 6-player games (paired turns)', () => {
+    for (const players of [5, 6]) {
+      const r = simulateCK(players, 11, STEP_CAP);
+      expect(r.state.phase, `${players}p stuck after ${r.steps} steps`).toBe('gameOver');
+    }
+  }, 120_000);
+
+  it("finishes on the rulebook's first-game board", () => {
+    const r = simulateCK(4, 12, STEP_CAP, { baseScenarioId: 'ckFirstGame' });
+    expect(r.state.phase).toBe('gameOver');
+  }, 120_000);
+
   it('uses the expansion rules', () => {
     const totals: Record<string, number> = {};
     for (const r of [...gamesAt(3), ...gamesAt(4)]) {
