@@ -65,7 +65,10 @@ export function handleMoveRobber(
   }
   if (!state.pendingRobberMove) throw new Error('No pending robber move');
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
-  if (action.hex === state.board.robberHex) {
+  // An off-board robber (Fishing on Catan, Merchant Trains: `robberActive`
+  // false) enters on any legal hex — including the one it is parked on.
+  const offBoard = state.robberActive === false;
+  if (!offBoard && action.hex === state.board.robberHex) {
     throw new Error('Robber must move to a different hex');
   }
   if (!state.board.hexes[action.hex]) throw new Error('Unknown hex');
@@ -89,6 +92,8 @@ export function handleMoveRobber(
   let next: GameState = {
     ...state,
     board: { ...state.board, robberHex: action.hex },
+    // Placing an off-board robber puts it into play.
+    ...(offBoard ? { robberActive: true } : {}),
   };
 
   if (action.stealFrom !== null) {
