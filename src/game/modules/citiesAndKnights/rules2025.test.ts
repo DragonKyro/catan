@@ -403,3 +403,42 @@ describe('C&K winning (p.10)', () => {
     expect(s.winner).toBe('p1');
   });
 });
+
+describe('C&K 5-6 players (ck56 p.2-3)', () => {
+  it('adds 6 of each commodity and refuses 7+ players', () => {
+    const s = ckGame(5);
+    expect(s.commodityBank).toEqual({ paper: 18, cloth: 18, coin: 18 });
+    expect(s.board.hexIds.length).toBeGreaterThan(19);
+    expect(() => ckGame(7)).toThrow(/at most 6/);
+  });
+
+  it('paired turns: player 2 acts after player 1 but may not trade with other players', () => {
+    let s = ckAfterSetup(5);
+    s = toMainPaired(s);
+    s = applyAction(s, { type: 'endTurn', playerId: 'p0' });
+    // Player 2 is the third seat to player 1's left.
+    expect(s.playerOrder[s.currentPlayerIndex]).toBe('p3');
+    expect(s.phase).toBe('main');
+    s = updatePlayer(s, 'p3', (p) => ({
+      ...p,
+      commodities: { paper: 1, cloth: 0, coin: 0 },
+      resources: { ...p.resources, wood: 1 },
+    }));
+    expect(() =>
+      applyAction(s, {
+        type: 'proposeTrade',
+        playerId: 'p3',
+        give: {},
+        giveCommodities: { paper: 1 },
+        receive: { ore: 1 },
+      }),
+    ).toThrow(/Player 2/);
+    s = applyAction(s, { type: 'endTurn', playerId: 'p3' });
+    expect(s.playerOrder[s.currentPlayerIndex]).toBe('p1');
+    expect(s.phase).toBe('rollOrPlayKnight');
+  });
+});
+
+function toMainPaired(s: GameState): GameState {
+  return roll(s, [5, 6], 'science');
+}

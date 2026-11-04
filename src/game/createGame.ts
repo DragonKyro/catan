@@ -20,6 +20,7 @@ import {
 } from './modules/traders/constants';
 import {
   getBaseScenario,
+  baseScenarioAllowed,
   DEFAULT_BASE_SCENARIO_ID,
 } from './modules/base/scenarios';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
@@ -27,7 +28,9 @@ import { TRADERS_EXPANSION_ID } from './modules/traders/constants';
 import {
   CITIES_AND_KNIGHTS_EXPANSION_ID,
   CITIES_AND_KNIGHTS_DEFAULT_VP,
+  CITIES_AND_KNIGHTS_MAX_PLAYERS,
   COMMODITY_BANK_SIZE,
+  COMMODITY_BANK_SIZE_5_6,
   KNIGHT_SUPPLY_PER_STRENGTH,
 } from './modules/citiesAndKnights/constants';
 import { shuffleProgressDecks } from './modules/citiesAndKnights/progress/catalogue';
@@ -190,6 +193,11 @@ export function createGame(opts: CreateGameOptions): GameState {
   // combined ruleset has its own intercept points (knights on ships, pirate
   // on barbarian track, etc.) we haven't implemented yet. Refuse the combo
   // at the engine boundary so the UI picker is the only mutex to maintain.
+  if (hasCitiesKnights && numPlayers > CITIES_AND_KNIGHTS_MAX_PLAYERS) {
+    throw new Error(
+      `Cities & Knights supports at most ${CITIES_AND_KNIGHTS_MAX_PLAYERS} players (got ${numPlayers}).`,
+    );
+  }
   if (hasCitiesKnights && expansions.includes(SEAFARERS_EXPANSION_ID)) {
     throw new Error(
       'Cities & Knights cannot be combined with Seafarers yet (Phase 1 deferral).',
@@ -226,6 +234,14 @@ export function createGame(opts: CreateGameOptions): GameState {
   const baseScenarioId = opts.settings?.baseScenarioId ?? DEFAULT_BASE_SCENARIO_ID;
   const tradersScenarioId = opts.settings?.tradersScenarioId;
   const tradersVariants = opts.settings?.tradersVariants;
+  // Base-game maps tied to (or ruled out by) an expansion: the C&K first-game
+  // board needs C&K; Gold Rush / Volcano can't be played with it.
+  if (!customMap && !hasTraders && !expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const map = getBaseScenario(baseScenarioId);
+    if (!baseScenarioAllowed(map, expansions)) {
+      throw new Error(`The "${map.name}" map can't be played with these expansions.`);
+    }
+  }
   const scenarioVp = ((): number | undefined => {
     if (customMap) return customMap.defaultVpToWin;
     if (hasTraders) {
@@ -465,7 +481,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let metropolises: Record<ImprovementTrack, MetropolisRecord | null> | undefined;
   let progressDecks: Record<ImprovementTrack, ProgressCardKind[]> | undefined;
   if (hasCitiesKnights) {
-    commodityBank = commoditiesFull(COMMODITY_BANK_SIZE);
+    commodityBank = commoditiesFull(numPlayers >= 5 ? COMMODITY_BANK_SIZE_5_6 : COMMODITY_BANK_SIZE);
     barbarian = { position: 0, attacksResolved: 0 };
     // Robber starts "offshore" in C&K — represented by a flag rather than a
     // sentinel hex. board.robberHex still points at the desert so the existing

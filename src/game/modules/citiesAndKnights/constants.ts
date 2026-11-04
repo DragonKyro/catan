@@ -50,8 +50,14 @@ export const CITY_WALL_HAND_BONUS = 2;
 // settings.victoryPointsToWin when needed.
 export const CITIES_AND_KNIGHTS_DEFAULT_VP = 13;
 
-// Commodity bank size per commodity. Rulebook ships 12 cards each.
+// Seats supported under Cities & Knights: the 3-4 player game plus the
+// Cities & Knights 5-6 Player Expansion (5-6 board, paired turns).
+export const CITIES_AND_KNIGHTS_MAX_PLAYERS = 6;
+
+// Commodity bank size per commodity. Rulebook ships 12 cards each; the 5-6
+// player expansion adds 6 of each (ck56 p.2-3).
 export const COMMODITY_BANK_SIZE = 12;
+export const COMMODITY_BANK_SIZE_5_6 = 18;
 
 // Display emoji for each commodity (used by HandPanel, OpponentPanel,
 // BankPanel, CostCheatsheet). Kept on the engine side so the same icon is
