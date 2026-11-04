@@ -1,78 +1,92 @@
 import type {
   BuildCityAction,
   BuildRoadAction,
+  EdgeId,
   GameState,
+  PlaceInitialSettlementAction,
+  PlayerId,
+  ResourceBank,
+  VertexId,
 } from '../../../types';
 import { COSTS } from '../../../types';
 import {
   handleBuildRoad as baseHandleBuildRoad,
   handleBuildCity as baseHandleBuildCity,
+  MAX_CITIES,
+  MAX_ROADS,
 } from '../../../actions/build';
-import { updatePlayer } from '../../../helpers';
-import { addResources } from '../../../resources';
+import { handlePlaceInitialSettlement as baseHandlePlaceInitialSettlement } from '../../../actions/setup';
+import { currentPlayerId, getPlayer, updatePlayer } from '../../../helpers';
+import { addResources, canAfford, subtractResources } from '../../../resources';
+import { canConnectRoad } from '../../../placement';
 
-// Cities & Knights — wraps the base build handlers to honour progress-card
-// flags. Diplomacy lets the player build one free road after removing one
-// of their own; Medicine reduces the next city upgrade from 2+3 to 1+2.
+// Cities & Knights wrappers around the base build handlers.
 
-export function handleBuildRoadCK(
+// Setup (p.5): round 1 places a settlement, round 2 places a CITY, which
+// collects 1 resource per adjacent hex (the base handler already pays the
+// round-2 piece that way; we just turn the piece into a city).
+export function handlePlaceInitialSettlementCK(
   state: GameState,
-  action: BuildRoadAction,
+  action: PlaceInitialSettlementAction,
 ): GameState {
-  if (!state.diplomacyFreeRoad) {
-    return baseHandleBuildRoad(state, action);
-  }
-  // Let the base handler validate placement + collect the normal cost, then
-  // refund and clear the flag.
-  const after = baseHandleBuildRoad(state, action);
-  let refunded = updatePlayer(after, action.playerId, (p) => ({
+  const next = baseHandlePlaceInitialSettlement(state, action);
+  if (state.phase !== 'setupRound2') return next;
+  return updatePlayer(next, action.playerId, (p) => ({
     ...p,
-    resources: addResources(p.resources, COSTS.road),
+    settlements: p.settlements.filter((v) => v !== action.vertex),
+    cities: [...p.cities, action.vertex],
   }));
-  refunded = {
-    ...refunded,
-    bank: {
-      wood: refunded.bank.wood - (COSTS.road.wood ?? 0),
-      brick: refunded.bank.brick - (COSTS.road.brick ?? 0),
-      sheep: refunded.bank.sheep,
-      wheat: refunded.bank.wheat,
-      ore: refunded.bank.ore,
-    },
-    diplomacyFreeRoad: false,
-  };
-  return refunded;
 }
 
-export function handleBuildCityCK(
+// Can `playerId` lay a free road on `edge` (Road Building, Diplomacy)? Same
+// placement as a bought road: connected, not past opponents' buildings or
+// knights, a road left in the supply.
+export function canPlaceFreeRoad(state: GameState, playerId: PlayerId, edge: EdgeId): boolean {
+  const p = state.players.find((pl) => pl.id === playerId);
+  if (!p || p.roads.length >= MAX_ROADS) return false;
+  return canConnectRoad(state, playerId, edge);
+}
+
+export function placeFreeRoad(state: GameState, playerId: PlayerId, edge: EdgeId): GameState {
+  if (!canPlaceFreeRoad(state, playerId, edge)) throw new Error('Invalid road placement');
+  return updatePlayer(state, playerId, (p) => ({ ...p, roads: [...p.roads, edge] }));
+}
+
+// Diplomacy (p.15): after removing one of your own roads you may build 1
+// road at no cost — the next buildRoad is free.
+export function handleBuildRoadCK(state: GameState, action: BuildRoadAction): GameState {
+  if (!state.diplomacyFreeRoad) return baseHandleBuildRoad(state, action);
+  if (state.phase !== 'main') throw new Error(`Cannot build road in phase ${state.phase}`);
+  if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
+  return { ...placeFreeRoad(state, action.playerId, action.edge), diplomacyFreeRoad: false };
+}
+
+// Upgrade a settlement to a city for `cost` (Medicine: 1 wheat + 2 ore).
+export function upgradeToCity(
   state: GameState,
-  action: BuildCityAction,
+  playerId: PlayerId,
+  vertex: VertexId,
+  cost: Partial<ResourceBank>,
 ): GameState {
-  if (!state.medicineActive) {
-    return baseHandleBuildCity(state, action);
-  }
-  // Temporarily lower the city cost. Use a god-mode trick: subtract the
-  // delta (1 wheat + 1 ore from the rulebook discount) from the cost by
-  // gifting the player those resources, then run the base handler.
-  const refundResources = {
-    wheat: 1,
-    ore: 1,
-  } as const;
-  let primed = updatePlayer(state, action.playerId, (p) => ({
+  const player = getPlayer(state, playerId);
+  if (player.cities.length >= MAX_CITIES) throw new Error('No city tokens left');
+  if (!player.settlements.includes(vertex)) throw new Error('Must upgrade your own settlement');
+  if (!canAfford(player.resources, cost)) throw new Error('Cannot afford the city');
+  const next = updatePlayer(state, playerId, (p) => ({
     ...p,
-    resources: addResources(p.resources, refundResources),
+    settlements: p.settlements.filter((v) => v !== vertex),
+    cities: [...p.cities, vertex],
+    resources: subtractResources(p.resources, cost),
   }));
-  primed = {
-    ...primed,
-    // Compensate the bank — the base handler will subtract the full city
-    // cost and return it to the bank, so this preserves balance.
-    bank: {
-      wood: primed.bank.wood,
-      brick: primed.bank.brick,
-      sheep: primed.bank.sheep,
-      wheat: primed.bank.wheat - 1,
-      ore: primed.bank.ore - 1,
-    },
-  };
-  const after = baseHandleBuildCity(primed, action);
-  return { ...after, medicineActive: false };
+  return { ...next, bank: addResources(next.bank, cost) };
+}
+
+// Medicine (p.13) played without a target: the next city upgrade this turn
+// costs 1 wheat + 2 ore.
+export function handleBuildCityCK(state: GameState, action: BuildCityAction): GameState {
+  if (!state.medicineActive) return baseHandleBuildCity(state, action);
+  if (state.phase !== 'main') throw new Error(`Cannot build city in phase ${state.phase}`);
+  if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
+  const next = upgradeToCity(state, action.playerId, action.vertex, COSTS.cityMedicine);
+  return { ...next, medicineActive: false };
 }

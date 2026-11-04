@@ -1,43 +1,32 @@
 import type { ChaseRobberAction, GameState } from '../../../types';
 import { currentPlayerId } from '../../../helpers';
 import { knightAt, vertexAdjacentToRobber } from '../knights/state';
+import { knightCanAct } from '../knights/legal';
 
-// "Chase the Robber" — an active knight adjacent to the robber triggers a
-// robber move. The knight becomes inactive immediately, and the engine
-// enters the standard moveRobber phase so the player picks the destination
-// + steal target. Returns to main afterwards.
-//
-// Only legal once the robber is active (post-first-barbarian-attack).
-export function handleChaseRobber(
-  state: GameState,
-  action: ChaseRobberAction,
-): GameState {
+// Chase away the robber (p.10): an acting knight on a corner of the robber's
+// hex "Activates the Robber" — the player moves it and steals as on a 7 —
+// and is laid down. Only once the robber is on the board.
+export function handleChaseRobber(state: GameState, action: ChaseRobberAction): GameState {
   if (state.phase !== 'main') {
     throw new Error(`Cannot chase robber in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   if (!state.robberActive) {
-    throw new Error("Robber isn't active yet — wait for the first barbarian attack");
+    throw new Error("The robber isn't on the board until the first barbarian attack");
   }
   const k = knightAt(state, action.vertex);
   if (!k) throw new Error('No knight at that vertex');
   if (k.playerId !== action.playerId) throw new Error('Not your knight');
   if (!k.active) throw new Error('Knight is not active');
-  if (state.activatedKnightsThisTurn?.includes(action.vertex)) {
+  if (!knightCanAct(state, action.vertex)) {
     throw new Error("Knight was activated this turn — it can't act yet");
   }
   if (!vertexAdjacentToRobber(state, action.vertex)) {
-    throw new Error('Knight is not adjacent to the robber');
+    throw new Error('Knight is not next to the robber');
   }
-
   return {
     ...state,
-    // Knight goes inactive even before the moveRobber phase resolves —
-    // the action's "cost" is the knight standing down.
-    knights: {
-      ...(state.knights ?? {}),
-      [action.vertex]: { ...k, active: false },
-    },
+    knights: { ...(state.knights ?? {}), [action.vertex]: { ...k, active: false } },
     phase: 'moveRobber',
     pendingRobberMove: { reason: 'knight', returnTo: 'main' },
   };

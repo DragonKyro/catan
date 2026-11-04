@@ -397,6 +397,7 @@ export function createGame(opts: CreateGameOptions): GameState {
           cityWalls: 0,
           improvements: { science: 0, trade: 0, politics: 0 },
           progressCards: { science: [], trade: [], politics: [] },
+          progressVpCards: [],
           defenderTokens: 0,
         }
       : {}),
