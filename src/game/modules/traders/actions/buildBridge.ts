@@ -6,11 +6,14 @@ import { COSTS } from '../../../types';
 import { currentPlayerId, updatePlayer, getPlayer } from '../../../helpers';
 import { canAfford, subtractResources, addResources } from '../../../resources';
 import { canPlaceBridge } from '../../../placement';
-import { BRIDGE_GOLD_REWARD } from '../constants';
-import { recalcWealthTiles } from '../scoring/wealthTiles';
+import { BRIDGE_GOLD_REWARD, MAX_BRIDGES } from '../constants';
+import { addGold } from '../coins/gold';
 
-const MAX_BRIDGES = 3;
-
+// Rivers of Catan bridge (rulebook p. 12): on an empty bridge site, joined
+// to one of your roads, bridges or buildings and not past an opponent's
+// building (canPlaceBridge); 2 brick + 1 lumber; 3 per player; +3 gold.
+// Road Building can't place one (playRoadBuilding only takes roads, and
+// canConnectRoad rejects bridge sites).
 export function handleBuildBridge(
   state: GameState,
   action: BuildBridgeAction,
@@ -20,11 +23,11 @@ export function handleBuildBridge(
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   if (!state.riverEdges?.includes(action.edge)) {
-    throw new Error('Bridges may only be built on river edges');
+    throw new Error('Bridges may only be built on bridge sites');
   }
   const player = getPlayer(state, action.playerId);
   if ((player.bridges?.length ?? 0) >= MAX_BRIDGES) {
-    throw new Error('No bridge tokens left');
+    throw new Error('No bridges left');
   }
   if (!canPlaceBridge(state, action.playerId, action.edge)) {
     throw new Error('Invalid bridge placement');
@@ -36,11 +39,10 @@ export function handleBuildBridge(
   let next = updatePlayer(state, action.playerId, (p) => ({
     ...p,
     bridges: [...(p.bridges ?? []), action.edge],
-    gold: (p.gold ?? 0) + BRIDGE_GOLD_REWARD,
     resources: subtractResources(p.resources, COSTS.bridge),
   }));
   next = { ...next, bank: addResources(next.bank, COSTS.bridge) };
-  next = { ...next, wealthTiles: recalcWealthTiles(next) };
+  next = addGold(next, action.playerId, BRIDGE_GOLD_REWARD);
   // Merchant Trains: bridge builds count toward the end-of-turn voting round.
   if (next.wateringHoleHexId) next = { ...next, builtThisTurn: true };
   return next;

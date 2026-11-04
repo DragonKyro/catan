@@ -1,6 +1,8 @@
 import type { BoardState, Hex } from '@/game/types';
 import { hexPolygonPoints, probabilityDots } from './boardLayout';
 import { HexTexture } from './HexTexture';
+import { MultiNumberToken } from './MultiNumberToken';
+import { hexNumbers } from '@/game/board/hexNumbers';
 
 interface Props {
   board: BoardState;
@@ -89,7 +91,11 @@ export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse, 
         strokeWidth={1.5}
       />
       <HexTexture hex={hex} />
-      {hex.numberToken !== null && !isRobberOnHex && (
+      {/* A hex with several numbers (T&B Rivers' 2 + 12, Fishing's lake). */}
+      {hex.extraNumbers && hex.extraNumbers.length > 0 && !isRobberOnHex && (
+        <MultiNumberToken numbers={hexNumbers(hex)} x={hex.center.x} y={hex.center.y} />
+      )}
+      {hex.numberToken !== null && !hex.extraNumbers?.length && !isRobberOnHex && (
         <g transform={`translate(${hex.center.x}, ${hex.center.y})`}>
           <circle r={17} fill="var(--token-fill)" stroke="var(--token-edge)" strokeWidth={1.5} />
           <text

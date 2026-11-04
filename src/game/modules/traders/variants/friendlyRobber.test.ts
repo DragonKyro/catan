@@ -5,7 +5,7 @@ import { applyAction } from '../../../engine';
 import type { GameState } from '../../../types';
 
 function startWithFriendlyRobber(): GameState {
-  return runSetupPhase(
+  const s = runSetupPhase(
     createGame({
       playerNames: ['A', 'B', 'C'],
       seed: 7,
@@ -17,6 +17,9 @@ function startWithFriendlyRobber(): GameState {
       randomizeTurnOrder: false,
     }),
   );
+  // Rivers of Catan setup gold can make a player Wealthiest (+1 VP); level
+  // everyone's gold so the starting VPs stay at the 2-VP threshold.
+  return { ...s, wealthTiles: undefined, players: s.players.map((p) => ({ ...p, gold: 0 })) };
 }
 
 describe('Friendly Robber variant', () => {

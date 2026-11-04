@@ -13,6 +13,9 @@ import { handleEndTurnTraders } from './turn';
 import { handleHireKnight } from './actions/hireKnight';
 import { validateMoveRobberFriendlyRobber } from './variants/friendlyRobber';
 import { TRADERS_EXPANSION_ID } from './constants';
+import { handleSpendGold, handleBuyGold } from './coins/actions';
+import { handleSwapFish } from './fishing/swap';
+import { withTradersTurnFlags } from './turnFlags';
 
 // The Traders & Barbarians module. Wraps build* actions to award scenario
 // gold (Rivers of Catan) and refresh Strongest Ports / Wealthiest tile
@@ -28,7 +31,7 @@ import { TRADERS_EXPANSION_ID } from './constants';
 export const tradersModule: RuleModule = {
   id: TRADERS_EXPANSION_ID,
   name: 'Traders & Barbarians',
-  handlers: {
+  handlers: withTradersTurnFlags({
     buildBridge: handleBuildBridge as never,
     buildRoad: handleBuildRoadWithRiverGold as never,
     buildSettlement: handleBuildSettlementWithRiverGold as never,
@@ -41,7 +44,12 @@ export const tradersModule: RuleModule = {
     placeWagon: handlePlaceWagon as never,
     hireKnight: handleHireKnight as never,
     endTurn: handleEndTurnTraders as never,
-  },
+    // Coins (Rivers of Catan; gated on state.coinsInPlay).
+    spendGold: handleSpendGold as never,
+    buyGold: handleBuyGold as never,
+    // Fishing on Catan: the 7-token swap after a capped production.
+    swapFish: handleSwapFish as never,
+  }),
   validators: {
     moveRobber: combineRobberValidators(
       validateMoveRobberFriendlyRobber,
@@ -69,9 +77,8 @@ function combineRobberValidators(
 }
 
 // Fishing on Catan: the robber may sit on the lake (rulebook explicitly
-// allows this — it blocks lake production). The "no fishing grounds"
-// clause is naturally enforced because our model anchors fishing grounds
-// to vertices, not hexes — the robber never sits on a vertex.
+// allows this; it blocks all four lake numbers). The "no fishing grounds"
+// clause holds by construction: fishing grounds are frame tiles, not hexes.
 //
 // Left as a stub for now so future scenarios (Barbarian Attack's castle
 // hex, Merchant Trains' watering hole) can plug in additional bans here.

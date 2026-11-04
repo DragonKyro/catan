@@ -168,6 +168,12 @@ export interface Hex {
   coord: HexCoord;
   terrain: Terrain;
   numberToken: number | null;
+  // Further numbers this hex also produces on, beyond `numberToken`. Absent
+  // on ordinary hexes. Traders & Barbarians uses it for the Rivers of Catan
+  // hex that carries both the 12 and the 2 disc, and for Fishing on Catan's
+  // lake (printed 2 / 3 / 11 / 12). Read a hex's numbers through
+  // `hexNumbers` / `hexRollsOn` in src/game/board/hexNumbers.ts.
+  extraNumbers?: number[];
   corners: VertexId[]; // 6 vertex IDs in clockwise order, for SVG polygon rendering
   center: { x: number; y: number }; // pixel center of the hex
 }
@@ -346,15 +352,28 @@ export interface Player {
 // the pile reshuffles into a fresh pool when the pool empties.
 export type FishTokenType = 'one' | 'two' | 'three' | 'oldBoot';
 
-// Fishing ground tile: placed on a frame edge at a coastal vertex. The tile
-// has its own number token; on roll, the settlement/city at the anchor
-// vertex (if any) draws fish tokens. Vertices uniquely identify a fishing
-// ground (one per coastal "V" notch on the frame).
+// Fishing ground tile: a frame piece filling one of the six coastal "V"
+// notches. It touches two coastal edges and so three corners of the island;
+// when its number is rolled every settlement (1 fish) / city (2 fish) on one
+// of those corners draws fish tokens. Not a hex: the robber never sits here.
 export interface FishingGround {
-  // Anchor vertex on the main island. Settlements/cities on this vertex
-  // earn fish when `token` is rolled.
-  vertex: VertexId;
+  // The three coastal corners the tile touches (the notch's inner corner
+  // is the middle one).
+  vertices: VertexId[];
+  // The two coastal edges the tile lies against.
+  edges: EdgeId[];
   token: number;
+}
+
+// ----- Traders & Barbarians / Rivers of Catan -----
+
+// One river tile: the hexes it runs through, from its source (inside the
+// first hex, a mountain) downstream, plus the coastal edge where it meets
+// the sea (null if it ends inland). Every edge the river crosses or meets is
+// a bridge site (`state.riverEdges`).
+export interface RiverPath {
+  hexes: HexId[];
+  mouth: EdgeId | null;
 }
 
 // ----- Traders & Barbarians / Merchant Trains -----
@@ -431,6 +450,10 @@ export type GamePhase =
   // Traders & Barbarians / Merchant Trains: end-of-turn voting + placement.
   | 'wagonVoting'
   | 'placeWagon'
+  // Traders & Barbarians / Fishing on Catan: players whose fish draws hit
+  // the 7-token cap this production decide (in turn order) whether to swap
+  // one token for a fresh draw (`swapFish`).
+  | 'fishSwap'
   // Seafarers extension phases.
   | 'chooseRobberOrPirate'
   | 'movePirate'
@@ -747,6 +770,18 @@ export interface GameState {
   // forbidden on these edges; bridges are the only structure that can
   // occupy them. Empty / undefined when T&B is inactive.
   riverEdges?: EdgeId[];
+  // Rivers of Catan: the two river tiles (hexes source → mouth). Every
+  // corner / edge of these hexes pays gold on build; the renderer draws the
+  // water along them.
+  rivers?: RiverPath[];
+  // Traders & Barbarians scenarios that use coins (Rivers of Catan,
+  // Barbarian Attack, Traders & Barbarians): enables `spendGold` (2 gold → 1
+  // resource of choice, at most twice per turn) and `buyGold` (resources →
+  // 1 gold at your bank trade rate). Set by createGame from the scenario.
+  coinsInPlay?: boolean;
+  // How many times the acting player has spent gold this turn (the
+  // 2-per-turn cap). Cleared when a new turn starts.
+  goldSpendsThisTurn?: number;
   // Wealthiest / Poor Catanian bonus tiles. Recalculated after every gold
   // change. `wealthiest` = unique max-gold player (≥ 1 gold; ties leave it
   // null). `poor` = all players strictly below the min — i.e. everyone tied
@@ -778,6 +813,10 @@ export interface GameState {
   // Hex id of the lake (a non-resource hex with a number that produces fish
   // on roll). Robber may sit on the lake to block its production.
   lakeHexId?: HexId;
+  // Fishing on Catan: present iff phase is 'fishSwap'. Players (turn order)
+  // whose draws were cut off by the 7-token cap and may still swap one token.
+  // `returnTo` is the phase play resumes in afterwards.
+  fishSwap?: { queue: PlayerId[]; returnTo: GamePhase };
   // Holder of the old boot (≥1 extra VP needed to win). Drawn from the fish
   // pool. Players may pass it during their turn to any player with ≥ their
   // VPs. null when in the supply.
@@ -1111,10 +1150,13 @@ export interface BuildBridgeAction extends ActionBase {
 // "you lose the excess fish"). `effect.kind` discriminates the action.
 export type FishSpendEffect =
   | { kind: 'removeRobber' }
-  | { kind: 'steal'; target: PlayerId; resource: Resource }
+  // The stolen card is picked from the victim's hand with the seeded RNG
+  // (same as a robber steal) so every peer reduces the same card.
+  | { kind: 'steal'; target: PlayerId }
   | { kind: 'takeFromBank'; resource: Resource }
   | { kind: 'buildRoad'; edge: EdgeId }
-  | { kind: 'buyDevCard'; drawn: DevCardType };
+  // Takes the top card of the development deck, free.
+  | { kind: 'buyDevCard' };
 
 export interface SpendFishAction extends ActionBase {
   type: 'spendFish';
@@ -1123,6 +1165,28 @@ export interface SpendFishAction extends ActionBase {
   // / 'three' tokens may be spent — the old boot is never spent.
   tokens: Array<'one' | 'two' | 'three'>;
   effect: FishSpendEffect;
+}
+
+// Fishing on Catan, 'fishSwap' phase: the player at the head of the queue
+// discards one fish token and draws a replacement (`token`), or declines
+// (`token: null`).
+export interface SwapFishAction extends ActionBase {
+  type: 'swapFish';
+  token: 'one' | 'two' | 'three' | null;
+}
+
+// Coins (Rivers of Catan / Barbarian Attack): pay 2 gold for 1 resource
+// card of your choice from the supply. At most twice per turn.
+export interface SpendGoldAction extends ActionBase {
+  type: 'spendGold';
+  resource: Resource;
+}
+
+// Coins: trade resource cards to the supply for 1 gold, at your bank rate
+// for that resource (4:1, 3:1 with a generic port, 2:1 with its port).
+export interface BuyGoldAction extends ActionBase {
+  type: 'buyGold';
+  give: Resource;
 }
 
 // Hand the old boot to another player. Legal target: any other player whose
@@ -1359,6 +1423,9 @@ export type Action =
   | BuildBridgeAction
   | SpendFishAction
   | PassOldBootAction
+  | SwapFishAction
+  | SpendGoldAction
+  | BuyGoldAction
   | SubmitWagonVoteAction
   | PlaceWagonAction
   | HireKnightAction
@@ -1419,10 +1486,9 @@ export const COSTS: Record<
   // Cities & Knights / Medicine progress card: city upgrade cost while the
   // card's effect is live.
   cityMedicine: { wheat: 1, ore: 2 },
-  // Traders & Barbarians / Rivers of Catan: same as a road. Sits in the road
-  // column of the rulebook's player aid; the visible payoff is +3 gold on
-  // build, so a road-equivalent cost keeps the math balanced.
-  bridge: { wood: 1, brick: 1 },
+  // Traders & Barbarians / Rivers of Catan: 2 brick + 1 lumber (rulebook
+  // building-cost box). Pays +3 gold on build.
+  bridge: { brick: 2, wood: 1 },
   // Traders & Barbarians / Barbarian Attack: hire a defender knight.
   // Rulebook is 1 wool + 1 wheat + 1 ore; we drop wool so the wool
   // economy stays free for Merchant Trains-style bids in the combo

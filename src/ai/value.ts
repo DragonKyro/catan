@@ -12,6 +12,8 @@ import { getPortAtVertex } from '@/game/board/adjacency';
 import { islandBonusAt } from '@/game/modules/seafarers/islandBonus';
 import { canPlaceSettlement } from '@/game/placement';
 import { hasShipGoal } from './seafarers/ships';
+import { hexPips } from '@/game/board/hexNumbers';
+import { tradersVertexBonus } from './traders/value';
 
 // Resource weights tuned for typical Catan economy. Ore/wheat slightly
 // scarce; sheep slightly abundant.
@@ -73,8 +75,9 @@ export function pipsByResource(state: GameState, playerId: PlayerId): Record<Res
     if (!vertex) continue;
     for (const hexId of vertex.hexes) {
       const hex = state.board.hexes[hexId]!;
-      if (hex.terrain === 'desert') continue;
-      const pips = probabilityDots(hex.numberToken);
+      // Only resource hexes (not desert / sea / swamp / lake / ...).
+      if (!(RESOURCES as readonly string[]).includes(hex.terrain)) continue;
+      const pips = hexPips(hex);
       out[hex.terrain as Resource] += pips * mult;
     }
   }
@@ -130,7 +133,8 @@ export function vertexScore(
       shoreline += 1;
       continue;
     }
-    const pips = probabilityDots(hex.numberToken);
+    // Every number the hex carries (T&B Rivers' 2 + 12 hex).
+    const pips = hexPips(hex);
     // Gold pays the player's choice on roll. Bump it further with a small
     // flat bonus on top of pips*weight because the optionality also smooths
     // out cards-stuck-without-the-right-resource scenarios.
@@ -229,14 +233,9 @@ export function vertexScore(
     volcanoPenalty = 3.5;
   }
 
-  // Traders & Barbarians / Rivers of Catan: each adjacent swamp hex grants
-  // +1 gold on build (and gold drives Wealthiest Catanian / spending). A
-  // small flat bonus is the right scale — it's a one-shot +1 gold worth
-  // roughly +1 VP toward the wealth tile race.
-  let riverGoldBonus = 0;
-  for (const hexId of vertex.hexes) {
-    if (state.board.hexes[hexId]?.terrain === 'swamp') riverGoldBonus += 0.4;
-  }
+  // Traders & Barbarians / Rivers of Catan + Fishing on Catan: gold for
+  // building on a river tile, fish from the lake and fishing grounds.
+  const tradersBonus = tradersVertexBonus(state, vertexId, playerId);
 
   // Traders & Barbarians / Barbarian Attack: a small bonus for settling
   // adjacent to a castle. The defender-VP upside isn't tied to the
@@ -251,27 +250,6 @@ export function vertexScore(
     }
   }
 
-  // Traders & Barbarians / Fishing on Catan:
-  //   - The lake produces fish tokens on its number. Settlements adjacent
-  //     to the lake catch 1 token per production, cities 2. Worth pips ×
-  //     0.5 (rough average value of a fish token, which is ~2 fish).
-  //   - A fishing ground's anchor vertex earns the same. They're per-
-  //     vertex rather than per-hex, so the bonus is concentrated and
-  //     significant — boost it more aggressively.
-  let fishBonus = 0;
-  if (state.lakeHexId && vertex.hexes.includes(state.lakeHexId)) {
-    const lake = state.board.hexes[state.lakeHexId];
-    if (lake) fishBonus += probabilityDots(lake.numberToken) * 0.5;
-  }
-  if (state.fishingGrounds) {
-    for (const fg of state.fishingGrounds) {
-      if (fg.vertex !== vertexId) continue;
-      // Fishing grounds are EXCLUSIVE to one vertex — extra strong (no
-      // neighbour competition like a regular hex with 6 corners).
-      fishBonus += probabilityDots(fg.token) * 0.9;
-    }
-  }
-
   return (
     totalPips +
     diversityBonus +
@@ -280,8 +258,7 @@ export function vertexScore(
     chipBonus +
     fogBonus +
     clothBonus +
-    riverGoldBonus +
-    fishBonus +
+    tradersBonus +
     castleBonus -
     shoreline -
     volcanoPenalty -

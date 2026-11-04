@@ -7,8 +7,10 @@ interface Props {
   color: PlayerColor;
 }
 
-// Bridge sprite: a player-color road bar plus a pair of arch pylons that
-// distinguish it visually from a regular road. Renders on river edges only.
+// T&B bridge: an arched deck in the player's colour along the bridge site,
+// on grey stone abutments, with the arch's shadow over the water. Reads as
+// "not a road" at a glance (curved, wider ends) while sitting on the edge
+// like one.
 export function Bridge({ board, edge, color }: Props) {
   const e = board.edges[edge]!;
   const p1 = board.vertices[e.vertices[0]]!.position;
@@ -18,47 +20,49 @@ export function Bridge({ board, edge, color }: Props) {
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len;
   const uy = dy / len;
-  // Normal vector (90° CCW) for arch placement above/below the deck.
-  const nx = -uy;
-  const ny = ux;
+  // Bow the deck away from the board's centre so every bridge arches
+  // "outward" consistently.
+  let nx = -uy;
+  let ny = ux;
+  const mx = (p1.x + p2.x) / 2;
+  const my = (p1.y + p2.y) / 2;
+  if (nx * mx + ny * my < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
   const shrink = 5;
-  const x1 = p1.x + ux * shrink;
-  const y1 = p1.y + uy * shrink;
-  const x2 = p2.x - ux * shrink;
-  const y2 = p2.y - uy * shrink;
-  // Arch pylon endpoints — offset perpendicular to the deck.
-  const archOff = 4;
-  const a1x = x1 + nx * archOff;
-  const a1y = y1 + ny * archOff;
-  const a2x = x2 + nx * archOff;
-  const a2y = y2 + ny * archOff;
+  const a = { x: p1.x + ux * shrink, y: p1.y + uy * shrink };
+  const b = { x: p2.x - ux * shrink, y: p2.y - uy * shrink };
+  const bow = 6;
+  const c = { x: mx + nx * bow, y: my + ny * bow };
+  const deck = `M${a.x},${a.y} Q${c.x},${c.y} ${b.x},${b.y}`;
+  const shadow = `M${a.x - nx * 2},${a.y - ny * 2} Q${mx - nx * 7},${my - ny * 7} ${b.x - nx * 2},${b.y - ny * 2}`;
+  const abutment = (p: { x: number; y: number }) => (
+    <rect
+      x={p.x - 4}
+      y={p.y - 4}
+      width={8}
+      height={8}
+      rx={1.5}
+      fill="#8d8d8d"
+      stroke="#1a1a1a"
+      strokeWidth={1.3}
+      transform={`rotate(${(Math.atan2(uy, ux) * 180) / Math.PI}, ${p.x}, ${p.y})`}
+    />
+  );
   return (
     <g className="bridge">
-      {/* Deck */}
-      <line
-        x1={x1}
-        y1={y1}
-        x2={x2}
-        y2={y2}
-        stroke="#1a1a1a"
-        strokeWidth={10}
-        strokeLinecap="round"
-      />
-      <line
-        x1={x1}
-        y1={y1}
-        x2={x2}
-        y2={y2}
-        stroke={playerColorVar(color)}
-        strokeWidth={6.5}
-        strokeLinecap="round"
-      />
-      {/* Arch — single curve above the deck. */}
+      <path d={shadow} fill="none" stroke="#1d4a63" strokeWidth={3} strokeLinecap="round" opacity={0.6} />
+      {abutment(a)}
+      {abutment(b)}
+      <path d={deck} fill="none" stroke="#1a1a1a" strokeWidth={9.5} strokeLinecap="round" />
+      <path d={deck} fill="none" stroke={playerColorVar(color)} strokeWidth={6.2} strokeLinecap="round" />
+      {/* Railing highlight. */}
       <path
-        d={`M${a1x},${a1y} Q${(a1x + a2x) / 2 + nx * 4},${(a1y + a2y) / 2 + ny * 4} ${a2x},${a2y}`}
+        d={`M${a.x + nx * 1.6},${a.y + ny * 1.6} Q${c.x + nx * 1.6},${c.y + ny * 1.6} ${b.x + nx * 1.6},${b.y + ny * 1.6}`}
         fill="none"
-        stroke="#1a1a1a"
-        strokeWidth={2.5}
+        stroke="rgba(255,255,255,0.55)"
+        strokeWidth={1.1}
         strokeLinecap="round"
       />
     </g>

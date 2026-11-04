@@ -1,5 +1,5 @@
 import type { GameState, PlayerId, HexId, Resource } from '@/game/types';
-import { probabilityDots } from './value';
+import { hexPips } from '@/game/board/hexNumbers';
 import { totalResources } from '@/game/resources';
 import { assessThreats, isRival, type PlayerThreat } from './threats';
 import { canMoveRobberTo } from '@/game/placement';
@@ -44,7 +44,7 @@ export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberCh
     // Forgotten Tribe: numbered hexes only, ...).
     if (!canMoveRobberTo(state, hexId)) continue;
     const hex = state.board.hexes[hexId]!;
-    const pips = probabilityDots(hex.numberToken);
+    const pips = hexPips(hex);
     const hexResource = hex.terrain as Resource;
     let score = 0;
     let touchesOwn = false;
@@ -120,7 +120,7 @@ function computePipsByResourceByPlayer(
   for (const hexId of state.board.hexIds) {
     const hex = state.board.hexes[hexId]!;
     if (hex.numberToken === undefined) continue;
-    const pips = probabilityDots(hex.numberToken);
+    const pips = hexPips(hex);
     if (pips === 0) continue;
     const res = hex.terrain;
     if (res === 'desert' || res === 'sea') continue;

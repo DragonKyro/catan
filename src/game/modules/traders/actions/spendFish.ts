@@ -8,9 +8,12 @@ import type {
 import { currentPlayerId, getPlayer, updatePlayer } from '../../../helpers';
 import {
   addResources,
+  flattenBank,
   subtractResources,
+  totalResources,
 } from '../../../resources';
 import { canConnectRoad } from '../../../placement';
+import { pickOne } from '../../../rng';
 import { handleBuildRoadWithRiverGold } from './buildRoad';
 import {
   FISH_COST_BUILD_ROAD,
@@ -21,6 +24,11 @@ import {
   FISH_TOKEN_VALUE,
 } from '../constants';
 
+// Fishing on Catan: spend fish tokens during your turn (rulebook p. 10).
+// Each action is paid in full by its own tokens (the tokens listed here);
+// fish on them beyond the cost are lost. 2 remove the robber; 3 steal a
+// random resource card from another player; 4 take a resource card of your
+// choice; 5 build a road free; 7 take a development card free.
 export function handleSpendFish(
   state: GameState,
   action: SpendFishAction,
@@ -33,9 +41,7 @@ export function handleSpendFish(
   }
   const player = getPlayer(state, action.playerId);
 
-  // Validate the spent tokens are actually in the player's hand. Spent
-  // tokens are matched by type, not identity — we remove the first
-  // matching token of each type.
+  // The spent tokens must be in the player's hand (matched by type).
   const remaining = (player.fishTokens ?? []).slice();
   for (const t of action.tokens) {
     const idx = remaining.indexOf(t);
@@ -45,20 +51,15 @@ export function handleSpendFish(
     remaining.splice(idx, 1);
   }
 
-  // Validate sum vs. cost for the chosen effect.
-  const total = action.tokens.reduce(
-    (s, t) => s + FISH_TOKEN_VALUE[t],
-    0,
-  );
-  const cost = costFor(action.effect.kind);
+  const total = action.tokens.reduce((s, t) => s + FISH_TOKEN_VALUE[t], 0);
+  const cost = fishCost(action.effect.kind);
   if (total < cost) {
     throw new Error(
       `Effect "${action.effect.kind}" needs ${cost} fish; ${total} spent`,
     );
   }
 
-  // Apply the discard first (regardless of effect). Excess fish is
-  // forfeit per the rulebook — it goes to the discard pile.
+  // Pay: the tokens go face up on the discard pile.
   let next: GameState = updatePlayer(state, action.playerId, (p) => ({
     ...p,
     fishTokens: remaining,
@@ -71,24 +72,26 @@ export function handleSpendFish(
     ],
   };
 
-  // Apply the effect.
   switch (action.effect.kind) {
     case 'removeRobber':
-      // Take the robber off the board. It returns when a 7 is rolled or
-      // a Knight card is played (those flows set robberActive back to true).
+      // Off the board until the next "Resolve a 7" or Knight card.
+      if (state.robberActive === false) {
+        throw new Error('The robber is not on the board');
+      }
       next = { ...next, robberActive: false };
       break;
     case 'steal': {
-      // Steal a SPECIFIC named resource. The action carries the resource so
-      // every peer reduces identically (mirrors the robber-steal pattern,
-      // where the dice/knight handler rolls the random pick and broadcasts
-      // the outcome via the action payload).
-      next = stealResource(
-        next,
-        action.playerId,
-        action.effect.target,
-        action.effect.resource,
-      );
+      const targetId = action.effect.target;
+      if (targetId === action.playerId) throw new Error('Cannot steal from yourself');
+      const target = state.players.find((p) => p.id === targetId);
+      if (!target) throw new Error('Unknown steal target');
+      if (totalResources(target.resources) === 0) {
+        throw new Error('That player has no resource cards');
+      }
+      // Random card, picked with the seeded RNG like a robber steal.
+      const [stolen, rng] = pickOne(next.rngState, flattenBank(target.resources));
+      next = { ...next, rngState: rng };
+      next = stealResource(next, action.playerId, targetId, stolen);
       break;
     }
     case 'takeFromBank': {
@@ -100,22 +103,15 @@ export function handleSpendFish(
         ...p,
         resources: { ...p.resources, [r]: p.resources[r] + 1 },
       }));
-      next = {
-        ...next,
-        bank: { ...next.bank, [r]: next.bank[r] - 1 },
-      };
+      next = { ...next, bank: { ...next.bank, [r]: next.bank[r] - 1 } };
       break;
     }
     case 'buildRoad': {
-      // Reuse the standard buildRoad handler so river-edge and connectivity
-      // rules apply. The handler also consumes the wood+brick — but a fish
-      // road is free, so we refund the cost immediately after.
+      // A normal road (same placement rules and piece limit), just free:
+      // pre-credit the cost so the regular road handler can run.
       if (!canConnectRoad(next, action.playerId, action.effect.edge)) {
         throw new Error('Invalid road placement');
       }
-      // Pre-credit the cost so the base handler can succeed, then re-debit
-      // it by adding the same back. Net: free road, but the river-gold
-      // wrapper (and the longest-road recalc) still fires.
       next = updatePlayer(next, action.playerId, (p) => ({
         ...p,
         resources: addResources(p.resources, { wood: 1, brick: 1 }),
@@ -129,29 +125,20 @@ export function handleSpendFish(
       break;
     }
     case 'buyDevCard': {
-      // Pull the next card from the deck — the action payload names the
-      // card so all peers reduce identically (matches the existing
-      // buyDevCard pattern). Free of cost.
+      // The top card of the deck, free: exactly as if bought.
       if (next.devCardDeck.length === 0) {
         throw new Error('Dev card deck is empty');
       }
-      const drawn = action.effect.drawn;
-      // Top card must match (deterministic peer convergence). Same check
-      // used by the base buyDevCard handler.
-      if (next.devCardDeck[next.devCardDeck.length - 1] !== drawn) {
-        throw new Error('Drawn card mismatch');
-      }
-      next = {
-        ...next,
-        devCardDeck: next.devCardDeck.slice(0, -1),
-      };
-      next = updatePlayer(next, action.playerId, (p) => ({
-        ...p,
-        devCards: {
-          ...p.devCards,
-          boughtThisTurn: [...p.devCards.boughtThisTurn, drawn],
-        },
-      }));
+      const card = next.devCardDeck[next.devCardDeck.length - 1]!;
+      next = { ...next, devCardDeck: next.devCardDeck.slice(0, -1) };
+      next = updatePlayer(next, action.playerId, (p) =>
+        card === 'victoryPoint'
+          ? { ...p, devCards: { ...p.devCards, victoryPoints: p.devCards.victoryPoints + 1 } }
+          : {
+              ...p,
+              devCards: { ...p.devCards, boughtThisTurn: [...p.devCards.boughtThisTurn, card] },
+            },
+      );
       break;
     }
   }
@@ -159,7 +146,7 @@ export function handleSpendFish(
   return next;
 }
 
-function costFor(kind: SpendFishAction['effect']['kind']): number {
+export function fishCost(kind: SpendFishAction['effect']['kind']): number {
   switch (kind) {
     case 'removeRobber':
       return FISH_COST_REMOVE_ROBBER;
@@ -174,9 +161,45 @@ function costFor(kind: SpendFishAction['effect']['kind']): number {
   }
 }
 
-// Helper used externally too — picks a random resource from a target
-// player's hand and returns the new state. Mirrors the steal-on-robber
-// flow but accepts the resource as input so all peers see the same draw.
+// Tokens to pay `cost` from a fish hand, wasting as few fish as possible
+// (excess fish are lost), then using as few tokens as possible. Null when
+// the hand can't pay. Shared by the UI and the AI.
+export function pickFishTokens(
+  hand: Array<'one' | 'two' | 'three'>,
+  cost: number,
+): Array<'one' | 'two' | 'three'> | null {
+  const have = { one: 0, two: 0, three: 0 };
+  for (const t of hand) have[t]++;
+  let best: { tokens: Array<'one' | 'two' | 'three'>; total: number } | null = null;
+  for (let c3 = 0; c3 <= have.three; c3++) {
+    for (let c2 = 0; c2 <= have.two; c2++) {
+      for (let c1 = 0; c1 <= have.one; c1++) {
+        const total = c3 * 3 + c2 * 2 + c1;
+        if (total < cost) continue;
+        const tokens = [
+          ...Array<'three'>(c3).fill('three'),
+          ...Array<'two'>(c2).fill('two'),
+          ...Array<'one'>(c1).fill('one'),
+        ];
+        if (
+          !best ||
+          total < best.total ||
+          (total === best.total && tokens.length < best.tokens.length)
+        ) {
+          best = { tokens, total };
+        }
+        break; // more ones only add waste
+      }
+    }
+  }
+  return best?.tokens ?? null;
+}
+
+export function fishTotal(hand: Array<'one' | 'two' | 'three'>): number {
+  return hand.reduce((s, t) => s + FISH_TOKEN_VALUE[t], 0);
+}
+
+// Move one named resource card from `targetId` to `thiefId`.
 export function stealResource(
   state: GameState,
   thiefId: PlayerId,

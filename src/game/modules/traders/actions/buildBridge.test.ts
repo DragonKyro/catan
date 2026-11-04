@@ -30,7 +30,7 @@ describe('buildBridge', () => {
     )!;
     expect(() =>
       applyAction(s, { type: 'buildBridge', playerId: 'p0', edge: nonRiver.id }),
-    ).toThrow(/river edges/);
+    ).toThrow(/bridge sites/);
   });
 
   it('refuses placement when not connected to the network', () => {
