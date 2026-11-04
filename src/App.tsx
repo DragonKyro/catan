@@ -5,11 +5,20 @@ import { HomeMenu } from '@/ui/newGame/HomeMenu';
 import { LobbyScreen } from '@/ui/lobby/LobbyScreen';
 import { GameView } from '@/ui/game/GameView';
 import { ReplayScreen } from '@/ui/replay/ReplayScreen';
+import { ScenarioPreviewPage, parsePreviewQuery } from '@/ui/mapBuilder/ScenarioPreview';
+
+// `?preview=<kind>:<id>` renders one scenario's board full-window (map
+// checks against the rulebook; see ScenarioPreview.tsx). Read once.
+const PREVIEW_SPEC = typeof window === 'undefined' ? null : parsePreviewQuery(window.location.search);
 
 export default function App() {
   const game = useGameStore((s) => s.game);
   const connection = useNetworkStore((s) => s.connection);
   const replayData = useReplayStore((s) => s.data);
+
+  if (PREVIEW_SPEC) {
+    return <ScenarioPreviewPage spec={PREVIEW_SPEC} />;
+  }
 
   // Replay overrides everything — it's a top-level view triggered either
   // from GameOver ("Watch replay") or HomeMenu ("Load replay"). Exiting
