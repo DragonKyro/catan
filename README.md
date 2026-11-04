@@ -103,7 +103,7 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 7 — Seafarers 5–6 player extension (all 9 scenarios have a `layout5_6p` matching the 5-6 player rulebook's component counts; the rulebook's "Six Islands" scenario is implemented as Four Islands' 5-6p geometry. Hex positions are approximate, pending visual verification against [docs/.scenario-renders/seafarers-56-*.png])
 - [x] Phase 7c — Base-game colonist.io Fun Maps: Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl. Selectable from a base-map dropdown alongside Standard. Volcano implements full eruption rules (setup block, inline destruction on roll, AI penalty, dedicated rulebook entry). Gold Rush and Pond ship 5-6p layouts; the rest are 3-4p
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
-- [~] Phase 8 — Cities & Knights expansion (engine complete: knights, commodities, barbarian advance + attack, all 3 improvement tracks with L3 abilities + metropolis, 54 progress cards with effects, city walls. **AI support missing** — AI seats default to base play; see Outstanding work)
+- [~] Phase 8 — Cities & Knights expansion (engine complete: knights, commodities, barbarian advance + attack, all 3 improvement tracks with L3 abilities + metropolis, 54 progress cards with effects, city walls. Heuristic AI plays the expansion: knights vs. the barbarians, improvements + metropolises, progress cards, commodity trades)
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
 - [~] Phase 10 — Traders & Barbarians expansion (4 of 5 scenarios shipping: Rivers of Catan + Fishing on Catan + Merchant Trains + Barbarian Attack, plus the Friendly Robber and Strongest Ports variants. The Traders & Barbarians combo scenario, Catan Event Cards variant, and Catan for Two variant are deferred; see Outstanding work)
 - [ ] Phase 11 — Traders & Barbarians 5–6 player extension
@@ -125,7 +125,7 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 
 **Cities & Knights (Phase 8):**
 
-- [ ] **AI support** — no `src/ai/citiesAndKnights/` module exists; `src/ai/main.ts` doesn't route C&K phases. AI seats currently default to base-game play (no knight recruitment, no improvement tracks, no progress cards). Largest single gap; without it, AI vs human C&K is a runaway human win.
+- [x] **AI support** — `src/ai/citiesAndKnights/` plays C&K: answers every C&K decision on or off its turn, defends against the barbarians (activates / promotes / recruits from the ship position and every seat's strength, holds back a city it can't defend), raises improvement tracks toward level 3 and the metropolises, plays each progress card by a simple rule, builds walls, chases the robber, and trades commodities with the bank and players. All-AI games finish at 3–6 players (`playCitiesAndKnights.test.ts`). Still simple: one difficulty, little knight-based blocking / displacement, no long-term plan beyond the next build.
 - [ ] **Deeper test coverage** — current C&K tests are basic smoke tests (`integration.test.ts` + `phase2.test.ts`, ~695 lines). Displacement, chase-robber, and per-progress-card effects are mostly untested.
 - [ ] **Spot-check progress-card dialogs** — confirm every progress card that requires a follow-up dialog (intrigue, espionage, treason, wedding, commercial harbor offer, etc.) has its UI wired and not just the engine handler.
 
