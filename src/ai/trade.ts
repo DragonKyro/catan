@@ -10,6 +10,7 @@ import { RESOURCES, COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import { handValue, partialValue, reportNeeds, pipsByResource } from './value';
 import { assessThreats, isRival } from './threats';
+import { ckShouldAcceptTrade, tradeHasCommodities } from './citiesAndKnights/trade';
 
 // Threshold for accepting a trade as-is. Lower than before so AI doesn't
 // stonewall reasonable swaps — colonist.io's AI accepts pretty liberally.
@@ -175,6 +176,9 @@ export function shouldAcceptTrade(state: GameState, playerId: PlayerId): boolean
   const trade = state.pendingTrade;
   if (!trade) return false;
   if (trade.proposerId === playerId) return false;
+  // Cities & Knights offers may include commodities: judged by the C&K
+  // card values instead.
+  if (tradeHasCommodities(trade)) return ckShouldAcceptTrade(state, playerId);
   // From acceptor's perspective: we'd GIVE trade.receive, RECEIVE trade.give.
   // Refuse if accepting would reverse our own earlier trades this turn.
   if (tradeWouldReverse(state, playerId, trade.receive, trade.give)) return false;
@@ -199,6 +203,8 @@ export function tryExtractCounter(
   const trade = state.pendingTrade;
   if (!trade) return null;
   if (trade.proposerId === playerId) return null;
+  // The counter builders only know resources.
+  if (tradeHasCommodities(trade)) return null;
   // Only fires when we'd already accept the original — this is value
   // extraction, not a way to refuse trades.
   if (!shouldAcceptTrade(state, playerId)) return null;
@@ -287,6 +293,8 @@ export function tryCounterTrade(
   const trade = state.pendingTrade;
   if (!trade) return null;
   if (trade.proposerId === playerId) return null;
+  // The counter builders only know resources.
+  if (tradeHasCommodities(trade)) return null;
   // If we'd already accept, no counter needed.
   if (shouldAcceptTrade(state, playerId)) return null;
   const proposer = state.players.find((p) => p.id === trade.proposerId);

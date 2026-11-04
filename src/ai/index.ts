@@ -17,12 +17,24 @@ import {
   trySubmitWagonVote,
   tryPlaceWagon,
 } from './traders/merchantTrains';
+import { chooseCitiesAndKnightsAction, isCitiesAndKnights } from './citiesAndKnights';
+
+function randomDice(): [number, number] {
+  return [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)];
+}
 
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
 // The caller (React driver) dispatches the action and re-invokes after
 // the new state arrives.
 export function chooseAction(state: GameState, playerId: PlayerId): Action | null {
+  // Cities & Knights plays its own rules (knights, improvements, progress
+  // cards, commodities); setup falls through to the shared code below.
+  if (isCitiesAndKnights(state)) {
+    const ck = chooseCitiesAndKnightsAction(state, playerId, randomDice);
+    if (ck !== undefined) return ck;
+  }
+
   // Discard sub-phase
   if (state.phase === 'discard') {
     return {
