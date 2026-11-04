@@ -217,23 +217,34 @@ function applyTransition(
     next.phase === 'gameOver' ? beforeActor : getActingPlayerId(next);
   const nextActorPlayer = next.players.find((p) => p.id === nextActor);
   const online = isOnlinePredicate();
-  // Pass-device handoff is for hot-seat only. AI never needs handoff.
-  // Online sessions never use it — each player has their own device.
+  // Pass-device handoff is for hot-seat only: it needs two or more humans
+  // sharing this device. AI never needs handoff, and a lone human playing
+  // against AIs never passes the device (they used to get a "Pass the
+  // device" screen at the start of every turn). Online sessions never use
+  // it — each player has their own device.
+  const humanSeats = next.players.filter((p) => !p.isAI).length;
   const handoff =
     !online &&
+    humanSeats >= 2 &&
     next.phase !== 'gameOver' &&
     beforeActor !== nextActor &&
     !nextActorPlayer?.isAI &&
     nextActor !== get().handoffAcknowledgedForPlayer;
+  // The acknowledged seat tracks the last HUMAN at the device; AI moves in
+  // between don't reset it (so hot-seat players only see the handoff when
+  // the device really changes hands). All-AI games keep following the actor.
+  const acknowledged = handoff
+    ? get().handoffAcknowledgedForPlayer
+    : nextActorPlayer?.isAI && humanSeats > 0
+      ? get().handoffAcknowledgedForPlayer
+      : nextActor;
   set({
     game: next,
     uiMode: phaseToMode(next),
     dialog: null,
     error: null,
     handoffPending: handoff,
-    handoffAcknowledgedForPlayer: handoff
-      ? get().handoffAcknowledgedForPlayer
-      : nextActor,
+    handoffAcknowledgedForPlayer: acknowledged,
     pendingRobberHex: null,
     pendingPirateHex: null,
   });
