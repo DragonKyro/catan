@@ -280,15 +280,21 @@ export interface Player {
   // non-empty when the 'seafarers' expansion is active.
   ships: EdgeId[];
   movedShipThisTurn?: boolean;
-  // Seafarers / Forgotten Tribe: commercial harbor tokens awarded by tribe
-  // hexes. Each token unconditionally lowers the player's bank trade rate
-  // floor to 2:1 (better than generic 3:1 ports). Count, not boolean, so
-  // future scenarios can stack effects if needed.
-  commercialHarbors?: number;
-  // Seafarers / Cloth for Catan: cloth tokens earned by settling adjacent
-  // to a cloth-producing hex. Not a regular resource — can't be traded or
-  // spent on builds. Worth 1 VP per 2 cloth at game end (Math.floor).
+  // Seafarers: ships built during the current turn. They may not be moved
+  // this turn (rulebook p.2). Cleared when the turn advances.
+  builtShipsThisTurn?: EdgeId[];
+  // Seafarers / Forgotten Tribe: ports picked up from the tribe that the
+  // player has not placed yet (no valid coastal-settlement edge at pickup
+  // time). Placed as soon as a valid edge exists.
+  heldPorts?: PortType[];
+  // Seafarers / Forgotten Tribe: VP tokens picked up by ships (1 VP each).
+  tribeVp?: number;
+  // Seafarers / Cloth for Catan: cloth tokens collected from villages. Not a
+  // resource — can't be traded or spent. Each pair is worth 1 VP.
   cloth?: number;
+  // Seafarers / Pirate Islands: ships converted to warships with Knight
+  // cards. Subset of `ships`. Strength against the pirates = count.
+  warships?: EdgeId[];
   // Cities & Knights commodity hand (paper / cloth / coin). Empty bank when
   // the expansion isn't active. Note: `Player.cloth` (Seafarers cloth tokens)
   // and `commodities.cloth` (C&K commodity) are distinct — the two
@@ -414,6 +420,9 @@ export interface CastleState {
 export type GamePhase =
   | 'setupRound1'
   | 'setupRound2'
+  // Seafarers / Cloth for Catan: a third starting settlement, placed in
+  // normal turn order after the snake rounds.
+  | 'setupRound3'
   | 'rollOrPlayKnight'
   | 'discard'
   | 'moveRobber'
@@ -426,6 +435,11 @@ export type GamePhase =
   | 'chooseRobberOrPirate'
   | 'movePirate'
   | 'chooseGoldResource'
+  // Seafarers / Forgotten Tribe: place a port picked up from the tribe.
+  | 'placeTribePort'
+  // Seafarers / Pirate Islands: there is no robber; on a 7 the roller
+  // steals one random card from any player.
+  | 'stealResource'
   // Cities & Knights sub-phases. All transitions live on the C&K module.
   | 'displacedKnightMove'
   | 'placeMetropolis'
@@ -500,6 +514,10 @@ export interface GameSettings {
   // `generateCustomMapBoard`. The map's `seafarers` flag determines whether
   // island chips / fog state are populated.
   customMap?: import('./customMap/types').CustomMap;
+  // Number of starting-settlement rounds. 3 = Cloth for Catan (a third
+  // settlement in normal order; only the third collects resources).
+  // Set by createGame from the scenario; undefined = 2.
+  setupRounds?: 2 | 3;
 }
 
 export interface PendingTrade {
@@ -574,42 +592,57 @@ export interface GameState {
   // the pick is made we drop back into setup road placement.
   goldChoiceState?: {
     pending: Record<PlayerId, number>;
-    returnTo?: 'main' | 'setupRound2';
+    returnTo?: 'main' | 'setupRound1' | 'setupRound2' | 'setupRound3' | 'rollOrPlayKnight';
+    // Pirate Islands: the picks came from beating the pirate fleet on a 7;
+    // once they're made, "Resolve a 7" starts (discards, then the steal).
+    afterPicks?: 'resolveSeven';
   };
   islandChips?: IslandChip[];
-  // Seafarers / Forgotten Tribe: friendly-tribe tokens placed on outer
-  // islets. Claimed the first time any player settles on a vertex
-  // adjacent to the token's hex. Each type has its own one-shot effect
-  // (see TribeTokenType). Tokens stay on the board in `claimedBy` form so
-  // the UI can render who got what.
+  // Seafarers: island ids (see board.islandOfHex) that starting settlements
+  // must touch. Undefined = anywhere.
+  startingIslands?: string[];
+  // Seafarers: land hexes that don't count as land for settlement placement
+  // (Forgotten Tribe: hexes without a number disc; Cloth for Catan: the
+  // small village islands). A settlement needs at least one adjacent land
+  // hex outside this list.
+  settlementBlockedHexes?: HexId[];
+  // Seafarers: land hexes the robber may not be moved to (Forgotten Tribe:
+  // hexes without a number disc; Cloth for Catan: the small islands).
+  robberBlockedHexes?: HexId[];
+  // Seafarers: vertices where starting settlements may not go (Wonders of
+  // Catan: Great Wall / Great Bridge / "X" markers).
+  setupBlockedVertices?: VertexId[];
+  // Seafarers: the Longest Route / Largest Army tiles are returned to the box
+  // in some scenarios (Cloth for Catan, Pirate Islands).
+  noLongestRoad?: boolean;
+  noLargestArmy?: boolean;
+  // Seafarers / Forgotten Tribe: VP tokens, development cards and ports
+  // placed on edges around the tribe's islands. Picked up by building or
+  // moving a ship onto the edge.
   tribeTokens?: TribeToken[];
+  // Seafarers / Forgotten Tribe: port being placed in the 'placeTribePort'
+  // phase (taken from the placing player's `heldPorts`).
+  pendingTribePort?: { playerId: PlayerId; portType: PortType };
+  // Seafarers / Wonders of Catan: marker vertices that gate wonder claims
+  // (Great Wall, Great Bridge, Lighthouse).
+  wonderSites?: Partial<Record<WonderId, VertexId[]>>;
+  // Seafarers / Cloth for Catan: the villages on the small islands, plus
+  // the general cloth supply.
+  clothVillages?: ClothVillage[];
+  clothSupply?: number;
+  // Seafarers / Pirate Islands state (fleet path, fortresses, last attack).
+  pirateIslands?: PirateIslandsState;
   // Seafarers / Fog Island: hexes that start hidden under fog. Removed
   // from this list as players build settlements / roads / ships adjacent
   // to them. Empty / undefined when no fog is active. The terrain on the
   // hex itself is still set; we just gate the UI on this list and grant
   // the reveal bonus at the moment of unveiling.
   unrevealedFogHexes?: HexId[];
-  // Seafarers / Wonders of Catan: one entry per wonder defined for the
-  // scenario. `builtBy` is null until a player builds the first level,
-  // then locked to that player for the rest of the game (only one
-  // builder per wonder). `level` increments to the wonder's max; on
-  // reaching max the game ends with that player as winner.
+  // Seafarers / Wonders of Catan: one entry per wonder tile in play. A
+  // player claims one wonder (meeting its requirement), then builds its
+  // four levels. Completing level 4 wins; so does reaching the VP target
+  // with a strictly higher wonder level than everyone else.
   wonders?: WonderState[];
-  // Seafarers / Pirate Islands: enemy fleet anchored at a sea hex.
-  // Players attack it with ships; when strength hits 0 the fleet is
-  // defeated and the player who landed the final blow gets a bonus VP.
-  // The fleet is independent of the regular `board.pirateHex` (the
-  // movable pirate token); both can coexist on the board.
-  pirateFleet?: PirateFleet;
-  // Per-turn flag: has the current player already attacked the fleet
-  // this turn? Caps combat to one attack per turn so each player gets
-  // a roughly proportional shot at the killing blow. Cleared on endTurn.
-  attackedPirateThisTurn?: boolean;
-  // Seafarers / Cloth for Catan: hexes that produce cloth tokens instead
-  // of their regular resource on roll. Settled players get 1 cloth per
-  // settlement, 2 per city — same multiplier as resources. Cloth lives
-  // on player.cloth and converts to VP at 2:1 in scoring.
-  clothHexes?: HexId[];
   // ----- Cities & Knights extension -----
   // Commodity bank (paper / cloth / coin). Mirrors `bank` but for the three
   // C&K commodities. Decrements when cities produce commodities; refunds on
@@ -776,45 +809,104 @@ export interface GameState {
   barbarianKnightSupply?: number;
 }
 
+// Seafarers island bonus. Every player earns an island's bonus once, on
+// their first settlement there — it does not matter whether other players
+// settled it first (rulebook). Islands a player started on are that
+// player's home islands and never pay them a bonus.
 export interface IslandChip {
   islandId: string;
   vp: number;
-  firstSettler: PlayerId | null;
+  // Players who have earned this island's bonus.
+  claimedBy: PlayerId[];
+  // Players for whom this is a home island (a starting settlement is here).
+  homeOf: PlayerId[];
 }
 
-export type TribeTokenType = 'devCard' | 'victoryPoint' | 'commercialHarbor';
+export type TribeTokenType = 'victoryPoint' | 'devCard' | 'port';
 
 export interface TribeToken {
-  hexId: HexId;
+  edge: EdgeId;
   type: TribeTokenType;
+  // type 'port': which port the tribe hands over.
+  portType?: PortType;
+  // type 'devCard': the face-down card (drawn from the deck at setup).
+  devCard?: DevCardType;
   claimedBy: PlayerId | null;
 }
 
 export type WonderId =
-  | 'greatWall'
+  | 'grandCastle'
+  | 'grandMonument'
   | 'greatBridge'
-  | 'hangingGardens'
-  | 'cathedral'
-  | 'tradeOffice';
+  | 'grandTheater'
+  | 'greatWall'
+  // Seafarers 5-6 player extension.
+  | 'lighthouse'
+  | 'greatLibrary';
 
 export interface WonderState {
   id: WonderId;
-  // Player who first started this wonder. Only they can keep building it;
-  // other players are locked out once it's claimed.
-  builtBy: PlayerId | null;
-  // 0 = not started, increments by 1 per built level up to the wonder's
-  // max (defined in the wonder catalogue alongside cost and prereq).
+  // The player who claimed this wonder (each player may claim one). Locked
+  // for the rest of the game.
+  claimedBy: PlayerId | null;
+  // Levels built, 0..4. Level 4 = complete.
   level: number;
 }
 
-export interface PirateFleet {
-  hexId: HexId;
-  // Remaining strength. Each attack drops this by 1; 0 means defeated.
-  strength: number;
-  maxStrength: number;
-  // Player who landed the killing blow (strength → 0). Awarded a +2 VP
-  // bonus on top of standard scoring.
-  defeatedBy: PlayerId | null;
+// Cloth for Catan village: a number disc on a small-island intersection.
+export interface ClothVillage {
+  vertex: VertexId;
+  number: number;
+  // Cloth tokens left next to this village. 0 = exhausted (no production).
+  supply: number;
+  // Players who established trade relations (a route from one of their
+  // buildings to this village).
+  partners: PlayerId[];
+}
+
+// Pirate Islands fortress: a pirate-held settlement in one player's color.
+export interface PirateFortress {
+  playerId: PlayerId;
+  vertex: VertexId;
+  // The player's beachhead marker: their western line of ships must pass
+  // here, and they may build a settlement here once it arrives.
+  beachhead: VertexId;
+  // Pirate lair tokens left (3 → 0). 0 = recaptured (becomes a settlement).
+  lairs: number;
+}
+
+export interface PirateIslandsState {
+  // Island id (board.islandOfHex) of the eastern main island. Everything
+  // else is a pirate island.
+  mainIsland: string;
+  // The pirate fleet's loop of sea hexes, in travel order.
+  path: HexId[];
+  // Seafarers 5-6: the fleet doesn't attack from this hex.
+  noAttackHex?: HexId;
+  // Index into `path` of the fleet's hex. -1 once every fortress is
+  // recaptured and the pirate ship is removed.
+  fleetIndex: number;
+  fortresses: PirateFortress[];
+  // Most recent fleet attack, for the log / UI.
+  lastFleetAttack?: {
+    hex: HexId;
+    strength: number;
+    results: Array<{
+      playerId: PlayerId;
+      warships: number;
+      outcome: 'lost' | 'won' | 'tied';
+      discarded: number;
+    }>;
+  };
+  // Most recent fortress attack, for the log / UI.
+  lastFortressAttack?: {
+    playerId: PlayerId;
+    die: number;
+    warships: number;
+    outcome: 'won' | 'lost' | 'tied';
+    shipsLost: number;
+    captured: boolean;
+  };
 }
 
 // ============================================================================
@@ -884,7 +976,10 @@ export interface PlayKnightAction extends ActionBase {
 
 export interface PlayRoadBuildingAction extends ActionBase {
   type: 'playRoadBuilding';
-  edges: [EdgeId] | [EdgeId, EdgeId];
+  // Free roads, placed in order.
+  edges: EdgeId[];
+  // Seafarers: free ships, placed after the roads. Roads + ships <= 2.
+  ships?: EdgeId[];
 }
 
 export interface PlayYearOfPlentyAction extends ActionBase {
@@ -961,6 +1056,8 @@ export interface MovePirateAction extends ActionBase {
   type: 'movePirate';
   hex: HexId;
   stealFrom: PlayerId | null;
+  // Cloth for Catan: steal a cloth token instead of a resource card.
+  stealCloth?: boolean;
 }
 
 export interface ChooseGoldResourceAction extends ActionBase {
@@ -968,13 +1065,35 @@ export interface ChooseGoldResourceAction extends ActionBase {
   resources: Resource[];
 }
 
+// Wonders of Catan: claim a wonder tile (requirements must be met).
+export interface ClaimWonderAction extends ActionBase {
+  type: 'claimWonder';
+  wonderId: WonderId;
+}
+
+// Wonders of Catan: build the next level of the player's claimed wonder.
 export interface BuildWonderAction extends ActionBase {
   type: 'buildWonder';
   wonderId: WonderId;
 }
 
-export interface AttackPirateFleetAction extends ActionBase {
-  type: 'attackPirateFleet';
+// Seafarers setup: a coastal starting settlement may take a ship instead
+// of a road.
+export interface PlaceInitialShipAction extends ActionBase {
+  type: 'placeInitialShip';
+  edge: EdgeId;
+}
+
+// Forgotten Tribe: place a port picked up from the tribe.
+export interface PlaceTribePortAction extends ActionBase {
+  type: 'placeTribePort';
+  edge: EdgeId;
+}
+
+// Pirate Islands: steal one random resource card from any player on a 7.
+export interface StealResourceAction extends ActionBase {
+  type: 'stealResource';
+  stealFrom: PlayerId | null;
 }
 
 // ----------------------------------------------------------------------------
@@ -1233,7 +1352,10 @@ export type Action =
   | MovePirateAction
   | ChooseGoldResourceAction
   | BuildWonderAction
-  | AttackPirateFleetAction
+  | ClaimWonderAction
+  | PlaceInitialShipAction
+  | PlaceTribePortAction
+  | StealResourceAction
   | BuildBridgeAction
   | SpendFishAction
   | PassOldBootAction

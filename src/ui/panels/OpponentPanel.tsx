@@ -1,8 +1,10 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
+import { calculateVictoryPoints, calculateIslandBonusVp } from '@/game/scoring/points';
 import { calculateBarbarianDefenderVp } from '@/game/modules/traders/scoring/barbarianAttack';
-import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { calculateRouteLength } from '@/game/engine';
+import { isSetupPhase } from '@/game/actions/setup';
+import { MAX_SHIPS } from '@/game/modules/seafarers/constants';
 import { totalResources } from '@/game/resources';
 import { totalCommodities } from '@/game/commodities';
 import { pairedPlayer2Index, usesPairedRules } from '@/game/helpers';
@@ -17,7 +19,6 @@ import './OpponentPanel.css';
 const MAX_SETTLEMENTS = 5;
 const MAX_CITIES = 4;
 const MAX_ROADS = 15;
-const MAX_SHIPS = 15;
 
 function sumDefenderVp(
   game: ReturnType<typeof useGameStore.getState>['game'],
@@ -49,7 +50,7 @@ export function OpponentPanel() {
   // Player 2 (third seat to P1's left) for the current paired turn so we
   // can mark them in the panel. Returns null in 3-4p games and during
   // initial setup (paired turns only kick in after both setup rounds).
-  const inSetup = game.phase === 'setupRound1' || game.phase === 'setupRound2';
+  const inSetup = isSetupPhase(game.phase);
   const paired = !inSetup && usesPairedRules(game)
     ? {
         p1: game.playerOrder[game.turnHolderIndex ?? game.currentPlayerIndex]!,
@@ -126,25 +127,53 @@ export function OpponentPanel() {
             <div className="opp-stats">
               <span title="Resource cards">🂠 {totalResources(p.resources)}</span>
               <span title="Dev cards (face down)">🂡 {cards}</span>
-              <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
-              <span title="Longest contiguous road">
-                📏 {calculateLongestRoad(game, p.id)}
-              </span>
-              {p.hasLongestRoad && <span title="Longest Road bonus">★ Road</span>}
+              {!game.noLargestArmy && (
+                <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
+              )}
+              {!game.noLongestRoad && (
+                <span
+                  title={
+                    hasSeafarers
+                      ? 'Longest route — roads and ships, joined at your own buildings'
+                      : 'Longest contiguous road'
+                  }
+                >
+                  📏 {calculateRouteLength(game, p.id)}
+                </span>
+              )}
+              {p.hasLongestRoad && (
+                <span title={hasSeafarers ? 'Longest Route bonus' : 'Longest Road bonus'}>
+                  ★ {hasSeafarers ? 'Route' : 'Road'}
+                </span>
+              )}
               {p.hasLargestArmy && <span title="Largest Army bonus">★ Army</span>}
               {(() => {
-                const chipVp = calculateIslandChipVp(game, p.id);
+                const chipVp = calculateIslandBonusVp(game, p.id);
                 return chipVp > 0 ? (
-                  <span title={`Outer-island settlement bonuses (+${chipVp} VP)`}>
+                  <span title={`Island settlement bonuses (+${chipVp} VP)`}>
                     🏝 +{chipVp}
                   </span>
                 ) : null;
               })()}
-              {p.cloth && p.cloth > 0 && (
-                <span title={`Cloth tokens — ${p.cloth} cloth = ${Math.floor(p.cloth / 2)} VP`}>
+              {(p.cloth ?? 0) > 0 && (
+                <span title={`Cloth tokens — ${p.cloth} cloth = ${Math.floor((p.cloth ?? 0) / 2)} VP`}>
                   🧵 {p.cloth}
                 </span>
               )}
+              {(p.tribeVp ?? 0) > 0 && (
+                <span title={`Tribe VP tokens (+${p.tribeVp} VP)`}>★ {p.tribeVp}</span>
+              )}
+              {(p.warships?.length ?? 0) > 0 && (
+                <span title="Warships (strength against the pirates)">⚔⛵ {p.warships!.length}</span>
+              )}
+              {game.pirateIslands && (() => {
+                const f = game.pirateIslands.fortresses.find((x) => x.playerId === p.id);
+                return f ? (
+                  <span title={f.lairs > 0 ? `Pirate fortress: ${f.lairs} lair token(s) left` : 'Fortress recaptured'}>
+                    🏴‍☠️ {f.lairs > 0 ? f.lairs : '✓'}
+                  </span>
+                ) : null;
+              })()}
               {hasCK && p.commodities && totalCommodities(p.commodities) > 0 && (
                 <span title="Commodity cards (paper / cloth / coin)">
                   📜 {totalCommodities(p.commodities)}

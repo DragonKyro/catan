@@ -30,6 +30,10 @@ export type UIMode =
   | { kind: 'buildCity' }
   | { kind: 'buildRoad' }
   | { kind: 'buildShip' }
+  // Seafarers: move one ship — pick the ship, then where it goes.
+  | { kind: 'moveShip'; from?: EdgeId }
+  // Seafarers / Forgotten Tribe: place a port taken from the tribe.
+  | { kind: 'placeTribePort' }
   // Traders & Barbarians — picking a river edge to span with a bridge.
   | { kind: 'buildBridge' }
   // Traders & Barbarians / Merchant Trains — placing a trade wagon after a
@@ -63,12 +67,13 @@ export type UIMode =
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }
   | { kind: 'movePirate' }
-  // While the user is placing the 2 free roads from a roadBuilding dev card,
-  // the FIRST click is buffered in `firstEdge` and the action is dispatched
-  // only on the SECOND click (with both edges). This is required because
+  // While the user is placing the 2 free pieces from a Road Building card,
+  // the FIRST click is buffered in `first` and the action is dispatched
+  // only on the SECOND click (with both pieces). This is required because
   // the engine consumes the card up front — splitting the placement across
   // two playRoadBuilding actions would try to consume the card twice.
-  | { kind: 'roadBuilding'; remaining: 1 | 2; firstEdge?: EdgeId };
+  // Seafarers: each piece may be a road or a ship.
+  | { kind: 'roadBuilding'; remaining: 1 | 2; first?: { edge: EdgeId; ship: boolean } };
 
 export type DialogName =
   | 'bankTrade'
@@ -108,6 +113,9 @@ interface AppStore {
   // candidates, this holds the chosen hex until the steal-target dialog
   // resolves and dispatches the actual moveRobber action.
   pendingRobberHex: HexId | null;
+  // Same for the pirate (Seafarers): the clicked sea hex while the player
+  // picks whom to rob.
+  pendingPirateHex: HexId | null;
   // Pre-action snapshot for solo/hot-seat undo. Set after a successful
   // dispatch of one of UNDOABLE_ACTION_TYPES; cleared by any non-undoable
   // action, by undo, or by starting/resetting a game.
@@ -131,6 +139,7 @@ interface AppStore {
   acknowledgeHandoff: () => void;
   dismissError: () => void;
   setPendingRobberHex: (hex: HexId | null) => void;
+  setPendingPirateHex: (hex: HexId | null) => void;
   setLastRolledHighlight: (token: number | null) => void;
 }
 
@@ -143,16 +152,39 @@ const UNDOABLE_ACTION_TYPES = new Set<Action['type']>([
   'buildCity',
   'buyDevCard',
   'bankTrade',
+  'buildShip',
+  'moveShip',
 ]);
 
+// An otherwise-undoable action that uncovered something can't be taken back
+// (Seafarers: lifting fog, picking up a face-down tribe card / token,
+// opening a cloth trade, or landing in a follow-up step such as a gold
+// pick) — undoing would let a player peek and retry.
+function revealedSomething(before: GameState, next: GameState): boolean {
+  if ((before.unrevealedFogHexes?.length ?? 0) !== (next.unrevealedFogHexes?.length ?? 0)) {
+    return true;
+  }
+  const claimed = (s: GameState) => (s.tribeTokens ?? []).filter((t) => t.claimedBy).length;
+  if (claimed(before) !== claimed(next)) return true;
+  const partners = (s: GameState) =>
+    (s.clothVillages ?? []).reduce((n, v) => n + v.partners.length, 0);
+  if (partners(before) !== partners(next)) return true;
+  return next.phase !== before.phase;
+}
+
 const phaseToMode = (state: GameState): UIMode => {
-  if (state.phase === 'setupRound1' || state.phase === 'setupRound2') {
+  if (
+    state.phase === 'setupRound1' ||
+    state.phase === 'setupRound2' ||
+    state.phase === 'setupRound3'
+  ) {
     return state.setupState?.step === 'settlement'
       ? { kind: 'placeSetupSettlement' }
       : { kind: 'placeSetupRoad' };
   }
   if (state.phase === 'moveRobber') return { kind: 'moveRobber' };
   if (state.phase === 'movePirate') return { kind: 'movePirate' };
+  if (state.phase === 'placeTribePort') return { kind: 'placeTribePort' };
   // T&B Merchant Trains: the placer picks an edge.
   if (state.phase === 'placeWagon') return { kind: 'placeWagon' };
   // Cities & Knights sub-phases that drive board interactions.
@@ -174,6 +206,7 @@ function applyTransition(
     handoffPending: boolean;
     handoffAcknowledgedForPlayer: PlayerId | null;
     pendingRobberHex: null;
+    pendingPirateHex: null;
   }>) => void,
   get: () => { handoffAcknowledgedForPlayer: PlayerId | null },
   before: GameState,
@@ -202,6 +235,7 @@ function applyTransition(
       ? get().handoffAcknowledgedForPlayer
       : nextActor,
     pendingRobberHex: null,
+    pendingPirateHex: null,
   });
 }
 
@@ -213,6 +247,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
   handoffAcknowledgedForPlayer: null,
   error: null,
   pendingRobberHex: null,
+  pendingPirateHex: null,
   lastActionSnapshot: null,
   lastRolledHighlight: null,
 
@@ -227,6 +262,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       handoffAcknowledgedForPlayer: getActingPlayerId(game),
       error: null,
       pendingRobberHex: null,
+      pendingPirateHex: null,
       lastActionSnapshot: null,
     });
   },
@@ -241,6 +277,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       handoffAcknowledgedForPlayer: null,
       error: null,
       pendingRobberHex: null,
+      pendingPirateHex: null,
       lastActionSnapshot: null,
     });
   },
@@ -265,7 +302,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       if (broadcastHandler) broadcastHandler(action);
       // Update snapshot bookkeeping for undo (solo/hot-seat only).
       const solo = !isOnlinePredicate();
-      if (solo && UNDOABLE_ACTION_TYPES.has(action.type)) {
+      if (solo && UNDOABLE_ACTION_TYPES.has(action.type) && !revealedSomething(before, next)) {
         set({ lastActionSnapshot: { game: before, log: logBefore } });
       } else {
         set({ lastActionSnapshot: null });
@@ -304,6 +341,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       dialog: null,
       error: null,
       pendingRobberHex: null,
+      pendingPirateHex: null,
       lastActionSnapshot: null,
     });
   },
@@ -320,6 +358,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       handoffAcknowledgedForPlayer: getActingPlayerId(state),
       error: null,
       pendingRobberHex: null,
+      pendingPirateHex: null,
       lastActionSnapshot: null,
     });
   },
@@ -337,5 +376,6 @@ export const useGameStore = create<AppStore>((set, get) => ({
   },
   dismissError: () => set({ error: null }),
   setPendingRobberHex: (hex) => set({ pendingRobberHex: hex }),
+  setPendingPirateHex: (hex) => set({ pendingPirateHex: hex }),
   setLastRolledHighlight: (token) => set({ lastRolledHighlight: token }),
 }));

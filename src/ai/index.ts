@@ -1,6 +1,12 @@
 import type { Action, GameState, PlayerId } from '@/game/types';
 import { isPairedPlayer2 } from '@/game/helpers';
 import { chooseSetupSettlement, chooseSetupRoad } from './setup';
+import { isSetupPhase } from '@/game/actions/setup';
+import { requiredGoldPicks } from '@/game/modules/seafarers/actions/chooseGoldResource';
+import {
+  chooseTribePortEdge,
+  chooseStealResourceTarget,
+} from './seafarers/scenarios';
 import { chooseRobberMove } from './robber';
 import { chooseDiscard } from './discard';
 import { chooseMainPhaseAction } from './main';
@@ -43,17 +49,26 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
   // Seafarers: pirate move sub-phase.
   if (state.phase === 'movePirate') {
     const choice = choosePirateMove(state, playerId);
-    if (!choice) {
-      // No legal sea hex (extreme corner case). Fall back to first sea hex
-      // that's not the pirate's current location.
-      const fallback = state.board.hexIds.find(
-        (h) =>
-          state.board.hexes[h]!.terrain === 'sea' && h !== state.board.pirateHex,
-      );
-      if (!fallback) return null;
-      return { type: 'movePirate', playerId, hex: fallback, stealFrom: null };
-    }
-    return { type: 'movePirate', playerId, hex: choice.hex, stealFrom: choice.stealFrom };
+    if (!choice) return null;
+    return {
+      type: 'movePirate',
+      playerId,
+      hex: choice.hex,
+      stealFrom: choice.stealFrom,
+      ...(choice.stealCloth ? { stealCloth: true } : {}),
+    };
+  }
+
+  // Seafarers / Forgotten Tribe: place a port picked up from the tribe.
+  if (state.phase === 'placeTribePort') {
+    if (state.pendingTribePort?.playerId !== playerId) return null;
+    const edge = chooseTribePortEdge(state, playerId);
+    return edge ? { type: 'placeTribePort', playerId, edge } : null;
+  }
+
+  // Seafarers / Pirate Islands: no robber; steal from anyone on a 7.
+  if (state.phase === 'stealResource') {
+    return { type: 'stealResource', playerId, stealFrom: chooseStealResourceTarget(state, playerId) };
   }
 
   // Seafarers: gold-hex resource choice. Only fires when this AI has a
@@ -64,21 +79,23 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
       return {
         type: 'chooseGoldResource',
         playerId,
-        resources: chooseGoldResourcePicks(state, playerId, pending),
+        resources: chooseGoldResourcePicks(state, playerId, requiredGoldPicks(state, playerId)),
       };
     }
     return null;
   }
 
   // Setup
-  if (state.phase === 'setupRound1' || state.phase === 'setupRound2') {
+  if (isSetupPhase(state.phase)) {
     if (state.setupState?.step === 'settlement') {
       const vid = chooseSetupSettlement(state, playerId);
       return { type: 'placeInitialSettlement', playerId, vertex: vid };
     }
     const placed = state.setupState!.lastPlacedSettlement!;
-    const eid = chooseSetupRoad(state, playerId, placed);
-    return { type: 'placeInitialRoad', playerId, edge: eid };
+    const pick = chooseSetupRoad(state, playerId, placed);
+    return pick.ship
+      ? { type: 'placeInitialShip', playerId, edge: pick.edge }
+      : { type: 'placeInitialRoad', playerId, edge: pick.edge };
   }
 
   if (state.phase === 'rollOrPlayKnight') {

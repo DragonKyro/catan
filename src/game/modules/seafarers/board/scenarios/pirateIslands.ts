@@ -1,188 +1,225 @@
-import type { ScenarioLayout, ScenarioPosition } from '../types';
+import type { ScenarioLayout, ScenarioPirateIslandsDef } from '../types';
 import { buildScenario } from './builder';
-import { seaPositionsInDisk } from './helpers';
+import { fixedPositions, seaHexes, type FixedHex } from './helpers';
 
-// Pirate Islands — main island plus outer "pirate isles" separated by a
-// stretch of sea where a pirate fleet sits. Players sail ships east to
-// attack the fleet via `attackPirateFleet`; killing it grants +2 VP.
+// The Pirate Islands — Seafarers rulebook p.16-17 (3-4 players) and
+// Seafarers 5-6 p.10. Fixed setup ("We do not recommend variations for this
+// scenario"), transcribed hex by hex from the rulebook maps; terrain and
+// number counts match the component tables exactly.
 //
-// Structural migration to the modular schema. Same land coordinates and
-// pirate-fleet anchor; terrains, tokens, and port types are pool-drawn.
+// The main island is in the east. The pirate fleet sails a clockwise loop
+// around the desert islets in the middle; each player sails one line of
+// ships west to their beachhead and on to the pirate fortress in their
+// color. Mechanics live in ../../pirateIslands.ts.
+//
+// Corners: 0 NE, 1 SE, 2 S, 3 SW, 4 NW, 5 N. Edge directions: 0 E, 1 SE,
+// 2 SW, 3 W, 4 NW, 5 NE.
 
-// 9 main + 1 desert + 6 outer islets = 16 land positions.
-const LAND_3_4P: ScenarioPosition[] = [
-  // Main island (9 land + 1 desert)
-  { q: -3, r: 0, kind: 'land' },
-  { q: -3, r: 1, kind: 'land' },
-  { q: -3, r: 2, kind: 'land' },
-  { q: -2, r: -1, kind: 'land' },
-  { q: -2, r: 0, kind: 'land' },
-  { q: -2, r: 1, kind: 'land' },
-  { q: -2, r: 2, kind: 'land' },
-  { q: -1, r: -2, kind: 'desert' },
-  { q: -1, r: -1, kind: 'land' },
-  { q: -1, r: 0, kind: 'land' },
-  // Pirate isles (small outer islands)
-  { q: 1, r: -2, kind: 'land' },
-  { q: 2, r: -2, kind: 'land' },
-  { q: 2, r: 0, kind: 'land' },
-  { q: 3, r: -1, kind: 'land' },
-  { q: 1, r: 2, kind: 'land' },
-  { q: 0, r: 3, kind: 'land' },
+// ---------------------------------------------------------------- 3-4p ---
+const HEXES_3_4P: FixedHex[] = [
+  // Western pirate islands.
+  [-1, -3, 'gold', 11], [0, -3, 'ore', 6], [-2, -2, 'brick', null], [-3, -1, 'wheat', 4],
+  [-2, 0, 'ore', 8],
+  [-4, 1, 'wheat', 10], [-4, 2, 'brick', null], [-4, 3, 'gold', 3], [-3, 3, 'ore', 6],
+  // Desert islets inside the fleet's loop.
+  [1, -2, 'desert'], [0, -1, 'desert'], [-1, 1, 'desert'], [-1, 2, 'sheep', null],
+  // Main (eastern) island.
+  [3, -3, 'wheat', 4], [4, -3, 'brick', 5],
+  [3, -2, 'ore', 9], [4, -2, 'wood', 10],
+  [2, -1, 'wood', 3], [3, -1, 'sheep', 8], [4, -1, 'wood', 5],
+  [1, 0, 'wheat', 6], [2, 0, 'brick', 9], [3, 0, 'sheep', 12],
+  [1, 1, 'sheep', 11], [2, 1, 'wood', 8], [3, 1, 'sheep', 9],
+  [1, 2, 'ore', 5], [2, 2, 'wood', 2],
+  [0, 3, 'wheat', 10], [1, 3, 'brick', 4],
+  ...seaHexes([
+    [1, -3], [2, -3], [-1, -2], [0, -2], [2, -2], [-2, -1], [-1, -1], [1, -1],
+    [-3, 0], [-1, 0], [0, 0], [-3, 1], [-2, 1], [0, 1], [-3, 2], [-2, 2], [0, 2],
+    [-2, 3], [-1, 3],
+  ]),
 ];
 
-const LAYOUT_3_4P: ScenarioLayout = {
-  positions: [
-    ...LAND_3_4P,
-    ...seaPositionsInDisk(LAND_3_4P, 3),
+const PIRATES_3_4P: ScenarioPirateIslandsDef = {
+  path: [
+    { q: 1, r: -3 }, { q: 2, r: -3 }, { q: 2, r: -2 }, { q: 1, r: -1 }, { q: 0, r: 0 },
+    { q: 0, r: 1 }, { q: 0, r: 2 }, { q: -1, r: 3 }, { q: -2, r: 3 }, { q: -2, r: 2 },
+    { q: -2, r: 1 }, { q: -1, r: 0 }, { q: -1, r: -1 }, { q: 0, r: -2 },
   ],
-  portAnchors: [
-    // (-3, 0) has no coastal edge to an in-frame sea hex at 3p; the NW
-    // generic port anchors on the desert at (-1, -2) facing NE.
-    { q: -1, r: -2, direction: 5 },
-    { q: -3, r: 2, direction: 1 },
-    { q: -1, r: 0, direction: 1 },
-    { q: 1, r: -2, direction: 5 },
-    { q: 2, r: 0, direction: 2 },
-    { q: 0, r: 3, direction: 4 },
-  ],
-  pools: {
-    // 15 non-desert land hexes.
-    terrainCounts: {
-      gold: 2,
-      brick: 2,
-      wood: 3,
-      sheep: 3,
-      wheat: 3,
-      ore: 2,
+  start: 7,
+  slots: [
+    {
+      color: 'red',
+      settlement: { q: 3, r: -3, corner: 2 },
+      ship: { q: 3, r: -3, direction: 2 },
+      fortress: { q: -1, r: -3, corner: 5 },
+      beachhead: { q: 0, r: -3, corner: 0 },
     },
-    // 15 tokens — symmetric around 7. Odd total → smallest asymmetry at
-    // the 2/12 pair (rarest, least impactful). 2: 1, 3/11: 1 each, 4/10: 2,
-    // 5/9: 2, 6/8: 2.
-    tokens: [2, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11],
-    portTypes: ['generic', 'generic', 'wood', 'brick', 'sheep', 'wheat'],
-  },
-  // Pirate fleet sits on the sea hex between the main island and the isles.
-  // (1, 0) isn't a land position so it becomes sea via `seaPositionsInDisk`,
-  // and the generator anchors the pirate token there.
-  pirateStart: { q: 1, r: 0 },
+    {
+      color: 'white',
+      settlement: { q: 1, r: 0, corner: 5 },
+      ship: { q: 1, r: 0, direction: 4 },
+      fortress: { q: -2, r: -2, corner: 2 },
+      beachhead: { q: -2, r: 0, corner: 5 },
+    },
+    {
+      color: 'blue',
+      settlement: { q: 1, r: 0, corner: 2 },
+      ship: { q: 1, r: 0, direction: 2 },
+      fortress: { q: -4, r: 2, corner: 5 },
+      beachhead: { q: -2, r: 0, corner: 2 },
+    },
+    {
+      color: 'orange',
+      settlement: { q: 0, r: 3, corner: 5 },
+      ship: { q: 0, r: 3, direction: 4 },
+      fortress: { q: -4, r: 3, corner: 2 },
+      beachhead: { q: -3, r: 3, corner: 1 },
+    },
+  ],
+  // "In a 3-player game, do not use the white piece locations."
+  slotsByPlayers: { 3: [0, 2, 3], 4: [0, 1, 2, 3] },
 };
 
-// ---------------------------------------------------------------------------
-// 5-6 player layout: 37 land (32 non-desert + 5 desert) + 24 sea = 61 disk
-// Rulebook (Seafarers 5-6p, p10): 4 gold + 4 hills + 6 forests + 6 pastures
-// + 5 fields + 7 mountains + 5 deserts = 37 land; 32 tokens; 9 ports.
-//
-// Geometry is APPROXIMATE — large main island (west) + pirate-isles
-// archipelago (east) separated by a corridor of sea where the fleet sits.
-// Visual verification against [docs/.scenario-renders/seafarers-56-p10.png]
-// is pending.
-// ---------------------------------------------------------------------------
-const LAND_5_6P: ScenarioPosition[] = [
-  // Main island west (20 non-desert + 2 desert = 22 hexes)
-  { q: -4, r: 0, kind: 'land' },
-  { q: -4, r: 1, kind: 'land' },
-  { q: -4, r: 2, kind: 'land' },
-  { q: -4, r: 3, kind: 'land' },
-  { q: -4, r: 4, kind: 'land' },
-  { q: -3, r: -1, kind: 'land' },
-  { q: -3, r: 0, kind: 'land' },
-  { q: -3, r: 1, kind: 'land' },
-  { q: -3, r: 2, kind: 'land' },
-  { q: -3, r: 3, kind: 'land' },
-  { q: -3, r: 4, kind: 'land' },
-  { q: -2, r: -1, kind: 'desert' },
-  { q: -2, r: 0, kind: 'land' },
-  { q: -2, r: 1, kind: 'land' },
-  { q: -2, r: 2, kind: 'land' },
-  { q: -2, r: 3, kind: 'land' },
-  { q: -2, r: 4, kind: 'desert' },
-  { q: -1, r: -2, kind: 'land' },
-  { q: -1, r: -1, kind: 'land' },
-  { q: -1, r: 0, kind: 'land' },
-  { q: -1, r: 1, kind: 'land' },
-  { q: -1, r: 2, kind: 'land' },
-  // Pirate isles east (12 non-desert + 3 desert = 15 hexes)
-  { q: 2, r: -2, kind: 'land' },
-  { q: 3, r: -3, kind: 'land' },
-  { q: 3, r: -2, kind: 'land' },
-  { q: 4, r: -3, kind: 'land' },
-  { q: 4, r: -2, kind: 'desert' },
-  { q: 2, r: 0, kind: 'land' },
-  { q: 3, r: 0, kind: 'land' },
-  { q: 3, r: 1, kind: 'land' },
-  { q: 4, r: 0, kind: 'land' },
-  { q: 4, r: -1, kind: 'desert' },
-  { q: 0, r: 3, kind: 'land' },
-  { q: 1, r: 3, kind: 'land' },
-  { q: 1, r: 2, kind: 'land' },
-  { q: 0, r: 4, kind: 'land' },
-  { q: 2, r: 1, kind: 'desert' },
+const LAYOUT_3_4P: ScenarioLayout = {
+  positions: fixedPositions(HEXES_3_4P),
+  portAnchors: [
+    { q: 3, r: -3, direction: 4 },
+    { q: 4, r: -3, direction: 4 },
+    { q: 4, r: -3, direction: 0 },
+    { q: 4, r: -2, direction: 0 },
+    { q: 3, r: 0, direction: 0 },
+    { q: 3, r: 1, direction: 1 },
+    { q: 2, r: 2, direction: 1 },
+    { q: 0, r: 3, direction: 1 },
+  ],
+  pools: {
+    terrainCounts: {},
+    tokens: [],
+    portTypes: ['wood', 'brick', 'sheep', 'wheat', 'ore', 'generic', 'generic', 'generic'],
+  },
+  pirateStart: { q: -1, r: 3 },
+};
+
+// ---------------------------------------------------------------- 5-6p ---
+const HEXES_5_6P: FixedHex[] = [
+  // Western pirate islands.
+  [-2, -3, 'gold', 3], [0, -3, 'ore', 6],
+  [-4, -1, 'gold', 11], [-3, -1, 'desert'], [-2, -1, 'ore', 8],
+  [-5, 1, 'gold', 11], [-4, 1, 'desert'], [-3, 1, 'ore', 6],
+  [-5, 3, 'gold', 3], [-3, 3, 'ore', 8],
+  // Desert islets inside the fleet's loop.
+  [1, -2, 'desert'], [-1, 0, 'desert'], [-1, 2, 'desert'],
+  // Main (eastern) island.
+  [3, -3, 'sheep', 5], [4, -3, 'wheat', 4], [5, -3, 'brick', 9],
+  [3, -2, 'ore', 3], [4, -2, 'brick', 10], [5, -2, 'wood', 11],
+  [2, -1, 'wood', 12], [3, -1, 'wood', 6], [4, -1, 'sheep', 4], [5, -1, 'wood', 10],
+  [1, 0, 'wheat', 6], [2, 0, 'wheat', 4], [3, 0, 'ore', 5], [4, 0, 'sheep', 8],
+  [1, 1, 'sheep', 2], [2, 1, 'sheep', 10], [3, 1, 'brick', 3], [4, 1, 'sheep', 5],
+  [1, 2, 'wheat', 11], [2, 2, 'ore', 9], [3, 2, 'brick', 8],
+  [0, 3, 'wood', 9], [1, 3, 'wheat', 5], [2, 3, 'wood', 4],
+  ...seaHexes([
+    [-1, -3], [1, -3], [2, -3],
+    [-3, -2], [-2, -2], [-1, -2], [0, -2], [2, -2],
+    [-1, -1], [0, -1], [1, -1],
+    [-4, 0], [-3, 0], [-2, 0], [0, 0],
+    [-2, 1], [-1, 1], [0, 1],
+    [-5, 2], [-4, 2], [-3, 2], [-2, 2], [0, 2],
+    [-4, 3], [-2, 3], [-1, 3],
+  ]),
 ];
 
-const LAYOUT_5_6P: ScenarioLayout = {
-  positions: [
-    ...LAND_5_6P,
-    ...seaPositionsInDisk(LAND_5_6P, 4),
+const PIRATES_5_6P: ScenarioPirateIslandsDef = {
+  path: [
+    { q: 1, r: -3 }, { q: 2, r: -3 }, { q: 2, r: -2 }, { q: 1, r: -1 }, { q: 0, r: 0 },
+    { q: 0, r: 1 }, { q: 0, r: 2 }, { q: -1, r: 3 }, { q: -2, r: 3 }, { q: -2, r: 2 },
+    { q: -2, r: 1 }, { q: -2, r: 0 }, { q: -1, r: -1 }, { q: 0, r: -2 },
   ],
-  // 9 ports — rulebook 5-6p Pirate Islands (5×2:1 + 4×3:1). All verified
-  // coastal.
-  portAnchors: [
-    { q: -2, r: -1, direction: 4 }, // → (-2, -2) sea
-    { q: -3, r: -1, direction: 5 }, // → (-2, -2) sea
-    { q: -1, r: -2, direction: 4 }, // → (-1, -3) sea
-    { q: -1, r: 2, direction: 1 }, // → (-1, 3) sea
-    { q: -2, r: 4, direction: 0 }, // → (-1, 4) sea
-    { q: 2, r: -2, direction: 3 }, // → (1, -2) sea
-    { q: 3, r: -3, direction: 4 }, // → (3, -4) sea
-    { q: 3, r: 1, direction: 2 }, // → (2, 2) sea
-    { q: 0, r: 4, direction: 3 }, // → (-1, 4) sea (other edge)
-  ],
-  // Pirate fleet starts on the sea corridor between main and pirate isles.
-  pirateStart: { q: 1, r: 0 },
-  pools: {
-    // 32 non-desert land hexes (5 deserts are fixed positions).
-    terrainCounts: {
-      gold: 4,
-      brick: 4,
-      wood: 6,
-      sheep: 6,
-      wheat: 5,
-      ore: 7,
+  start: 8,
+  // The "!" hex: while the pirate ship is here, skip the Pirate Attacks step.
+  noAttackHex: { q: -2, r: 0 },
+  slots: [
+    {
+      color: 'red',
+      settlement: { q: 3, r: -3, corner: 4 },
+      ship: { q: 2, r: -3, direction: 5 },
+      fortress: { q: -2, r: -3, corner: 4 },
+      beachhead: { q: 0, r: -3, corner: 0 },
     },
-    // 32 tokens — fully symmetric around 7. 2/12: 2, 3/11: 3, 4/10: 3,
-    // 5/9: 4, 6/8: 4.
-    tokens: [
-      2, 2,
-      3, 3, 3,
-      4, 4, 4,
-      5, 5, 5, 5,
-      6, 6, 6, 6,
-      8, 8, 8, 8,
-      9, 9, 9, 9,
-      10, 10, 10,
-      11, 11, 11,
-      12, 12,
-    ],
-    // 9 port types — 4 generic + 5 single-resource.
+    {
+      color: 'white',
+      settlement: { q: 3, r: -3, corner: 2 },
+      ship: { q: 2, r: -2, direction: 5 },
+      fortress: { q: -2, r: -3, corner: 2 },
+      beachhead: { q: 0, r: -3, corner: 2 },
+    },
+    {
+      color: 'blue',
+      settlement: { q: 1, r: 0, corner: 5 },
+      ship: { q: 1, r: 0, direction: 4 },
+      fortress: { q: -4, r: -1, corner: 1 },
+      beachhead: { q: -2, r: -1, corner: 1 },
+    },
+    {
+      color: 'orange',
+      settlement: { q: 1, r: 0, corner: 2 },
+      ship: { q: 1, r: 0, direction: 2 },
+      fortress: { q: -5, r: 1, corner: 0 },
+      beachhead: { q: -3, r: 1, corner: 0 },
+    },
+    {
+      color: 'green',
+      settlement: { q: 0, r: 3, corner: 5 },
+      ship: { q: 0, r: 3, direction: 4 },
+      fortress: { q: -5, r: 3, corner: 5 },
+      beachhead: { q: -3, r: 3, corner: 5 },
+    },
+    {
+      color: 'purple',
+      settlement: { q: 0, r: 3, corner: 3 },
+      ship: { q: -1, r: 3, direction: 1 },
+      fortress: { q: -5, r: 3, corner: 3 },
+      beachhead: { q: -3, r: 3, corner: 1 },
+    },
+  ],
+  // "In a 5-player game, do not use the purple piece locations."
+  slotsByPlayers: { 5: [0, 1, 2, 3, 4], 6: [0, 1, 2, 3, 4, 5] },
+};
+
+const LAYOUT_5_6P: ScenarioLayout = {
+  positions: fixedPositions(HEXES_5_6P),
+  portAnchors: [
+    { q: 4, r: -3, direction: 4 },
+    { q: 5, r: -3, direction: 4 },
+    { q: 5, r: -3, direction: 0 },
+    { q: 5, r: -2, direction: 0 },
+    { q: 4, r: 0, direction: 0 },
+    { q: 3, r: 2, direction: 0 },
+    { q: 2, r: 3, direction: 0 },
+    { q: 1, r: 3, direction: 2 },
+    { q: 2, r: 3, direction: 2 },
+  ],
+  pools: {
+    terrainCounts: {},
+    tokens: [],
     portTypes: [
-      'generic', 'generic', 'generic', 'generic',
       'wood', 'brick', 'sheep', 'wheat', 'ore',
+      'generic', 'generic', 'generic', 'generic',
     ],
   },
+  pirateStart: { q: -2, r: 3 },
 };
 
 export const pirateIslands = buildScenario({
   id: 'pirateIslands',
   name: 'Pirate Islands',
-  defaultIslandBonusVp: 2,
-  defaultVpToWin: 12,
-  defaultVpToWin5_6: 13,
+  // No island bonus; the win needs your recaptured fortress AND 10 VP.
+  defaultIslandBonusVp: 0,
+  defaultVpToWin: 10,
   minPlayers: 3,
   maxPlayers: 6,
-  pirateFleet: { q: 1, r: 0, strength: 4 },
-  // 5-6p fleet has +1 strength per rulebook.
-  pirateFleet5_6: { q: 1, r: 0, strength: 5 },
+  noLongestRoad: true,
+  noLargestArmy: true,
+  extras3_4: { pirateIslands: PIRATES_3_4P },
+  extras5_6: { pirateIslands: PIRATES_5_6P },
   layout3p: LAYOUT_3_4P,
   layout5_6p: LAYOUT_5_6P,
 });

@@ -4,7 +4,7 @@ import { RESOURCES, COMMODITIES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
 import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
-import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
+import { calculateVictoryPoints, calculateIslandBonusVp } from '@/game/scoring/points';
 import { calculateBarbarianDefenderVp } from '@/game/modules/traders/scoring/barbarianAttack';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
@@ -122,28 +122,54 @@ export function HandPanel() {
           />
           {player.name}
           {player.hasLongestRoad && (
-            <span className="hand-flag" title="Longest Road (+2 VP)">🛣️</span>
+            <span
+              className="hand-flag"
+              title={`${game.settings.expansions.includes('seafarers') ? 'Longest Route' : 'Longest Road'} (+2 VP)`}
+            >
+              🛣️
+            </span>
           )}
           {player.hasLargestArmy && (
             <span className="hand-flag" title="Largest Army (+2 VP)">⚔️</span>
           )}
           {(() => {
-            const chipVp = calculateIslandChipVp(game, player.id);
+            const chipVp = calculateIslandBonusVp(game, player.id);
             return chipVp > 0 ? (
               <span
                 className="hand-flag"
-                title={`Outer-island settlement bonuses (+${chipVp} VP)`}
+                title={`Island settlement bonuses (+${chipVp} VP)`}
               >
                 🏝 +{chipVp}
               </span>
             ) : null;
           })()}
-          {player.cloth && player.cloth > 0 && (
+          {(player.cloth ?? 0) > 0 && (
             <span
               className="hand-flag"
-              title={`Cloth tokens — ${player.cloth} cloth = ${Math.floor(player.cloth / 2)} VP`}
+              title={`Cloth tokens — ${player.cloth} cloth = ${Math.floor((player.cloth ?? 0) / 2)} VP`}
             >
               🧵 {player.cloth}
+            </span>
+          )}
+          {(player.tribeVp ?? 0) > 0 && (
+            <span className="hand-flag" title={`Tribe VP tokens (+${player.tribeVp} VP)`}>
+              ★ {player.tribeVp}
+            </span>
+          )}
+          {(player.warships?.length ?? 0) > 0 && (
+            <span
+              className="hand-flag"
+              title={`Warships — your strength against the pirates (${player.warships!.length})`}
+            >
+              ⚔⛵ {player.warships!.length}
+            </span>
+          )}
+          {(player.heldPorts?.length ?? 0) > 0 && (
+            <span
+              className="hand-flag"
+              title="Tribe ports waiting for a coastal settlement with room for a port"
+            >
+              ⚓ {player.heldPorts!.length}
             </span>
           )}
           {(player.cityWalls ?? 0) > 0 && (
@@ -303,20 +329,30 @@ export function HandPanel() {
 
       <div className="hand-section">
         <div className="hand-cards">
-          {Object.entries(cardCounts).map(([card, count]) => (
-            <DevCardChip
-              key={card}
-              card={card as never}
-              count={count}
-              onClick={canPlayCards ? () => onPlay(card) : undefined}
-              disabled={!canPlayCards}
-              title={
-                canPlayCards
-                  ? `Play ${DEV_LABEL[card as keyof typeof DEV_LABEL]}`
-                  : 'Cannot play right now'
-              }
-            />
-          ))}
+          {Object.entries(cardCounts).map(([card, count]) => {
+            // Before the roll only a Knight may be played.
+            const playable = canPlayCards && (card === 'knight' || game.phase === 'main');
+            const label =
+              card === 'knight' && game.pirateIslands
+                ? 'Knight (turns your ship nearest the start of your route into a warship)'
+                : DEV_LABEL[card as keyof typeof DEV_LABEL];
+            return (
+              <DevCardChip
+                key={card}
+                card={card as never}
+                count={count}
+                onClick={playable ? () => onPlay(card) : undefined}
+                disabled={!playable}
+                title={
+                  playable
+                    ? `Play ${label}`
+                    : canPlayCards
+                      ? 'Only a Knight may be played before you roll'
+                      : 'Cannot play right now'
+                }
+              />
+            );
+          })}
           {player.devCards.boughtThisTurn.map((c, i) => (
             <DevCardChip
               key={`bt-${i}`}

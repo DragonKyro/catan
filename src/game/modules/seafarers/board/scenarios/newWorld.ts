@@ -166,9 +166,12 @@ const LAYOUT_5_6P: ScenarioLayout = {
 export const newWorld = buildScenario({
   id: 'newWorld',
   name: 'New World',
-  defaultIslandBonusVp: 2,
+  // Rulebook: +1 VP per unexplored island; 12 VP at 3-4 and 5-6 players.
+  // Start on one or two islands (your home islands).
+  defaultIslandBonusVp: 1,
   defaultVpToWin: 12,
-  defaultVpToWin5_6: 13,
+  startingPlacementZone: 'anyIsland',
+  bonusOnEveryIsland: true,
   minPlayers: 3,
   maxPlayers: 6,
   layout3p: LAYOUT_3_4P,

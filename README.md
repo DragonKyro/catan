@@ -25,25 +25,25 @@ The popular online version (colonist.io) paywalls the expansions; this is a free
 
 Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 3–4 player only for now.
 
-**Seafarers expansion** — 9 official scenarios, every one with its rulebook headline mechanic wired up:
+**Seafarers expansion** — 9 official scenarios, following the 2025 rulebook (setup, extra rules, win condition and VP target):
 
-- **Heading for New Shores** — main island + outer islands with gold hexes and settlement-bonus chips
-- **Four Islands** — no main island; ships from turn one; starting settlements legal anywhere
-- **Through the Desert** — desert hexes act as island boundaries, so settling past the desert earns an outer-island chip
-- **New World** — random map for variety
-- **Fog Island** — outer hexes start hidden under fog; revealed (and rewarded) by adjacent builds
-- **The Forgotten Tribe** — outer islets carry one-shot tokens: dev cards, +VP, and commercial harbors (2:1 any resource)
-- **Pirate Islands** — an enemy fleet on a sea hex you attack with adjacent ships; killing-blow earns +2 VP
-- **Cloth for Catan** — designated hexes produce cloth tokens instead of resources; 2 cloth = 1 VP
-- **The Wonders of Catan** — 5 prerequisite-gated wonders with 4 levels each; **first to finish any wonder wins immediately** regardless of VP
+- **Heading for New Shores** (14 VP) — main island + small islands; +2 VP for *your* first settlement on each small island
+- **The Four Islands / The Six Islands** (13 VP) — start on one or two islands; +2 VP per other island you settle
+- **The Fog Islands** (12 VP) — unexplored spaces are discovered by roads/ships next to them; land pays a resource
+- **Through the Desert** (14 VP) — the desert cuts off a strip that counts as an unexplored region (+2 VP)
+- **The Forgotten Tribe** (13 VP) — ships pick up the tribe's VP tokens, dev cards and ports from island edges; settlements only on numbered hexes
+- **Cloth for Catan** (14 VP) — three starting settlements; ship routes to villages trade cloth (2 cloth = 1 VP); the game also ends when 5 villages run dry
+- **The Pirate Islands** (fortress + 10 VP) — a pirate fleet circles the board attacking buildings; build warships and one line of ships west to recapture your pirate fortress
+- **The Wonders of Catan** — claim one of the rulebook's wonders and build its 4 levels; finish it, or reach 10 VP with the highest level, to win
+- **New World** (12 VP) — open map; +1 VP per island you didn't start on
 
 ### Notable mechanics
 
 - **Online multiplayer with no backend.** WebRTC peer-to-peer over Trystero (Nostr-relay signaling — works on cellular and corporate networks where BitTorrent trackers are blocked). Create a room, share a 4-character code, friends join. Full state replication; randomness baked into actions so all peers reduce to the same state. Drop out and rejoin mid-game with the same code — your seat is preserved via `localStorage` UUID. Late joiners without a saved UUID become read-only spectators.
 - **End-of-game match graph.** Tabbed line charts (VP, resources earned per-player and per-resource, hand size, knights, longest road, trade count, trade efficiency) and bar charts (dice frequency, cumulative bank circulation). Hover snaps to the nearest timeline step with an x-unified crosshair; x-axis is labeled in turn numbers.
 - **End-of-game replay.** Scrub through your finished game step by step, or auto-play at 0.5×–4×. Slider stops only on board-changing actions; rolls and trades fold in but skip.
-- **Heuristic AI with encoded win plans.** Six 10-VP templates (city+army, sprawl+road, etc.); AI scores each by resource cost + production mismatch and picks the cheapest reachable plan. Threat model flags opponents close to win, longest road, or largest army, and refuses trades that hand them the resource they need. In Seafarers it values outer-island chip VP, weights gold above any single resource, and builds ships toward unclaimed chips.
-- **Scenario progress tracker.** When a Seafarers scenario has live state (chips, fog, tribe tokens, wonder levels, pirate fleet, cloth), a "Scenario" side tab appears with everything-at-a-glance. Player badges in the hand/opponent panels mirror it (`🏝 +N`, `🧵 N`, `X/N VP`).
+- **Heuristic AI with encoded win plans.** Six 10-VP templates (city+army, sprawl+road, etc.); AI scores each by resource cost + production mismatch and picks the cheapest reachable plan. Threat model flags opponents close to win, longest road, or largest army, and refuses trades that hand them the resource they need. In Seafarers it values the island bonuses it can still earn, weights gold above any single resource, looks a few ship-steps ahead to cross open sea, moves ships, and plays each scenario's mechanic (tribe pickups, cloth routes, the pirate-fortress line, wonders).
+- **Scenario progress tracker.** When a Seafarers scenario has live state (island bonuses, fog, tribe gifts, wonders, pirate fortresses, cloth), a "Scenario" side tab appears with everything-at-a-glance, including how the scenario is won. Player badges in the hand/opponent panels mirror it (`🏝 +N`, `🧵 N`, `X/N VP`).
 - **Pass-device hot-seat.** In local games with multiple humans, an explicit handoff screen hides resource hands and unplayed dev cards between turns. AI hands stay face-down (counts visible, types hidden).
 - **Self-contained rulebook with search.** Paginated by topic with inline SVG diagrams; per-scenario explainers cover the actual implemented mechanic for each Seafarers scenario and base-game Fun Map, including its win target. A search box filters topics by title and body text in real time so you can find a specific rule without scrolling.
 

@@ -9,6 +9,9 @@ import type {
 } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { getPortAtVertex } from '@/game/board/adjacency';
+import { islandBonusAt } from '@/game/modules/seafarers/islandBonus';
+import { canPlaceSettlement } from '@/game/placement';
+import { hasShipGoal } from './seafarers/ships';
 
 // Resource weights tuned for typical Catan economy. Ore/wheat slightly
 // scarce; sheep slightly abundant.
@@ -113,8 +116,12 @@ export function vertexScore(
   let shoreline = 0;
   let missingBonus = 0;
 
+  const fogged = new Set(state.unrevealedFogHexes ?? []);
   for (const hexId of vertex.hexes) {
     const hex = state.board.hexes[hexId]!;
+    // Unexplored fog is unknown to every player — don't peek at the terrain
+    // underneath (the fog bonus below accounts for it).
+    if (fogged.has(hexId)) continue;
     if (hex.terrain === 'desert') {
       shoreline += 0.5;
       continue;
@@ -172,38 +179,11 @@ export function vertexScore(
     else portBonus = 1.2;
   }
 
-  // Seafarers: bonus for settling on an outer island whose chip is still
-  // unclaimed. Worth `chip.vp` VP at game end; scale by ~3 so it competes
-  // with strong missing-resource bonuses. Already-claimed chips don't apply
-  // (and our own claimed chips don't double-count — we already have that VP).
-  let chipBonus = 0;
-  if (state.islandChips && state.board.islandOfHex) {
-    const islandIds = new Set<string>();
-    for (const hexId of vertex.hexes) {
-      const id = state.board.islandOfHex[hexId];
-      if (id) islandIds.add(id);
-    }
-    for (const chip of state.islandChips) {
-      if (chip.firstSettler !== null) continue;
-      if (islandIds.has(chip.islandId)) chipBonus += chip.vp * 3;
-    }
-  }
-
-  // Forgotten Tribe: bonus per unclaimed adjacent tribe token. Scaled by
-  // type — VP tokens use the same chip multiplier (× 3), commercial harbor
-  // is a long-term 2:1 trade rate worth a strong port, dev card is a single
-  // ~0.3 VP grant.
-  let tribeBonus = 0;
-  if (state.tribeTokens) {
-    const hexSet = new Set(vertex.hexes);
-    for (const t of state.tribeTokens) {
-      if (t.claimedBy !== null) continue;
-      if (!hexSet.has(t.hexId)) continue;
-      if (t.type === 'victoryPoint') tribeBonus += 3.0;
-      else if (t.type === 'commercialHarbor') tribeBonus += 2.5;
-      else tribeBonus += 1.5; // devCard
-    }
-  }
+  // Seafarers island bonus: each player earns an island's bonus on their
+  // own first settlement there (unless it's one of their home islands).
+  // Worth `vp` VP; scale by ~3 so it competes with strong missing-resource
+  // bonuses.
+  const chipBonus = islandBonusAt(state, playerId, vertexId) * 3;
 
   // Fog Island: small bonus per adjacent unrevealed fog hex. Reveal grants
   // +1 of the underlying resource (or a gold pick / nothing for desert), so
@@ -219,29 +199,25 @@ export function vertexScore(
     }
   }
 
-  // Cloth for Catan: cloth-producing hexes pay 1 cloth per settle / 2 per
-  // city on roll, and 2 cloth = 1 VP. Treat as a direct VP source: pips ×
-  // 0.5 (VP per cloth) × ~1.4 settle-multiplier ≈ 0.7 × pips. Already-
-  // counted production from the underlying terrain is REPLACED by cloth,
-  // so subtract the resource contribution we added in the hex loop above
-  // to avoid double-paying.
+  // Cloth for Catan: settlements close to villages we don't trade with yet
+  // launch the short ship routes that open cloth trade.
   let clothBonus = 0;
-  if (state.clothHexes && state.clothHexes.length > 0) {
-    const cloth = new Set(state.clothHexes);
-    for (const hexId of vertex.hexes) {
-      if (!cloth.has(hexId)) continue;
-      const hex = state.board.hexes[hexId]!;
-      const pips = probabilityDots(hex.numberToken);
-      // Strip the resource-production value the loop already added.
-      if (hex.terrain !== 'desert' && hex.terrain !== 'sea') {
-        const w = hex.terrain === 'gold' ? terrainWeight('gold') : RESOURCE_WEIGHT[hex.terrain as Resource];
-        clothBonus -= pips * w;
-      }
-      // Cloth payoff: pips × ~0.7 (see above). Add a flat +1.5 because cloth
-      // VP doesn't compete for board placement like settlements/cities do
-      // and stacks across cities, mirroring the chip-VP bias.
-      clothBonus += pips * 0.7 + 1.5;
+  if (state.clothVillages && state.clothVillages.length > 0) {
+    const near = new Set<VertexId>([vertexId, ...vertex.neighborVertices]);
+    for (const n of vertex.neighborVertices) {
+      for (const nn of state.board.vertices[n]?.neighborVertices ?? []) near.add(nn);
     }
+    for (const village of state.clothVillages) {
+      if (village.supply <= 0 || village.partners.includes(playerId)) continue;
+      if (near.has(village.vertex)) clothBonus += 1.0;
+    }
+  }
+
+  // Pirate Islands: buildings next to the fleet's loop get attacked.
+  let fleetPenalty = 0;
+  if (state.pirateIslands && state.pirateIslands.fleetIndex >= 0) {
+    const path = new Set(state.pirateIslands.path);
+    for (const hexId of vertex.hexes) if (path.has(hexId)) fleetPenalty += 0.6;
   }
 
   // Volcano scenario: heavy penalty for touching the volcano hex. The
@@ -302,14 +278,14 @@ export function vertexScore(
     portBonus +
     missingBonus +
     chipBonus +
-    tribeBonus +
     fogBonus +
     clothBonus +
     riverGoldBonus +
     fishBonus +
     castleBonus -
     shoreline -
-    volcanoPenalty
+    volcanoPenalty -
+    fleetPenalty
   );
 }
 
@@ -318,8 +294,9 @@ export function vertexScore(
 export interface NeedReport {
   // 1 = severe shortfall, 0 = none.
   byResource: Record<Resource, number>;
-  // Suggested goal: 'city' | 'settlement' | 'road' | 'devCard' | 'none'
-  goal: 'city' | 'settlement' | 'road' | 'devCard' | 'none';
+  // Suggested goal. 'ship' = Seafarers, when a worthwhile ship is the way
+  // forward (no settlement spot open on land).
+  goal: 'city' | 'settlement' | 'ship' | 'road' | 'devCard' | 'none';
 }
 
 export function reportNeeds(state: GameState, playerId: PlayerId): NeedReport {
@@ -344,6 +321,23 @@ export function reportNeeds(state: GameState, playerId: PlayerId): NeedReport {
       goal = 'city';
       byResource.wheat = Math.max(byResource.wheat, wheatShort);
       byResource.ore = Math.max(byResource.ore, oreShort);
+    }
+  }
+
+  // Ship: 1 wood 1 wool — Seafarers, when no settlement spot is open now
+  // and a ship leads somewhere worth going (an island, a scenario target).
+  if (
+    goal === 'none' &&
+    state.settings.expansions.includes('seafarers') &&
+    !state.board.vertexIds.some((v) => canPlaceSettlement(state, playerId, v)) &&
+    hasShipGoal(state, playerId)
+  ) {
+    const woodShort = Math.max(0, 1 - r.wood);
+    const sheepShort = Math.max(0, 1 - r.sheep);
+    if (woodShort + sheepShort <= 2) {
+      goal = 'ship';
+      byResource.wood = Math.max(byResource.wood, woodShort);
+      byResource.sheep = Math.max(byResource.sheep, sheepShort);
     }
   }
 

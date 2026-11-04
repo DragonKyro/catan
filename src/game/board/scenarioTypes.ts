@@ -22,10 +22,11 @@ export interface ScenarioHexDef {
   token: number | null;
 }
 
-// Port placement: anchored by a (q, r) land/island hex and a direction 0..5
-// (clockwise from the upper-right edge, pointy-top orientation). The edge
-// chosen is the shared edge between this hex and the neighbour in that
-// direction. The neighbour is expected to be a sea hex.
+// Port placement: anchored by a (q, r) land/island hex and a direction 0..5,
+// the edge between corners `direction` and `direction + 1`. Corners run
+// clockwise from the north-east corner of the pointy-top hex (0 NE, 1 SE,
+// 2 S, 3 SW, 4 NW, 5 N), so directions are 0 E, 1 SE, 2 SW, 3 W, 4 NW,
+// 5 NE. The neighbour across that edge is expected to be sea or frame.
 export interface ScenarioPortDef {
   q: number;
   r: number;
@@ -56,6 +57,10 @@ export interface ScenarioPosition {
   // of `fixedToken` positions on the layout. The 6/8 adjacency check still
   // includes fixed-token hexes.
   fixedToken?: number;
+  // When true, this land position never gets a number disc (it produces
+  // nothing). Seafarers scenarios use it for the tribe / village islands and
+  // Pirate Islands' bare hexes.
+  noToken?: boolean;
 }
 
 // Port anchor without a type — the type is drawn from `ScenarioPools.portTypes`.

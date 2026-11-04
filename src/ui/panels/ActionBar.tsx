@@ -6,7 +6,14 @@ import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import { isPairedPlayer2 } from '@/game/helpers';
 import { SHIP_COST, MAX_SHIPS } from '@/game/modules/seafarers/constants';
-import { hasShipAdjacentToFleet } from '@/game/modules/seafarers/actions/attackPirateFleet';
+import { canBuildShip } from '@/game/modules/seafarers/validation/shipPlacement';
+import {
+  lineReachesFortress,
+  pirateIslandsShipViolation,
+} from '@/game/modules/seafarers/pirateIslands';
+import { isSetupPhase } from '@/game/actions/setup';
+import type { GameState, PlayerId } from '@/game/types';
+import { movableShips } from '@/ui/game/PlacementOverlay';
 import {
   CITIES_AND_KNIGHTS_EXPANSION_ID,
   MAX_CITY_WALLS,
@@ -73,6 +80,9 @@ export function ActionBar() {
   if (phase === 'rollOrPlayKnight') {
     // Under C&K, dev cards are replaced by progress cards — no "Play Knight"
     // pre-roll. Phase 8c will introduce the equivalent Alchemy pre-roll.
+    // Pirate Islands: a Knight makes a warship (before the roll it counts
+    // against this roll's fleet attack).
+    const knightLabel = game.pirateIslands ? '⚔️ Knight → warship' : '⚔️ Play Knight';
     const hasKnight =
       !hasCK &&
       !game.hasPlayedDevCardThisTurn &&
@@ -99,7 +109,7 @@ export function ActionBar() {
               fullWidth
               onClick={() => dispatch({ type: 'playKnight', playerId: acting })}
             >
-              ⚔️ Play Knight
+              {knightLabel}
             </Button>
           </div>
         )}
@@ -111,11 +121,33 @@ export function ActionBar() {
     const inMode = uiMode.kind !== 'idle';
     const cancel = () => setMode({ kind: 'idle' });
     if (inMode) {
+      const rb = uiMode.kind === 'roadBuilding' ? uiMode : null;
+      const back =
+        uiMode.kind === 'moveShip' && uiMode.from
+          ? () => setMode({ kind: 'moveShip' })
+          : null;
       return wrap(
         <div className="actionbar">
-          <div className="actionbar-slot actionbar-slot-wide">
+          <div className="actionbar-hint actionbar-slot-wide">{modeHint(uiMode)}</div>
+          {rb?.first && (
+            <Button
+              onClick={() =>
+                dispatch({
+                  type: 'playRoadBuilding',
+                  playerId: acting,
+                  edges: rb.first!.ship ? [] : [rb.first!.edge],
+                  ships: rb.first!.ship ? [rb.first!.edge] : [],
+                })
+              }
+              title="Place only this one piece"
+            >
+              Done (1 piece)
+            </Button>
+          )}
+          {back && <Button onClick={back}>◂ Pick another ship</Button>}
+          <div className="actionbar-slot">
             <Button fullWidth onClick={cancel}>
-              Cancel build
+              Cancel
             </Button>
           </div>
         </div>,
@@ -138,12 +170,34 @@ export function ActionBar() {
           <Button
             disabled={
               !canAfford(player.resources, SHIP_COST) ||
-              player.ships.length >= MAX_SHIPS
+              player.ships.length >= MAX_SHIPS ||
+              !hasShipSpot(game, acting)
             }
             onClick={() => setMode({ kind: 'buildShip' })}
-            title="Build Ship (1🌲 1🐑)"
+            title={
+              player.ships.length >= MAX_SHIPS
+                ? 'No ships left (15 max)'
+                : !hasShipSpot(game, acting)
+                  ? 'No legal place for a ship — ships extend from your ships or coastal buildings'
+                  : `Build Ship (1🌲 1🐑) — ${MAX_SHIPS - player.ships.length} left`
+            }
           >
             ⛵ Ship
+          </Button>
+        )}
+        {game.settings.expansions.includes('seafarers') && player.ships.length > 0 && (
+          <Button
+            disabled={movableShips(game, acting).length === 0}
+            onClick={() => setMode({ kind: 'moveShip' })}
+            title={
+              player.movedShipThisTurn
+                ? 'You already moved a ship this turn'
+                : movableShips(game, acting).length === 0
+                  ? 'No ship can move: it needs an open end, must not be built this turn, and can\'t leave or enter the pirate\'s hex'
+                  : 'Move one ship (once per turn) — pick a ship at the open end of a line'
+            }
+          >
+            ⛵ Move
           </Button>
         )}
         {hasTraders && (
@@ -314,7 +368,7 @@ export function ActionBar() {
         {game.wonders && game.wonders.length > 0 && (
           <Button
             onClick={() => openDialog('wonders')}
-            title="Build a wonder — finish one to win"
+            title="Claim and build a wonder — finish it to win"
           >
             🏛️ Wonder
           </Button>
@@ -335,41 +389,87 @@ export function ActionBar() {
             👢 Pass boot
           </Button>
         )}
-        {(() => {
-          const fleet = game.pirateFleet;
-          if (!fleet || fleet.defeatedBy !== null) return null;
-          const adjacent = hasShipAdjacentToFleet(game, acting);
-          const alreadyAttacked = !!game.attackedPirateThisTurn;
-          const disabled = !adjacent || alreadyAttacked;
-          const title = alreadyAttacked
-            ? 'Already attacked this turn'
-            : !adjacent
-              ? 'Need a ship adjacent to the pirate fleet'
-              : `Attack pirate fleet (${fleet.strength}/${fleet.maxStrength})`;
-          return (
-            <Button
-              disabled={disabled}
-              onClick={() => dispatch({ type: 'attackPirateFleet', playerId: acting })}
-              title={title}
-            >
-              ⚔️ Attack ({fleet.strength})
-            </Button>
-          );
-        })()}
         <div className="actionbar-slot actionbar-slot-end">
           <Button
             variant="primary"
             fullWidth
             onClick={() => dispatch({ type: 'endTurn', playerId: acting })}
+            title={
+              game.pirateIslands && lineReachesFortress(game, acting)
+                ? 'Your ships reach your pirate fortress: ending your turn attacks it (roll a die vs your warships)'
+                : undefined
+            }
           >
-            End turn ▸
+            {game.pirateIslands && lineReachesFortress(game, acting)
+              ? '⚔ End & attack ▸'
+              : 'End turn ▸'}
           </Button>
         </div>
       </div>,
     );
   }
 
-  // Setup, moveRobber, discard, gameOver are handled by other UI elements
-  // (board highlights, dialogs) — no action bar content needed.
+  // Other phases are driven by board highlights or dialogs; say what's
+  // expected so a player is never left guessing.
+  const hint = phaseHint(game, acting);
+  return hint ? <div className="actionbar actionbar-hint">{hint}</div> : null;
+}
+
+function hasShipSpot(game: GameState, pid: PlayerId): boolean {
+  return game.board.edgeIds.some(
+    (eid) => canBuildShip(game, pid, eid) && !pirateIslandsShipViolation(game, pid, eid),
+  );
+}
+
+function modeHint(mode: ReturnType<typeof useGameStore.getState>['uiMode']): string {
+  switch (mode.kind) {
+    case 'buildRoad':
+      return 'Pick a highlighted edge for your road.';
+    case 'buildShip':
+      return 'Pick a highlighted edge for your ship — it must touch one of your ships or coastal buildings.';
+    case 'moveShip':
+      return mode.from
+        ? 'Pick where the ship goes.'
+        : 'Pick a ship to move (only the open end of a line can move).';
+    case 'roadBuilding':
+      return mode.first
+        ? 'Road Building: place your second piece (or finish with one).'
+        : 'Road Building: place 2 free pieces — roads, ships (⛵), or one of each.';
+    case 'buildSettlement':
+      return 'Pick a highlighted intersection for your settlement.';
+    case 'buildCity':
+      return 'Pick one of your settlements to upgrade.';
+    default:
+      return '';
+  }
+}
+
+function phaseHint(game: GameState, pid: PlayerId): string | null {
+  const seafarers = game.settings.expansions.includes('seafarers');
+  if (isSetupPhase(game.phase)) {
+    const step = game.setupState?.step;
+    const round =
+      game.phase === 'setupRound3' ? 3 : game.phase === 'setupRound2' ? 2 : 1;
+    const pays = (game.settings.setupRounds === 3 ? 3 : 2) === round;
+    if (step === 'settlement') {
+      const where = game.startingIslands
+        ? game.startingIslands.length > 1
+          ? ' on one of the large islands'
+          : ' on the main island'
+        : '';
+      return `Place starting settlement ${round}${where}${pays ? ' — it collects starting resources' : ''}.`;
+    }
+    return seafarers
+      ? 'Place a road next to it — or, on the coast, a ship (⛵) instead.'
+      : 'Place a road next to it.';
+  }
+  if (game.phase === 'moveRobber') return 'Move the robber: pick a highlighted hex.';
+  if (game.phase === 'movePirate') {
+    return 'Move the pirate: pick a sea hex. Ships can\'t be built or moved on its edges.';
+  }
+  if (game.phase === 'placeTribePort' && game.pendingTribePort?.playerId === pid) {
+    const t = game.pendingTribePort.portType;
+    return `Place your ${t === 'generic' ? '3:1' : `2:1 ${t}`} port from the tribe next to one of your coastal settlements (at least one edge from other ports).`;
+  }
   return null;
 }

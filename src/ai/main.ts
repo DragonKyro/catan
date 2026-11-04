@@ -13,15 +13,14 @@ import { getBankTradeRate } from '@/game/actions/trade';
 import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
 import { tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
 import { chooseDevCardPlay } from './devcard';
-import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { calculateRouteLength } from '@/game/engine';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { chooseWinPlan } from './winPaths';
-import { tryBuildShip } from './seafarers/ships';
+import { tryBuildShip, tryMoveShip } from './seafarers/ships';
 import { tryBuildBridge } from './traders/bridges';
 import { tryFishSpend, tryPassBoot } from './traders/fish';
 import { tryHireKnight } from './traders/knights';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
-import { tryAttackPirateFleet } from './seafarers/pirateFleet';
 import { tryBuildWonder } from './seafarers/wonders';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 
@@ -68,14 +67,6 @@ export function chooseMainPhaseAction(
   if (allowDevCardPlay) {
     const cardPlay = chooseDevCardPlay(state, playerId);
     if (cardPlay) return cardPlay;
-  }
-
-  // 0.5) Pirate Islands: attack the fleet whenever we have an adjacent ship
-  //      and haven't attacked this turn. Costs nothing and is +2 VP on the
-  //      killing blow, so it always precedes resource-spending steps.
-  if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
-    const attack = tryAttackPirateFleet(state, playerId);
-    if (attack) return attack;
   }
 
   // 0.75) Wonders of Catan: completing a wonder is an instant win, so if
@@ -129,6 +120,10 @@ export function chooseMainPhaseAction(
   if (state.settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const shipAction = tryBuildShip(state, playerId);
     if (shipAction) return shipAction;
+    // Free: re-route one open-ended ship when it can go somewhere clearly
+    // better (once per turn).
+    const move = tryMoveShip(state, playerId);
+    if (move) return move;
   }
 
   // 2.6) BUILD BRIDGE (Traders & Barbarians / Rivers of Catan). Bridges
@@ -174,11 +169,12 @@ export function chooseMainPhaseAction(
     player.roads.length < 15
   ) {
     const openSpots = countOpenSettlementSpots(state, playerId);
-    const myRoadLen = calculateLongestRoad(state, playerId);
+    const myRoadLen = calculateRouteLength(state, playerId);
     const lrHolder = state.longestRoad?.holder ?? null;
     const lrLength = state.longestRoad?.length ?? 0;
     let lrClaimTarget = 0;
-    if (lrHolder === null) lrClaimTarget = LR_CLAIM_LENGTH;
+    if (state.noLongestRoad) lrClaimTarget = 0;
+    else if (lrHolder === null) lrClaimTarget = LR_CLAIM_LENGTH;
     else if (lrHolder !== playerId) lrClaimTarget = lrLength + 1;
     const pursuingLR = lrClaimTarget > 0 && myRoadLen + 2 >= lrClaimTarget;
     // Station roads (toward an unsettle-able vertex) are only allowed

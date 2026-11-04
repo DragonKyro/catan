@@ -82,6 +82,9 @@ export function materializeLayout(
     // Castle (T&B Barbarian Attack) — non-producing fixed-terrain hex in
     // the sea ring. Robber-immune; no number token.
     if (h.terrain === 'castle') continue;
+    // Scenario land that never receives a number disc (Seafarers' Forgotten
+    // Tribe and Cloth for Catan islands, Pirate Islands' bare hexes).
+    if (pos.noToken) continue;
     if (pos.fixedToken != null) {
       fixedAssignments.push({ index: i, token: pos.fixedToken });
     } else {

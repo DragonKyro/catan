@@ -1,7 +1,39 @@
-import type { GameState, HexId, PlayerId, Resource, ResourceBank } from '../../../types';
+import type {
+  EdgeId,
+  GameState,
+  HexId,
+  PlayerId,
+  Resource,
+  ResourceBank,
+} from '../../../types';
 import { RESOURCES } from '../../../types';
 import { updatePlayer } from '../../../helpers';
 import { addResources, subtractResources } from '../../../resources';
+
+// Rulebook (The Fog Islands): "When you place a ship or road adjacent to an
+// intersection with an empty hex space, you discover a new location." The
+// discovered hexes are therefore every hex around either end of the edge —
+// not just the two hexes the edge separates.
+export function revealFogAroundEdge(
+  state: GameState,
+  edgeId: EdgeId,
+  playerId: PlayerId,
+): GameState {
+  if (!state.unrevealedFogHexes || state.unrevealedFogHexes.length === 0) return state;
+  const edge = state.board.edges[edgeId];
+  if (!edge) return state;
+  const hexes = new Set<HexId>();
+  for (const v of edge.vertices) {
+    for (const h of state.board.vertices[v]?.hexes ?? []) hexes.add(h);
+  }
+  return revealAdjacentFog(state, hexes, playerId);
+}
+
+// True while a hex is still face-down fog (not yet on the table): it does
+// not produce, can't hold the robber, and gives no setup resources.
+export function isUnrevealedFog(state: GameState, hexId: HexId): boolean {
+  return state.unrevealedFogHexes?.includes(hexId) ?? false;
+}
 
 // Reveal any fog hexes touched by the set of hex ids (the hexes adjacent
 // to a piece that was just built or moved). For each newly-revealed hex:
@@ -78,8 +110,10 @@ export function revealAdjacentFog(
     // First-time entry into the phase records returnTo as wherever we
     // came from. Subsequent reveals during the same flow keep the
     // original returnTo so we don't accidentally lose the setup context.
-    const returnTo =
-      existingReturnTo ?? (state.phase === 'setupRound2' ? 'setupRound2' : 'main');
+    // A reveal during setup resumes the setup flow (whatever phase the
+    // placement left us in — the last starting road already moved the game
+    // on to the first roll).
+    const returnTo = existingReturnTo ?? goldReturnPhase(state.phase);
     next = {
       ...next,
       phase: 'chooseGoldResource',
@@ -94,4 +128,19 @@ export function revealAdjacentFog(
   }
 
   return next;
+}
+
+// Where a gold pick drops the game once every pending pick is made.
+export function goldReturnPhase(
+  phase: GameState['phase'],
+): NonNullable<GameState['goldChoiceState']>['returnTo'] {
+  switch (phase) {
+    case 'setupRound1':
+    case 'setupRound2':
+    case 'setupRound3':
+    case 'rollOrPlayKnight':
+      return phase;
+    default:
+      return 'main';
+  }
 }

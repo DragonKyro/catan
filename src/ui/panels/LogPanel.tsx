@@ -284,6 +284,11 @@ function entryMatches(
     case 'robberActivated':
       parts.push('robber', 'active', 'activated');
       break;
+    case 'seafarers':
+      if (entry.player) pushName(entry.player);
+      parts.push(entry.text);
+      if (entry.gained) pushBank(entry.gained);
+      break;
     case 'turnBegins':
       parts.push('turn', `turn ${entry.turnNumber}`);
       break;
@@ -555,6 +560,19 @@ function LogLine({
       return (
         <div className="log-line log-soft">
           🥷 Robber lands on the desert — now active on 7-rolls
+        </div>
+      );
+    case 'seafarers':
+      return (
+        <div className={`log-line${entry.player ? '' : ' log-soft'}`}>
+          {entry.player && <>{pname(entry.player)} </>}
+          {entry.text}
+          {entry.gained && (
+            <>
+              {' '}
+              <Bank bank={entry.gained} />
+            </>
+          )}
         </div>
       );
     case 'turnBegins':

@@ -9,9 +9,7 @@ import { City } from './City';
 import { Road } from './Road';
 import { Ship } from './seafarers/Ship';
 import { PirateMarker } from './seafarers/PirateMarker';
-import { TribeTokenMarker } from './seafarers/TribeTokenMarker';
-import { PirateFleetMarker } from './seafarers/PirateFleetMarker';
-import { ClothHexMarker } from './seafarers/ClothHexMarker';
+import { ScenarioMarkers } from './seafarers/ScenarioMarkers';
 import { VolcanoMarker } from './base/VolcanoMarker';
 import { CityWallMarker } from './citiesAndKnights/CityWallMarker';
 import { KnightPiece } from './citiesAndKnights/KnightPiece';
@@ -192,7 +190,13 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         <g className="ships">
           {game.players.flatMap((player) =>
             player.ships.map((eid) => (
-              <Ship key={eid} board={board} edge={eid} color={player.color} />
+              <Ship
+                key={eid}
+                board={board}
+                edge={eid}
+                color={player.color}
+                warship={player.warships?.includes(eid)}
+              />
             )),
           )}
         </g>
@@ -235,6 +239,9 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         </g>
         <MetropolisMarker game={game} />
         <MerchantMarker game={game} />
+        {/* Seafarers scenario markers: below the overlay so they never
+            block a click on a ghost. */}
+        <ScenarioMarkers game={game} />
 
         {/* Interactive ghosts render on top of pieces so the full circle is
             clickable — especially important for city upgrade, where the
@@ -255,10 +262,7 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         )}
 
         <Robber board={board} active={game.robberActive ?? true} />
-        <PirateMarker board={board} />
-        <PirateFleetMarker game={game} />
-        <TribeTokenMarker game={game} />
-        <ClothHexMarker game={game} />
+        <PirateMarker board={board} fleet={game.pirateIslands !== undefined} />
         <VolcanoMarker board={board} />
       </svg>
     </div>

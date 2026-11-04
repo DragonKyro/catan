@@ -212,11 +212,14 @@ export const fourIslands = buildScenario({
   id: 'fourIslands',
   name: 'Four Islands',
   defaultIslandBonusVp: 2,
-  defaultVpToWin: 12,
-  defaultVpToWin5_6: 13,
+  // Rulebook: 13 VP (3-4p and The Six Islands at 5-6p).
+  defaultVpToWin: 13,
   minPlayers: 3,
   maxPlayers: 6,
+  // Start on one or two islands — your home islands; every other island,
+  // the largest included, pays you its bonus.
   startingPlacementZone: 'anyIsland',
+  bonusOnEveryIsland: true,
   layout3p: LAYOUT_3_4P,
   layout5_6p: LAYOUT_5_6P,
 });

@@ -4,6 +4,7 @@ import type {
   ChoosePirateAction,
 } from '../../../types';
 import { currentPlayerId } from '../../../helpers';
+import { canChoosePirate } from '../routing';
 
 // chooseRobber: commit to moving the robber. Phase becomes 'moveRobber',
 // using the existing pendingRobberMove context.
@@ -29,6 +30,7 @@ export function handleChoosePirate(
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   if (!state.pendingRobberMove) throw new Error('No pending robber move context');
+  if (!canChoosePirate(state)) throw new Error('You may not move the pirate yet');
   return {
     ...state,
     phase: 'movePirate',

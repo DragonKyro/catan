@@ -259,9 +259,11 @@ const LAYOUT_5_6P: ScenarioLayout = {
 export const fogIsland = buildScenario({
   id: 'fogIsland',
   name: 'Fog Island',
-  defaultIslandBonusVp: 3,
+  // No island bonus in The Fog Islands; discovering a land hex pays 1
+  // resource instead. Starting settlements may go on one or two islands.
+  defaultIslandBonusVp: 0,
   defaultVpToWin: 12,
-  defaultVpToWin5_6: 13,
+  startingPlacementZone: 'anyIsland',
   minPlayers: 3,
   maxPlayers: 6,
   fogHexes: FOG_COORDS_3_4P,

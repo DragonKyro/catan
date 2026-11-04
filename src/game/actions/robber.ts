@@ -15,6 +15,7 @@ import {
 } from '../resources';
 import { pickOne } from '../rng';
 import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
+import { canMoveRobberTo } from '../placement';
 
 export function handleDiscard(state: GameState, action: DiscardAction): GameState {
   if (state.phase !== 'discard') throw new Error(`Cannot discard in phase ${state.phase}`);
@@ -68,6 +69,9 @@ export function handleMoveRobber(
     throw new Error('Robber must move to a different hex');
   }
   if (!state.board.hexes[action.hex]) throw new Error('Unknown hex');
+  if (!canMoveRobberTo(state, action.hex)) {
+    throw new Error('The robber may not move to that hex');
+  }
   // Module-level validators (e.g. T&B Friendly Robber) are dispatched from
   // engine.applyAction BEFORE this handler runs — no extra wiring here.
 

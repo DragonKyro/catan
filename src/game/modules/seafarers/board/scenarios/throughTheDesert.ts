@@ -221,8 +221,8 @@ export const throughTheDesert = buildScenario({
   id: 'throughTheDesert',
   name: 'Through the Desert',
   defaultIslandBonusVp: 2,
-  defaultVpToWin: 10,
-  defaultVpToWin5_6: 15,
+  // Rulebook: 14 VP at 3-4 and 5-6 players.
+  defaultVpToWin: 14,
   minPlayers: 3,
   maxPlayers: 6,
   desertIsBoundary: true,

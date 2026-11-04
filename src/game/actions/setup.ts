@@ -7,12 +7,13 @@ import type {
 import { updatePlayer, currentPlayerId } from '../helpers';
 import { addResources, subtractResources } from '../resources';
 import { getPortAtVertex } from '../board/adjacency';
+import { canPlaceInitialRoad, hasSettleableLand } from '../placement';
 
 export function handlePlaceInitialSettlement(
   state: GameState,
   action: PlaceInitialSettlementAction,
 ): GameState {
-  if (state.phase !== 'setupRound1' && state.phase !== 'setupRound2') {
+  if (!isSetupPhase(state.phase)) {
     throw new Error(`Cannot place initial settlement in phase ${state.phase}`);
   }
   if (state.setupState?.step !== 'settlement') {
@@ -28,8 +29,12 @@ export function handlePlaceInitialSettlement(
   // Settlements require at least one adjacent land hex (any non-sea).
   // Trivially true on the base board (no sea hexes exist), but enforced
   // for scenarios that do have water.
-  const hasLand = vertex.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea');
-  if (!hasLand) throw new Error('Settlement must touch at least one land hex');
+  if (!hasSettleableLand(state, action.vertex)) {
+    throw new Error('Settlement must touch at least one land hex');
+  }
+  if (state.setupBlockedVertices?.includes(action.vertex)) {
+    throw new Error('Starting settlements may not go on a marked intersection');
+  }
 
   // Volcano scenario: setup placement may not touch the volcano hex (the
   // settlement would just get destroyed on the first eruption, so the rule
@@ -58,14 +63,16 @@ export function handlePlaceInitialSettlement(
     ports: port && !p.ports.includes(port) ? [...p.ports, port] : p.ports,
   }));
 
-  // Round 2: grant one resource per adjacent producing hex. Sea/gold hexes
-  // skip the grant (Seafarers expansion rule: gold yields are chosen on rolls,
-  // not auto-granted at setup).
-  if (state.phase === 'setupRound2') {
+  // The settlement that pays out starting resources (round 2 normally; the
+  // third settlement in Cloth for Catan): one resource per adjacent
+  // producing hex. Gold hexes are handled by the Seafarers wrapper (a
+  // resource of choice); fog that hasn't been explored yet pays nothing.
+  if (state.phase === startingResourcePhase(state)) {
     const grants: Partial<ResourceBank> = {};
     for (const hexId of vertex.hexes) {
       const hex = state.board.hexes[hexId]!;
       const t = hex.terrain;
+      if (state.unrevealedFogHexes?.includes(hexId)) continue;
       if (
         t === 'desert' ||
         t === 'sea' ||
@@ -95,7 +102,7 @@ export function handlePlaceInitialRoad(
   state: GameState,
   action: PlaceInitialRoadAction,
 ): GameState {
-  if (state.phase !== 'setupRound1' && state.phase !== 'setupRound2') {
+  if (!isSetupPhase(state.phase)) {
     throw new Error(`Cannot place initial road in phase ${state.phase}`);
   }
   if (state.setupState?.step !== 'road') {
@@ -119,9 +126,8 @@ export function handlePlaceInitialRoad(
   if (edge.vertices[0] !== placed && edge.vertices[1] !== placed) {
     throw new Error('Road must touch the just-placed settlement');
   }
-
-  for (const p of state.players) {
-    if (p.roads.includes(action.edge)) throw new Error('Edge already has a road');
+  if (!canPlaceInitialRoad(state, placed, action.edge)) {
+    throw new Error('Edge already taken');
   }
 
   const placedRoadState = updatePlayer(state, action.playerId, (p) => ({
@@ -132,7 +138,18 @@ export function handlePlaceInitialRoad(
   return advanceSetupTurn(placedRoadState);
 }
 
-function advanceSetupTurn(state: GameState): GameState {
+// Which setup round's settlement collects starting resources. Normally the
+// second; scenarios with a third starting settlement (Cloth for Catan) pay
+// out on the third instead.
+export function startingResourcePhase(state: GameState): 'setupRound2' | 'setupRound3' {
+  return state.settings.setupRounds === 3 ? 'setupRound3' : 'setupRound2';
+}
+
+export function isSetupPhase(phase: GameState['phase']): boolean {
+  return phase === 'setupRound1' || phase === 'setupRound2' || phase === 'setupRound3';
+}
+
+export function advanceSetupTurn(state: GameState): GameState {
   if (state.phase === 'setupRound1') {
     if (state.currentPlayerIndex < state.players.length - 1) {
       return {
@@ -156,15 +173,39 @@ function advanceSetupTurn(state: GameState): GameState {
         setupState: { step: 'settlement', lastPlacedSettlement: null },
       };
     }
-    // Setup complete; player 0 starts main game.
-    return {
-      ...state,
-      phase: 'rollOrPlayKnight',
-      setupState: undefined,
-      currentPlayerIndex: 0,
-      hasRolledThisTurn: false,
-      hasPlayedDevCardThisTurn: false,
-    };
+    // Cloth for Catan: a third settlement, in normal turn order from the
+    // first player.
+    if (state.settings.setupRounds === 3) {
+      return {
+        ...state,
+        phase: 'setupRound3',
+        currentPlayerIndex: 0,
+        setupState: { step: 'settlement', lastPlacedSettlement: null },
+      };
+    }
+    return finishSetup(state);
+  }
+  if (state.phase === 'setupRound3') {
+    if (state.currentPlayerIndex < state.players.length - 1) {
+      return {
+        ...state,
+        currentPlayerIndex: state.currentPlayerIndex + 1,
+        setupState: { step: 'settlement', lastPlacedSettlement: null },
+      };
+    }
+    return finishSetup(state);
   }
   return state;
+}
+
+// Setup complete; player 0 starts the main game.
+function finishSetup(state: GameState): GameState {
+  return {
+    ...state,
+    phase: 'rollOrPlayKnight',
+    setupState: undefined,
+    currentPlayerIndex: 0,
+    hasRolledThisTurn: false,
+    hasPlayedDevCardThisTurn: false,
+  };
 }

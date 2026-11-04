@@ -15,6 +15,7 @@ import {
 } from '../resources';
 import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
 import { maybeDistributeFish } from '../modules/traders/fishing/production';
+import { distributeCloth } from '../modules/seafarers/cloth';
 import { rngInt } from '../rng';
 
 export function handleRollDice(state: GameState, action: RollDiceAction): GameState {
@@ -36,30 +37,36 @@ export function handleRollDice(state: GameState, action: RollDiceAction): GameSt
     lastRoll: { dice: action.dice, total, player: action.playerId },
   };
 
-  if (total === 7) {
-    const required: Record<PlayerId, number> = {};
-    for (const p of state.players) {
-      const count = totalResources(p.resources);
-      if (count > 7) required[p.id] = Math.floor(count / 2);
-    }
-    if (Object.keys(required).length > 0) {
-      return {
-        ...next,
-        phase: 'discard',
-        discardState: { required },
-        pendingRobberMove: { reason: 'sevenRoll', returnTo: 'main' },
-      };
-    }
-    return {
-      ...next,
-      phase: robberOrPirateChoicePhase(next),
-      pendingRobberMove: { reason: 'sevenRoll', returnTo: 'main' },
-    };
-  }
+  if (total === 7) return startSevenResolution(next);
 
   const afterProduction = distributeResources(next, total);
   const afterFish = maybeDistributeFish(afterProduction, total);
   return maybeEruptVolcano(afterFish, total);
+}
+
+// "Resolve a 7": everyone over 7 cards discards half, then the roller moves
+// the robber (or, with Seafarers, chooses robber or pirate). Exported so a
+// scenario that resolves something between the roll and the 7 (Pirate
+// Islands' fleet attack) can start this step afterwards.
+export function startSevenResolution(next: GameState): GameState {
+  const required: Record<PlayerId, number> = {};
+  for (const p of next.players) {
+    const count = totalResources(p.resources);
+    if (count > 7) required[p.id] = Math.floor(count / 2);
+  }
+  if (Object.keys(required).length > 0) {
+    return {
+      ...next,
+      phase: 'discard',
+      discardState: { required },
+      pendingRobberMove: { reason: 'sevenRoll', returnTo: 'main' },
+    };
+  }
+  return {
+    ...next,
+    phase: robberOrPirateChoicePhase(next),
+    pendingRobberMove: { reason: 'sevenRoll', returnTo: 'main' },
+  };
 }
 
 // Volcano scenario: if the volcano hex's number was rolled, pick a random
@@ -117,15 +124,11 @@ function distributeResources(state: GameState, rolled: number): GameState {
   // adjacent gold hex matching the rolled number). Always zero on the base
   // board because there are no gold hexes there.
   const goldPicks: Record<PlayerId, number> = {};
-  // Cloth tokens earned this roll (Cloth for Catan). Settlements yield 1,
-  // cities 2 per adjacent cloth hex matching the roll.
-  const clothGrants: Record<PlayerId, number> = {};
   for (const p of state.players) {
     grants.set(p.id, emptyGrants());
     goldPicks[p.id] = 0;
-    clothGrants[p.id] = 0;
   }
-  const clothHexes = new Set(state.clothHexes ?? []);
+  const fog = new Set(state.unrevealedFogHexes ?? []);
 
   for (const hex of Object.values(state.board.hexes)) {
     if (hex.terrain === 'desert' || hex.terrain === 'sea') continue;
@@ -140,23 +143,12 @@ function distributeResources(state: GameState, rolled: number): GameState {
       continue;
     if (hex.numberToken !== rolled) continue;
     if (hex.id === state.board.robberHex && (state.robberActive ?? true)) continue;
+    // Seafarers / Fog Islands: an unexplored hex isn't on the table yet.
+    if (fog.has(hex.id)) continue;
 
     const corners: VertexId[] = [];
     for (const v of Object.values(state.board.vertices)) {
       if (v.hexes.includes(hex.id)) corners.push(v.id);
-    }
-
-    // Cloth hex: produces cloth instead of its terrain's resource. The
-    // check comes before the gold and resource branches so a cloth hex
-    // overrides whatever else the terrain would suggest.
-    if (clothHexes.has(hex.id)) {
-      for (const vid of corners) {
-        for (const p of state.players) {
-          if (p.settlements.includes(vid)) clothGrants[p.id] += 1;
-          else if (p.cities.includes(vid)) clothGrants[p.id] += 2;
-        }
-      }
-      continue;
     }
 
     if (hex.terrain === 'gold') {
@@ -219,18 +211,9 @@ function distributeResources(state: GameState, rolled: number): GameState {
   }
   next = { ...next, bank: subtractResources(next.bank, bankOut) };
 
-  // Cloth for Catan: apply cloth grants. Cloth lives on player.cloth as a
-  // simple counter — it doesn't deplete a bank pool (the rulebook treats
-  // each cloth island as having unlimited tokens to give while production
-  // hits).
-  for (const p of state.players) {
-    const c = clothGrants[p.id] ?? 0;
-    if (c <= 0) continue;
-    next = updatePlayer(next, p.id, (pl) => ({
-      ...pl,
-      cloth: (pl.cloth ?? 0) + c,
-    }));
-  }
+  // Seafarers / Cloth for Catan: villages whose number was rolled pay
+  // their trading partners (no-op without villages).
+  next = distributeCloth(next, rolled);
 
   // Seafarers: if any player earned gold picks this roll, transition to the
   // chooseGoldResource phase. They each get N "any resource" picks; the phase

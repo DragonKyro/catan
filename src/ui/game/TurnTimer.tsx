@@ -5,6 +5,8 @@ import { chooseAction } from '@/ai';
 import { chooseRobberMove } from '@/ai/robber';
 import { reportNeeds, RESOURCE_WEIGHT } from '@/ai/value';
 import { RESOURCES, type Action, type GameState, type HexId, type Resource } from '@/game/types';
+import { isSetupPhase } from '@/game/actions/setup';
+import { pirateStealCandidates } from '@/game/modules/seafarers/actions/movePirate';
 import './TurnTimer.css';
 
 // Optional per-turn time limit. When set in GameSettings, runs only for
@@ -19,6 +21,7 @@ export function TurnTimer() {
   const dialog = useGameStore((s) => s.dialog);
   const closeDialog = useGameStore((s) => s.closeDialog);
   const setPendingRobberHex = useGameStore((s) => s.setPendingRobberHex);
+  const setPendingPirateHex = useGameStore((s) => s.setPendingPirateHex);
   const pendingRobberHex = useGameStore((s) => s.pendingRobberHex);
   const role = useNetworkStore((s) => s.role);
   const limitSec = game?.settings.turnTimerSec ?? 0;
@@ -46,7 +49,12 @@ export function TurnTimer() {
       key={key}
       limitSec={limitSec}
       onExpire={() =>
-        autoFinish(useGameStore.getState(), { dispatch, closeDialog, setPendingRobberHex })
+        autoFinish(useGameStore.getState(), {
+          dispatch,
+          closeDialog,
+          setPendingRobberHex,
+          setPendingPirateHex,
+        })
       }
     />
   );
@@ -101,6 +109,7 @@ function autoFinish(
     dispatch: (a: Action) => void;
     closeDialog: () => void;
     setPendingRobberHex: (h: HexId | null) => void;
+    setPendingPirateHex: (h: HexId | null) => void;
   },
 ): void {
   const initial = store.game;
@@ -152,6 +161,15 @@ function autoFinish(
     return;
   }
 
+  // Same for the pirate: let the AI heuristic pick the victim.
+  if (store.pendingPirateHex) {
+    const hex = store.pendingPirateHex;
+    const victim = pirateStealCandidates(initial, playerId, hex)[0] ?? null;
+    ctx.setPendingPirateHex(null);
+    ctx.dispatch({ type: 'movePirate', playerId, hex, stealFrom: victim });
+    return;
+  }
+
   // Pending trade where we're the proposer: walk away.
   if (initial.pendingTrade && initial.pendingTrade.proposerId === playerId) {
     ctx.dispatch({ type: 'cancelTrade', playerId });
@@ -165,8 +183,9 @@ function autoFinish(
     initial.phase === 'movePirate' ||
     initial.phase === 'chooseGoldResource' ||
     initial.phase === 'chooseRobberOrPirate' ||
-    initial.phase === 'setupRound1' ||
-    initial.phase === 'setupRound2' ||
+    initial.phase === 'placeTribePort' ||
+    initial.phase === 'stealResource' ||
+    isSetupPhase(initial.phase) ||
     initial.phase === 'rollOrPlayKnight'
   ) {
     const action = chooseAction(initial, playerId);

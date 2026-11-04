@@ -1,4 +1,4 @@
-import type { ScenarioHexDef, ScenarioPosition } from '../types';
+import type { ScenarioHexDef, ScenarioPosition, Terrain } from '../types';
 
 // Fill a bounded hex grid (max radius `radius`) with sea hexes, skipping
 // any coordinate already claimed by the scenario's land list.
@@ -33,4 +33,22 @@ export function seaPositionsInDisk(
     }
   }
   return out;
+}
+
+// A hex of a fixed (rulebook "Fixed Setup") map: [q, r, terrain, number].
+// Sea and desert take no number; land with `null` gets no number disc.
+export type FixedHex = [number, number, Terrain, (number | null)?];
+
+export function fixedPositions(hexes: FixedHex[]): ScenarioPosition[] {
+  return hexes.map(([q, r, terrain, token]): ScenarioPosition => {
+    if (terrain === 'sea') return { q, r, kind: 'sea' };
+    if (terrain === 'desert') return { q, r, kind: 'desert' };
+    if (token == null) return { q, r, kind: 'land', fixedTerrain: terrain, noToken: true };
+    return { q, r, kind: 'land', fixedTerrain: terrain, fixedToken: token };
+  });
+}
+
+// Sea hexes for a fixed map, from [q, r] pairs.
+export function seaHexes(coords: Array<[number, number]>): FixedHex[] {
+  return coords.map(([q, r]): FixedHex => [q, r, 'sea']);
 }

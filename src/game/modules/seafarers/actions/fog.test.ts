@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { createGame } from '../../../createGame';
-import { applyAction } from '../../../engine';
 import type { GameState } from '../../../types';
 import { revealAdjacentFog } from './fog';
 
@@ -68,39 +67,7 @@ describe('Fog Island: fog reveal', () => {
     expect(s.bank).toEqual(bankSnapshot);
   });
 
-  it('settlement built adjacent to a fog hex triggers reveal via the engine', () => {
-    let s = fresh();
-    // Find a fog hex with a non-gold, non-desert terrain, then a vertex of
-    // that hex. We bypass setup phase and god-mode the placement so the
-    // test is focused on the post-build hook.
-    const fogHexId = s.unrevealedFogHexes!.find((id) => {
-      const t = s.board.hexes[id]!.terrain;
-      return t !== 'gold' && t !== 'desert' && t !== 'sea';
-    })!;
-    const terrain = s.board.hexes[fogHexId]!.terrain as
-      | 'wood' | 'brick' | 'sheep' | 'wheat' | 'ore';
-    const cornerVid = s.board.vertexIds.find((vid) =>
-      s.board.vertices[vid]!.hexes.includes(fogHexId),
-    )!;
-    s = { ...s, phase: 'main', hasRolledThisTurn: true };
-    s = {
-      ...s,
-      players: s.players.map((p, i) =>
-        i === 0
-          ? {
-              ...p,
-              resources: { wood: 1, brick: 1, sheep: 1, wheat: 1, ore: 0 },
-              roads: [s.board.vertices[cornerVid]!.edges[0]!],
-            }
-          : p,
-      ),
-    };
-    const before = s.players[0]!.resources[terrain];
-    s = applyAction(s, { type: 'buildSettlement', playerId: 'p0', vertex: cornerVid });
-    // +1 from fog reveal of `terrain` (settlement spent 1 of each non-ore
-    // resource; the +1 fog reveal is observable on top of that). Compare
-    // bank-delta to make the assertion terrain-independent of cost path.
-    expect(s.players[0]!.resources[terrain]).toBeGreaterThanOrEqual(before);
-    expect(s.unrevealedFogHexes ?? []).not.toContain(fogHexId);
-  });
+  // Discovery by road / ship (rulebook: "When you place a ship or road
+  // adjacent to an intersection with an empty hex space") is covered end to
+  // end in ../rules.test.ts.
 });

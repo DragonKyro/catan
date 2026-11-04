@@ -8,7 +8,8 @@ import type {
 } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
-import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { calculateRouteLength } from '@/game/engine';
+import { seafarersLogLines } from './seafarersLog';
 import { pipsByResource } from '@/ai/value';
 
 // =======================================================================
@@ -172,6 +173,15 @@ export type LogEntry =
       pillaged: PlayerId[];
     }
   | { id: number; kind: 'robberActivated' }
+  // Seafarers events (ships, pirate, gold picks, scenario mechanics). See
+  // seafarersLog.ts.
+  | {
+      id: number;
+      kind: 'seafarers';
+      player: PlayerId | null;
+      text: string;
+      gained?: Partial<ResourceBank>;
+    }
   | {
       id: number;
       kind: 'turnBegins';
@@ -854,6 +864,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
         break;
     }
 
+    for (const line of seafarersLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+
     // Turn detection: one "turn" = one full revolution of the table.
     // We bump the turn counter only when the active turn-holder wraps
     // back to playerOrder[0] (or on the very first rollOrPlayKnight,
@@ -868,7 +882,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     ) {
       const turnHolderIdx = after.turnHolderIndex ?? after.currentPlayerIndex;
       const isRevolutionStart =
-        turnHolderIdx === 0 && (get().turnNumber === 0 || before.phase === 'main' || before.phase === 'setupRound2');
+        turnHolderIdx === 0 && (get().turnNumber === 0 ||
+          before.phase === 'main' ||
+          before.phase === 'setupRound2' ||
+          before.phase === 'setupRound3');
       if (isRevolutionStart) {
         newTurnNumber = get().turnNumber + 1;
         append.push({
@@ -1058,7 +1075,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         gainedTotal: newGained[p.id] ?? 0,
         gainedByResource: { ...(newGainedByResource[p.id] ?? emptyResourceBank()) },
         knightsPlayed: p.devCards.playedKnights,
-        longestRoadLength: calculateLongestRoad(after, p.id),
+        longestRoadLength: calculateRouteLength(after, p.id),
         tradesCount: ts.tradesCount,
         tradesGiven: ts.tradesGiven,
         tradesReceived: ts.tradesReceived,

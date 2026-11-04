@@ -8,10 +8,36 @@ import { currentPlayerId, updatePlayer } from '../../../helpers';
 import { totalResources, flattenBank } from '../../../resources';
 import { pickOne } from '../../../rng';
 
-// Move the pirate to a sea hex, then optionally steal from a player who has
-// a SHIP on one of the hex's adjacent edges. Mirrors handleMoveRobber but:
-//   - target hex must be a sea hex
-//   - steal-candidate set is players with ships adjacent (not settlements)
+// Players `actorId` could rob by moving the pirate to `hexId`: opponents with
+// a ship on one of its edges who hold a resource card (or, in Cloth for
+// Catan, a cloth token).
+export function pirateStealCandidates(
+  state: GameState,
+  actorId: PlayerId,
+  hexId: string,
+): PlayerId[] {
+  const out: PlayerId[] = [];
+  for (const p of state.players) {
+    if (p.id === actorId) continue;
+    const hasShip = p.ships.some((eid) => state.board.edges[eid]?.hexes.includes(hexId));
+    if (!hasShip) continue;
+    if (totalResources(p.resources) > 0 || (p.cloth ?? 0) > 0) out.push(p.id);
+  }
+  return out;
+}
+
+// Hexes the pirate may move to: any other sea hex that's on the table.
+export function canMovePirateTo(state: GameState, hexId: string): boolean {
+  const hex = state.board.hexes[hexId];
+  if (!hex || hex.terrain !== 'sea') return false;
+  if (hexId === state.board.pirateHex) return false;
+  if (state.unrevealedFogHexes?.includes(hexId)) return false;
+  return true;
+}
+
+// Move the pirate to a sea hex, then steal from a player who has a ship on
+// one of its edges. Cloth for Catan: the thief may take a cloth token
+// instead of a resource card.
 export function handleMovePirate(
   state: GameState,
   action: MovePirateAction,
@@ -21,50 +47,44 @@ export function handleMovePirate(
   }
   if (!state.pendingPirateMove) throw new Error('No pending pirate move');
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
-  const targetHex = state.board.hexes[action.hex];
-  if (!targetHex) throw new Error('Unknown hex');
-  if (targetHex.terrain !== 'sea') throw new Error('Pirate must move to a sea hex');
-  if (action.hex === state.board.pirateHex) {
-    throw new Error('Pirate must move to a different hex');
+  if (!state.board.hexes[action.hex]) throw new Error('Unknown hex');
+  if (state.board.hexes[action.hex]!.terrain !== 'sea') {
+    throw new Error('Pirate must move to a sea hex');
+  }
+  if (!canMovePirateTo(state, action.hex)) {
+    throw new Error('Pirate must move to a different, explored sea hex');
   }
 
-  // Edges around this hex: hex.hexes membership in edge.hexes.
-  const adjacentEdgeIds: string[] = [];
-  for (const eid of state.board.edgeIds) {
-    if (state.board.edges[eid]!.hexes.includes(action.hex)) adjacentEdgeIds.push(eid);
-  }
-  const stealCandidates = new Set<PlayerId>();
-  for (const eid of adjacentEdgeIds) {
-    for (const p of state.players) {
-      if (p.id === action.playerId) continue;
-      if (p.ships.includes(eid) && totalResources(p.resources) > 0) {
-        stealCandidates.add(p.id);
-      }
-    }
-  }
-
+  const candidates = pirateStealCandidates(state, action.playerId, action.hex);
   let next: GameState = {
     ...state,
     board: { ...state.board, pirateHex: action.hex },
   };
 
   if (action.stealFrom !== null) {
-    if (!stealCandidates.has(action.stealFrom)) {
+    if (!candidates.includes(action.stealFrom)) {
       throw new Error('Cannot steal from that player');
     }
     const target = state.players.find((p) => p.id === action.stealFrom)!;
-    const pool = flattenBank(target.resources);
-    let [stolen, newRng]: [Resource, number] = pickOne(next.rngState, pool);
-    next = { ...next, rngState: newRng };
-    next = updatePlayer(next, action.stealFrom, (p) => ({
-      ...p,
-      resources: { ...p.resources, [stolen]: p.resources[stolen] - 1 },
-    }));
-    next = updatePlayer(next, action.playerId, (p) => ({
-      ...p,
-      resources: { ...p.resources, [stolen]: p.resources[stolen] + 1 },
-    }));
-  } else if (stealCandidates.size > 0) {
+    const wantsCloth = action.stealCloth === true && state.clothVillages !== undefined;
+    if (wantsCloth || totalResources(target.resources) === 0) {
+      if ((target.cloth ?? 0) <= 0) throw new Error('That player has nothing to steal');
+      next = updatePlayer(next, target.id, (p) => ({ ...p, cloth: (p.cloth ?? 0) - 1 }));
+      next = updatePlayer(next, action.playerId, (p) => ({ ...p, cloth: (p.cloth ?? 0) + 1 }));
+    } else {
+      const pool = flattenBank(target.resources);
+      const [stolen, newRng]: [Resource, number] = pickOne(next.rngState, pool);
+      next = { ...next, rngState: newRng };
+      next = updatePlayer(next, target.id, (p) => ({
+        ...p,
+        resources: { ...p.resources, [stolen]: p.resources[stolen] - 1 },
+      }));
+      next = updatePlayer(next, action.playerId, (p) => ({
+        ...p,
+        resources: { ...p.resources, [stolen]: p.resources[stolen] + 1 },
+      }));
+    }
+  } else if (candidates.length > 0) {
     throw new Error('Must select a player to steal from');
   }
 

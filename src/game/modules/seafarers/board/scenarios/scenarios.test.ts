@@ -42,11 +42,23 @@ describe('all Seafarers scenarios', () => {
         desertIsBoundary: scenario.desertIsBoundary === true,
       });
       expect(islands.mainIslandId).toBeTruthy();
-      expect(islandChips.length).toBe(islands.outerIslandIds.length);
+      // Island bonus: none in scenarios without one; every island when
+      // players may start anywhere; otherwise the islands off the main one.
+      const expected =
+        scenario.defaultIslandBonusVp === 0
+          ? 0
+          : scenario.bonusOnEveryIsland
+            ? islands.outerIslandIds.length + 1
+            : islands.outerIslandIds.length;
+      expect(islandChips.length).toBe(expected);
 
-      // Pirate placed on sea hex.
-      expect(board.pirateHex).toBeDefined();
-      expect(board.hexes[board.pirateHex!]!.terrain).toBe('sea');
+      // Pirate on a sea hex (Wonders of Catan has none).
+      if (scenario.noPirate) {
+        expect(board.pirateHex).toBeUndefined();
+      } else {
+        expect(board.pirateHex).toBeDefined();
+        expect(board.hexes[board.pirateHex!]!.terrain).toBe('sea');
+      }
 
       // Robber placed on a hex (desert when present, otherwise any non-sea).
       expect(board.robberHex).toBeDefined();

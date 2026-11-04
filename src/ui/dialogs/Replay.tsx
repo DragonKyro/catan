@@ -29,6 +29,9 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   'buildCity',
   'buildShip',
   'moveShip',
+  'placeInitialShip',
+  'placeTribePort',
+  'buildWonder',
   'moveRobber',
   'movePirate',
   'playKnight',
@@ -252,6 +255,16 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} picks gold resources`;
     case 'moveShip':
       return `${who} moves a ship`;
+    case 'placeInitialShip':
+      return `${who} places an initial ship`;
+    case 'placeTribePort':
+      return `${who} places a tribe port`;
+    case 'claimWonder':
+      return `${who} claims a wonder`;
+    case 'buildWonder':
+      return `${who} builds a wonder level`;
+    case 'stealResource':
+      return `${who} steals${action.stealFrom ? ` from ${name(action.stealFrom)}` : ' nothing'}`;
     default:
       return `${who} — ${(action as Action).type}`;
   }

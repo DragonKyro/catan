@@ -1,7 +1,13 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, PirateFleet, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, CastleState } from './types';
-import { WONDERS } from './modules/seafarers/wonders/catalogue';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, CastleState } from './types';
+import { wondersForPlayerCount } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
-import { generateSeafarersBoard } from './modules/seafarers/board/generator';
+import {
+  generateSeafarersBoard,
+  type SeafarersBoardResult,
+} from './modules/seafarers/board/generator';
+import { pirateIslandsDevDeck, PIRATE_LAIRS } from './modules/seafarers/pirateIslands';
+import { CLOTH_GENERAL_SUPPLY } from './modules/seafarers/cloth';
+import { getPortAtVertex } from './board/adjacency';
 import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
 import { generateTradersBoard } from './modules/traders/board/generator';
 import { buildInitialFishPool } from './modules/traders/fishing/pool';
@@ -261,6 +267,15 @@ export function createGame(opts: CreateGameOptions): GameState {
     aiLevel: opts.settings?.aiLevel,
     customMap,
   };
+  // Cloth for Catan: three starting settlements.
+  if (
+    !customMap &&
+    expansions.includes(SEAFARERS_EXPANSION_ID) &&
+    scenarioId &&
+    getScenario(scenarioId).setupRounds === 3
+  ) {
+    settings.setupRounds = 3;
+  }
 
   let rng = opts.seed >>> 0;
   let board: BoardState;
@@ -268,8 +283,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let tribeTokens: TribeToken[] | undefined;
   let unrevealedFogHexes: string[] | undefined;
   let wonders: WonderState[] | undefined;
-  let pirateFleet: PirateFleet | undefined;
-  let clothHexes: string[] | undefined;
+  let seafarers: SeafarersBoardResult | undefined;
   let riverEdges: EdgeId[] | undefined;
   let lakeHexId: HexId | undefined;
   let fishingGrounds: FishingGround[] | undefined;
@@ -304,18 +318,19 @@ export function createGame(opts: CreateGameOptions): GameState {
     castles = result.castles.length > 0 ? result.castles : undefined;
   } else if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
+    seafarers = result;
     board = result.board;
     rng = result.rngState;
-    islandChips = result.islandChips;
-    tribeTokens = result.tribeTokens.length > 0 ? result.tribeTokens : undefined;
+    islandChips = result.islandChips.length > 0 ? result.islandChips : undefined;
     unrevealedFogHexes =
       result.unrevealedFogHexes.length > 0 ? result.unrevealedFogHexes : undefined;
-    pirateFleet = result.pirateFleet;
-    clothHexes = result.clothHexes.length > 0 ? result.clothHexes : undefined;
-    // Wonders of Catan: seed every wonder at level 0 / unclaimed. Other
-    // scenarios leave `wonders` undefined so the build action stays gated.
-    if (settings.scenarioId === 'wondersOfCatan') {
-      wonders = WONDERS.map((w) => ({ id: w.id, builtBy: null, level: 0 }));
+    // Wonders of Catan: every wonder tile in play starts unclaimed.
+    if (result.wonderSites) {
+      wonders = wondersForPlayerCount(numPlayers).map((w) => ({
+        id: w.id,
+        claimedBy: null,
+        level: 0,
+      }));
     }
   } else if (baseScenarioId && baseScenarioId !== DEFAULT_BASE_SCENARIO_ID) {
     // Fun Maps (Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes,
@@ -339,7 +354,22 @@ export function createGame(opts: CreateGameOptions): GameState {
   if (hasCitiesKnights) {
     devCardDeck = [];
   } else {
-    [devCardDeck, rng] = shuffle(rng, devDeckFor(numPlayers));
+    let deck = devDeckFor(numPlayers);
+    // Pirate Islands: 3p removes the Victory Point cards; 4+ treats them as
+    // Knights (which only make warships in this scenario).
+    if (seafarers?.pirateIslands) deck = pirateIslandsDevDeck(deck, numPlayers);
+    [devCardDeck, rng] = shuffle(rng, deck);
+  }
+
+  // Forgotten Tribe: "place the 4 topmost cards from the development card
+  // deck face down on the indicated edges."
+  if (seafarers?.tribeTokens) {
+    tribeTokens = seafarers.tribeTokens.map((t) => {
+      if (t.type !== 'devCard') return { ...t, claimedBy: null };
+      const card = devCardDeck[devCardDeck.length - 1];
+      devCardDeck = devCardDeck.slice(0, -1);
+      return { ...t, ...(card ? { devCard: card } : {}), claimedBy: null };
+    });
   }
 
   const players: Player[] = opts.playerNames.map((name, i) => ({
@@ -392,6 +422,37 @@ export function createGame(opts: CreateGameOptions): GameState {
     [shuffled, rng] = shuffle(rng, ids);
     playerOrder = shuffled;
   }
+
+  // Seafarers / Pirate Islands: each player starts with a settlement and a
+  // ship on the main island's coast, and a pirate fortress (3 lair tokens)
+  // in their color on the western islands. Slots follow turn order.
+  let pirateIslands: GameState['pirateIslands'];
+  if (seafarers?.pirateIslands) {
+    const pi = seafarers.pirateIslands;
+    const fortresses = playerOrder.map((pid, i) => {
+      const slot = pi.slots[i]!;
+      const port = getPortAtVertex(board, slot.settlement);
+      const idx = players.findIndex((p) => p.id === pid);
+      const p = players[idx]!;
+      players[idx] = {
+        ...p,
+        settlements: [...p.settlements, slot.settlement],
+        ships: [...p.ships, slot.ship],
+        warships: [],
+        ports: port && !p.ports.includes(port) ? [...p.ports, port] : p.ports,
+      };
+      return { playerId: pid, vertex: slot.fortress, beachhead: slot.beachhead, lairs: PIRATE_LAIRS };
+    });
+    pirateIslands = {
+      mainIsland: pi.mainIsland,
+      path: pi.path,
+      fleetIndex: pi.fleetIndex,
+      ...(pi.noAttackHex ? { noAttackHex: pi.noAttackHex } : {}),
+      fortresses,
+    };
+  }
+  const scenarioRules =
+    seafarers && settings.scenarioId ? getScenario(settings.scenarioId) : undefined;
 
   // Cities & Knights state seeding.
   let commodityBank: CommodityBank | undefined;
@@ -479,6 +540,9 @@ export function createGame(opts: CreateGameOptions): GameState {
     barbarianKnightSupply = BARBARIAN_KNIGHT_SUPPLY;
   }
 
+  // Pirate Islands has no robber at all.
+  if (pirateIslands) robberActive = false;
+
   return {
     settings,
     rngState: rng,
@@ -503,8 +567,20 @@ export function createGame(opts: CreateGameOptions): GameState {
     tribeTokens,
     unrevealedFogHexes,
     wonders,
-    pirateFleet,
-    clothHexes,
+    ...(seafarers
+      ? {
+          startingIslands: seafarers.startingIslands,
+          settlementBlockedHexes: seafarers.settlementBlockedHexes,
+          robberBlockedHexes: seafarers.robberBlockedHexes,
+          setupBlockedVertices: seafarers.setupBlockedVertices,
+          wonderSites: seafarers.wonderSites,
+          clothVillages: seafarers.clothVillages,
+          clothSupply: seafarers.clothVillages ? CLOTH_GENERAL_SUPPLY : undefined,
+          pirateIslands,
+          noLongestRoad: scenarioRules?.noLongestRoad || undefined,
+          noLargestArmy: scenarioRules?.noLargestArmy || undefined,
+        }
+      : {}),
     commodityBank,
     barbarian,
     robberActive,

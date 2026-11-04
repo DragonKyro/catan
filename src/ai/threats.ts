@@ -1,6 +1,6 @@
 import type { GameState, PlayerId, Resource } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
-import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { calculateRouteLength } from '@/game/engine';
 
 // How much of a near-win threat each opponent represents. The AI uses this
 // to (a) avoid trading resources that would let a threat finish the game,
@@ -201,8 +201,8 @@ export function isRival(
     them.devCards.playedKnights >= LA_RIVAL_KNIGHTS;
   // LR race: both have contiguous chain ≥ 4. Computed fresh because we
   // need it per-player and the global longestRoad only tracks the holder.
-  const meRoadLen = calculateLongestRoad(state, meId);
-  const themRoadLen = calculateLongestRoad(state, themId);
+  const meRoadLen = calculateRouteLength(state, meId);
+  const themRoadLen = calculateRouteLength(state, themId);
   const lrRivalry = meRoadLen >= LR_RIVAL_LENGTH && themRoadLen >= LR_RIVAL_LENGTH;
   return laRivalry || lrRivalry;
 }

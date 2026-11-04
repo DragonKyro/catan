@@ -44,6 +44,7 @@ export function GameView() {
   const error = useGameStore((s) => s.error);
   const dismissError = useGameStore((s) => s.dismissError);
   const pendingRobberHex = useGameStore((s) => s.pendingRobberHex);
+  const pendingPirateHex = useGameStore((s) => s.pendingPirateHex);
   const resetGame = useGameStore((s) => s.resetGame);
   const role = useNetworkStore((s) => s.role);
   const leaveRoom = useNetworkStore((s) => s.leaveRoom);
@@ -80,7 +81,11 @@ export function GameView() {
     game.phase === 'chooseGoldResource' && !handoffPending ? <GoldResourceDialog /> : null;
   const robberOrPirateDialog =
     game.phase === 'chooseRobberOrPirate' && !handoffPending ? <RobberOrPirateDialog /> : null;
-  const robberDialog = pendingRobberHex ? <RobberStealDialog /> : null;
+  // Robber / pirate victim pick, and the Pirate Islands "rob anyone" on a 7.
+  const robberDialog =
+    (pendingRobberHex || pendingPirateHex || game.phase === 'stealResource') && !handoffPending ? (
+      <RobberStealDialog />
+    ) : null;
   const improvementsDialog =
     dialog === 'cityImprovements' ? <ImprovementsDialog /> : null;
   const progressCardsDialog =

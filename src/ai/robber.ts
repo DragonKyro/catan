@@ -2,10 +2,13 @@ import type { GameState, PlayerId, HexId, Resource } from '@/game/types';
 import { probabilityDots } from './value';
 import { totalResources } from '@/game/resources';
 import { assessThreats, isRival, type PlayerThreat } from './threats';
+import { canMoveRobberTo } from '@/game/placement';
 
 export interface RobberChoice {
   hex: HexId;
   stealFrom: PlayerId | null;
+  // Heuristic value of the move (compared against the pirate in Seafarers).
+  score: number;
 }
 
 // Multipliers stacked onto a hex's score when it produces for a
@@ -37,11 +40,10 @@ export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberCh
   let bestScore = -Infinity;
   let bestStealTarget: PlayerId | null = null;
   for (const hexId of state.board.hexIds) {
-    if (hexId === state.board.robberHex) continue;
+    // Land hexes on the table that the scenario allows (no sea, no fog,
+    // Forgotten Tribe: numbered hexes only, ...).
+    if (!canMoveRobberTo(state, hexId)) continue;
     const hex = state.board.hexes[hexId]!;
-    if (hex.terrain === 'desert') {
-      // Robber on desert produces nothing; only useful if forced
-    }
     const pips = probabilityDots(hex.numberToken);
     const hexResource = hex.terrain as Resource;
     let score = 0;
@@ -97,11 +99,14 @@ export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberCh
     }
   }
   if (!bestHex) {
-    // Pick the first non-current hex as fallback
-    bestHex = state.board.hexIds.find((h) => h !== state.board.robberHex)!;
+    // Pick the first legal hex as fallback
+    bestHex =
+      state.board.hexIds.find((h) => canMoveRobberTo(state, h)) ??
+      state.board.hexIds.find((h) => h !== state.board.robberHex)!;
     bestStealTarget = pickStealTarget(state, playerId, bestHex, threats);
+    bestScore = 0;
   }
-  return { hex: bestHex, stealFrom: bestStealTarget };
+  return { hex: bestHex, stealFrom: bestStealTarget, score: bestScore };
 }
 
 // Per-player resource production map (in pips). Mirrors pipsByResource

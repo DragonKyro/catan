@@ -51,7 +51,8 @@ export function generateCustomMapBoard(
     islandChips = islands.outerIslandIds.map((id) => ({
       islandId: id,
       vp: 2,
-      firstSettler: null,
+      claimedBy: [],
+      homeOf: [],
     }));
 
     for (const f of map.fogHexes) {

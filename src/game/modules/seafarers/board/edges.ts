@@ -35,16 +35,17 @@ export function canBuildRoadOnEdge(board: BoardState, edgeId: EdgeId): boolean {
   return classifyEdge(board, edgeId) !== 'sea';
 }
 
+// Ships sail on edges bordering a sea hex and along the sea frame (outer
+// edges with a single hex).
 export function canBuildShipOnEdge(board: BoardState, edgeId: EdgeId): boolean {
+  if (board.edges[edgeId]?.hexes.length === 1) return true;
   return classifyEdge(board, edgeId) !== 'land';
 }
 
 // Whether an edge can host a port. Coastal (land+sea) edges qualify, AND so
 // do disk-perimeter edges whose single adjacent hex is land — those represent
 // a main-island face that opens onto the painted water border (no sea hex
-// tile behind it), exactly like base-game port placements. Ships still cannot
-// build on perimeter edges (canBuildShipOnEdge is unchanged), but settlements
-// on a perimeter port's vertices can still claim it via the road network.
+// tile behind it), exactly like base-game port placements.
 export function isPortEligibleEdge(board: BoardState, edgeId: EdgeId): boolean {
   const edge = board.edges[edgeId];
   if (!edge) return false;

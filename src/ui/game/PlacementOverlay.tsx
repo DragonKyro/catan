@@ -8,11 +8,24 @@ import {
   canPlaceInitialSettlement,
   canPlaceInitialRoad,
   canPlaceBridge,
+  canMoveRobberTo,
 } from '@/game/placement';
-import { canBuildShip } from '@/game/modules/seafarers/validation/shipPlacement';
+import {
+  canBuildShip,
+  canPlaceInitialShip,
+  isShipMovable,
+  shipMoveDestinations,
+} from '@/game/modules/seafarers/validation/shipPlacement';
+import { pirateIslandsShipViolation } from '@/game/modules/seafarers/pirateIslands';
+import {
+  canMovePirateTo,
+  pirateStealCandidates,
+} from '@/game/modules/seafarers/actions/movePirate';
+import { validTribePortEdges } from '@/game/modules/seafarers/tribe';
+import { totalResources } from '@/game/resources';
 import { canPlaceWagon as canPlaceWagonHelper } from '@/game/modules/traders/merchantTrains/placement';
 import { canPlaceKnight } from '@/game/modules/traders/barbarianAttack/placement';
-import type { EdgeId, PlayerColor, VertexId } from '@/game/types';
+import type { EdgeId, GameState, PlayerColor, PlayerId, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 
 export function PlacementOverlay() {
@@ -378,75 +391,104 @@ export function PlacementOverlay() {
     uiMode.kind === 'roadBuilding'
   ) {
     const isSetup = uiMode.kind === 'placeSetupRoad';
-    // For step 2 of road-building, include the buffered first edge in the
-    // acting player's road set so canConnectRoad recognises the new chain
-    // tip. Mirrors what the engine will see when both edges dispatch.
-    const stagedGame =
-      uiMode.kind === 'roadBuilding' && uiMode.firstEdge
-        ? {
-            ...game,
-            players: game.players.map((p) =>
-              p.id === acting
-                ? { ...p, roads: [...p.roads, uiMode.firstEdge!] }
-                : p,
-            ),
-          }
-        : game;
+    const seafarers = game.settings.expansions.includes('seafarers');
+    // Road Building, second piece: stage the first one so the legality
+    // checks see the new chain tip (same order the engine applies them:
+    // roads, then ships).
+    const first = uiMode.kind === 'roadBuilding' ? uiMode.first : undefined;
+    const staged: GameState = first
+      ? {
+          ...game,
+          players: game.players.map((p) =>
+            p.id === acting
+              ? first.ship
+                ? { ...p, ships: [...p.ships, first.edge] }
+                : { ...p, roads: [...p.roads, first.edge] }
+              : p,
+          ),
+        }
+      : game;
+    const placed = game.setupState?.lastPlacedSettlement ?? null;
+    const shipOk = (eid: EdgeId): boolean => {
+      if (!seafarers) return false;
+      if (isSetup) {
+        return (
+          !!placed &&
+          canPlaceInitialShip(game, placed, eid) &&
+          !pirateIslandsShipViolation(game, acting, eid)
+        );
+      }
+      if (uiMode.kind !== 'roadBuilding') return false;
+      // A road placed first would be applied before a ship anyway; a ship
+      // placed first must stay a ship-then-ship pair (the engine places
+      // roads before ships), so a second road can't depend on it.
+      return canBuildShip(staged, acting, eid) && !pirateIslandsShipViolation(staged, acting, eid);
+    };
+    const roadOk = (eid: EdgeId): boolean => {
+      if (isSetup) return !!placed && canPlaceInitialRoad(game, placed, eid);
+      if (first?.ship) return canConnectRoad(game, acting, eid);
+      return canConnectRoad(staged, acting, eid);
+    };
+    const finishRoadBuilding = (piece: { edge: EdgeId; ship: boolean }) => {
+      const pieces = first ? [first, piece] : [piece];
+      dispatch({
+        type: 'playRoadBuilding',
+        playerId: acting,
+        edges: pieces.filter((x) => !x.ship).map((x) => x.edge),
+        ships: pieces.filter((x) => x.ship).map((x) => x.edge),
+      });
+    };
+    const place = (eid: EdgeId, ship: boolean) => {
+      if (isSetup) {
+        dispatch(
+          ship
+            ? { type: 'placeInitialShip', playerId: acting, edge: eid }
+            : { type: 'placeInitialRoad', playerId: acting, edge: eid },
+        );
+      } else if (uiMode.kind === 'roadBuilding') {
+        if (uiMode.remaining === 2 && !first) {
+          setMode({ kind: 'roadBuilding', remaining: 1, first: { edge: eid, ship } });
+        } else {
+          finishRoadBuilding({ edge: eid, ship });
+        }
+      } else {
+        dispatch({ type: 'buildRoad', playerId: acting, edge: eid });
+      }
+    };
     return (
       <g className="overlay overlay-edges">
         {game.board.edgeIds.map((eid) => {
-          let ok = false;
-          if (isSetup) {
-            const placed = game.setupState?.lastPlacedSettlement;
-            if (!placed) return null;
-            ok = canPlaceInitialRoad(game, placed, eid);
-          } else if (uiMode.kind === 'roadBuilding' && uiMode.firstEdge === eid) {
-            // The buffered first edge isn't a valid spot for the second road,
-            // but we DO want to render it (as a preview) so the user sees
-            // what they already picked. Handled below the map.
-            ok = false;
-          } else {
-            ok = canConnectRoad(stagedGame, acting, eid);
-          }
-          if (!ok) return null;
+          if (first?.edge === eid) return null;
+          const asRoad = roadOk(eid);
+          const asShip = !asRoad && shipOk(eid);
+          if (!asRoad && !asShip) return null;
           return (
             <EdgeGhost
               key={eid}
               eid={eid}
-              variant="road"
+              variant={asShip ? 'ship' : 'road'}
               previewColor={previewColor}
               isHovered={hoveredEid === eid}
               onHoverChange={(h) => setHoveredEid(h ? eid : null)}
-              onClick={() => {
-                if (isSetup) {
-                  dispatch({ type: 'placeInitialRoad', playerId: acting, edge: eid });
-                } else if (uiMode.kind === 'roadBuilding') {
-                  // 2-road dev card flow:
-                  //   - remaining=2 with no first edge: buffer it, wait for click 2.
-                  //   - remaining=1 (already chose one, OR only 1 road left in
-                  //     supply): dispatch with [firstEdge?, eid].
-                  if (uiMode.remaining === 2 && !uiMode.firstEdge) {
-                    setMode({ kind: 'roadBuilding', remaining: 1, firstEdge: eid });
-                  } else {
-                    const edges: [EdgeId] | [EdgeId, EdgeId] = uiMode.firstEdge
-                      ? [uiMode.firstEdge, eid]
-                      : [eid];
-                    dispatch({
-                      type: 'playRoadBuilding',
-                      playerId: acting,
-                      edges,
-                    });
-                  }
-                } else {
-                  dispatch({ type: 'buildRoad', playerId: acting, edge: eid });
-                }
-              }}
+              onClick={() => place(eid, asShip)}
             />
           );
         })}
-        {uiMode.kind === 'roadBuilding' && uiMode.firstEdge && (
-          <FirstRoadPreview eid={uiMode.firstEdge} color={previewColor} />
-        )}
+        {/* Coastal edges where both fit: a road is the default; the ship
+            ghost sits on the sea side so either can be picked. */}
+        {(isSetup || uiMode.kind === 'roadBuilding') &&
+          game.board.edgeIds
+            .filter((eid) => first?.edge !== eid && roadOk(eid) && shipOk(eid))
+            .map((eid) => (
+              <ShipChoiceGhost
+                key={`ship-${eid}`}
+                eid={eid}
+                game={game}
+                previewColor={previewColor}
+                onClick={() => place(eid, true)}
+              />
+            ))}
+        {first && <FirstRoadPreview eid={first.edge} color={previewColor} ship={first.ship} />}
       </g>
     );
   }
@@ -456,6 +498,7 @@ export function PlacementOverlay() {
       <g className="overlay overlay-edges">
         {game.board.edgeIds.map((eid) => {
           if (!canBuildShip(game, acting, eid)) return null;
+          if (pirateIslandsShipViolation(game, acting, eid)) return null;
           return (
             <EdgeGhost
               key={eid}
@@ -470,6 +513,67 @@ export function PlacementOverlay() {
             />
           );
         })}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'moveShip') {
+    const from = uiMode.from;
+    if (!from) {
+      // Step 1: which ship? Only ships that can actually go somewhere.
+      return (
+        <g className="overlay overlay-edges">
+          {movableShips(game, acting).map((eid) => (
+            <EdgeGhost
+              key={eid}
+              eid={eid}
+              variant="ship"
+              previewColor={previewColor}
+              isHovered={hoveredEid === eid}
+              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+              onClick={() => setMode({ kind: 'moveShip', from: eid })}
+            />
+          ))}
+        </g>
+      );
+    }
+    // Step 2: where to? The lifted ship is drawn faded.
+    return (
+      <g className="overlay overlay-edges">
+        <FirstRoadPreview eid={from} color={previewColor} ship faded />
+        {moveTargets(game, acting, from).map((eid) => (
+          <EdgeGhost
+            key={eid}
+            eid={eid}
+            variant="ship"
+            previewColor={previewColor}
+            isHovered={hoveredEid === eid}
+            onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+            onClick={() => {
+              dispatch({ type: 'moveShip', playerId: acting, from, to: eid });
+              setMode({ kind: 'idle' });
+            }}
+          />
+        ))}
+      </g>
+    );
+  }
+
+  if (uiMode.kind === 'placeTribePort') {
+    if (game.pendingTribePort?.playerId !== acting) return null;
+    return (
+      <g className="overlay overlay-edges">
+        {validTribePortEdges(game, acting).map((eid) => (
+          <EdgeGhost
+            key={eid}
+            eid={eid}
+            variant="road"
+            previewColor={previewColor}
+            isHovered={hoveredEid === eid}
+            onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+            onClick={() => dispatch({ type: 'placeTribePort', playerId: acting, edge: eid })}
+          />
+        ))}
       </g>
     );
   }
@@ -552,9 +656,8 @@ export function PlacementOverlay() {
     return (
       <g className="overlay overlay-hexes">
         {game.board.hexIds.map((hid) => {
-          if (hid === game.board.robberHex) return null;
-          // Robber goes only on land hexes (skip sea).
-          if (game.board.hexes[hid]!.terrain === 'sea') return null;
+          // Land hexes on the table that the scenario allows.
+          if (!canMoveRobberTo(game, hid)) return null;
           const hex = game.board.hexes[hid]!;
           return (
             <circle
@@ -600,8 +703,7 @@ export function PlacementOverlay() {
     return (
       <g className="overlay overlay-hexes">
         {game.board.hexIds.map((hid) => {
-          if (hid === game.board.pirateHex) return null;
-          if (game.board.hexes[hid]!.terrain !== 'sea') return null;
+          if (!canMovePirateTo(game, hid)) return null;
           const hex = game.board.hexes[hid]!;
           return (
             <circle
@@ -618,29 +720,27 @@ export function PlacementOverlay() {
               style={{ cursor: 'pointer' }}
               onClick={() => {
                 const candidates = pirateStealCandidates(game, acting, hid);
+                const only = candidates.length === 1 ? candidates[0]! : null;
+                // Cloth for Catan: a victim with both cards and cloth gets a
+                // choice of what to take.
+                const onlyHasChoice =
+                  only !== null &&
+                  game.clothVillages !== undefined &&
+                  (game.players.find((p) => p.id === only)?.cloth ?? 0) > 0 &&
+                  totalResources(game.players.find((p) => p.id === only)!.resources) > 0;
                 if (candidates.length === 0) {
+                  dispatch({ type: 'movePirate', playerId: acting, hex: hid, stealFrom: null });
+                } else if (only && !onlyHasChoice) {
+                  const victim = game.players.find((p) => p.id === only)!;
                   dispatch({
                     type: 'movePirate',
                     playerId: acting,
                     hex: hid,
-                    stealFrom: null,
-                  });
-                } else if (candidates.length === 1) {
-                  dispatch({
-                    type: 'movePirate',
-                    playerId: acting,
-                    hex: hid,
-                    stealFrom: candidates[0]!,
+                    stealFrom: only,
+                    ...(totalResources(victim.resources) === 0 ? { stealCloth: true } : {}),
                   });
                 } else {
-                  // Multiple victims — for v1, just pick the first. A proper
-                  // selector dialog can be added later.
-                  dispatch({
-                    type: 'movePirate',
-                    playerId: acting,
-                    hex: hid,
-                    stealFrom: candidates[0]!,
-                  });
+                  useGameStore.getState().setPendingPirateHex(hid);
                 }
               }}
             />
@@ -783,20 +883,82 @@ function EdgeGhost({
         y1={p1.y}
         x2={p2.x}
         y2={p2.y}
-        stroke="#ffd97e"
+        stroke={variant === 'ship' ? '#9fe3ff' : '#ffd97e'}
         strokeOpacity={isHovered ? 0.4 : 0.9}
         strokeWidth={4}
-        strokeDasharray="6 4"
+        strokeDasharray={variant === 'ship' ? '2 4' : '6 4'}
         strokeLinecap="round"
       />
+      {variant === 'ship' && !isHovered && (
+        <text
+          x={(p1.x + p2.x) / 2}
+          y={(p1.y + p2.y) / 2}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={9}
+          pointerEvents="none"
+        >
+          ⛵
+        </text>
+      )}
     </g>
   );
 }
 
-// First road of a Road Building dev card — rendered in the actor's color
-// at full opacity so the user sees their committed first pick while
-// choosing the second.
-function FirstRoadPreview({ eid, color }: { eid: EdgeId; color: PlayerColor }) {
+// On a coastal edge where a road and a ship both fit (setup, Road
+// Building), a small ship button on the sea side picks the ship.
+function ShipChoiceGhost({
+  eid,
+  game,
+  previewColor,
+  onClick,
+}: {
+  eid: EdgeId;
+  game: GameState;
+  previewColor: PlayerColor;
+  onClick: () => void;
+}) {
+  const e = game.board.edges[eid]!;
+  const a = game.board.vertices[e.vertices[0]]!.position;
+  const b = game.board.vertices[e.vertices[1]]!.position;
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const land = e.hexes.find((h) => game.board.hexes[h]!.terrain !== 'sea');
+  const c = land ? game.board.hexes[land]!.center : mid;
+  const dx = mid.x - c.x;
+  const dy = mid.y - c.y;
+  const mag = Math.hypot(dx, dy) || 1;
+  const x = mid.x + (dx / mag) * 11;
+  const y = mid.y + (dy / mag) * 11;
+  return (
+    <g
+      transform={`translate(${x}, ${y})`}
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+      className="ghost"
+    >
+      <title>Place a ship here instead of a road</title>
+      <circle r={8} fill="#0b3a5a" fillOpacity={0.85} stroke="#9fe3ff" strokeWidth={1.5} />
+      <circle r={3} cy={4} fill={playerColorVar(previewColor)} opacity={0.9} />
+      <text textAnchor="middle" dominantBaseline="central" fontSize={9} y={-1}>
+        ⛵
+      </text>
+    </g>
+  );
+}
+
+// First piece of a Road Building card (or the ship being moved) — drawn in
+// the actor's color so the user sees what they already picked.
+function FirstRoadPreview({
+  eid,
+  color,
+  ship,
+  faded,
+}: {
+  eid: EdgeId;
+  color: PlayerColor;
+  ship?: boolean;
+  faded?: boolean;
+}) {
   const game = useGameStore((s) => s.game!);
   const e = game.board.edges[eid]!;
   const p1 = game.board.vertices[e.vertices[0]]!.position;
@@ -814,8 +976,9 @@ function FirstRoadPreview({ eid, color }: { eid: EdgeId; color: PlayerColor }) {
       x2={p2.x - ux * shrink}
       y2={p2.y - uy * shrink}
       stroke={playerColorVar(color)}
-      strokeOpacity={0.85}
-      strokeWidth={5}
+      strokeOpacity={faded ? 0.35 : 0.85}
+      strokeWidth={ship ? 3 : 5}
+      strokeDasharray={ship ? '3 3' : undefined}
       strokeLinecap="round"
     />
   );
@@ -879,28 +1042,26 @@ function stealCandidatesOnHex(
   return out;
 }
 
-// Pirate equivalent: opponents with a ship adjacent to the sea hex who
-// still hold at least one resource card.
-function pirateStealCandidates(
-  game: import('@/game/types').GameState,
-  actorId: string,
-  hexId: string,
-): string[] {
-  const out: string[] = [];
-  const adjacentEdges = game.board.edgeIds.filter((eid) =>
-    game.board.edges[eid]!.hexes.includes(hexId),
+// Seafarers ship moves: legal destinations (Pirate Islands line rules
+// included) for the ship on `from`.
+export function moveTargets(game: GameState, pid: PlayerId, from: EdgeId): EdgeId[] {
+  const lifted: GameState = {
+    ...game,
+    players: game.players.map((p) =>
+      p.id === pid ? { ...p, ships: p.ships.filter((e) => e !== from) } : p,
+    ),
+  };
+  return shipMoveDestinations(game, pid, from).filter(
+    (eid) => !pirateIslandsShipViolation(lifted, pid, eid),
   );
-  for (const p of game.players) {
-    if (p.id === actorId) continue;
-    const hasShipHere = adjacentEdges.some((eid) => p.ships.includes(eid));
-    if (!hasShipHere) continue;
-    const total =
-      p.resources.wood +
-      p.resources.brick +
-      p.resources.sheep +
-      p.resources.wheat +
-      p.resources.ore;
-    if (total > 0) out.push(p.id);
-  }
-  return out;
+}
+
+// Ships the player could move right now (open end, not built this turn, not
+// by the pirate, and with somewhere to go).
+export function movableShips(game: GameState, pid: PlayerId): EdgeId[] {
+  const player = game.players.find((p) => p.id === pid);
+  if (!player || player.movedShipThisTurn) return [];
+  return player.ships.filter(
+    (eid) => isShipMovable(game, pid, eid) && moveTargets(game, pid, eid).length > 0,
+  );
 }

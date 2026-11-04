@@ -8,6 +8,11 @@ import type {
 } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { canConnectRoad } from '@/game/placement';
+import { canBuildShip } from '@/game/modules/seafarers/validation/shipPlacement';
+import {
+  pirateIslandsShipViolation,
+  shipToConvert,
+} from '@/game/modules/seafarers/pirateIslands';
 import { reportNeeds } from './value';
 
 // Choose which dev card (if any) to play. Returns null if we shouldn't
@@ -19,8 +24,17 @@ export function chooseDevCardPlay(state: GameState, playerId: PlayerId): Action 
   const cards = player.devCards.unplayed;
   if (cards.length === 0) return null;
 
+  // Pirate Islands: Knights only turn ships into warships — always worth it
+  // while we have a normal ship to convert (before the roll, too, so the
+  // new warship counts against this turn's fleet attack).
+  if (state.pirateIslands) {
+    if (cards.includes('knight') && shipToConvert(state, playerId)) {
+      return { type: 'playKnight', playerId };
+    }
+  }
+
   // 1) Knight if robber sits on one of our hexes (defensive)
-  if (cards.includes('knight')) {
+  if (cards.includes('knight') && !state.pirateIslands && (state.robberActive ?? true)) {
     const robberHex = state.board.robberHex;
     let robberHurtsUs = false;
     for (const v of Object.values(state.board.vertices)) {
@@ -39,7 +53,7 @@ export function chooseDevCardPlay(state: GameState, playerId: PlayerId): Action 
   }
 
   // 2) Knight if we're 1 away from largest army (or holding it)
-  if (cards.includes('knight')) {
+  if (cards.includes('knight') && !state.noLargestArmy && !state.pirateIslands) {
     const army = state.largestArmy;
     const targetSize = army ? army.size + 1 : 3;
     if (player.devCards.playedKnights + 1 >= targetSize) {
@@ -106,14 +120,23 @@ export function chooseDevCardPlay(state: GameState, playerId: PlayerId): Action 
         if (legalEdges.length >= 2) break;
       }
     }
-    if (legalEdges.length >= 1) {
+    // Seafarers: the card builds ships too — top up with a ship when
+    // there's no second road to place.
+    const shipEdges: EdgeId[] = [];
+    if (legalEdges.length < 2 && state.settings.expansions.includes('seafarers')) {
+      for (const eid of state.board.edgeIds) {
+        if (!canBuildShip(state, playerId, eid)) continue;
+        if (pirateIslandsShipViolation(state, playerId, eid)) continue;
+        shipEdges.push(eid);
+        break;
+      }
+    }
+    if (legalEdges.length + shipEdges.length >= 1) {
       return {
         type: 'playRoadBuilding',
         playerId,
-        edges:
-          legalEdges.length >= 2
-            ? [legalEdges[0]!, legalEdges[1]!]
-            : [legalEdges[0]!],
+        edges: legalEdges.slice(0, 2),
+        ...(shipEdges.length > 0 ? { ships: shipEdges } : {}),
       };
     }
   }

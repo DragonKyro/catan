@@ -7,13 +7,17 @@ import { Button } from '@/ui/shared/Button';
 import { ResourcePicker } from '@/ui/shared/ResourcePicker';
 import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
+import { useCanAct } from '@/ui/shared/useCanAct';
 
 export function DiscardDialog() {
   const { game, dispatch } = useGameStore();
   const [picked, setPicked] = useState<Partial<ResourceBank>>({});
   const [pickedCom, setPickedCom] = useState<Partial<CommodityBank>>({});
-  if (!game || game.phase !== 'discard' || !game.discardState) return null;
-  const acting = getActingPlayerId(game);
+  const actingId = game ? getActingPlayerId(game) : null;
+  // Online: only the discarding player's own device gets the controls.
+  const canAct = useCanAct(game, actingId);
+  if (!game || game.phase !== 'discard' || !game.discardState || !canAct) return null;
+  const acting = actingId!;
   const required = game.discardState.required[acting];
   if (required === undefined) return null;
   const player = game.players.find((p) => p.id === acting)!;

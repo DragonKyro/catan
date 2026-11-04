@@ -102,5 +102,6 @@ export const fourIslands2 = buildScenario({
   minPlayers: 3,
   maxPlayers: 4,
   startingPlacementZone: 'anyIsland',
+  bonusOnEveryIsland: true,
   layout3p: LAYOUT_3_4P,
 });

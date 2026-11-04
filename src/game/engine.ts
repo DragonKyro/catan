@@ -7,8 +7,8 @@ import { tradersModule } from './modules/traders';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from './modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from './modules/traders/constants';
-import { calculateLongestTradeRoute } from './modules/seafarers/scoring/longestTradeRoute';
 import { calculateLongestRoad } from './scoring/longestRoad';
+import { isSetupPhase } from './actions/setup';
 import { calculateLargestArmy } from './scoring/largestArmy';
 import {
   calculateLongestRoadHolder,
@@ -61,19 +61,35 @@ export function applyAction(state: GameState, action: Action): GameState {
   throw new Error(`No handler for action type: ${action.type}`);
 }
 
+// Longest Road / Route length for a player under the active rules.
+export function calculateRouteLength(state: GameState, playerId: PlayerId): number {
+  for (const mod of getActiveModules(state)) {
+    if (mod.routeLength) return mod.routeLength(state, playerId);
+  }
+  return calculateLongestRoad(state, playerId);
+}
+
+// Has the acting seat won? Scenario modules may replace the plain VP check.
+export function hasPlayerWon(state: GameState, playerId: PlayerId): boolean {
+  const vp = calculateVictoryPoints(state, playerId, true);
+  for (const mod of getActiveModules(state)) {
+    const verdict = mod.hasWon?.(state, playerId, vp);
+    if (verdict !== undefined) return verdict;
+  }
+  // Traders & Barbarians / Fishing on Catan: the old boot holder needs +1 VP
+  // to win. Per-player win threshold so the rest of the table is unaffected.
+  const bootTax = state.oldBootHolder === playerId ? 1 : 0;
+  return vp >= state.settings.victoryPointsToWin + bootTax;
+}
+
 function recomputeDerived(state: GameState): GameState {
-  const useTradeRoute = state.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const lengths = new Map<PlayerId, number>();
   for (const p of state.players) {
-    lengths.set(
-      p.id,
-      useTradeRoute
-        ? calculateLongestTradeRoute(state, p.id)
-        : calculateLongestRoad(state, p.id),
-    );
+    lengths.set(p.id, calculateRouteLength(state, p.id));
   }
-  const longestRoad = calculateLongestRoadHolder(state, lengths);
-  const largestArmy = calculateLargestArmy(state);
+  // Some scenarios return the Longest Route / Largest Army tiles to the box.
+  const longestRoad = state.noLongestRoad ? null : calculateLongestRoadHolder(state, lengths);
+  const largestArmy = state.noLargestArmy ? null : calculateLargestArmy(state);
 
   const players = state.players.map((p) => ({
     ...p,
@@ -88,18 +104,9 @@ function recomputeDerived(state: GameState): GameState {
   // Player 1 / Player 2 is currently `currentPlayerIndex`, so this naturally
   // gives Player 1 the simultaneous-10 tiebreak: P1's actions are processed
   // first, so the game is already 'gameOver' before P2 takes their part.
-  if (
-    next.phase !== 'setupRound1' &&
-    next.phase !== 'setupRound2' &&
-    next.phase !== 'gameOver'
-  ) {
+  if (!isSetupPhase(next.phase) && next.phase !== 'gameOver') {
     const currentId = next.playerOrder[next.currentPlayerIndex]!;
-    const vp = calculateVictoryPoints(next, currentId, true);
-    // Traders & Barbarians / Fishing on Catan: the old boot holder needs
-    // +1 VP to win. Per-player win threshold so the rest of the table is
-    // unaffected.
-    const bootTax = next.oldBootHolder === currentId ? 1 : 0;
-    if (vp >= next.settings.victoryPointsToWin + bootTax) {
+    if (hasPlayerWon(next, currentId)) {
       next = { ...next, winner: currentId, phase: 'gameOver' };
     }
   }

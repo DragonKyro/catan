@@ -1,3 +1,4 @@
+import { isSetupPhase } from '@/game/actions/setup';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Action, GameState, Player, Resource } from '@/game/types';
 import { RESOURCES } from '@/game/types';
@@ -26,6 +27,11 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'buildRoad',
   'buildShip',
   'moveShip',
+  'placeInitialShip',
+  'placeTribePort',
+  'claimWonder',
+  'buildWonder',
+  'stealResource',
   'buyDevCard',
   'playKnight',
   'playRoadBuilding',
@@ -176,9 +182,7 @@ function ReplayBody({
       <div className="rscreen-players">
         {(() => {
           const actingId = getActingPlayerId(replayState);
-          const inSetup =
-            replayState.phase === 'setupRound1' ||
-            replayState.phase === 'setupRound2';
+          const inSetup = isSetupPhase(replayState.phase);
           const paired = !inSetup && usesPairedRules(replayState)
             ? {
                 p1: replayState.playerOrder[
@@ -505,6 +509,16 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} picks gold resources`;
     case 'moveShip':
       return `${who} moves a ship`;
+    case 'placeInitialShip':
+      return `${who} places an initial ship`;
+    case 'placeTribePort':
+      return `${who} places a tribe port`;
+    case 'claimWonder':
+      return `${who} claims a wonder`;
+    case 'buildWonder':
+      return `${who} builds a wonder level`;
+    case 'stealResource':
+      return `${who} steals${action.stealFrom ? ` from ${name(action.stealFrom)}` : ' nothing'}`;
     default:
       return `${who} — ${(action as Action).type}`;
   }
