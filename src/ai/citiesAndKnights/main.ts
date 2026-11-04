@@ -24,7 +24,7 @@ import {
   tryMedicine,
   tryPlayProgressCard,
 } from './progress';
-import { tryCommodityTrade, tryProposeCommodityTrade } from './trade';
+import { tryCommodityTrade, tryHandLimitTrade, tryProposeCommodityTrade } from './trade';
 
 export interface CKMainOptions {
   allowPlayerTrade?: boolean;
@@ -112,7 +112,8 @@ export function chooseCKMainAction(
     (allowPlayerTrade ? tryProposeCommodityTrade(state, playerId) : null) ??
     (allowPlayerTrade ? legalOrNull(state, tryProposeFavorableTrade(state, playerId)) : null) ??
     (allowPlayerTrade ? legalOrNull(state, tryProposeTrade(state, playerId)) : null) ??
-    legalOrNull(state, tryBankTrade(state, playerId))
+    legalOrNull(state, tryBankTrade(state, playerId)) ??
+    tryHandLimitTrade(state, playerId)
   );
 }
 

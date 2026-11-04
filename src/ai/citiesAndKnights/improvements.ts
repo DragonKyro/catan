@@ -1,8 +1,10 @@
 import type { Action, GameState, ImprovementTrack, PlayerId, VertexId } from '@/game/types';
 import { COSTS, IMPROVEMENT_TRACKS, TRACK_COMMODITY } from '@/game/types';
 import { canAfford } from '@/game/resources';
-import { improvementCost, vertexHasMetropolis } from '@/game/modules/citiesAndKnights/improvements/state';
-import { MAX_CITY_WALLS, MAX_IMPROVEMENT_LEVEL } from '@/game/modules/citiesAndKnights/constants';
+import { improvementCost } from '@/game/modules/citiesAndKnights/improvements/state';
+import { MAX_IMPROVEMENT_LEVEL } from '@/game/modules/citiesAndKnights/constants';
+import { metropolisSites } from '@/game/modules/citiesAndKnights/actions/buildCityImprovement';
+import { cityWallSites } from '@/game/modules/citiesAndKnights/actions/buildCityWall';
 import { vertexScore } from '../value';
 import { commoditiesOf, firstLegal, handSizeCK, playerById } from './common';
 import { ckReportNeeds, trackPriority } from './value';
@@ -66,10 +68,9 @@ export function craneTrack(state: GameState, playerId: PlayerId): ImprovementTra
 export function chooseMetropolisVertex(state: GameState, playerId: PlayerId): Action | null {
   const track = state.pendingMetropolis?.track;
   if (!track) return null;
-  const p = playerById(state, playerId);
-  const options = p.cities
-    .filter((v) => !vertexHasMetropolis(state, v))
-    .sort((a, b) => vertexScore(state, b, playerId) - vertexScore(state, a, playerId));
+  const options = metropolisSites(state, playerId).sort(
+    (a, b) => vertexScore(state, b, playerId) - vertexScore(state, a, playerId),
+  );
   return firstLegal(
     state,
     options.map((vertex) => ({ type: 'placeMetropolis' as const, playerId, track, vertex })),
@@ -78,11 +79,9 @@ export function chooseMetropolisVertex(state: GameState, playerId: PlayerId): Ac
 
 // City without a wall (best city first).
 export function wallSpot(state: GameState, playerId: PlayerId): VertexId | null {
-  const p = playerById(state, playerId);
-  if ((p.cityWalls ?? 0) >= MAX_CITY_WALLS) return null;
-  const open = p.cities
-    .filter((v) => !state.cityWalls?.[v])
-    .sort((a, b) => vertexScore(state, b, playerId) - vertexScore(state, a, playerId));
+  const open = cityWallSites(state, playerId).sort(
+    (a, b) => vertexScore(state, b, playerId) - vertexScore(state, a, playerId),
+  );
   return open[0] ?? null;
 }
 

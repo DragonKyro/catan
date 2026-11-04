@@ -18,6 +18,7 @@ import { ckBankTradeRate } from '@/game/modules/citiesAndKnights/trade';
 import { applyAction } from '@/game/engine';
 import { canAfford } from '@/game/resources';
 import { canConnectRoad } from '@/game/placement';
+import { merchantSites } from '@/game/modules/citiesAndKnights/actions/placeMerchant';
 import { VP_PROGRESS_CARDS } from '@/game/modules/citiesAndKnights/progress/catalogue';
 import {
   playerKnights,
@@ -684,12 +685,11 @@ export function chooseProgressPick(state: GameState, playerId: PlayerId): Action
 export function chooseMerchantHex(state: GameState, playerId: PlayerId): Action | null {
   const p = playerById(state, playerId);
   const options: Array<{ hex: HexId; score: number }> = [];
-  for (const hexId of state.board.hexIds) {
+  for (const hexId of merchantSites(state, playerId)) {
     const t = state.board.hexes[hexId]!.terrain;
-    if (!(RESOURCES as readonly string[]).includes(t)) continue;
-    if (!touchesHex(state, playerId, hexId)) continue;
-    const r = t as Resource;
-    options.push({ hex: hexId, score: p.resources[r] * 1.0 + hexPips(state, hexId) * 0.4 });
+    // A non-resource hex (desert) still scores the VP, but no 2:1 rate.
+    const held = (RESOURCES as readonly string[]).includes(t) ? p.resources[t as Resource] : -2;
+    options.push({ hex: hexId, score: held * 1.0 + hexPips(state, hexId) * 0.4 });
   }
   options.sort((a, b) => b.score - a.score);
   return firstLegal(

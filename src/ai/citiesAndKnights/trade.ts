@@ -4,14 +4,16 @@ import type {
   GameState,
   PendingTrade,
   PlayerId,
+  Resource,
   ResourceBank,
   TradeGood,
 } from '@/game/types';
 import { COMMODITIES, RESOURCES, TRACK_COMMODITY } from '@/game/types';
 import { ckBankTradeRate } from '@/game/modules/citiesAndKnights/trade';
+import { handLimitOnSeven } from '@/game/modules/citiesAndKnights/production';
 import { MAX_IMPROVEMENT_LEVEL } from '@/game/modules/citiesAndKnights/constants';
 import { assessThreats } from '../threats';
-import { commoditiesOf, firstLegal, playerById } from './common';
+import { commoditiesOf, firstLegal, handSizeCK, playerById } from './common';
 import { ckReportNeeds, focusTrack, isCommodity, unitValue, type CardKind } from './value';
 
 // Commodity trades for the Cities & Knights AI: bank trades with a
@@ -184,4 +186,42 @@ export function tryProposeCommodityTrade(state: GameState, playerId: PlayerId): 
 function commodityOfHex(state: GameState, hexId: string): string | null {
   const t = state.board.hexes[hexId]?.terrain;
   return t === 'wood' ? 'paper' : t === 'sheep' ? 'cloth' : t === 'ore' ? 'coin' : null;
+}
+
+// Holding more cards than the 7-roll limit: a 7 before our next turn
+// (likely: each roll is a 7 with probability 1/6) costs half the hand. Spend
+// the excess with the bank — the trade that loses least — even at a small
+// loss, when it brings the hand back under the limit or close to it.
+export function tryHandLimitTrade(state: GameState, playerId: PlayerId): Action | null {
+  if (state.phase !== 'main') return null;
+  const p = playerById(state, playerId);
+  const hand = handSizeCK(p);
+  const limit = handLimitOnSeven(state, playerId);
+  if (hand <= limit) return null;
+  const rolls = Math.max(2, state.players.length);
+  const pSeven = 1 - (5 / 6) ** rolls;
+  const have = holding(state, playerId);
+  const needs = ckReportNeeds(state, playerId);
+  let best: { give: CardKind; receive: CardKind; score: number } | null = null;
+  for (const give of [...RESOURCES, ...COMMODITIES] as CardKind[]) {
+    const rate = ckBankTradeRate(state, playerId, give);
+    if (have[give] < rate) continue;
+    const after = hand - rate + 1;
+    // Cards a 7 would take: now vs after the trade.
+    const saved = Math.floor(hand / 2) - (after > limit ? Math.floor(after / 2) : 0);
+    for (const receive of [...RESOURCES, ...COMMODITIES] as CardKind[]) {
+      if (receive === give || supply(state, receive) <= 0) continue;
+      if (!isCommodity(give) && !isCommodity(receive) && needs.byResource[give] > 0) continue;
+      const gain = tradeGain(state, playerId, have, give, rate, receive);
+      const score = gain + pSeven * saved * 0.9;
+      if (!best || score > best.score) best = { give, receive, score };
+    }
+  }
+  if (!best || best.score <= 0.2) return null;
+  const resourceOnly = !isCommodity(best.give) && !isCommodity(best.receive);
+  return firstLegal(state, [
+    resourceOnly
+      ? { type: 'bankTrade', playerId, give: best.give as Resource, receive: best.receive as Resource }
+      : { type: 'bankTradeCK', playerId, give: best.give, receive: best.receive },
+  ]);
 }
