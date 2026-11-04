@@ -35,6 +35,10 @@ export interface PreviewSpec {
   coords: boolean;
   // Heuristic-AI moves to play before rendering (0 = the fresh board).
   steps?: number;
+  // 'game' loads the position into the real game screen (seat 1 human, the
+  // rest AI) instead of drawing the bare board — for checking panels and
+  // dialogs. Default 'board'.
+  view?: 'board' | 'game';
 }
 
 export function previewOptions(kind: PreviewKind): { id: string; label: string }[] {
@@ -66,12 +70,27 @@ export function buildPreviewGame(spec: PreviewSpec): GameState {
   const names = Array.from({ length: spec.players }, (_, i) => `P${i + 1}`);
   const game = createGame({
     playerNames: names,
+    // The AIs play every seat while fast-forwarding; in the game view seat 1
+    // is handed back to a human afterwards (see App.tsx).
     playerTypes: names.map(() => 'ai' as const),
     seed: spec.seed,
     settings: previewSettings(spec),
     randomizeTurnOrder: false,
   });
   return spec.steps ? simulate(game, spec.steps, spec.seed) : game;
+}
+
+// Keep playing until `playerId` must act (so the game screen opens on the
+// human's move rather than mid-AI-turn). Gives up after `limit` moves.
+function simulateUntilActor(start: GameState, playerId: string, seed: number, limit = 600): GameState {
+  let s = start;
+  for (let n = 0; n < limit && s.phase !== 'gameOver'; n++) {
+    if (getActingPlayerId(s) === playerId && !s.pendingTrade) return s;
+    const next = simulate(s, 1, seed + n);
+    if (next === s) return s;
+    s = next;
+  }
+  return s;
 }
 
 // Play `steps` heuristic-AI moves with seeded dice. Stops early on game over
@@ -118,7 +137,8 @@ export function parsePreviewQuery(search: string): PreviewSpec | null {
   const seed = Number(params.get('seed') ?? 1) || 1;
   const coords = params.get('coords') === '1';
   const steps = Number(params.get('steps') ?? 0) || 0;
-  return { kind, id, players, seed, coords, steps };
+  const view = params.get('view') === 'game' ? 'game' : 'board';
+  return { kind, id, players, seed, coords, steps, view };
 }
 
 function PreviewBoard({ spec }: { spec: PreviewSpec }) {
@@ -172,6 +192,18 @@ function CoordLabels({ game }: { game: GameState }) {
       })}
     </g>
   );
+}
+
+// The position for `view=game`: fast-forwarded by AIs, then seat 1 (the
+// first player in seat order) becomes the human at this device.
+export function buildPreviewGameForView(spec: PreviewSpec): GameState {
+  const first = buildPreviewGame(spec);
+  const humanId = first.players[0]!.id;
+  const game = simulateUntilActor(first, humanId, spec.seed + 7919);
+  return {
+    ...game,
+    players: game.players.map((p) => (p.id === humanId ? { ...p, isAI: false } : p)),
+  };
 }
 
 // Full-window board for `?preview=` URLs (headless screenshots).

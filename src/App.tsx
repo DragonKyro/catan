@@ -5,18 +5,30 @@ import { HomeMenu } from '@/ui/newGame/HomeMenu';
 import { LobbyScreen } from '@/ui/lobby/LobbyScreen';
 import { GameView } from '@/ui/game/GameView';
 import { ReplayScreen } from '@/ui/replay/ReplayScreen';
-import { ScenarioPreviewPage, parsePreviewQuery } from '@/ui/mapBuilder/ScenarioPreview';
+import {
+  ScenarioPreviewPage,
+  buildPreviewGameForView,
+  parsePreviewQuery,
+} from '@/ui/mapBuilder/ScenarioPreview';
 
 // `?preview=<kind>:<id>` renders one scenario's board full-window (map
-// checks against the rulebook; see ScenarioPreview.tsx). Read once.
+// checks against the rulebook; see ScenarioPreview.tsx). With `view=game`
+// the fast-forwarded position is loaded into the normal game screen
+// instead. Read once.
 const PREVIEW_SPEC = typeof window === 'undefined' ? null : parsePreviewQuery(window.location.search);
+if (PREVIEW_SPEC?.view === 'game') {
+  const previewGame = buildPreviewGameForView(PREVIEW_SPEC);
+  useGameStore.getState().setGameState(previewGame);
+  // One human at this device: skip the hot-seat "pass the device" screen.
+  useGameStore.setState({ handoffAcknowledgedForPlayer: previewGame.players[0]!.id });
+}
 
 export default function App() {
   const game = useGameStore((s) => s.game);
   const connection = useNetworkStore((s) => s.connection);
   const replayData = useReplayStore((s) => s.data);
 
-  if (PREVIEW_SPEC) {
+  if (PREVIEW_SPEC && PREVIEW_SPEC.view !== 'game') {
     return <ScenarioPreviewPage spec={PREVIEW_SPEC} />;
   }
 

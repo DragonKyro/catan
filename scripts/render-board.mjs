@@ -4,11 +4,12 @@
 //
 //   npm run dev                      # in another terminal (or set BOARD_URL)
 //   node scripts/render-board.mjs traders:riversOfCatan traders:fishingOnCatan \
-//     --players 4 --seed 3 --coords --steps 300 --out board-renders
+//     --players 4 --seed 3 --coords --steps 300 [--view game] --out board-renders
 //
 // Each spec is <kind>:<id> (kind = base | seafarers | traders | ck), the same
 // format as the app's `?preview=` URL (src/ui/mapBuilder/ScenarioPreview.tsx).
-// Writes <out>/<kind>-<id>-<players>p-s<seed>.png.
+// Writes <out>/<kind>-<id>-<players>p-s<seed>[-m<steps>][-game].png. `--view game`
+// shows the whole game screen (seat 1 human) instead of the bare board.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
@@ -21,6 +22,7 @@ let players = 4;
 let seed = 1;
 let coords = false;
 let steps = 0;
+let view = 'board';
 let out = 'board-renders';
 let size = '1100,1000';
 for (let i = 0; i < args.length; i++) {
@@ -29,6 +31,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--seed') seed = Number(args[++i]);
   else if (a === '--coords') coords = true;
   else if (a === '--steps') steps = Number(args[++i]);
+  else if (a === '--view') view = args[++i];
   else if (a === '--out') out = args[++i];
   else if (a === '--size') size = args[++i];
   else specs.push(a);
@@ -55,8 +58,8 @@ if (!browser) {
 
 mkdirSync(out, { recursive: true });
 for (const spec of specs) {
-  const url = `${base}?preview=${encodeURIComponent(spec)}&players=${players}&seed=${seed}${coords ? '&coords=1' : ''}${steps ? `&steps=${steps}` : ''}`;
-  const file = resolve(join(out, `${spec.replace(':', '-')}-${players}p-s${seed}${steps ? `-m${steps}` : ''}.png`));
+  const url = `${base}?preview=${encodeURIComponent(spec)}&players=${players}&seed=${seed}${coords ? '&coords=1' : ''}${steps ? `&steps=${steps}` : ''}${view === 'game' ? '&view=game' : ''}`;
+  const file = resolve(join(out, `${spec.replace(':', '-')}-${players}p-s${seed}${steps ? `-m${steps}` : ''}${view === 'game' ? '-game' : ''}.png`));
   // A fresh profile per shot: a second Chrome on a shared profile can hand
   // the URL to the first instance and exit without rendering.
   const profile = mkdtempSync(join(tmpdir(), 'catan-render-'));
@@ -67,8 +70,11 @@ for (const spec of specs) {
       '--disable-gpu',
       '--hide-scrollbars',
       `--window-size=${size}`,
-      '--virtual-time-budget=8000',
+      `--virtual-time-budget=${process.env.RENDER_BUDGET_MS ?? 20000}`,
       `--user-data-dir=${profile}`,
+      // Without these the game screen (timers, animations) can screenshot blank.
+      '--run-all-compositor-stages-before-draw',
+      '--disable-features=PaintHolding',
       '--no-first-run',
       `--screenshot=${file}`,
       url,
