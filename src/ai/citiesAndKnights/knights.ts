@@ -182,17 +182,18 @@ export function tryBarbarianDefense(state: GameState, playerId: PlayerId): Actio
       }
     }
   }
-  // Defender of Catan VP: only by standing up knights we already have, and
-  // only when the island would hold.
-  if (
-    o.myInactive > 0 &&
-    o.myActive < defenderVpStrength(o) &&
-    o.totalDefense + o.myInactive >= o.barbarianStrength &&
-    o.myActive + o.myInactive >= defenderVpStrength(o)
-  ) {
-    return tryActivate(state, playerId);
-  }
-  return null;
+  // Defender of Catan VP (top defender when the island holds). Normally only
+  // by standing up knights we already have; within 2 VP of the win it's
+  // worth promoting / recruiting for.
+  const vpTarget = defenderVpStrength(o);
+  if (!o.near || o.myActive >= vpTarget) return null;
+  const closeToWin = publicVp(state, playerId) >= state.settings.victoryPointsToWin - 2;
+  const reach = o.myActive + o.myInactive + (closeToWin ? 2 : 0);
+  if (reach < vpTarget) return null;
+  if (o.totalDefense + (reach - o.myActive) < o.barbarianStrength) return null;
+  if (o.myInactive > 0) return tryActivate(state, playerId);
+  if (!closeToWin) return null;
+  return tryPromoteActive(state, playerId) ?? tryRecruit(state, playerId);
 }
 
 function tryPromoteActive(state: GameState, playerId: PlayerId): Action | null {
