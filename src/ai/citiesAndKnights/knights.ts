@@ -108,7 +108,6 @@ function mine(state: GameState, playerId: PlayerId): Array<{ vertex: VertexId; k
   return playerKnights(state, playerId);
 }
 
-
 export function tryRecruit(state: GameState, playerId: PlayerId): Action | null {
   const p = playerById(state, playerId);
   if (!canAfford(p.resources, COSTS.knight)) return null;
@@ -154,7 +153,7 @@ export function tryPromote(
 
 // Barbarians are close and a city of ours is on the line: stand knights up,
 // strengthen standing ones, or recruit (recruit + activate in one turn is
-// allowed). Also grabs the Defender of Catan VP when one wheat does it.
+// allowed). Also goes for the Defender of Catan VP when it's cheap.
 export function tryBarbarianDefense(state: GameState, playerId: PlayerId): Action | null {
   const pending = cityPending(state, playerId) ? 1 : 0;
   const o = barbarianOutlook(state, playerId, pending);
@@ -163,10 +162,13 @@ export function tryBarbarianDefense(state: GameState, playerId: PlayerId): Actio
   const target = defenseTarget(o, p.cities.length + pending);
   if (o.myActive < target) {
     if (o.near) {
+      // A new knight only defends once stood up: recruit when there's also
+      // the wheat to activate it.
+      const canStandUp = p.resources.wheat >= 1 && (p.resources.sheep >= 1 && p.resources.ore >= 1);
       const a =
         tryActivate(state, playerId) ??
         tryPromoteActive(state, playerId) ??
-        tryRecruit(state, playerId);
+        (canStandUp ? tryRecruit(state, playerId) : null);
       if (a) return a;
     } else {
       // Likely within two rounds: a standing knight stays up until the
