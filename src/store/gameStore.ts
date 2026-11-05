@@ -97,23 +97,11 @@ export type DialogName =
   // Traders & Barbarians / Fishing on Catan
   | 'spendFish'
   | 'passBoot'
-  // Cities & Knights dialogs.
+  // Cities & Knights dialogs opened from the ActionBar (sub-phase prompts
+  // follow game.phase instead — see ui/dialogs/citiesAndKnights/CKDialogs).
   | 'cityImprovements'
   | 'progressCards'
   | 'alchemy'
-  | 'smithing'
-  | 'merchantFleet'
-  | 'tradeMonopoly'
-  | 'resourceMonopolyCK'
-  | 'metropolisPlace'
-  | 'progressCardPick'
-  | 'treasonRemove'
-  | 'treasonPlace'
-  | 'commercialHarborOffer'
-  | 'weddingGive'
-  | 'progressCardDiscard'
-  | 'defenderTieDraw'
-  | 'aqueductPick'
   | 'knights'
   | 'commercialHarbor';
 
