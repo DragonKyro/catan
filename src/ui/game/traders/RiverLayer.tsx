@@ -55,9 +55,12 @@ function River({ board, river }: { board: BoardState; river: RiverPath }) {
     pts.push(exit);
   });
   let sea: Point | null = null;
+  // A harbor on the mouth edge (the 5-6 map's ore harbor on River B): stop
+  // at the coast so the water doesn't cover the harbor sign.
+  const harborAtMouth = !!river.mouth && board.ports.some((p) => p.edge === river.mouth);
   if (mouth) {
     const last = hexes[hexes.length - 1]!;
-    sea = add(mouth, scale(unit(sub(mouth, last.center)), 16));
+    sea = add(mouth, scale(unit(sub(mouth, last.center)), harborAtMouth ? 3 : 16));
     pts.push(sea);
   }
   const d = smoothPath(pts);
@@ -93,7 +96,7 @@ function River({ board, river }: { board: BoardState; river: RiverPath }) {
       {/* The spring: white water spilling out of the mountain. */}
       <circle cx={spring.x} cy={spring.y} r={5.2} fill="#69c1e6" stroke="#2f6f93" strokeWidth={1.6} />
       <circle cx={spring.x - 1.2} cy={spring.y - 1.2} r={2} fill="#f3fbff" />
-      {sea && <circle cx={sea.x} cy={sea.y} r={4} fill="#9fdcf5" opacity={0.7} />}
+      {sea && !harborAtMouth && <circle cx={sea.x} cy={sea.y} r={4} fill="#9fdcf5" opacity={0.7} />}
     </g>
   );
 }
