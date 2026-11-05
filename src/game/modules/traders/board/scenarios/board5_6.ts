@@ -9,8 +9,7 @@ import { seaPositionsInDisk } from '../../../base/scenarios/helpers';
 // All 28 number discs of CATAN 5-6: two 2s, two 12s, three of every other
 // number. (Barbarian Attack 5-6 "returns the number 2 disc and the number
 // 12 disc" and prints one of each on its map, so the set has two of each.)
-// The base game's own NUMBER_TOKENS_5_6 is a different, older pool and is
-// left alone.
+// Same set as the base game's NUMBER_TOKENS_5_6 (src/game/board/generator.ts).
 export const TB_DISCS_5_6: number[] = [
   2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6,
   8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
