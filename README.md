@@ -73,11 +73,11 @@ All eight also play at 5–6 players: Gold Rush, Pond, Black Forest and Lakes (f
 
 Two browser windows in the same incognito session share storage, which gives them the same identity and breaks seat assignment. Append `?fresh` to the URL of each test window to give it its own identity (per-tab `sessionStorage`, including its anonymous sign-in).
 
-`npm run test:run` covers online play against an in-memory server. To run the same flow against the real Firebase project: `FIREBASE_LIVE=1 npx vitest run src/store/networkStore.live.test.ts` (it prints the room codes it used; remove them with `firebase database:remove /rooms/<CODE>`).
+`npm run test:run` covers online play against an in-memory server. To run the same flow against the real Firebase project: `FIREBASE_LIVE=1 npx vitest run src/store/networkStore.live.test.ts` (it prints the room codes it used; remove them with `firebase database:remove /catan/rooms/<CODE>`).
 
 ### Why Firebase
 
-Online play used to be peer-to-peer WebRTC (Trystero, signaling over BitTorrent trackers and then Nostr relays). It never worked reliably: carriers block trackers, relays come and go, phones drop their sockets in the background, and with STUN only (no TURN server), two devices behind strict NAT, the usual case on cellular, can find each other but never connect. Firebase's Realtime Database replaced it: one WebSocket on port 443 to Google's servers, which every network allows, plus server-side ordering, presence, and rejoin for free. It bills bytes and connections, not operations, so rooms stay small: the start record is the game's setup inputs (~0.4 KB) rather than the whole board, a move is ~100 bytes, a whole game ~60–100 KB, and a device closes its connection whenever it isn't in a room. Rooms clean themselves up: each time someone makes a room, their device deletes rooms more than a week old that nobody is connected to (the rules allow exactly that, and keep younger rooms' codes private), so storage stays bounded with no server code. The security rules are in `database.rules.json` (deploy with `firebase deploy --only database`).
+Online play used to be peer-to-peer WebRTC (Trystero, signaling over BitTorrent trackers and then Nostr relays). It never worked reliably: carriers block trackers, relays come and go, phones drop their sockets in the background, and with STUN only (no TURN server), two devices behind strict NAT, the usual case on cellular, can find each other but never connect. Firebase's Realtime Database replaced it: one WebSocket on port 443 to Google's servers, which every network allows, plus server-side ordering, presence, and rejoin for free. It bills bytes and connections, not operations, so rooms stay small: the start record is the game's setup inputs (~0.4 KB) rather than the whole board, a move is ~100 bytes, a whole game ~60–100 KB, and a device closes its connection whenever it isn't in a room. Rooms clean themselves up: each time someone makes a room, their device deletes rooms more than a week old that nobody is connected to (the rules allow exactly that, and keep younger rooms' codes private), so storage stays bounded with no server code. The database (project `github-games-e7c7d`) is shared with other web apps, so this app keeps everything under `/catan`, and its security rules in `database.rules.json` cover only that key. A database has one rules set, so `npm run deploy:rules` (or `firebase deploy --only database`) first merges this app's key into the live rules and leaves the other apps' rules alone (`scripts/merge-db-rules.mjs`, the predeploy hook in `firebase.json`).
 
 ## Tech stack
 
@@ -86,7 +86,7 @@ Online play used to be peer-to-peer WebRTC (Trystero, signaling over BitTorrent 
 - **honeycomb-grid** for hex math
 - **Zustand** for state management
 - **Vitest** for tests
-- **Firebase Realtime Database** + anonymous Auth for online multiplayer (project `catan-33623`; no server code of our own)
+- **Firebase Realtime Database** + anonymous Auth for online multiplayer (project `github-games-e7c7d`, shared with other web apps, data under `/catan`; no server code of our own)
 
 ## Local development
 
