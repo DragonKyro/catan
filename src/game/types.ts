@@ -547,6 +547,10 @@ export interface PendingTrade {
   proposerId: PlayerId;
   give: Partial<ResourceBank>;
   receive: Partial<ResourceBank>;
+  // Traders & Barbarians coins (only when `state.coinsInPlay`): gold the
+  // proposer offers / asks for alongside (or instead of) cards.
+  giveGold?: number;
+  receiveGold?: number;
   // Players who have explicitly rejected this offer. Purely informational —
   // a rejection does not cancel the trade; the proposer can still wait for
   // another player to accept or for the timer/end-turn auto-cancel.
@@ -1044,6 +1048,9 @@ export interface ProposeTradeAction extends ActionBase {
   type: 'proposeTrade';
   give: Partial<ResourceBank>;
   receive: Partial<ResourceBank>;
+  // T&B coins: gold offered / asked (see PendingTrade).
+  giveGold?: number;
+  receiveGold?: number;
 }
 
 export interface AcceptTradeAction extends ActionBase {
@@ -1062,6 +1069,9 @@ export interface CounterTradeAction extends ActionBase {
   type: 'counterTrade';
   give: Partial<ResourceBank>;
   receive: Partial<ResourceBank>;
+  // T&B coins: gold offered / asked (see PendingTrade).
+  giveGold?: number;
+  receiveGold?: number;
 }
 
 export interface EndTurnAction extends ActionBase {

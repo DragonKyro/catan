@@ -63,13 +63,31 @@ export function tradersLogLines(before: GameState, action: Action, after: GameSt
         text: action.token ? 'swapped a fish token for a new one' : 'kept a full fish hand',
       });
       break;
+    case 'acceptTrade': {
+      // Coins changing hands in a player trade (the cards are in the
+      // regular trade line).
+      const t = before.pendingTrade;
+      const net = (t?.giveGold ?? 0) - (t?.receiveGold ?? 0);
+      if (t && net !== 0) {
+        const payer = net > 0 ? t.proposerId : me;
+        const payee = net > 0 ? me : t.proposerId;
+        out.push({ player: payer, text: `paid ${Math.abs(net)} gold to ${name(after, payee)} in the trade` });
+      }
+      break;
+    }
     default:
       break;
   }
 
-  // River gold earned on a road / settlement (setup included). Bridges and
-  // coin trades are logged above.
-  if (action.type !== 'buildBridge' && action.type !== 'buyGold' && action.type !== 'spendGold') {
+  // River gold earned on a road / settlement (setup included). Bridges,
+  // coin trades and trades are logged above.
+  const riverBuild =
+    action.type === 'buildRoad' ||
+    action.type === 'buildSettlement' ||
+    action.type === 'placeInitialRoad' ||
+    action.type === 'placeInitialSettlement' ||
+    action.type === 'spendFish';
+  if (riverBuild) {
     for (const p of after.players) {
       const d = gold(after, p.id) - gold(before, p.id);
       if (d > 0) out.push({ player: p.id, text: `earned ${d} gold building on a river tile` });

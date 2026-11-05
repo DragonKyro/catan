@@ -337,3 +337,50 @@ describe('Rivers of Catan: coins', () => {
     expect(() => applyAction(s, { type: 'spendGold', playerId: 'p0', resource: 'ore' })).toThrow(/Coins/);
   });
 });
+
+describe('Rivers of Catan: coins in player trades', () => {
+  it('moves gold both ways and refreshes the wealth tiles', () => {
+    let s = withGold(mainPhase(rivers()), { p0: 3, p1: 0, p2: 1 });
+    s = giveResources(s, 'p1', { ore: 1 });
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: {}, giveGold: 2, receive: { ore: 1 } });
+    expect(s.pendingTrade?.giveGold).toBe(2);
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' });
+    expect(gold(s, 'p0')).toBe(1);
+    expect(gold(s, 'p1')).toBe(2);
+    expect(s.players[0]!.resources.ore).toBe(1);
+    expect(s.wealthTiles).toEqual({ wealthiest: 'p1', poor: ['p0', 'p2'] });
+  });
+
+  it('needs the gold on both sides', () => {
+    let s = withGold(mainPhase(rivers()), { p0: 1, p1: 0 });
+    expect(() =>
+      applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: {}, giveGold: 2, receive: { ore: 1 } }),
+    ).toThrow(/gold you're offering/);
+    s = giveResources(s, 'p0', { wood: 1 });
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: {}, receiveGold: 1 });
+    expect(() => applyAction(s, { type: 'acceptTrade', playerId: 'p1' })).toThrow(/gold the proposer wants/);
+  });
+
+  it('may be countered with gold', () => {
+    let s = withGold(mainPhase(rivers()), { p0: 0, p1: 4 });
+    s = giveResources(s, 'p0', { wood: 1 });
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: {}, receiveGold: 1 });
+    s = applyAction(s, { type: 'counterTrade', playerId: 'p1', give: {}, giveGold: 1, receive: { wood: 1 } });
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p0' });
+    expect(gold(s, 'p0')).toBe(1);
+    expect(s.players[1]!.resources.wood).toBe(1);
+  });
+
+  it('is refused in games without coins', () => {
+    const fishing = createGame({
+      playerNames: ['A', 'B', 'C'],
+      seed: 1,
+      settings: { expansions: ['traders'], tradersScenarioId: 'fishingOnCatan' },
+      randomizeTurnOrder: false,
+    });
+    const s = giveResources(mainPhase(fishing), 'p0', { wood: 1 });
+    expect(() =>
+      applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: {}, receiveGold: 1 }),
+    ).toThrow(/Coins/);
+  });
+});

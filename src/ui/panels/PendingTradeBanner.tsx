@@ -3,6 +3,7 @@ import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
+import { CoinIcon } from '@/ui/game/traders/TradersIcons';
 import { Button } from '@/ui/shared/Button';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import './PendingTradeBanner.css';
@@ -25,7 +26,8 @@ export function PendingTradeBanner() {
       if (p.id === t.proposerId) continue;
       if (p.isAI) continue; // AIs handle themselves
       if (t.rejectedBy.includes(p.id)) continue;
-      let canAccept = true;
+      // T&B coins: the gold asked for counts like a card.
+      let canAccept = (t.receiveGold ?? 0) <= (p.gold ?? 0);
       for (const r of RESOURCES) {
         if ((t.receive[r] ?? 0) > p.resources[r]) {
           canAccept = false;
@@ -68,9 +70,10 @@ export function PendingTradeBanner() {
   const viewer = viewerId ? game.players.find((p) => p.id === viewerId) : null;
 
   const hasResources = (
-    p: { resources: typeof proposer.resources },
+    p: { resources: typeof proposer.resources; gold?: number },
     bank: typeof trade.receive,
   ): boolean => {
+    if ((trade.receiveGold ?? 0) > (p.gold ?? 0)) return false;
     for (const r of RESOURCES) {
       if ((bank[r] ?? 0) > p.resources[r]) return false;
     }
@@ -111,12 +114,14 @@ export function PendingTradeBanner() {
             {RESOURCES.filter((r) => (trade.give[r] ?? 0) > 0).map((r) => (
               <ResourceChip key={r} resource={r} count={trade.give[r]} size="sm" />
             ))}
+            {(trade.giveGold ?? 0) > 0 && <GoldChip n={trade.giveGold!} />}
           </span>
           <span style={{ color: 'var(--text-soft)' }}>→</span>
           <span className="ptbanner-basket">
             {RESOURCES.filter((r) => (trade.receive[r] ?? 0) > 0).map((r) => (
               <ResourceChip key={r} resource={r} count={trade.receive[r]} size="sm" />
             ))}
+            {(trade.receiveGold ?? 0) > 0 && <GoldChip n={trade.receiveGold!} />}
           </span>
         </span>
       </div>
@@ -198,5 +203,15 @@ export function PendingTradeBanner() {
         )}
       </div>
     </div>
+  );
+}
+
+// Gold in a trade offer (T&B coins).
+function GoldChip({ n }: { n: number }) {
+  return (
+    <span className="rchip rchip-sm" title={`${n} gold`} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      <CoinIcon size={14} />
+      <span className="rchip-count">{n}</span>
+    </span>
   );
 }
