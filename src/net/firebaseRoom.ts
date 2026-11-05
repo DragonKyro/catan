@@ -1,6 +1,12 @@
-// The real RoomTransport: Firebase Realtime Database (project catan-33623).
-// Loaded lazily (dynamic import from networkStore) so the Firebase SDK only
-// downloads when someone opens "Play online".
+// The real RoomTransport: Firebase Realtime Database (project
+// github-games-e7c7d, shared with other web apps). Loaded lazily (dynamic
+// import from networkStore) so the Firebase SDK only downloads when someone
+// opens "Play online".
+//
+// The database is shared, so everything this app stores lives under one
+// top-level key, DB_ROOT ("catan"), and database.rules.json only covers that
+// key (scripts/merge-db-rules.mjs merges it into the live rules on deploy).
+// The paths below are relative to it.
 //
 // Each device signs in anonymously and silently (no account, no prompt); the
 // uid exists only so the security rules (database.rules.json) can tie writes
@@ -83,14 +89,21 @@ import {
 import type { ChatMessage, LobbyState, Presence, RoomMeta, StartRecord } from './types';
 
 // Public by design: a web app's Firebase config identifies the project, it
-// grants nothing. Access is decided by the security rules.
+// grants nothing. Access is decided by the security rules. (The "Catan" web
+// app registered in the project; only the database and Auth are used.)
 export const FIREBASE_CONFIG = {
-  apiKey: 'AIzaSyDtnCIFrLyLwden3XhTrHH7Y57Cm5tXn2k',
-  authDomain: 'catan-33623.firebaseapp.com',
-  databaseURL: 'https://catan-33623-default-rtdb.firebaseio.com',
-  projectId: 'catan-33623',
-  appId: '1:314886105974:web:ecb33cc78d0b42099b6857',
+  apiKey: 'AIzaSyAmAirzwcz926PyKh-bfUUIn7OSkcve6tI',
+  authDomain: 'github-games-e7c7d.firebaseapp.com',
+  databaseURL: 'https://github-games-e7c7d-default-rtdb.firebaseio.com',
+  projectId: 'github-games-e7c7d',
+  appId: '1:879254296864:web:58a7c931d374fa128f1f45',
 };
+
+/**
+ * This app's top-level key in the shared database: every path it reads or
+ * writes is under it (must match the key in database.rules.json).
+ */
+export const DB_ROOT = 'catan';
 
 /** Bump when the room layout changes (also checked by the rules). */
 export const PROTOCOL_VERSION = 2;
@@ -125,7 +138,7 @@ export async function sweepStaleRooms(db: Database): Promise<string[]> {
   // A minute's margin so a fast local clock can't ask for a day the rules
   // still consider fresh.
   const cutoff = Date.now() + (await serverTimeOffset(db)) - ROOM_LIFETIME_MS - 60_000;
-  const days = await get(query(ref(db, 'roomDays'), orderByValue(), limitToFirst(SWEEP_DAYS)));
+  const days = await get(query(ref(db, `${DB_ROOT}/roomDays`), orderByValue(), limitToFirst(SWEEP_DAYS)));
   const stale: string[] = [];
   days.forEach((d) => {
     if (d.key && Number(d.val()) <= cutoff) stale.push(d.key);
@@ -133,19 +146,19 @@ export async function sweepStaleRooms(db: Database): Promise<string[]> {
   const removed: string[] = [];
   for (const day of stale) {
     const codes: string[] = [];
-    (await get(ref(db, `roomIndex/${day}`))).forEach((c) => {
+    (await get(ref(db, `${DB_ROOT}/roomIndex/${day}`))).forEach((c) => {
       if (c.key) codes.push(c.key);
     });
     let kept = 0;
     await Promise.all(
       codes.map((code) =>
-        update(ref(db), { [`rooms/${code}`]: null, [`roomIndex/${day}/${code}`]: null }).then(
+        update(ref(db, DB_ROOT), { [`rooms/${code}`]: null, [`roomIndex/${day}/${code}`]: null }).then(
           () => removed.push(code),
           () => kept++, // still in use: kept for now
         ),
       ),
     );
-    if (kept === 0) await remove(ref(db, `roomDays/${day}`)).catch(() => {});
+    if (kept === 0) await remove(ref(db, `${DB_ROOT}/roomDays/${day}`)).catch(() => {});
   }
   return removed;
 }
@@ -267,7 +280,7 @@ export function createFirebaseTransport(opts: FirebaseTransportOptions = {}): Fi
   function openRoom(code: string, meta: RoomMeta, myUid: string, me: Presence, events: RoomEvents): RoomConnection {
     const db = connect();
     openRooms++;
-    const base = `rooms/${code}`;
+    const base = `${DB_ROOT}/rooms/${code}`;
     const offs: Unsubscribe[] = [];
     let presenceRef: DatabaseReference | null = null;
     let closed = false;
@@ -411,7 +424,7 @@ export function createFirebaseTransport(opts: FirebaseTransportOptions = {}): Fi
       try {
         // The room and its index entries, atomically.
         await withTimeout(
-          update(ref(db), {
+          update(ref(db, DB_ROOT), {
             [`rooms/${code}`]: {
               meta: {
                 hostUuid: meta.hostUuid,
@@ -444,7 +457,7 @@ export function createFirebaseTransport(opts: FirebaseTransportOptions = {}): Fi
       const db = connect();
       let snap: DataSnapshot;
       try {
-        snap = await withTimeout(get(ref(db, `rooms/${code}/meta`)), 'looking up the room');
+        snap = await withTimeout(get(ref(db, `${DB_ROOT}/rooms/${code}/meta`)), 'looking up the room');
       } catch (e) {
         disconnectIfIdle();
         throw unreachable(e);

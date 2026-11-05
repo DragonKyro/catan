@@ -12,6 +12,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Firebase CLI (merged rules written by scripts/merge-db-rules.mjs)
+.firebase/
+
 # Local env
 .env
 .env.local
