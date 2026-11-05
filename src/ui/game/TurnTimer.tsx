@@ -185,11 +185,16 @@ function autoFinish(
     initial.phase === 'chooseRobberOrPirate' ||
     initial.phase === 'placeTribePort' ||
     initial.phase === 'stealResource' ||
+    // T&B Barbarian Attack: a card's choice, then the knight moves (the AI
+    // moves any knight that must leave the castle, then ends the turn).
+    initial.phase === 'barbarianCard' ||
+    initial.phase === 'barbarianKnightMoves' ||
     isSetupPhase(initial.phase) ||
     initial.phase === 'rollOrPlayKnight'
   ) {
     const action = chooseAction(initial, playerId);
     if (action) ctx.dispatch(action);
+    else if (initial.phase === 'barbarianKnightMoves') ctx.dispatch({ type: 'endTurn', playerId });
     return;
   }
 

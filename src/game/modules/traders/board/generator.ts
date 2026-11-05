@@ -45,6 +45,8 @@ export function generateTradersBoard(
   }
   if (scenario.prepareLayout) [layout, rngState] = scenario.prepareLayout(layout, rngState);
   const assembled = assembleBoardFromLayout(layout, rngState);
+  // The sea ring is just the frame: there is no pirate in T&B.
+  delete assembled.board.pirateHex;
   const riverEdges = resolveRiverEdges(
     scenario.riverEdges ?? [],
     assembled.board,

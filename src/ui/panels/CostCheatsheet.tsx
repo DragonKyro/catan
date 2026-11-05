@@ -4,7 +4,10 @@ import type { Resource, ResourceBank } from '@/game/types';
 import { useGameStore } from '@/store/gameStore';
 import { SEAFARERS_EXPANSION_ID, SHIP_COST } from '@/game/modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
-import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
+import {
+  BARBARIAN_KNIGHT_BOOST_COST,
+  TRADERS_EXPANSION_ID,
+} from '@/game/modules/traders/constants';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 
 interface Row {
@@ -23,10 +26,13 @@ const BASE_ROWS: Row[] = [
 const SHIP_ROW: Row = { icon: '⛵', label: 'Ship', cost: SHIP_COST };
 const CITY_WALL_ROW: Row = { icon: '🧱', label: 'City Wall', cost: COSTS.cityWall };
 const BRIDGE_ROW: Row = { icon: '🌉', label: 'Bridge', cost: COSTS.bridge };
-const HIRE_KNIGHT_ROW: Row = {
-  icon: '🛡',
-  label: 'Knight',
-  cost: COSTS.hireKnight,
+// Barbarian Attack: the scenario's cards are played on purchase, and a
+// knight moves 4-5 edges (instead of 3) for 1 wheat.
+const BA_CARD_ROW: Row = { icon: '🃏', label: 'Dev Card (played at once)', cost: COSTS.devCard };
+const BA_KNIGHT_BOOST_ROW: Row = {
+  icon: '⚔',
+  label: 'Knight: 4-5 edges',
+  cost: BARBARIAN_KNIGHT_BOOST_COST,
 };
 
 interface Props {
@@ -50,11 +56,11 @@ export function CostCheatsheet({ onClose }: Props) {
   if (hasTraders) {
     // Bridge slots in just after Road — both span an edge, both cost wood + brick.
     rows = [BASE_ROWS[0]!, BRIDGE_ROW, ...BASE_ROWS.slice(1)];
-    // Barbarian Attack: surface the knight row only when the scenario is
-    // active (the dropdown picker for T&B scenarios already gates this).
-    const castles = useGameStore.getState().game?.castles;
-    if (castles && castles.length > 0) {
-      rows = [...rows, HIRE_KNIGHT_ROW];
+    if (useGameStore.getState().game?.barbarianAttack) {
+      rows = [
+        ...rows.map((r) => (r.label === 'Dev Card' ? BA_CARD_ROW : r)),
+        BA_KNIGHT_BOOST_ROW,
+      ];
     }
   }
   if (hasCK) {

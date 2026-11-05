@@ -38,6 +38,10 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   'playRoadBuilding',
   'playYearOfPlenty',
   'playMonopoly',
+  // T&B Barbarian Attack: knights placed / moved, barbarians captured or
+  // moved by Treason.
+  'resolveBarbarianCard',
+  'moveBarbarianKnight',
 ]);
 
 // Step + slider + auto-play replay. The slider/buttons step through a
@@ -265,6 +269,14 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} builds a wonder level`;
     case 'stealResource':
       return `${who} steals${action.stealFrom ? ` from ${name(action.stealFrom)}` : ' nothing'}`;
+    case 'resolveBarbarianCard':
+      return action.hex
+        ? `${who} takes a barbarian prisoner`
+        : action.edge
+          ? `${who} places a knight`
+          : `${who} moves barbarians (Treason)`;
+    case 'moveBarbarianKnight':
+      return `${who} moves a knight`;
     default:
       return `${who} — ${(action as Action).type}`;
   }

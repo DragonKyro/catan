@@ -33,6 +33,8 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'buildWonder',
   'stealResource',
   'buyDevCard',
+  'resolveBarbarianCard',
+  'moveBarbarianKnight',
   'playKnight',
   'playRoadBuilding',
   'playYearOfPlenty',
@@ -519,6 +521,14 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} builds a wonder level`;
     case 'stealResource':
       return `${who} steals${action.stealFrom ? ` from ${name(action.stealFrom)}` : ' nothing'}`;
+    case 'resolveBarbarianCard':
+      return action.hex
+        ? `${who} takes a barbarian prisoner`
+        : action.edge
+          ? `${who} places a knight`
+          : `${who} moves barbarians (Treason)`;
+    case 'moveBarbarianKnight':
+      return `${who} moves a knight`;
     default:
       return `${who} — ${(action as Action).type}`;
   }

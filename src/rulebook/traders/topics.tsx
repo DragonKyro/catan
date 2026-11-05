@@ -1,4 +1,5 @@
 import type { Topic } from '../topics';
+import { CastleEdgeKeyDiagram } from './barbarianAttackDiagrams';
 
 // Traders & Barbarians expansion rulebook entries. This commit covers the
 // Rivers of Catan scenario plus the Friendly Robber and Strongest Ports
@@ -338,89 +339,155 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          Three castles ring the island. Each one is the target of a
-          barbarian group creeping in from the sea. Every turn the
-          barbarians advance one hex; when they arrive at a castle,
-          combat resolves automatically. First player to <strong>12 VP
-          </strong> wins.
+          Barbarian raiders land on Catan's coast every time someone builds.
+          Raise knights, drive them off and take them prisoner — every{' '}
+          <strong>2 prisoners are worth 1 VP</strong>. First to{' '}
+          <strong>12 VP</strong> on their turn wins.
         </p>
         <ul>
           <li>
-            <strong>Castle hexes</strong> are non-producing and immune to
-            the robber. They sit in the outer sea ring; building can still
-            happen on adjacent coastal vertices.
+            <strong>The board</strong>: the number discs are printed in fixed
+            places. The castle (bottom left) and the desert (top right) sit on
+            the coast; the other coastal hexes are dealt from 2 hills, 2
+            forests, 3 pastures, 2 fields and 1 mountains, the 7 inner hexes
+            from 1 hills, 1 forest, 1 pasture, 2 fields and 2 mountains. The
+            coastal numbers are 2-6 and 8-12 once each.
           </li>
           <li>
-            <strong>Barbarian groups</strong> walk a 4-hex path from an
-            outer sea hex inward. The first three turns the barbarian
-            moves; the fourth turn it arrives and fights.
+            One barbarian starts on the 2 and one on the 12; 34 more wait next
+            to the board (36 in all).
           </li>
           <li>
-            <strong>Defender knights</strong> are hired on the six edges
-            that bound each castle. Up to 6 per castle (the supply of 18
-            divides evenly across the three castles).
+            <strong>No robber, no base development cards, no Largest
+            Army.</strong> On a 7, players discard as normal, then the roller
+            steals 1 random resource card from a player of their choice.
+          </li>
+          <li>
+            <strong>Setup</strong>: your second starting placement is a{' '}
+            <strong>city</strong>. It pays 1 card for each adjacent hex.
+          </li>
+          <li>
+            <strong>Coins</strong>: gold comes from Treason, from losing
+            knights and as consolation in prisoner draws. 2 gold buy 1 resource
+            (up to twice a turn); resources buy gold at your supply trade rate.
+            Coins aren't cards: not in your hand size, never stolen.
           </li>
         </ul>
       </>
     ),
   },
   {
-    id: 'traders-hire-knight',
-    title: 'Hiring knights',
+    id: 'traders-barbarian-landing',
+    title: 'Barbarians land and conquer',
     body: (
       <>
         <p>
-          During your main phase, spend <strong>1 wheat + 1 ore</strong>
-          {' '}to place a defender knight on a castle-bordering edge that
-          is empty (no road, ship, bridge, or knight there). Any player
-          may fill any open castle slot — defenders aren't tied to your
-          own road network, so you can rush to defend a contested castle
-          even without prior buildup there.
+          <strong>Each time you place a settlement or city</strong> (not
+          during setup) the barbarians attack. The app rolls the dice for
+          you, until the result isn't 7; one barbarian lands on the coastal
+          hex with that number unless it already holds 3. It rolls twice
+          more, each time until the number differs from the earlier ones. It
+          stops early when the barbarian supply is empty. The log shows every
+          roll.
         </p>
+        <ul>
+          <li>
+            <strong>3 barbarians conquer a hex</strong>: its number disc turns
+            face down, it produces nothing, no more barbarians land there, and
+            nobody may build on its edges or corners (cities included).
+          </li>
+          <li>
+            <strong>A building touching only conquered hexes and the
+            frame is conquered</strong> (drawn tipped over): it's worth no VP
+            and its harbor can't be used. A building that also touches an
+            inner hex, the desert or the castle (while unconquered) is safe.
+          </li>
+          <li>
+            Taking barbarians off a conquered hex (Capture, Treason, or a
+            victory) liberates it and stands its buildings up again.
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 'traders-barbarian-cards',
+    title: 'Barbarian Attack development cards',
+    body: (
+      <>
         <p>
-          The <strong>shared knight supply</strong> starts at 18 (6 per
-          castle). Each hire draws one; combat losses refund their
-          knights to the supply, so the bag refills naturally over time.
+          The scenario has its own 26-card deck at the usual price (1 sheep, 1
+          wheat, 1 ore). A card is <strong>played as soon as you buy
+          it</strong>; buy as many as you like. Played cards are reshuffled
+          when the deck runs out.
+        </p>
+        <ul>
+          <li>
+            <strong>Capture</strong> (4): take 1 barbarian from a coastal hex
+            of your choice as a prisoner. With no barbarian on the coast the
+            card is discarded and you draw another.
+          </li>
+          <li>
+            <strong>Knighthood</strong> (14): place one of your knights on a
+            free castle edge.
+          </li>
+          <li>
+            <strong>Swift Knight</strong> (4): place one of your knights on
+            any edge without a knight.
+          </li>
+          <li>
+            <strong>Treason</strong> (4): take 2 gold, then move 2 barbarians
+            from 2 different coastal hexes to 2 other unconquered coastal
+            hexes (the desert and the castle count as coastal). When the
+            coast holds too few barbarians, the rest come from the supply. A
+            third barbarian moved onto a hex conquers it.
+          </li>
+        </ul>
+        <p>
+          A knight card with all 6 of your knights on the board (or, for
+          Knighthood, no free castle edge) is discarded without effect.
         </p>
       </>
     ),
   },
   {
-    id: 'traders-castle-combat',
-    title: 'Castle combat',
+    id: 'traders-barbarian-knights',
+    title: 'Knights and expelling the barbarians',
     body: (
       <>
         <p>
-          When a barbarian reaches its castle (path position 3 of 3),
-          combat happens immediately at end of turn:
+          <strong>End of your turn</strong>: when you press End turn with
+          knights on the board you get a knight step. Pick a knight, then an
+          edge up to <strong>3 edges</strong> away — or 4-5 edges for{' '}
+          <strong>1 wheat</strong> (that knight only). Knights ignore every
+          piece on the way but must stop on an edge without a knight, and
+          never on a castle edge. A knight on a castle edge must move. Each
+          knight moves once. Then press <strong>Done</strong>.
+        </p>
+        <p>
+          <strong>Expel</strong>: starting with the 4 next to the castle and
+          going clockwise, every coastal hex with at least 1 barbarian and{' '}
+          <strong>more knights on its 6 edges than barbarians</strong> is a
+          victory:
         </p>
         <ul>
           <li>
-            <strong>Defender strength</strong> = the total number of
-            knights on the six edges around the castle, summed across
-            all players.
+            The barbarians become prisoners of the players with knights there.
+            One player alone takes them all. Otherwise each takes 1; a
+            leftover goes to whoever has the most knights there (a tie is
+            rolled for — the loser takes 3 gold). When there are fewer
+            prisoners than players, everyone rolls and the prisoners go out
+            from the highest roll; each player left without one takes 3 gold.
           </li>
+          <li>A conquered hex is liberated.</li>
           <li>
-            <strong>Barbarian strength</strong> = 4 (default for every
-            castle).
-          </li>
-          <li>
-            If defenders ≥ barbarians, the defense wins: each
-            participating player earns <strong>+1 VP per knight</strong>
-            {' '}they brought, and roughly half the defending knights
-            die (rounded up).
-          </li>
-          <li>
-            If defenders &lt; barbarians, the castle is overrun. All
-            defending knights die. The defender with the fewest knights
-            loses one settlement / city adjacent to the castle (cities
-            downgrade to settlements). When no defenders are present,
-            any player with a building on the castle's hex may lose it.
-          </li>
-          <li>
-            The barbarian resets to position 0 and the cycle repeats.
+            <strong>Knight losses</strong>: roll a die. 1 or 6 = the purple
+            edges, 2 or 5 = green, 3 or 4 = brown (the castle tile's key).
+            Each knight on the hex's edges of that direction returns to its
+            owner, who takes 3 gold for it.
           </li>
         </ul>
+        <CastleEdgeKeyDiagram />
       </>
     ),
   },

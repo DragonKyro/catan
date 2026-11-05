@@ -208,6 +208,29 @@ function treasonMovePossible(state: GameState, sources: HexId[], dests: HexId[])
   return false;
 }
 
+// The coast after some Treason moves, without validating them (used by the
+// UI to offer the next pick).
+export function previewTreason(state: GameState, moves: BarbarianTreasonMove[]): GameState {
+  if (!isBarbarianAttack(state)) return state;
+  let next: BarbarianAttackGame = state;
+  for (const m of moves) {
+    next = patchBarbarianAttack(next, (ba) => {
+      let b = ba;
+      if (m.from === null) b = { ...b, supply: b.supply - 1 };
+      else b = withBarbarians(b, m.from, -1);
+      return withBarbarians(b, m.to, 1);
+    });
+  }
+  return next;
+}
+
+// Can Treason move another barbarian after `moves`?
+export function treasonCanContinue(state: GameState, moves: BarbarianTreasonMove[]): boolean {
+  if (moves.length >= 2) return false;
+  const sources = moves.map((m) => m.from).filter((h): h is HexId => h !== null);
+  return treasonMovePossible(previewTreason(state, moves), sources, moves.map((m) => m.to));
+}
+
 // Validate a Treason's moves, applying them one after another. Returns the
 // state after the moves (barbarians moved, conquest updated) or throws.
 // Two moves are required unless no further legal move exists.

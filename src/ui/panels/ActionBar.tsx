@@ -19,6 +19,10 @@ import {
   MAX_CITY_WALLS,
 } from '@/game/modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
+import {
+  BarbarianAttackPhaseBar,
+  BarbarianCardButton,
+} from '@/ui/game/traders/BarbarianAttackActions';
 import './ActionBar.css';
 
 export function ActionBar() {
@@ -213,18 +217,6 @@ export function ActionBar() {
             🌉 Bridge
           </Button>
         )}
-        {hasTraders && (game.castles?.length ?? 0) > 0 && (
-          <Button
-            disabled={
-              !canAfford(player.resources, COSTS.hireKnight) ||
-              (game.barbarianKnightSupply ?? 0) <= 0
-            }
-            onClick={() => setMode({ kind: 'hireKnight' })}
-            title="Hire Knight (1🌾 1🪨) — place a defender on a castle-adjacent edge"
-          >
-            🛡 Knight
-          </Button>
-        )}
         <Button
           disabled={
             !canAfford(player.resources, COSTS.settlement) ||
@@ -337,7 +329,8 @@ export function ActionBar() {
             </Button>
           );
         })()}
-        {!hasCK && (
+        {game.barbarianAttack && <BarbarianCardButton game={game} acting={acting} />}
+        {!hasCK && !game.barbarianAttack && (
           <Button
             disabled={
               !canAfford(player.resources, COSTS.devCard) ||
@@ -409,6 +402,11 @@ export function ActionBar() {
     );
   }
 
+  // T&B Barbarian Attack: card choices and the end-of-turn knight moves.
+  if (phase === 'barbarianCard' || phase === 'barbarianKnightMoves') {
+    return wrap(<BarbarianAttackPhaseBar game={game} acting={acting} />);
+  }
+
   // Other phases are driven by board highlights or dialogs; say what's
   // expected so a player is never left guessing.
   const hint = phaseHint(game, acting);
@@ -457,7 +455,9 @@ function phaseHint(game: GameState, pid: PlayerId): string | null {
           ? ' on one of the large islands'
           : ' on the main island'
         : '';
-      return `Place starting settlement ${round}${where}${pays ? ' — it collects starting resources' : ''}.`;
+      // T&B Barbarian Attack: the second starting placement is a city.
+      const piece = game.barbarianAttack && round === 2 ? 'city' : 'settlement';
+      return `Place starting ${piece} ${round}${where}${pays ? ' — it collects starting resources' : ''}.`;
     }
     return seafarers
       ? 'Place a road next to it — or, on the coast, a ship (⛵) instead.'
