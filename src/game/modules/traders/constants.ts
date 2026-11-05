@@ -11,6 +11,8 @@ export const TRADERS_SCENARIO_BARBARIAN_ATTACK = 'barbarianAttack';
 // Merchant Trains: rulebook ships 22 wagon tokens in a shared neutral
 // supply. Each successful `placeWagon` action draws one.
 export const MERCHANT_WAGON_SUPPLY = 22;
+// T&B 5-6 adds 11 trade wagons (rulebook p. 7): 33.
+export const MERCHANT_WAGON_SUPPLY_5_6 = 33;
 
 // Merchant Trains victory-point target (rulebook: "If you have 12 or more
 // VPs at any point during your turn, the game ends and you are the winner!").
@@ -76,6 +78,8 @@ export const BARBARIAN_ATTACK_DEFAULT_VP = 12;
 // 36 barbarian figures: 1 starts on the 2 hex, 1 on the 12 hex, the rest
 // next to the board.
 export const BARBARIAN_TOTAL = 36;
+// T&B 5-6 adds 12 more (rulebook p. 2 / p. 8).
+export const BARBARIAN_TOTAL_5_6 = 48;
 // Three barbarians on a coastal hex conquer it.
 export const BARBARIANS_TO_CONQUER = 3;
 // Barbarians placed (dice rolls) after each building placed.

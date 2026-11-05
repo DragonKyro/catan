@@ -1,7 +1,7 @@
 import type { BoardState, GameState, HexId, PlayerColor } from '@/game/types';
 import { hexPolygonPoints } from '../boardLayout';
 import { PLAYER_COLOR_HEX } from '@/ui/shared/playerColors';
-import { isHexConquered } from '@/game/modules/traders/barbarianAttack/state';
+import { castleHexes, isHexConquered } from '@/game/modules/traders/barbarianAttack/state';
 import { edgeKey } from '@/game/board/coords';
 
 // Barbarian Attack board art (rulebook pp.15-18): the castle tile with its
@@ -29,7 +29,9 @@ export function BarbarianAttackHexLayer({ game }: { game: GameState }) {
   const board = game.board;
   return (
     <g className="barbarian-attack-hexes" pointerEvents="none">
-      <CastleTile board={board} hexId={ba.castleHex} />
+      {castleHexes(ba).map((h) => (
+        <CastleTile key={h} board={board} hexId={h} />
+      ))}
       {ba.coastalHexes.map((h) => {
         const n = ba.barbarians[h] ?? 0;
         if (n === 0) return null;

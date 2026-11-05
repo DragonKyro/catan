@@ -10,7 +10,7 @@ import {
   BARBARIAN_KNIGHT_MOVE,
   BARBARIAN_KNIGHT_MOVE_BOOSTED,
 } from '../constants';
-import { hexEdgeIds } from './state';
+import { castleHexes, hexEdgeIds } from './state';
 
 // Barbarian Attack knights: each player's 6 knights stand on edges (one
 // knight per edge, roads and buildings don't matter). They enter the board
@@ -44,13 +44,14 @@ export function isKnightEdge(state: GameState, edgeId: EdgeId): boolean {
 export function castleEdgeIds(state: GameState): EdgeId[] {
   const ba = state.barbarianAttack;
   if (!ba) return [];
-  return hexEdgeIds(state, ba.castleHex);
+  return castleHexes(ba).flatMap((h) => hexEdgeIds(state, h));
 }
 
 export function isCastleEdge(state: GameState, edgeId: EdgeId): boolean {
   const ba = state.barbarianAttack;
   if (!ba) return false;
-  return state.board.edges[edgeId]?.hexes.includes(ba.castleHex) ?? false;
+  const castles = castleHexes(ba);
+  return state.board.edges[edgeId]?.hexes.some((h) => castles.includes(h)) ?? false;
 }
 
 // Knights on a hex's six edges, per player.

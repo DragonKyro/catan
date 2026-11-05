@@ -38,6 +38,16 @@ export function conqueredHexes(state: GameState): HexId[] {
   return ba.coastalHexes.filter((h) => (ba.barbarians[h] ?? 0) >= BARBARIANS_TO_CONQUER);
 }
 
+// Every castle hex (one at 3-4 players, two at 5-6).
+export function castleHexes(ba: BarbarianAttackState): HexId[] {
+  return ba.castleHexes ?? [ba.castleHex];
+}
+
+export function isCastleHex(state: GameState, hexId: HexId): boolean {
+  const ba = state.barbarianAttack;
+  return !!ba && castleHexes(ba).includes(hexId);
+}
+
 export function isCoastalHex(state: GameState, hexId: HexId): boolean {
   return state.barbarianAttack?.coastalHexes.includes(hexId) ?? false;
 }

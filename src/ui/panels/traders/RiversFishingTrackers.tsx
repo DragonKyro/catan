@@ -1,5 +1,6 @@
 import type { GameState } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
+import { lakeHexes } from '@/game/modules/traders/fishing/lakes';
 import {
   FISH_COST_BUILD_ROAD,
   FISH_COST_BUY_DEV_CARD,
@@ -66,12 +67,12 @@ export function RiversTracker({ game }: { game: GameState }) {
 }
 
 export function FishingTracker({ game }: { game: GameState }) {
-  const lake = game.lakeHexId;
+  const lakes = lakeHexes(game);
   const robber =
     game.robberActive === false
       ? 'beside the board'
-      : game.board.robberHex === lake
-        ? 'on the lake'
+      : lakes.includes(game.board.robberHex)
+        ? 'on a lake'
         : 'on the island';
   return (
     <div className="scenario-panel-block">

@@ -68,14 +68,15 @@ export function NewGame({ onBack }: Props = {}) {
     ? customMap.minPlayers
     : isFunMap
       ? scenario.minPlayers
-      : scenario.kind === 'seafarers'
+      : scenario.kind === 'seafarers' || scenario.kind === 'traders'
         ? scenario.minPlayers
         : 3;
+  // T&B scenarios: 3-6 (the T&B 5-6 boards; no 7-8).
   const maxPlayers = customMap
     ? customMap.maxPlayers
     : isFunMap
       ? scenario.maxPlayers
-      : scenario.kind === 'seafarers'
+      : scenario.kind === 'seafarers' || scenario.kind === 'traders'
         ? scenario.maxPlayers
         : 8;
   const recommendedVpValue = customMap?.defaultVpToWin ?? recommendedVp(numPlayers, expansions);

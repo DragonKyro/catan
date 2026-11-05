@@ -22,6 +22,23 @@ import type {
 
 const START_LABELS = ['NW', 'NE', 'S'] as const;
 
+// Every watering hole: one at 3-4 players (`state.wateringHoleHexId`), two
+// at 5-6 (`state.wateringHoleHexIds`; "six locations for starting a
+// merchant train, three at each watering hole", T&B 5-6 p. 7).
+export function wateringHoles(
+  state: Pick<GameState, 'wateringHoleHexId' | 'wateringHoleHexIds'>,
+): HexId[] {
+  if (state.wateringHoleHexIds && state.wateringHoleHexIds.length > 0) {
+    return state.wateringHoleHexIds;
+  }
+  return state.wateringHoleHexId ? [state.wateringHoleHexId] : [];
+}
+
+// The start points of several watering holes, in hole order.
+export function resolveAllWagonStarts(board: BoardState, holes: HexId[]): WagonStartPoint[] {
+  return holes.flatMap((h) => resolveWagonStarts(board, h));
+}
+
 // The three start points of the watering hole, found geometrically from
 // the hex's corners (pixel y grows downward). Each corner has one edge that
 // isn't a side of the watering hole: the start edge, leading away from it.
@@ -208,6 +225,15 @@ export function applyWagonPlacement(
 export function placementLabel(state: GameState, p: WagonPlacement): string {
   if (p.train === null) {
     const s = (state.wagonStarts ?? []).find((x) => x.edge === p.edge);
+    // Two watering holes (5-6): say which one.
+    const holes = wateringHoles(state);
+    if (s && holes.length > 1) {
+      const hole = holes.find((h) => state.board.hexes[h]?.corners.includes(s.corner));
+      const ys = holes.map((h) => state.board.hexes[h]?.center.y ?? 0);
+      const y = hole ? state.board.hexes[hole]?.center.y ?? 0 : 0;
+      const where = y <= Math.min(...ys) ? 'upper hole' : 'lower hole';
+      return `new train (${where}, ${s.label})`;
+    }
     return `new train (${s?.label ?? '?'})`;
   }
   return `train ${p.train}`;

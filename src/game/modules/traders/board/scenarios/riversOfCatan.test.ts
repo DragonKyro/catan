@@ -130,10 +130,10 @@ describe('Rivers of Catan board (rulebook p. 11)', () => {
     expect(s.strongestPorts).toEqual({ holder: null });
   });
 
-  it('rejects 5+ player Rivers games (scope limit)', () => {
+  it('rejects 7+ player Rivers games (no 7-8 board)', () => {
     expect(() =>
       createGame({
-        playerNames: ['A', 'B', 'C', 'D', 'E'],
+        playerNames: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
         seed: 1,
         settings: {
           expansions: ['traders'],
@@ -141,6 +141,6 @@ describe('Rivers of Catan board (rulebook p. 11)', () => {
         },
         randomizeTurnOrder: false,
       }),
-    ).toThrow(/3-4 players only/);
+    ).toThrow(/at most 6 players/);
   });
 });

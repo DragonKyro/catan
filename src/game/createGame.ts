@@ -10,7 +10,7 @@ import { CLOTH_GENERAL_SUPPLY } from './modules/seafarers/cloth';
 import { getPortAtVertex } from './board/adjacency';
 import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
 import { generateTradersBoard } from './modules/traders/board/generator';
-import { resolveWagonStarts } from './modules/traders/merchantTrains/trains';
+import { resolveAllWagonStarts } from './modules/traders/merchantTrains/trains';
 import { hasTradersVariant } from './modules/traders/variants';
 import { buildEventDeck } from './modules/traders/variants/eventCards/deck';
 import { buildInitialFishPool } from './modules/traders/fishing/pool';
@@ -19,6 +19,7 @@ import {
   TRADERS_SCENARIO_MERCHANT_TRAINS,
   TRADERS_SCENARIO_BARBARIAN_ATTACK,
   MERCHANT_WAGON_SUPPLY,
+  MERCHANT_WAGON_SUPPLY_5_6,
 } from './modules/traders/constants';
 import type { BarbarianBoardSetup } from './modules/traders/barbarianAttack/board';
 import { initialBarbarianAttackState } from './modules/traders/barbarianAttack/init';
@@ -201,13 +202,15 @@ export function createGame(opts: CreateGameOptions): GameState {
   }
 
   // Traders & Barbarians compatibility limits for this phase:
-  //   - 3-4 players only (no 5-6p scenario layouts yet).
+  //   - 3-6 players (T&B 5-6 boards per scenario; no 7-8 boards). A
+  //     scenario without a 5-6 board (`layout5_6p`) stays 3-4.
   //   - Cannot combine with Seafarers (no merged scenario boards).
   //   - Cannot combine with Cities & Knights (variant interactions deferred).
   if (hasTraders) {
-    if (numPlayers > 4) {
+    const sc = getTradersScenario(opts.settings?.tradersScenarioId ?? 'riversOfCatan');
+    if (numPlayers > sc.maxPlayers) {
       throw new Error(
-        `Traders & Barbarians is 3-4 players only in this build (got ${numPlayers}).`,
+        `Traders & Barbarians: ${sc.name} supports at most ${sc.maxPlayers} players (got ${numPlayers}).`,
       );
     }
     if (expansions.includes(SEAFARERS_EXPANSION_ID)) {
@@ -295,8 +298,10 @@ export function createGame(opts: CreateGameOptions): GameState {
   let riverEdges: EdgeId[] | undefined;
   let rivers: RiverPath[] | undefined;
   let lakeHexId: HexId | undefined;
+  let lakeHexIds: HexId[] | undefined;
   let fishingGrounds: FishingGround[] | undefined;
   let wateringHoleHexId: HexId | undefined;
+  let wateringHoleHexIds: HexId[] | undefined;
   let barbarianBoard: BarbarianBoardSetup | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
@@ -322,6 +327,10 @@ export function createGame(opts: CreateGameOptions): GameState {
     riverEdges = result.riverEdges.length > 0 ? result.riverEdges : undefined;
     rivers = result.rivers.length > 0 ? result.rivers : undefined;
     lakeHexId = result.lakeHexId ?? undefined;
+    // 5-6 players: two lakes / two watering holes (lists kept only then).
+    lakeHexIds = result.lakeHexIds.length > 1 ? result.lakeHexIds : undefined;
+    wateringHoleHexIds =
+      result.wateringHoleHexIds.length > 1 ? result.wateringHoleHexIds : undefined;
     fishingGrounds =
       result.fishingGrounds.length > 0 ? result.fishingGrounds : undefined;
     wateringHoleHexId = result.wateringHoleHexId ?? undefined;
@@ -523,7 +532,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let fishTokenDiscard: FishTokenType[] | undefined;
   let oldBootHolder: PlayerId | null | undefined;
   if (isFishing) {
-    [fishTokenPool, rng] = shuffle(rng, buildInitialFishPool());
+    [fishTokenPool, rng] = shuffle(rng, buildInitialFishPool(numPlayers));
     fishTokenDiscard = [];
     oldBootHolder = null;
     // Robber off-board until activated. Use the existing robberActive flag
@@ -542,9 +551,10 @@ export function createGame(opts: CreateGameOptions): GameState {
   let wagonStarts: WagonStartPoint[] | undefined;
   if (isMerchantTrains) {
     wagons = [];
-    wagonSupply = MERCHANT_WAGON_SUPPLY;
+    // T&B 5-6 adds 11 wagons.
+    wagonSupply = numPlayers >= 5 ? MERCHANT_WAGON_SUPPLY_5_6 : MERCHANT_WAGON_SUPPLY;
     wagonStarts = wateringHoleHexId
-      ? resolveWagonStarts(board, wateringHoleHexId)
+      ? resolveAllWagonStarts(board, wateringHoleHexIds ?? [wateringHoleHexId])
       : undefined;
     robberActive = false;
   }
@@ -622,11 +632,13 @@ export function createGame(opts: CreateGameOptions): GameState {
     strongestPorts: strongestPortsInit,
     eventCards,
     lakeHexId,
+    ...(lakeHexIds ? { lakeHexIds } : {}),
     fishingGrounds,
     fishTokenPool,
     fishTokenDiscard,
     oldBootHolder,
     wateringHoleHexId,
+    ...(wateringHoleHexIds ? { wateringHoleHexIds } : {}),
     wagons,
     wagonSupply,
     wagonStarts,

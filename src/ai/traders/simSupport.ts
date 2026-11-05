@@ -20,7 +20,7 @@ export function simulate(
   maxSteps = 8000,
   onStep?: (before: GameState, action: Action, after: GameState) => void,
 ): SimResult {
-  const names = ['AI-A', 'AI-B', 'AI-C', 'AI-D'].slice(0, numPlayers);
+  const names = ['AI-A', 'AI-B', 'AI-C', 'AI-D', 'AI-E', 'AI-F'].slice(0, numPlayers);
   let s = createGame({
     playerNames: names,
     playerTypes: names.map(() => 'ai' as const),
