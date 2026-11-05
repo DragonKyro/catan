@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Action, EdgeId, HexId, PlayerId, VertexId } from '@/game/types';
+import type { Action, BarbarianTreasonMove, EdgeId, HexId, PlayerId, VertexId } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
@@ -39,9 +39,13 @@ export type UIMode =
   // Traders & Barbarians / Merchant Trains — placing a trade wagon after a
   // vote resolution that named a placer (no clear vote-winner edge).
   | { kind: 'placeWagon' }
-  // Traders & Barbarians / Barbarian Attack — picking a castle-adjacent
-  // edge to hire a defender knight on.
-  | { kind: 'hireKnight' }
+  // Traders & Barbarians / Barbarian Attack — the choice for a card just
+  // bought (Capture hex / knight edge), Treason's barbarian moves (picked
+  // one hex at a time: `from` set = choosing where it goes; null = from the
+  // supply), and the end-of-turn knight moves (`from` = the picked knight).
+  | { kind: 'baCard' }
+  | { kind: 'baTreason'; moves: BarbarianTreasonMove[]; from?: HexId | null }
+  | { kind: 'baKnightMove'; from?: EdgeId }
   // Cities & Knights — picking which of your own cities to put a wall under.
   | { kind: 'buildCityWall' }
   // Cities & Knights knight build/action modes.
@@ -169,6 +173,8 @@ function revealedSomething(before: GameState, next: GameState): boolean {
   const partners = (s: GameState) =>
     (s.clothVillages ?? []).reduce((n, v) => n + v.partners.length, 0);
   if (partners(before) !== partners(next)) return true;
+  // Anything that rolled dice (T&B Barbarian Attack landings after a build).
+  if (before.rngState !== next.rngState) return true;
   return next.phase !== before.phase;
 }
 
@@ -187,6 +193,13 @@ const phaseToMode = (state: GameState): UIMode => {
   if (state.phase === 'placeTribePort') return { kind: 'placeTribePort' };
   // T&B Merchant Trains: the placer picks an edge.
   if (state.phase === 'placeWagon') return { kind: 'placeWagon' };
+  // T&B Barbarian Attack: card choices and the end-of-turn knight moves.
+  if (state.phase === 'barbarianCard') {
+    return state.barbarianAttack?.pendingCard?.card === 'treason'
+      ? { kind: 'baTreason', moves: [] }
+      : { kind: 'baCard' };
+  }
+  if (state.phase === 'barbarianKnightMoves') return { kind: 'baKnightMove' };
   // Cities & Knights sub-phases that drive board interactions.
   if (state.phase === 'displacedKnightMove') return { kind: 'displacedKnightMove' };
   if (state.phase === 'placeMerchant') return { kind: 'placeMerchant' };

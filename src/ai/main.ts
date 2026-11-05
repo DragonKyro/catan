@@ -7,7 +7,7 @@ import type {
   EdgeId,
 } from '@/game/types';
 import { RESOURCES, COSTS } from '@/game/types';
-import { canPlaceSettlement, canConnectRoad } from '@/game/placement';
+import { canPlaceSettlement, canConnectRoad, canPlaceCity } from '@/game/placement';
 import { canAfford } from '@/game/resources';
 import { getBankTradeRate } from '@/game/actions/trade';
 import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
@@ -19,7 +19,7 @@ import { chooseWinPlan } from './winPaths';
 import { tryBuildShip, tryMoveShip } from './seafarers/ships';
 import { tryBuildBridge } from './traders/bridges';
 import { tryFishSpend, tryPassBoot } from './traders/fish';
-import { tryHireKnight } from './traders/knights';
+import { tryBuyBarbarianCard, barbarianAttackNeedsRoads } from './traders/barbarianAttack';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { tryBuildWonder } from './seafarers/wonders';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
@@ -83,6 +83,8 @@ export function chooseMainPhaseAction(
     let bestVid: VertexId | null = null;
     let bestScore = -Infinity;
     for (const vid of player.settlements) {
+      // T&B Barbarian Attack: no city on a conquered hex's corner.
+      if (!canPlaceCity(state, playerId, vid)) continue;
       const s = vertexScore(state, vid, playerId);
       if (s > bestScore) {
         bestScore = s;
@@ -144,13 +146,11 @@ export function chooseMainPhaseAction(
     if (fish) return fish;
     const boot = tryPassBoot(state, playerId);
     if (boot) return boot;
-    // 2.8) HIRE KNIGHT (Barbarian Attack). Fires only when a barbarian is
-    //      1-2 hexes from a castle AND the castle's existing defense is
-    //      under the barbarian strength. Higher priority than road
-    //      because losing combat costs a building outright — much worse
-    //      than a missed road segment.
-    const knight = tryHireKnight(state, playerId);
-    if (knight) return knight;
+    // 2.8) BARBARIAN ATTACK DEV CARD. The scenario's cards are played on
+    //      purchase and are the only source of knights (and so of
+    //      prisoners), so they come before roads.
+    const card = tryBuyBarbarianCard(state, playerId);
+    if (card) return card;
   }
 
   // 3) BUILD ROAD
@@ -218,10 +218,13 @@ export function chooseMainPhaseAction(
     // 6 VP for the rest of the game (the original bug: 7-8p games where
     // the AI maxed cities, drained the dev deck, and stopped building).
     const vpLockedOut =
-      state.devCardDeck.length === 0 &&
-      player.cities.length >= 4 &&
-      openSpots === 0 &&
-      player.settlements.length < 5;
+      (state.devCardDeck.length === 0 &&
+        player.cities.length >= 4 &&
+        openSpots === 0 &&
+        player.settlements.length < 5) ||
+      // T&B Barbarian Attack: nothing left to upgrade and no open spot —
+      // road out to new land (the scenario's crowded inner hexes).
+      barbarianAttackNeedsRoads(state, playerId, openSpots);
 
     // Threshold tiers:
     //   - LR pursuit: very low (any extension is worth ~2 VP)

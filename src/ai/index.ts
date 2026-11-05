@@ -17,6 +17,10 @@ import {
   trySubmitWagonVote,
   tryPlaceWagon,
 } from './traders/merchantTrains';
+import {
+  chooseBarbarianCardAction,
+  chooseBarbarianKnightMove,
+} from './traders/barbarianAttack';
 
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
@@ -124,6 +128,15 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
   }
   if (state.phase === 'placeWagon') {
     return tryPlaceWagon(state, playerId);
+  }
+
+  // T&B Barbarian Attack: the choice for a card just bought, then the
+  // end-of-turn knight moves (null = done, the driver ends the turn).
+  if (state.phase === 'barbarianCard') {
+    return chooseBarbarianCardAction(state, playerId);
+  }
+  if (state.phase === 'barbarianKnightMoves') {
+    return chooseBarbarianKnightMove(state, playerId);
   }
 
   return null;

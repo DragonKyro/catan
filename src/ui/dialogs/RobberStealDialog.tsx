@@ -73,7 +73,7 @@ export function RobberStealDialog() {
     >
       <p style={{ marginTop: 0, color: 'var(--text-soft)' }}>
         {mode === 'any'
-          ? 'There is no robber in the Pirate Islands: you may steal one random resource card from any player.'
+          ? 'There is no robber in this scenario: you may steal one random resource card from any player.'
           : cloth
             ? 'Take one random resource card — or one cloth token — from a player with a ship here.'
             : 'Pick a player to steal one resource card from at random.'}

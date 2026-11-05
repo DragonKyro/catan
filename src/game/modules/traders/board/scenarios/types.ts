@@ -33,18 +33,13 @@ export interface FishingGroundDef {
   token: number;
 }
 
-// Barbarian Attack: declarative castle entry. `castle` is the hex hosting
-// the castle (a fixed-terrain 'castle' position in the layout); `pathStart`
-// is the outer sea hex where the barbarian group spawns. The generator
-// walks from `pathStart` toward `castle` along hex-adjacency to derive the
-// concrete `barbarianPath`.
-export interface BarbarianCastleDef {
-  id: string;
+// Barbarian Attack board facts: the castle hex, the coastal hexes in expel
+// order (clockwise from the 4 next to the castle) and the hexes that start
+// with a barbarian. Resolved to hex ids by the generator.
+export interface BarbarianAttackDef {
   castle: { q: number; r: number };
-  pathStart: { q: number; r: number };
-  // Override the default barbarian strength on this castle. Defaults to
-  // `BARBARIAN_BASE_STRENGTH` when omitted.
-  strength?: number;
+  expelOrder: Array<{ q: number; r: number }>;
+  startBarbarians: Array<{ q: number; r: number }>;
 }
 
 export interface TradersScenario {
@@ -76,8 +71,10 @@ export interface TradersScenario {
   // this field surfaces the coord to the generator for `state.wateringHoleHexId`.
   // Falls back to scanning hexes with `terrain === 'wateringHole'`.
   wateringHole?: { q: number; r: number };
-  // Barbarian Attack: three (or however many) castle definitions. Resolved
-  // into `state.castles` by the generator. The layout must pin each castle
-  // position via `fixedTerrain: 'castle'`.
-  castles?: BarbarianCastleDef[];
+  // Optional per-game layout step run before materialization (seeded RNG
+  // in, RNG out). Barbarian Attack deals its coastal and inner terrain
+  // pools separately here.
+  prepareLayout?: (layout: ScenarioLayout, rngState: number) => [ScenarioLayout, number];
+  // Barbarian Attack: see BarbarianAttackDef.
+  barbarianAttack?: BarbarianAttackDef;
 }

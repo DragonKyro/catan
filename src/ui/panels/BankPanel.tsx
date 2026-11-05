@@ -12,7 +12,11 @@ export function BankPanel() {
     <section className="bank">
       <header className="bank-header">
         <span>Bank</span>
-        {!hasCK && <span className="bank-deck">🃏 {game.devCardDeck.length}</span>}
+        {!hasCK && (
+          <span className="bank-deck" title="Development cards left in the deck">
+            🃏 {game.barbarianAttack ? game.barbarianAttack.deck.length : game.devCardDeck.length}
+          </span>
+        )}
       </header>
       <div className="bank-resources">
         {RESOURCES.map((r) => (
