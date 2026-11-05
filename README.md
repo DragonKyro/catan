@@ -37,6 +37,8 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 - **The Wonders of Catan** — claim one of the rulebook's wonders and build its 4 levels; finish it, or reach 10 VP with the highest level, to win
 - **New World** (12 VP) — open map; +1 VP per island you didn't start on
 
+**Cities & Knights expansion** — 3–6 players, following the 2025 rulebook (13 VP): a city as your second starting piece, commodities (paper / cloth / coin) from cities, the event die (barbarian ship or a progress-card draw on the red die), the barbarian track and attacks (defended by active knights, pillaging the weakest defenders' cities), knights (recruit, activate, promote, move, displace, chase the robber), city walls, the three city improvement tracks with their level-3 abilities and metropolises, the merchant, and all 54 progress cards. The robber waits beside the track until the first attack. Play it on a random board, a shape Fun Map, or the rulebook's fixed **first-game board**. 5–6 players use the 5–6 board and paired turns.
+
 ### Notable mechanics
 
 - **Online multiplayer with no backend.** WebRTC peer-to-peer over Trystero (Nostr-relay signaling — works on cellular and corporate networks where BitTorrent trackers are blocked). Create a room, share a 4-character code, friends join. Full state replication; randomness baked into actions so all peers reduce to the same state. Drop out and rejoin mid-game with the same code — your seat is preserved via `localStorage` UUID. Late joiners without a saved UUID become read-only spectators.
@@ -103,8 +105,8 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 7 — Seafarers 5–6 player extension (all 9 scenarios have a `layout5_6p` matching the 5-6 player rulebook's component counts; the rulebook's "Six Islands" scenario is implemented as Four Islands' 5-6p geometry. Hex positions are approximate, pending visual verification against [docs/.scenario-renders/seafarers-56-*.png])
 - [x] Phase 7c — Base-game colonist.io Fun Maps: Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl. Selectable from a base-map dropdown alongside Standard. Volcano implements full eruption rules (setup block, inline destruction on roll, AI penalty, dedicated rulebook entry). Gold Rush and Pond ship 5-6p layouts; the rest are 3-4p
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
-- [~] Phase 8 — Cities & Knights expansion (engine complete: knights, commodities, barbarian advance + attack, all 3 improvement tracks with L3 abilities + metropolis, 54 progress cards with effects, city walls. Heuristic AI plays the expansion: knights vs. the barbarians, improvements + metropolises, progress cards, commodity trades)
-- [ ] Phase 9 — Cities & Knights 5–6 player extension
+- [x] Phase 8 — Cities & Knights expansion (audited rule by rule against the 2025 rulebook: turn flow, barbarians, knights, improvements + metropolises, all 54 progress cards, commodity trading. Every action playable in the UI with drawn pieces (knights by strength, standing / lying; walls; metropolis gates; merchant; barbarian track). The rulebook's first-game board as a map. Heuristic AI plays the expansion: knights vs. the barbarians, improvements + metropolises, progress cards, commodity trades)
+- [x] Phase 9 — Cities & Knights 5–6 player extension (5–6 board, paired turns — Player 2 may not trade with players — and 6 more of each commodity)
 - [~] Phase 10 — Traders & Barbarians expansion (4 of 5 scenarios shipping: Rivers of Catan + Fishing on Catan + Merchant Trains + Barbarian Attack, plus the Friendly Robber and Strongest Ports variants. The Traders & Barbarians combo scenario, Catan Event Cards variant, and Catan for Two variant are deferred; see Outstanding work)
 - [ ] Phase 11 — Traders & Barbarians 5–6 player extension
 - [ ] Phase 12 — Explorers & Pirates expansion
@@ -126,8 +128,12 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 **Cities & Knights (Phase 8):**
 
 - [x] **AI support** — `src/ai/citiesAndKnights/` plays C&K: answers every C&K decision on or off its turn, defends against the barbarians (activates / promotes / recruits from the ship position and every seat's strength, holds back a city it can't defend), raises improvement tracks toward level 3 and the metropolises, plays each progress card by a simple rule, builds walls, chases the robber, and trades commodities with the bank and players. Seeded all-AI games finish at 3–6 players (`playCitiesAndKnights.test.ts`). Still simple: one difficulty, little knight-based blocking / displacement, no long-term plan beyond the next build.
-- [ ] **Deeper test coverage** — current C&K tests are basic smoke tests (`integration.test.ts` + `phase2.test.ts`, ~695 lines). Displacement, chase-robber, and per-progress-card effects are mostly untested.
-- [ ] **Spot-check progress-card dialogs** — confirm every progress card that requires a follow-up dialog (intrigue, espionage, treason, wedding, commercial harbor offer, etc.) has its UI wired and not just the engine handler.
+- [x] **Rules audit + tests** — a test per rule (`rules2025.test.ts`, `knights.test.ts`, `improvementsTrade.test.ts`, `progressCards.test.ts`, `board/firstGame.test.ts`), covering the roll flow, draws, attacks, knights, metropolises, trading and every progress card.
+- [x] **Progress-card dialogs** — every card with a follow-up (Intrigue, Espionage, Treason, Wedding, Commercial Harbor, Guild Dues, Merchant Fleet, Invention, Diplomacy, Taxation, monopolies, Smithing, Road Building, Engineering, Medicine, Alchemy) is playable from the cards dialog or the board, with component tests in `src/ui/dialogs/citiesAndKnights/`.
+- [ ] **C&K + Seafarers** — the rulebook combination (ships as roads, pirate on the track, knights on sea intersections) isn't wired; `createGame` refuses it.
+- [ ] **Gold Rush / Volcano with C&K** — the C&K roll has no gold pick or eruption step, so those two maps are refused under C&K.
+- [ ] **Out of settlements on a pillage** — the rulebook turns the city on its side; here it becomes a 6th settlement.
+- [ ] **Online lobby** — the online lobby doesn't offer C&K yet (hot-seat / vs. AI only).
 
 **Traders & Barbarians (Phase 10):**
 
@@ -141,7 +147,7 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 
 **Cross-cutting:**
 
-- [ ] **Replay slider action coverage** — `MEANINGFUL_ACTIONS` in `src/ui/replay/ReplayScreen.tsx` is missing every C&K and T&B action type (`buildBridge`, `spendFish`, `passOldBoot`, `submitWagonVote`, `placeWagon`, `hireKnight`, `recruitKnight`, `activateKnight`, `promoteKnight`, `buildCityWall`, `buildCityImprovement`, `playProgressCard`, etc.). Replays of expansion games skip the interesting bits on the slider.
+- [ ] **Replay slider action coverage** — `MEANINGFUL_ACTIONS` in `src/ui/replay/ReplayScreen.tsx` now has every C&K action type; the T&B ones (`buildBridge`, `spendFish`, `passOldBoot`, `submitWagonVote`, `placeWagon`, `hireKnight`) are still missing, so replays of T&B games skip them on the slider.
 
 **Fun map ideas (not yet implemented):**
 
