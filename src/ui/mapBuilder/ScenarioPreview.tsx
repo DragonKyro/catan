@@ -39,6 +39,8 @@ export interface PreviewSpec {
   // rest AI) instead of drawing the bare board — for checking panels and
   // dialogs. Default 'board'.
   view?: 'board' | 'game';
+  // T&B variants to switch on (`variants=eventCards,friendlyRobber,…`).
+  variants?: string[];
 }
 
 export function previewOptions(kind: PreviewKind): { id: string; label: string }[] {
@@ -74,7 +76,18 @@ export function buildPreviewGame(spec: PreviewSpec): GameState {
     // is handed back to a human afterwards (see App.tsx).
     playerTypes: names.map(() => 'ai' as const),
     seed: spec.seed,
-    settings: previewSettings(spec),
+    settings: {
+      ...previewSettings(spec),
+      ...(spec.variants?.length
+        ? {
+            tradersVariants: {
+              friendlyRobber: spec.variants.includes('friendlyRobber'),
+              strongestPorts: spec.variants.includes('strongestPorts'),
+              eventCards: spec.variants.includes('eventCards'),
+            },
+          }
+        : {}),
+    },
     randomizeTurnOrder: false,
   });
   return spec.steps ? simulate(game, spec.steps, spec.seed) : game;
@@ -138,7 +151,8 @@ export function parsePreviewQuery(search: string): PreviewSpec | null {
   const coords = params.get('coords') === '1';
   const steps = Number(params.get('steps') ?? 0) || 0;
   const view = params.get('view') === 'game' ? 'game' : 'board';
-  return { kind, id, players, seed, coords, steps, view };
+  const variants = (params.get('variants') ?? '').split(',').filter(Boolean);
+  return { kind, id, players, seed, coords, steps, view, variants };
 }
 
 function PreviewBoard({ spec }: { spec: PreviewSpec }) {

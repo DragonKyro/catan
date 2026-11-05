@@ -8,6 +8,7 @@ import {
   BARBARIAN_KNIGHT_BOOST_COST,
   TRADERS_EXPANSION_ID,
 } from '@/game/modules/traders/constants';
+import { REPAIR_ROAD_COST } from '@/game/modules/traders/variants/eventCards/events';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 
 interface Row {
@@ -29,6 +30,7 @@ const BRIDGE_ROW: Row = { icon: '🌉', label: 'Bridge', cost: COSTS.bridge };
 // Barbarian Attack: the scenario's cards are played on purchase, and a
 // knight moves 4-5 edges (instead of 3) for 1 wheat.
 const BA_CARD_ROW: Row = { icon: '🃏', label: 'Dev Card (played at once)', cost: COSTS.devCard };
+const REPAIR_ROAD_ROW: Row = { icon: '🔧', label: 'Repair road', cost: REPAIR_ROAD_COST };
 const BA_KNIGHT_BOOST_ROW: Row = {
   icon: '⚔',
   label: 'Knight: 4-5 edges',
@@ -62,6 +64,10 @@ export function CostCheatsheet({ onClose }: Props) {
         BA_KNIGHT_BOOST_ROW,
       ];
     }
+  }
+  // T&B Catan Event Cards: repairing an Earthquake-damaged road.
+  if (useGameStore.getState().game?.eventCards) {
+    rows = [...rows, REPAIR_ROAD_ROW];
   }
   if (hasCK) {
     // Cities & Knights replaces dev cards with progress cards (drawn on the

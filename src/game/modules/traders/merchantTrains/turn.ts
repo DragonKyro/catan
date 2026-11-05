@@ -1,58 +1,31 @@
-import type { GameState, EndTurnAction, WagonVoteState } from '../../../types';
+import type { GameState, EndTurnAction } from '../../../types';
 import { handleEndTurn as baseHandleEndTurn } from '../../../actions/turn';
 import { currentPlayerId } from '../../../helpers';
-import { forceResolveVoting } from './voting';
+import { openWagonVote, placeAndFinish } from './voting';
+import { legalWagonPlacements } from './trains';
 
-// Merchant Trains endTurn wrapper. When the active player has built at
-// least one piece this turn, open the wagon-voting phase instead of
-// advancing the turn immediately. Voting + placement eventually call
-// `handleEndTurn` themselves, so the turn does advance — just after the
-// wagon lands.
+// Merchant Trains endTurn wrapper. A player who built a building in their
+// Action phase collected a wagon; ending the turn opens the voting round
+// for it. Voting + placement end the turn themselves once the wagon lands.
+// With only one place the wagon could go there's nothing to vote on, and
+// with none (or an empty supply) the wagon is simply lost.
 export function handleEndTurnWithWagonVote(
   state: GameState,
   action: EndTurnAction,
 ): GameState {
-  // Merchant-trains scenarios only — fall through to base for the others.
-  if (!state.wateringHoleHexId) {
-    return baseHandleEndTurn(state, action);
+  const legalEnd =
+    state.phase === 'main' &&
+    action.playerId === currentPlayerId(state) &&
+    state.hasRolledThisTurn;
+  // Bad calls: let the base handler throw its usual error.
+  if (!state.wateringHoleHexId || !legalEnd) return baseHandleEndTurn(state, action);
+  if (!state.builtThisTurn) return baseHandleEndTurn(state, action);
+  const options = legalWagonPlacements(state);
+  if (options.length === 0) {
+    return baseHandleEndTurn({ ...state, builtThisTurn: false }, action);
   }
-  if (!state.builtThisTurn) {
-    return baseHandleEndTurn(state, action);
+  if (options.length === 1) {
+    return placeAndFinish(state, options[0]!, 'onlyOption', null);
   }
-  if (state.phase !== 'main') {
-    // Hand off to base so it can throw the correct phase error.
-    return baseHandleEndTurn(state, action);
-  }
-  if (action.playerId !== currentPlayerId(state)) {
-    return baseHandleEndTurn(state, action);
-  }
-  if (!state.hasRolledThisTurn) {
-    return baseHandleEndTurn(state, action);
-  }
-  // Out of supply? Just end the turn normally — no point opening voting.
-  if ((state.wagonSupply ?? 0) <= 0) {
-    return baseHandleEndTurn(state, { ...action, type: 'endTurn' });
-  }
-  // Auto-fill AI bids with an abstain (engine handles AI voting at phase
-  // entry so the AIDriver — which only fires for the acting player — doesn't
-  // need to drive every seat). Humans still see the dialog. If only one
-  // human remains and they're absent (e.g. AI-only game), force-resolve.
-  const initialVote: WagonVoteState = {
-    acquirerId: action.playerId,
-    bids: {},
-  };
-  for (const p of state.players) {
-    if (p.isAI) initialVote.bids[p.id] = { cards: {}, target: null };
-  }
-  const next: GameState = {
-    ...state,
-    phase: 'wagonVoting',
-    wagonVote: initialVote,
-  };
-  // If all players are AI (or all but the acquirer), resolution is
-  // already mathematically determined — kick it now.
-  if (Object.keys(initialVote.bids).length === state.players.length) {
-    return forceResolveVoting(next);
-  }
-  return next;
+  return openWagonVote(state, action.playerId);
 }

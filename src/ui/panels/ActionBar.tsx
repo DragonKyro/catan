@@ -23,6 +23,10 @@ import {
   BarbarianAttackPhaseBar,
   BarbarianCardButton,
 } from '@/ui/game/traders/BarbarianAttackActions';
+import {
+  REPAIR_ROAD_COST,
+  damagedRoadsOf,
+} from '@/game/modules/traders/variants/eventCards/events';
 import './ActionBar.css';
 
 export function ActionBar() {
@@ -103,8 +107,13 @@ export function ActionBar() {
               const d2 = 1 + Math.floor(Math.random() * 6);
               dispatch({ type: 'rollDice', playerId: acting, dice: [d1, d2] });
             }}
+            title={
+              game.eventCards
+                ? 'Catan Event Cards: flip the top event card — resolve its event, then produce for its number'
+                : undefined
+            }
           >
-            🎲 Roll dice
+            {game.eventCards ? '📜 Flip event card' : '🎲 Roll dice'}
           </Button>
         </div>
         {hasKnight && (
@@ -161,15 +170,30 @@ export function ActionBar() {
     // the trade button collapses to a bank-only label and we suppress the
     // player-trade dialog entry point. P2 can still bank-trade.
     const pairedP2 = isPairedPlayer2(game);
+    // T&B Catan Event Cards / Earthquake: damaged roads block new roads.
+    const damaged = game.damagedRoads ? damagedRoadsOf(game, acting) : [];
     return wrap(
       <div className="actionbar">
         <Button
-          disabled={!canAfford(player.resources, COSTS.road)}
+          disabled={!canAfford(player.resources, COSTS.road) || damaged.length > 0}
           onClick={() => setMode({ kind: 'buildRoad' })}
-          title="Build Road (1🌲 1🧱)"
+          title={
+            damaged.length > 0
+              ? 'Earthquake: repair your damaged roads before building new ones'
+              : 'Build Road (1🌲 1🧱)'
+          }
         >
           🛣 Road
         </Button>
+        {damaged.length > 0 && (
+          <Button
+            disabled={!canAfford(player.resources, REPAIR_ROAD_COST)}
+            onClick={() => dispatch({ type: 'repairRoad', playerId: acting, edge: damaged[0]! })}
+            title={`Repair a damaged road (1🧱 1🌲) — ${damaged.length} damaged`}
+          >
+            🔧 Repair ({damaged.length})
+          </Button>
+        )}
         {game.settings.expansions.includes('seafarers') && (
           <Button
             disabled={
@@ -464,6 +488,13 @@ function phaseHint(game: GameState, pid: PlayerId): string | null {
       : 'Place a road next to it.';
   }
   if (game.phase === 'moveRobber') return 'Move the robber: pick a highlighted hex.';
+  if (game.phase === 'wagonVoting') {
+    return game.wagonVote?.stage === 'assign'
+      ? 'Merchant Trains: give your votes to a lettered spot on the board.'
+      : 'Merchant Trains: bid wool / wheat for where the wagon goes (or pass).';
+  }
+  if (game.phase === 'placeWagon') return 'Merchant Trains: click a lettered spot for the wagon.';
+  if (game.phase === 'eventResolution') return 'Event card: answer the event above.';
   if (game.phase === 'movePirate') {
     return 'Move the pirate: pick a sea hex. Ships can\'t be built or moved on its edges.';
   }

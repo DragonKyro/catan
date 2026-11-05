@@ -21,6 +21,9 @@ import { FishingGroundMarker } from './traders/FishingGroundMarker';
 import { Wagon } from './traders/Wagon';
 import { BarbarianAttackHexLayer, BarbarianAttackKnights } from './traders/BarbarianAttackBoard';
 import { conqueredBuildingVertices } from '@/game/modules/traders/barbarianAttack/state';
+import { WagonSpots } from './traders/WagonSpots';
+import { WateringHoleMarker } from './traders/WateringHoleMarker';
+import { DamagedRoadMarker } from './traders/DamagedRoadMarker';
 import './Board.css';
 
 interface Props {
@@ -109,6 +112,8 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         </g>
 
         <BarbarianAttackHexLayer game={game} />
+        {/* T&B Merchant Trains: watering hole art + train start points. */}
+        <WateringHoleMarker game={game} />
 
         <g className="ports">
           {board.ports.map((p) => (
@@ -145,13 +150,24 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           )}
         </g>
 
-        {game.wagons && (
-          <g className="wagons">
-            {game.wagons.map((w) => (
-              <Wagon key={w.edge} board={board} edge={w.edge} />
+        {/* T&B Catan Event Cards / Earthquake: damaged roads. */}
+        {game.damagedRoads && (
+          <g className="damaged-roads">
+            {game.damagedRoads.map((eid) => (
+              <DamagedRoadMarker key={eid} board={board} edge={eid} />
             ))}
           </g>
         )}
+
+        {game.wagons && (
+          <g className="wagons">
+            {game.wagons.map((w) => (
+              <Wagon key={w.edge} board={board} edge={w.edge} front={w.front} />
+            ))}
+          </g>
+        )}
+        {/* Merchant Trains voting round: the lettered places the wagon could go. */}
+        <WagonSpots game={game} />
 
         {/* T&B / Barbarian Attack: knights on edges, above the roads. */}
         <BarbarianAttackKnights game={game} />

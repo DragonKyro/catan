@@ -189,6 +189,10 @@ function autoFinish(
     // moves any knight that must leave the castle, then ends the turn).
     initial.phase === 'barbarianCard' ||
     initial.phase === 'barbarianKnightMoves' ||
+    // T&B: Merchant Trains voting round / wagon placement, Event Card answers.
+    initial.phase === 'wagonVoting' ||
+    initial.phase === 'placeWagon' ||
+    initial.phase === 'eventResolution' ||
     isSetupPhase(initial.phase) ||
     initial.phase === 'rollOrPlayKnight'
   ) {

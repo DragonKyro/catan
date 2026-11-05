@@ -359,36 +359,144 @@ export interface FishingGround {
 // edge. Wagons form merchant trains starting at the watering hole hex.
 export interface TradeWagon {
   edge: EdgeId;
+  // The intersection the wagon faces (the train's front when it was
+  // placed). Wagons sit nose-to-tail, so this is what shows which way a
+  // train runs. Optional for snapshots from before trains were modelled.
+  front?: VertexId;
+  // Id of the merchant train the wagon was added to.
+  train?: number;
 }
 
-// A single bid in the end-of-turn voting round. `cards` is the wool/wheat
-// stack the player has committed to the location at `target`. `target` is
-// the edge they want the wagon placed on (`null` to abstain).
+// One of the watering hole's three train start points (rulebook: its NW,
+// NE and S corners). A new train's first wagon goes on `edge`, the edge
+// leaving `corner` away from the watering hole, facing `head`.
+export interface WagonStartPoint {
+  label: 'NW' | 'NE' | 'S';
+  corner: VertexId;
+  edge: EdgeId;
+  head: VertexId;
+}
+
+// A merchant train: a string of wagons from a watering-hole corner. Only
+// the front (`head`) can be extended — trains never branch.
+export interface MerchantTrain {
+  id: number;
+  start: VertexId;
+  head: VertexId;
+  // No more wagons can be added: it ran into another train's middle, was
+  // merged into another train, or its front has no free edge left.
+  ended: boolean;
+  // The train this one merged into (its head met that train's head; the
+  // merged train continues from there).
+  mergedInto?: number;
+}
+
+// Where a wagon can go: the edge, plus the train it extends (null = start a
+// new train on a start edge). The same edge can extend two different
+// trains when their fronts face each other, so the pair is the identity.
+export interface WagonPlacement {
+  edge: EdgeId;
+  train: number | null;
+}
+
+// A player's public bid in the voting round: wool and wheat cards laid face
+// up (both 0 = the player passed).
 export interface WagonVoteBid {
-  cards: Partial<ResourceBank>;
-  target: EdgeId | null;
+  sheep: number;
+  wheat: number;
 }
 
-// State for the wagon-voting phase. Built when a player ends their action
-// phase after having built ≥ 1 piece this turn (settlement / city / road
-// / bridge). All players (including the active one) submit a bid; the
-// engine auto-resolves once every player has spoken.
+// State for the Merchant Trains voting round (end of a turn in which the
+// active player built a settlement or city). Bids go round once, starting
+// with the active player clockwise. With no absolute majority, every bidder
+// then names one location for all of their votes (stage 'assign').
 export interface WagonVoteState {
-  // Player who acquired the wagon (the one who built and ended turn).
-  // They receive the placement-fallback by default and break ties at the
-  // edge level.
+  // Player who acquired the wagon (the active player).
   acquirerId: PlayerId;
-  // Submitted bids, keyed by player id. A player who hasn't submitted yet
-  // is absent from the map.
+  // Everyone, starting with the active player, clockwise.
+  order: PlayerId[];
+  stage: 'bid' | 'assign';
+  // Index of the next player to act: into `order` while bidding, into the
+  // bidders (players with a bid of 1+, in `order`) while assigning.
+  turn: number;
+  // Bids placed so far (public).
   bids: Record<PlayerId, WagonVoteBid>;
+  // Assign stage: the location each bidder gave their votes to.
+  assignments: Record<PlayerId, WagonPlacement>;
 }
 
-// Mid-resolution: the voting closed and the placer has been chosen, but
-// they still need to pick an edge (the bid-winner location was ambiguous).
-// When the location is unambiguous after voting, we skip straight to
-// placing the wagon and never enter this phase.
+// Mid-resolution: the voting closed and a player must choose where the
+// wagon goes. `reason` is for the prompt / log.
 export interface PendingWagonPlacement {
   placerId: PlayerId;
+  reason?: 'majority' | 'mostVotes' | 'activePlayer' | 'noVotes';
+}
+
+// Outcome of the latest voting round, for the Scenario panel and the log.
+export interface WagonVoteResult {
+  acquirerId: PlayerId;
+  bids: Record<PlayerId, WagonVoteBid>;
+  assignments: Record<PlayerId, WagonPlacement>;
+  // How the location was decided.
+  decidedBy: 'majority' | 'location' | 'mostVotes' | 'activePlayer' | 'noVotes' | 'onlyOption';
+  chooser: PlayerId | null;
+  placement: WagonPlacement;
+}
+
+// ----- Traders & Barbarians / Catan Event Cards -----
+
+export type EventCardKind =
+  | 'beautifulDay'
+  | 'calmSeas'
+  | 'conflict'
+  | 'earthquake'
+  | 'epidemic'
+  | 'goodNeighbors'
+  | 'helpfulNeighbor'
+  | 'newYear'
+  | 'plentifulYear'
+  | 'robberAttacks'
+  | 'robberFlees'
+  | 'tournament'
+  | 'tradeAdvantage';
+
+export interface EventCard {
+  id: number;
+  kind: EventCardKind;
+  // Production number on the card's disc. null only for New Year.
+  number: number | null;
+}
+
+// One answer an event is waiting for, from one player.
+export interface EventChoice {
+  playerId: PlayerId;
+  // takeResource: pick 1 resource from the supply (Plentiful Year, Calm
+  // Seas, Tournament). giveResource: give 1 card of your choice (Good
+  // Neighbors: to `recipients[0]`, the player on your left; Helpful
+  // Neighbor: to any of `recipients`). steal: take 1 random card from a
+  // player of your choice, or pass (Conflict, Trade Advantage). damageRoad:
+  // turn one of your roads sideways (Earthquake).
+  kind: 'takeResource' | 'giveResource' | 'steal' | 'damageRoad';
+  recipients?: PlayerId[];
+}
+
+export interface EventCardsState {
+  // Face-down deck; index 0 is the top card.
+  deck: EventCard[];
+  // The card flipped this turn (shown in place of the dice). Kept until the
+  // next flip.
+  current: EventCard | null;
+  // True when this turn's flip hit New Year and the deck was rebuilt.
+  newYear?: boolean;
+  // An event waiting on answers (phase 'eventResolution'); production for
+  // `card.number` follows once `choices` is empty.
+  pending?: {
+    card: EventCard;
+    choices: EventChoice[];
+    // Good Neighbors: gifts are handed over together once everyone chose,
+    // so nobody passes on a card they just received.
+    gifts: Array<{ from: PlayerId; to: PlayerId; resource: Resource }>;
+  };
 }
 
 // ----- Traders & Barbarians / Barbarian Attack -----
@@ -500,6 +608,9 @@ export type GamePhase =
   // card played on purchase, and the end-of-turn knight movement step.
   | 'barbarianCard'
   | 'barbarianKnightMoves'
+  // Traders & Barbarians / Catan Event Cards: players answer the flipped
+  // event (pick / give / steal / damage a road) before production.
+  | 'eventResolution'
   // Seafarers extension phases.
   | 'chooseRobberOrPirate'
   | 'movePirate'
@@ -570,13 +681,18 @@ export interface GameSettings {
   // Variants are tiny rule modifiers shipped with the T&B box but composable
   // with base / Seafarers / Fun Map games.
   tradersVariants?: {
-    // "Friendly Robber" — you may not place the robber on a hex whose only
-    // adjacent buildings belong to players with ≤ 2 VPs. Falls back to the
-    // desert when no valid hex exists.
+    // "Friendly Robber" — the robber may not go to a hex with a building of
+    // a player who has only 2 (public) VPs. With no valid hex it goes to
+    // the desert, stealing only from a neighbour with more than 2 VPs.
+    // Variants work with any rule set (base, Seafarers, T&B scenarios).
     friendlyRobber?: boolean;
-    // "Strongest Ports / Harbors of Catan" — the player with ≥ 3 VPs in
-    // port-buildings holds a 2 VP bonus tile. Target VP bumps by 1 when on.
+    // "Strongest Ports / Harbors of Catan" — the first player with 3 VPs
+    // in buildings on harbors takes a 2 VP tile; a player with more takes
+    // it over. Target VP bumps by 1 when on.
     strongestPorts?: boolean;
+    // "Catan Event Cards" — an event deck replaces the dice: each turn
+    // flips a card, resolves its event, then produces for its number.
+    eventCards?: boolean;
   };
   // User-authored custom map. When set, overrides every other board source
   // (Seafarers scenario, Fun Map, base) — createGame routes through
@@ -861,9 +977,15 @@ export interface GameState {
   // each placement. When 0, no more wagons can be placed (and the voting
   // phase still runs but resolves to a no-op).
   wagonSupply?: number;
-  // Did the active player build at least one piece this turn? Determines
-  // whether `endTurn` opens the voting phase. Cleared on turn advance.
+  // Did the active player build a building (settlement or city) in their
+  // Action phase this turn? Earns the turn's wagon, placed in the voting
+  // round when the turn ends. Roads and bridges don't count. Cleared when
+  // the turn ends.
   builtThisTurn?: boolean;
+  // The watering hole's three train start points (NW, NE, S corners).
+  wagonStarts?: WagonStartPoint[];
+  // Every merchant train on the board, in the order they were started.
+  merchantTrains?: MerchantTrain[];
   // Voting state — present iff phase is 'wagonVoting'.
   wagonVote?: WagonVoteState;
   // Pending placement — present iff phase is 'placeWagon'. Resolved by a
@@ -875,6 +997,15 @@ export interface GameState {
   // on edges, prisoners and the scenario's development deck. Undefined in
   // every other game.
   barbarianAttack?: BarbarianAttackState;
+  // The latest voting round's outcome (Scenario panel / log).
+  lastWagonVote?: WagonVoteResult;
+  // ----- Traders & Barbarians variant: Catan Event Cards -----
+  // The event deck that replaces the dice (`tradersVariants.eventCards`).
+  eventCards?: EventCardsState;
+  // Earthquake: roads turned sideways. Their owners can't build roads until
+  // they repair them all, and nobody may build a settlement at either end.
+  // They still count for the Longest Route.
+  damagedRoads?: EdgeId[];
 }
 
 // Seafarers island bonus. Every player earns an island's bonus once, on
@@ -1200,22 +1331,43 @@ export interface PassOldBootAction extends ActionBase {
   to: PlayerId;
 }
 
-// Merchant Trains end-of-turn voting. Every player (including the active
-// one) dispatches this exactly once per voting round. `cards` are
-// wool/wheat resource cards spent on the bid; `target` is the edge to
-// vote for (null = abstain). Engine auto-resolves once all players have
-// submitted.
+// Merchant Trains voting round, bid stage: the player whose turn it is lays
+// any number of wool / wheat cards face up (none = pass). Only `sheep` and
+// `wheat` may be set.
 export interface SubmitWagonVoteAction extends ActionBase {
   type: 'submitWagonVote';
   cards: Partial<ResourceBank>;
-  target: EdgeId | null;
 }
 
-// Merchant Trains placement after the vote resolves to a placer-with-no-
-// majority-location. Only the placer (set on state.pendingWagonPlacement)
-// may dispatch this. The edge must be a legal merchant-train extension.
+// Merchant Trains voting round, assign stage (no absolute majority): a
+// bidder gives all of their votes to one wagon location.
+export interface AssignWagonVotesAction extends ActionBase {
+  type: 'assignWagonVotes';
+  location: WagonPlacement;
+}
+
+// Merchant Trains: the chosen player places the wagon. `train` names the
+// train extended (null = start a new train); omitted, the engine picks the
+// only placement on `edge` (the first, if two trains' fronts share it).
 export interface PlaceWagonAction extends ActionBase {
   type: 'placeWagon';
+  edge: EdgeId;
+  train?: number | null;
+}
+
+// Catan Event Cards: answer the oldest open choice of this player in the
+// current event. `resource` for take / give; `target` for give (Helpful
+// Neighbor) and steal (null = don't steal); `edge` for Earthquake.
+export interface ResolveEventAction extends ActionBase {
+  type: 'resolveEvent';
+  resource?: Resource | null;
+  target?: PlayerId | null;
+  edge?: EdgeId | null;
+}
+
+// Catan Event Cards / Earthquake: repair one of your damaged roads.
+export interface RepairRoadAction extends ActionBase {
+  type: 'repairRoad';
   edge: EdgeId;
 }
 
@@ -1441,9 +1593,12 @@ export type Action =
   | SpendFishAction
   | PassOldBootAction
   | SubmitWagonVoteAction
+  | AssignWagonVotesAction
   | PlaceWagonAction
   | ResolveBarbarianCardAction
   | MoveBarbarianKnightAction
+  | ResolveEventAction
+  | RepairRoadAction
   | BuildCityWallAction
   | DiscardCKAction
   | RecruitKnightAction

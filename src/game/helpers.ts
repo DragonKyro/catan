@@ -68,5 +68,27 @@ export function getActingPlayerId(state: GameState): PlayerId {
       if (pending[id] !== undefined) return id;
     }
   }
+  // T&B Merchant Trains voting round: whoever's turn it is to bid (or, with
+  // no majority, to assign their votes), then the player placing the wagon.
+  if (state.phase === 'wagonVoting' && state.wagonVote) {
+    const v = state.wagonVote;
+    const list =
+      v.stage === 'bid'
+        ? v.order
+        : v.order.filter((id) => {
+            const b = v.bids[id];
+            return !!b && b.sheep + b.wheat > 0;
+          });
+    const id = list[v.turn];
+    if (id) return id;
+  }
+  if (state.phase === 'placeWagon' && state.pendingWagonPlacement) {
+    return state.pendingWagonPlacement.placerId;
+  }
+  // T&B Catan Event Cards: the player whose answer the event waits on.
+  if (state.phase === 'eventResolution') {
+    const choice = state.eventCards?.pending?.choices[0];
+    if (choice) return choice.playerId;
+  }
   return state.playerOrder[state.currentPlayerIndex]!;
 }

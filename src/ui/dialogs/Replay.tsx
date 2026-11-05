@@ -42,6 +42,12 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   // moved by Treason.
   'resolveBarbarianCard',
   'moveBarbarianKnight',
+  // T&B Merchant Trains: a wagon lands (chooser, or the winning vote).
+  'placeWagon',
+  'assignWagonVotes',
+  // T&B Catan Event Cards / Earthquake: a road damaged or repaired.
+  'resolveEvent',
+  'repairRoad',
 ]);
 
 // Step + slider + auto-play replay. The slider/buttons step through a

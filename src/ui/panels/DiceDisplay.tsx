@@ -1,6 +1,7 @@
 import { useGameStore } from '@/store/gameStore';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import type { EventDieFace } from '@/game/types';
+import { EventCardDisplay } from './EventCardDisplay';
 import './DiceDisplay.css';
 
 const PIPS: Record<number, [number, number][]> = {
@@ -79,6 +80,17 @@ export function DiceDisplay() {
   const hasCK = useGameStore(
     (s) => s.game?.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) ?? false,
   );
+  // T&B Catan Event Cards: the flipped card replaces the dice.
+  const eventCards = useGameStore((s) => s.game?.eventCards);
+  if (eventCards) {
+    return (
+      <EventCardDisplay
+        card={eventCards.current}
+        left={eventCards.deck.length}
+        newYear={eventCards.newYear}
+      />
+    );
+  }
   if (!lastRoll) return null;
   return (
     <div className="dice">

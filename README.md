@@ -37,7 +37,16 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 - **The Wonders of Catan** — claim one of the rulebook's wonders and build its 4 levels; finish it, or reach 10 VP with the highest level, to win
 - **New World** (12 VP) — open map; +1 VP per island you didn't start on
 
-**Traders & Barbarians — Barbarian Attack** (12 VP, 2025 rulebook) — every building lands 3 barbarians on the coast (dice rolled for you, shown in the log); 3 on a hex conquer it and the buildings touching only conquered hexes stop counting. Buy the scenario's development cards (Capture, Knighthood, Swift Knight, Treason) to raise knights, move them at the end of your turn (3 edges, 5 for a wheat), and drive the barbarians off: every 2 prisoners = 1 VP. Second starting placement is a city; no robber — a 7 steals from anyone.
+**Traders & Barbarians** — scenarios from the 2025 rulebook:
+
+- **Merchant Trains** (12 VP) — the watering hole replaces the desert; build a settlement or city to collect a wagon, then everyone bids wool / wheat (public, clockwise) for where it goes. Trains leave the watering hole's three start corners, run nose to tail, never branch and merge where their fronts meet. A wagon on a road is an extra road for the Longest Route; a building between two wagons is worth +1 VP
+- **Barbarian Attack** (12 VP, 2025 rulebook) — every building lands 3 barbarians on the coast (dice rolled for you, shown in the log); 3 on a hex conquer it and the buildings touching only conquered hexes stop counting. Buy the scenario's development cards (Capture, Knighthood, Swift Knight, Treason) to raise knights, move them at the end of your turn (3 edges, 5 for a wheat), and drive the barbarians off: every 2 prisoners = 1 VP. Second starting placement is a city; no robber — a 7 steals from anyone.
+
+**Traders & Barbarians variants** — work with any game (base, Seafarers, T&B scenarios), ticked on the New Game screen:
+
+- **Friendly Robber** — the robber can't go to a hex with a building of a player who has only 2 VPs (desert fallback, and no stealing from them)
+- **Strongest Ports** — the first player with 3 VPs in buildings on harbors takes a 2 VP tile; someone with more takes it over (+1 VP target)
+- **Catan Event Cards** — a 37-card event deck (numbers on the dice odds, New Year 6th from the bottom) replaces the dice: each turn flips a card, resolves its event (Plentiful Year, Earthquake, Good Neighbors, Robber Attacks, …), then produces for its number
 
 ### Notable mechanics
 
@@ -107,7 +116,7 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
 - [~] Phase 8 — Cities & Knights expansion (engine complete: knights, commodities, barbarian advance + attack, all 3 improvement tracks with L3 abilities + metropolis, 54 progress cards with effects, city walls. **AI support missing** — AI seats default to base play; see Outstanding work)
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
-- [~] Phase 10 — Traders & Barbarians expansion (4 of 5 scenarios shipping: Rivers of Catan + Fishing on Catan + Merchant Trains + Barbarian Attack, plus the Friendly Robber and Strongest Ports variants. The Traders & Barbarians combo scenario, Catan Event Cards variant, and Catan for Two variant are deferred; see Outstanding work)
+- [~] Phase 10 — Traders & Barbarians expansion (4 of 5 scenarios shipping: Rivers of Catan + Fishing on Catan + Merchant Trains + Barbarian Attack, plus the Friendly Robber, Strongest Ports and Catan Event Cards variants, which combine with any game. The Traders & Barbarians combo scenario and Catan for Two variant are deferred; see Outstanding work)
 - [ ] Phase 11 — Traders & Barbarians 5–6 player extension
 - [ ] Phase 12 — Explorers & Pirates expansion
 - [ ] Phase 13 — Explorers & Pirates 5–6 player extension
@@ -136,9 +145,11 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 - [ ] **2:1 gold spend action + UI** — Rivers of Catan rule (2 gold → any 1 resource, max 2× per turn). Constants defined; no `spendGold` action, no dialog. Gold currently only converts to VP via the Wealthiest Catanian tile.
 - [ ] **Fish spend UI completeness** — only 2 of 5 effects surfaced in `SpendFishDialog.tsx` (`removeRobber`, `takeFromBank`). The other three (`steal`, `buildRoad`, `buyDevCard`) are engine-complete but UI-unreachable.
 - [ ] **Fish 7-token "discard and replace" once-per-turn rule** — current cap is a hard stop; the rulebook nuance isn't implemented.
-- [ ] **Smarter AI wagon voting** — `trySubmitWagonVote` always abstains. AI doesn't compete for Merchant Trains wagon placement.
+- [x] **Smarter AI wagon voting** — the AI bids when steering the wagon is worth a VP / Longest Route to it (or keeps one from a rival), assigns its votes and places as chooser (`src/ai/traders/merchantTrains.ts`).
 - [ ] **Traders & Barbarians combo scenario** — all four T&B mechanics on one board; explicitly deferred.
-- [ ] **Catan Event Cards variant** — 37-card deck replacing dice; not implemented.
+- [x] **Catan Event Cards variant** — 37-card deck replacing the dice, all 13 events (base-game versions).
+- [ ] **Catan Event Cards with Cities & Knights** — the event die + red die alongside the card, and the C&K versions of Conflict / Epidemic / Good Neighbors / Helpful Neighbor / Tournament; `createGame` rejects the combination for now.
+- [ ] **Catan Event Cards: the printed deck** — the rulebook doesn't list each card's number; the shipped deck follows the dice odds with Robber Attacks on the 7s (`variants/eventCards/deck.ts`). Swap in the real per-card table if it turns up.
 - [ ] **Catan for Two variant** — neutral players for 2p; not implemented.
 
 **Cross-cutting:**

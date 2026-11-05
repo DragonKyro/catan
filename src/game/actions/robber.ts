@@ -10,12 +10,12 @@ import { currentPlayerId, updatePlayer } from '../helpers';
 import {
   addResources,
   subtractResources,
-  totalResources,
   flattenBank,
 } from '../resources';
 import { pickOne } from '../rng';
 import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
 import { canMoveRobberTo } from '../placement';
+import { robberStealCandidates } from '../engine';
 
 export function handleDiscard(state: GameState, action: DiscardAction): GameState {
   if (state.phase !== 'discard') throw new Error(`Cannot discard in phase ${state.phase}`);
@@ -78,16 +78,11 @@ export function handleMoveRobber(
   // Module-level validators (e.g. T&B Friendly Robber) are dispatched from
   // engine.applyAction BEFORE this handler runs — no extra wiring here.
 
-  // Find players adjacent to the target hex with at least one resource card.
-  const stealCandidates = new Set<PlayerId>();
-  for (const v of Object.values(state.board.vertices)) {
-    if (!v.hexes.includes(action.hex)) continue;
-    for (const p of state.players) {
-      if (p.id === action.playerId) continue;
-      const occupies = p.settlements.includes(v.id) || p.cities.includes(v.id);
-      if (occupies && totalResources(p.resources) > 0) stealCandidates.add(p.id);
-    }
-  }
+  // Players adjacent to the target hex with at least one resource card
+  // (minus any a module rules out, e.g. T&B Friendly Robber).
+  const stealCandidates = new Set<PlayerId>(
+    robberStealCandidates(state, action.playerId, action.hex),
+  );
 
   let next: GameState = {
     ...state,

@@ -20,6 +20,7 @@ import { tryBuildShip, tryMoveShip } from './seafarers/ships';
 import { tryBuildBridge } from './traders/bridges';
 import { tryFishSpend, tryPassBoot } from './traders/fish';
 import { tryBuyBarbarianCard, barbarianAttackNeedsRoads } from './traders/barbarianAttack';
+import { tryRepairRoad } from './traders/eventCards';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { tryBuildWonder } from './seafarers/wonders';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
@@ -152,6 +153,11 @@ export function chooseMainPhaseAction(
     const card = tryBuyBarbarianCard(state, playerId);
     if (card) return card;
   }
+
+  // 2.9) REPAIR A ROAD (T&B Catan Event Cards / Earthquake). Damaged roads
+  //      block every new road and the settlement spots at their ends.
+  const repair = tryRepairRoad(state, playerId);
+  if (repair) return repair;
 
   // 3) BUILD ROAD
   //    Roads come BEFORE dev cards. Resource-efficiency principle: if we

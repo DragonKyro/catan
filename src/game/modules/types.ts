@@ -4,6 +4,7 @@ import type {
   ActionType,
   MoveRobberAction,
   PlayerId,
+  HexId,
 } from '../types';
 
 export type ActionHandler<A extends Action = Action> = (
@@ -18,6 +19,14 @@ export type ActionHandler<A extends Action = Action> = (
 // Friendly Robber, which forbids targeting a 2-VP-only hex).
 export interface ModuleValidators {
   moveRobber?: (state: GameState, action: MoveRobberAction) => string | null;
+  // May the player moving the robber to `hexId` steal from `victimId`? A
+  // non-null return takes the victim off the steal list (T&B Friendly
+  // Robber: never from a player with 2 VPs or fewer).
+  robberVictim?: (
+    state: GameState,
+    hexId: HexId,
+    victimId: PlayerId,
+  ) => string | null;
 }
 
 export interface RuleModule {
@@ -34,4 +43,7 @@ export interface RuleModule {
   // decide, or undefined to fall through to the next module and finally the
   // default "VP >= victoryPointsToWin".
   hasWon?: (state: GameState, playerId: PlayerId, vp: number) => boolean | undefined;
+  // Derived state refreshed after every action, before the win check (T&B
+  // Strongest Ports: who holds the tile).
+  derive?: (state: GameState) => GameState;
 }

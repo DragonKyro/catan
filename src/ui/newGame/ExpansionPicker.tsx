@@ -26,9 +26,11 @@ export interface ExpansionPickerValue {
   scenarioId: string;
   baseScenarioId: string;
   tradersScenarioId: string;
+  // T&B variants: work with any rule set (base, Seafarers, T&B scenarios).
   tradersVariants: {
     friendlyRobber: boolean;
     strongestPorts: boolean;
+    eventCards: boolean;
   };
 }
 
@@ -82,7 +84,7 @@ export const DEFAULT_EXPANSIONS: ExpansionPickerValue = {
   scenarioId: DEFAULT_SCENARIO_ID,
   baseScenarioId: DEFAULT_BASE_SCENARIO_ID,
   tradersScenarioId: 'riversOfCatan',
-  tradersVariants: { friendlyRobber: false, strongestPorts: false },
+  tradersVariants: { friendlyRobber: false, strongestPorts: false, eventCards: false },
 };
 
 interface Props {
@@ -204,41 +206,69 @@ export function ExpansionPicker({ value, onChange }: Props) {
               ))}
             </select>
           </label>
-          <label className="expansion-picker-row">
-            <input
-              type="checkbox"
-              checked={value.tradersVariants.friendlyRobber}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  tradersVariants: {
-                    ...value.tradersVariants,
-                    friendlyRobber: e.target.checked,
-                  },
-                })
-              }
-            />
-            <span>Friendly Robber variant</span>
-          </label>
-          <label className="expansion-picker-row">
-            <input
-              type="checkbox"
-              checked={value.tradersVariants.strongestPorts}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  tradersVariants: {
-                    ...value.tradersVariants,
-                    strongestPorts: e.target.checked,
-                  },
-                })
-              }
-            />
-            <span>Strongest Ports variant (+1 VP target)</span>
-          </label>
         </>
       )}
+
+      {/* T&B variants combine with any game (rulebook p. 4-6). */}
+      <span className="expansion-picker-label">Traders &amp; Barbarians variants</span>
+      <VariantToggle
+        value={value}
+        onChange={onChange}
+        flag="friendlyRobber"
+        label="Friendly Robber"
+        title="The robber may not go to a hex with a building of a player who has only 2 VPs"
+      />
+      <VariantToggle
+        value={value}
+        onChange={onChange}
+        flag="strongestPorts"
+        label="Strongest Ports (+1 VP target)"
+        title="3+ VPs in buildings on harbors takes a 2 VP tile; a player with more takes it over"
+      />
+      <VariantToggle
+        value={value}
+        onChange={onChange}
+        flag="eventCards"
+        label="Catan Event Cards (deck replaces dice)"
+        title={
+          value.citiesKnights
+            ? "Can't be combined with Cities & Knights yet"
+            : 'Flip an event card each turn instead of rolling: resolve its event, then produce for its number'
+        }
+        disabled={value.citiesKnights}
+      />
     </div>
+  );
+}
+
+function VariantToggle({
+  value,
+  onChange,
+  flag,
+  label,
+  title,
+  disabled,
+}: Props & {
+  flag: keyof ExpansionPickerValue['tradersVariants'];
+  label: string;
+  title: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="expansion-picker-row" title={title}>
+      <input
+        type="checkbox"
+        checked={value.tradersVariants[flag] && !disabled}
+        disabled={disabled}
+        onChange={(e) =>
+          onChange({
+            ...value,
+            tradersVariants: { ...value.tradersVariants, [flag]: e.target.checked },
+          })
+        }
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 
