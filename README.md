@@ -39,7 +39,7 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 
 ### Notable mechanics
 
-- **Online multiplayer with no backend.** WebRTC peer-to-peer over Trystero (Nostr-relay signaling — works on cellular and corporate networks where BitTorrent trackers are blocked). Create a room, share a 4-character code, friends join. Full state replication; randomness baked into actions so all peers reduce to the same state. Drop out and rejoin mid-game with the same code — your seat is preserved via `localStorage` UUID. Late joiners without a saved UUID become read-only spectators.
+- **Online multiplayer, no sign-in.** Create a room, share the 4-character code (or the invite link), friends join, pick their colors, and play from their own devices: base game on any map, or any Seafarers scenario. The room lives in a Firebase Realtime Database: every move goes into an ordered, write-once log, so every device applies the same moves in the same order, and two players acting at the same moment (both accepting one trade) can't split the game. Your own moves show instantly; if someone else's lands first, yours is replayed on top or taken back. Drop out, reload, or lose signal and come back: the device replays the log and is back in its seat with the full history and the real game clock. Others joining mid-game spectate. Devices sign in anonymously behind the scenes, only so the security rules can tie writes to a device.
 - **End-of-game match graph.** Tabbed line charts (VP, resources earned per-player and per-resource, hand size, knights, longest road, trade count, trade efficiency) and bar charts (dice frequency, cumulative bank circulation). Hover snaps to the nearest timeline step with an x-unified crosshair; x-axis is labeled in turn numbers.
 - **End-of-game replay.** Scrub through your finished game step by step, or auto-play at 0.5×–4×. Slider stops only on board-changing actions; rolls and trades fold in but skip.
 - **Heuristic AI with encoded win plans.** Six 10-VP templates (city+army, sprawl+road, etc.); AI scores each by resource cost + production mismatch and picks the cheapest reachable plan. Threat model flags opponents close to win, longest road, or largest army, and refuses trades that hand them the resource they need. In Seafarers it values the island bonuses it can still earn, weights gold above any single resource, looks a few ship-steps ahead to cross open sea, moves ships, and plays each scenario's mechanic (tribe pickups, cloth routes, the pirate-fortress line, wonders).
@@ -49,22 +49,13 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 
 ### Testing online multiplayer locally
 
-Two browser windows in the same incognito session share `localStorage`, which gives them the same identity UUID and breaks seat assignment. Append `?fresh` to the URL of each test window to force a per-tab UUID via `sessionStorage` instead.
+Two browser windows in the same incognito session share storage, which gives them the same identity and breaks seat assignment. Append `?fresh` to the URL of each test window to give it its own identity (per-tab `sessionStorage`, including its anonymous sign-in).
 
-### Connection logic (and why it used to be flaky)
+`npm run test:run` covers online play against an in-memory server. To run the same flow against the real Firebase project: `FIREBASE_LIVE=1 npx vitest run src/store/networkStore.live.test.ts` (it prints the room codes it used; remove them with `firebase database:remove /rooms/<CODE>`).
 
-The multiplayer used to work only intermittently — particularly between phones on cellular. Three things were wrong, all fixed now:
+### Why Firebase
 
-1. **Wrong transport.** The previous build used `trystero/torrent`, which discovers peers via BitTorrent trackers and DHT. Most mobile carriers and many home routers block or rate-limit BitTorrent traffic outright, so two phones on cellular usually never even saw each other. Replaced with `trystero/nostr`, which signals over WebSocket (port 443) to public Nostr relays. WebSocket on 443 passes through cellular, corporate proxies, hotel WiFi, etc. — basically anywhere HTTPS works.
-2. **No real join timeout.** The old `joinRoom` had a 100 ms timer that did literally nothing, so a guest who couldn't reach the host sat on "Connecting…" forever. Now if no host answers in time the connection flips to an `error` state with a clear message and a Try Again button.
-3. **Lobby/start channel race.** The `lobby` and `start` Trystero channels are independent, so on a slow link the guest could receive `start` before the final `lobby` broadcast. The seat→UUID map was pulled from `lobby` at start time, so a lost race left the map empty and every subsequent action got dropped with a silent `UUID/seat mismatch` warning — the game looked frozen. Fixed by embedding `seatUuids` directly in the `start` payload so it's race-proof.
-
-Later, phones still sometimes couldn't find a room. Two more causes, also fixed:
-
-4. **Relay subscriptions lost on reconnect.** Trystero 0.20 reconnected a dropped relay WebSocket but never re-sent the room subscription. Phones drop a page's sockets while it's in the background (e.g. the host switches to Messages to send the code), so the host came back able to announce but deaf: the guest found nobody and the host never saw them. Upgraded to `@trystero-p2p/nostr` 0.26, which resubscribes; the app also reconnects immediately when the page comes back to the foreground, and uses 8 relays instead of 5 (0.20's built-in relay list had gone stale).
-5. **A failed join looked like an empty room.** While searching, the guest saw the lobby with its code and no players. Now it's a "Looking for room…" screen, and after 25 s a "Room ABCD not found" error that says whether this device reached the relays, whether any other device answered, and how long it waited. **Play online → Network test** checks a device's relays and NAT type and pairs two devices on a test code with live ping, for working out which side of a failing pairing is the problem.
-
-If you're forking this for your own P2P project, the takeaway is: **prefer `trystero/nostr` (or `trystero/mqtt`) over `trystero/torrent`** for anything that needs to work on mobile, and **never let two channels race for invariants** — bundle the invariant into the payload that establishes it.
+Online play used to be peer-to-peer WebRTC (Trystero, signaling over BitTorrent trackers and then Nostr relays). It never worked reliably: carriers block trackers, relays come and go, phones drop their sockets in the background, and with STUN only (no TURN server), two devices behind strict NAT, the usual case on cellular, can find each other but never connect. Firebase's Realtime Database replaced it: one WebSocket on port 443 to Google's servers, which every network allows, plus server-side ordering, presence, and rejoin for free. It bills bytes and connections, not operations, so rooms stay small: the start record is the game's setup inputs (~0.4 KB) rather than the whole board, a move is ~100 bytes, a whole game ~60–100 KB, and a device closes its connection whenever it isn't in a room. Rooms clean themselves up: each time someone makes a room, their device deletes rooms more than a week old that nobody is connected to (the rules allow exactly that, and keep younger rooms' codes private), so storage stays bounded with no server code. The security rules are in `database.rules.json` (deploy with `firebase deploy --only database`).
 
 ## Tech stack
 
@@ -73,7 +64,7 @@ If you're forking this for your own P2P project, the takeaway is: **prefer `trys
 - **honeycomb-grid** for hex math
 - **Zustand** for state management
 - **Vitest** for tests
-- **Trystero** (Nostr-relay signaling, WebSocket on port 443) for WebRTC peer-to-peer multiplayer
+- **Firebase Realtime Database** + anonymous Auth for online multiplayer (project `catan-33623`; no server code of our own)
 
 ## Local development
 
@@ -96,7 +87,7 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [x] Phase 1 — Game logic engine (base rules, tests)
 - [x] Phase 2 — Hot-seat UI (SVG board, panels, dialogs)
 - [x] Phase 3 — AI opponents + player-to-player trading
-- [x] Phase 4 — Online multiplayer (Trystero peer-to-peer) + in-game chat
+- [x] Phase 4 — Online multiplayer + in-game chat (now on Firebase Realtime Database; base game and Seafarers online)
 - [x] Phase 5 — Base game 5–6 player extension
 - [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
 - [x] Phase 6 — Seafarers expansion (9 official scenarios, each with its rulebook headline mechanic — see Features)
@@ -228,4 +219,4 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 
 ## Scope
 
-Intentionally **not** included: accounts, matchmaking, monetization, anti-cheat, persistent saves. Friends-only project — none of that pays for itself at this scale.
+Intentionally **not** included: accounts or sign-in screens, matchmaking, monetization, anti-cheat, saved games. Friends-only project — none of that pays for itself at this scale.

@@ -1,4 +1,5 @@
-import type { Action, GameState, PlayerColor, AiLevel } from '@/game/types';
+import type { Action, PlayerColor, AiLevel } from '@/game/types';
+import type { CreateGameOptions } from '@/game/createGame';
 
 export type ConnectionState =
   | 'disconnected'
@@ -16,12 +17,24 @@ export interface LobbySeat {
   color: PlayerColor;
 }
 
+/** What the online game will be: Seafarers (on `scenarioId`) or the base game (on `baseScenarioId`). */
+export interface LobbyGame {
+  seafarers: boolean;
+  scenarioId: string;
+  baseScenarioId: string;
+}
+
 export interface LobbyState {
+  hostUuid: string;
   seats: LobbySeat[];
-  victoryPointsToWin: number;
+  /** null = the scenario's recommended target for the seat count. */
+  victoryPointsToWin: number | null;
   seed: number;
-  /** AI seats' strength (the online lobby is base game only). Absent from older hosts. */
+  /** AI seats' strength (only used where the trained AI plays: base game, standard map). */
   aiLevel?: AiLevel;
+  game: LobbyGame;
+  /** Set by the host, atomically with the final seat list, as the game starts. */
+  started?: boolean;
 }
 
 export interface ChatMessage {
@@ -33,35 +46,45 @@ export interface ChatMessage {
   kind: 'user' | 'system';
 }
 
-// === Wire messages ===
+// === What a room stores ===
 
-export interface HelloMessage {
-  uuid: string;
-  displayName: string;
+/** Written once, by the host, when the room is made. */
+export interface RoomMeta {
+  hostUuid: string;
+  createdAt: number;
+  /** The app build that made the room (devices on other builds may not stay in step). */
+  build: string;
 }
 
-export interface StartMessage {
-  gameState: GameState;
-  // Seat → UUID mapping captured at start, so receivers don't depend on the
-  // 'lobby' and 'start' channels arriving in order.
+/**
+ * How the game began. It carries createGame's inputs rather than the
+ * starting GameState (a few hundred bytes instead of 30-100 KB): createGame
+ * is deterministic, so every device builds the same game from them, then
+ * applies the action log.
+ */
+export interface StartRecord {
+  options: CreateGameOptions;
+  // Seat → UUID, so each device can tell which seat is theirs (or that
+  // they're a spectator when their UUID isn't on any seat).
   seatUuids: (string | null)[];
   hostUuid: string;
+  /** When the host started the game (ms since epoch); the game clock counts from here. */
+  startedAt: number;
+  /** Checksum of the starting GameState, so a device that built a different one (another app version) can tell. */
+  check: string;
 }
 
-export interface ActionEnvelope {
+/** One move in the room's action log. */
+export interface LoggedAction {
   action: Action;
-  byUuid: string;
+  /** Short random id, so the author recognises its own move in the log. */
+  nonce: string;
+  /** When the move was made (ms since epoch, the author's clock): the game clock and per-player time stats. */
+  at: number;
 }
 
-export interface SnapshotMessage {
-  gameState: GameState;
-  chat: ChatMessage[];
-  hostUuid: string;
-  // Seat → UUID mapping so newcomers can tell which seat is theirs (or
-  // determine they're a spectator if their UUID isn't on any seat).
-  seatUuids: (string | null)[];
-}
-
-export interface SnapshotRequestMessage {
+/** A device currently connected to the room. */
+export interface Presence {
   uuid: string;
+  name: string;
 }

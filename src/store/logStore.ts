@@ -340,8 +340,10 @@ interface LogStore {
   // action's gap). Initialised to startTime on reset.
   lastActionT: number;
 
-  reset: (initial?: GameState) => void;
-  record: (before: GameState, action: Action, after: GameState) => void;
+  /** `startTime`: when the game began (default now; an online rejoin passes the room's start time). */
+  reset: (initial?: GameState, startTime?: number) => void;
+  /** `at`: when the action was made (default now; online, the time it was made on its device, so replays keep real timings). */
+  record: (before: GameState, action: Action, after: GameState, at?: number) => void;
   // Capture the current data fields (excluding methods + startTime) so the
   // gameStore can pair this with a GameState snapshot for undo.
   snapshot: () => LogStoreSnapshot;
@@ -416,7 +418,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   playerTimeTotals: {},
   lastActionT: Date.now(),
 
-  reset: (initial) => {
+  reset: (initial, startTime) => {
     const gained: Record<PlayerId, number> = {};
     const gainedByResource: Record<PlayerId, Record<Resource, number>> = {};
     const tradeStats: LogStore['tradeStatsTotals'] = {};
@@ -437,7 +439,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         playerTime[p.id] = 0;
       }
     }
-    const now = Date.now();
+    const now = startTime ?? Date.now();
     set({
       entries: [],
       timeline: [],
@@ -500,7 +502,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     });
   },
 
-  record: (before, action, after) => {
+  record: (before, action, after, at) => {
     const append: LogEntry[] = [];
     const stamp = (): number => {
       const id = get().nextId + append.length;
@@ -977,7 +979,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // Credit the gap since the previous action to the actor of THIS one.
     // First action's gap is measured from game-start, so it'll be small
     // unless a human took a while to place the very first settlement.
-    const now = Date.now();
+    const now = at ?? Date.now();
     const gap = Math.max(0, now - get().lastActionT);
     // Identify the actor — every action variant has a `playerId`. Cap the
     // gap at 5 minutes to keep an idle-window from skewing totals.
@@ -1091,7 +1093,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const newStep = get().entries.length + append.length;
     const snapshot: TimelineSnapshot = {
       step: newStep,
-      t: Date.now() - get().startTime,
+      t: now - get().startTime,
       turnNumber: newTurnNumber ?? get().turnNumber,
       perPlayer,
     };

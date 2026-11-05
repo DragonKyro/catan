@@ -10,7 +10,7 @@
 const UUID_KEY = 'catan.uuid';
 const NAME_KEY = 'catan.displayName';
 
-function freshTabMode(): boolean {
+export function freshTabMode(): boolean {
   try {
     if (typeof window === 'undefined') return false;
     const q = new URLSearchParams(window.location.search);

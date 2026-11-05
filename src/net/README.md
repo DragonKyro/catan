@@ -1,21 +1,21 @@
 # Network layer
 
-Wraps Trystero (WebRTC peer-to-peer, signaling over public Nostr relays via `@trystero-p2p/nostr`). Translates local action dispatches into network messages and applies remote actions to the local store.
+The room transport for online play: Firebase Realtime Database (project `catan-33623`), behind an interface so the stores can run against an in-memory server in tests.
 
-- `room.ts`: the only file that talks to Trystero (`bindRoom` → typed channels, relay status, background-page reconnect handling).
-- `diagnostics.ts`: relay states, the ICE route probe, device label, and the pair test behind the Network test screen.
-- `fakeRoom.ts`: test-only in-memory `room.ts` for multi-device store tests.
+- `transport.ts`: the interface (`RoomTransport` → `RoomConnection` + `RoomEvents`), `ServerUnreachableError`, log-slot keys.
+- `firebaseRoom.ts`: the Firebase implementation (anonymous sign-in, room layout, transactions, presence). Loaded lazily by `networkStore`, so the SDK only downloads when someone goes online.
+- `fakeTransport.ts`: test-only in-memory server with the same semantics, for multi-device store tests.
+- `types.ts`: lobby, chat, and room record types. `identity.ts`: persistent UUID, display name, room codes. `roomLink.ts`: `?room=CODE` in the URL (reload / invite links).
+- Security rules: `database.rules.json` at the repo root.
 
 ## Multiplayer model
 
-- Every peer holds the full `GameState`. Actions, not state diffs, flow over the wire.
-- On any local action: pass it through `applyAction` AND broadcast it to peers.
-- On any remote action: pass it through `applyAction` only.
-- Randomness (dice rolls, dev card draws) is decided by the acting player and included in the action payload, so every peer reduces to the same state.
-- Rejoin: the returning player enters the room with their persistent UUID; any peer in the room sends them the current `GameState` snapshot.
+- Every device holds the full `GameState`, rebuilt from the room's `start` record plus its action log, applied in slot order. Moves, not state diffs, go to the server.
+- Randomness (dice rolls, dev card draws) is decided by the acting player and included in the action payload, so every device reduces to the same state.
+- Ordering, rollback and replay of this device's own moves live in `src/store/actionSync.ts`; this layer only reads and writes the room.
 
 ## Rules of this layer
 
-- No imports from `@/ui`.
-- May import from `@/game` to type-check and apply actions.
+- No imports from `@/ui` or `@/store`.
+- May import from `@/game` for types.
 - Keep this layer thin — no game rules belong here.

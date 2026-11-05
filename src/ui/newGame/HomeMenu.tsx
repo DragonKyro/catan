@@ -5,12 +5,14 @@ import { OnlineMenu } from './OnlineMenu';
 import { Rulebook } from '@/rulebook/Rulebook';
 import { MapBuilderScreen } from '@/ui/mapBuilder/MapBuilderScreen';
 import { useReplayStore, parseReplay } from '@/store/replayStore';
+import { roomCodeFromUrl } from '@/net';
 import './HomeMenu.css';
 
 type Mode = 'choose' | 'local' | 'online' | 'rules' | 'builder';
 
 export function HomeMenu() {
-  const [mode, setMode] = useState<Mode>('choose');
+  // An invite link (?room=ABCD) opens the online menu on that room.
+  const [mode, setMode] = useState<Mode>(() => (roomCodeFromUrl() ? 'online' : 'choose'));
   const [replayError, setReplayError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const loadReplay = useReplayStore((s) => s.load);

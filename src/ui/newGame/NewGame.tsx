@@ -6,11 +6,8 @@ import type { AiLevel, PlayerColor } from '@/game/types';
 import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL, supportsNeuralAi } from '@/ai/nn';
 import type { CustomMap } from '@/game/customMap/types';
 import { parseCustomMap } from '@/game/customMap/parse';
-import {
-  PLAYER_COLORS,
-  PLAYER_COLOR_HEX,
-  PLAYER_COLOR_LABEL,
-} from '@/ui/shared/playerColors';
+import { PLAYER_COLOR_HEX, PLAYER_COLOR_LABEL } from '@/ui/shared/playerColors';
+import { ColorPicker } from '@/ui/shared/ColorPicker';
 import {
   ExpansionPicker,
   DEFAULT_EXPANSIONS,
@@ -241,32 +238,11 @@ export function NewGame({ onBack }: Props = {}) {
                     title={`${PLAYER_COLOR_LABEL[color]} — click to change`}
                   />
                   {isPickerOpen && (
-                    <div className="newgame-colorpicker" role="listbox">
-                      {PLAYER_COLORS.map((c) => {
-                        const takenByOther = colors
-                          .slice(0, numPlayers)
-                          .some((cc, j) => cc === c && j !== i);
-                        const isMine = color === c;
-                        return (
-                          <button
-                            key={c}
-                            type="button"
-                            role="option"
-                            aria-selected={isMine}
-                            className={`newgame-colorpicker-opt${isMine ? ' is-mine' : ''}${takenByOther ? ' is-taken' : ''}`}
-                            style={{ background: PLAYER_COLOR_HEX[c] }}
-                            onClick={() => setColor(i, c)}
-                            title={
-                              takenByOther
-                                ? `${PLAYER_COLOR_LABEL[c]} — taken (will swap)`
-                                : PLAYER_COLOR_LABEL[c]
-                            }
-                          >
-                            {isMine && <span className="newgame-colorpicker-check">✓</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <ColorPicker
+                      value={color}
+                      taken={colors.slice(0, numPlayers).filter((_, j) => j !== i)}
+                      onPick={(c) => setColor(i, c)}
+                    />
                   )}
                 </div>
                 <input

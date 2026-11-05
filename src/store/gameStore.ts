@@ -9,12 +9,30 @@ import { useLogStore, type LogStoreSnapshot } from './logStore';
 // Re-export the pure helper for callers used to importing it from the store.
 export { getActingPlayerId };
 
+/** The game plus its log, as captured for undo and for online rollbacks. */
+export interface GameSnapshot {
+  game: GameState;
+  log: LogStoreSnapshot;
+}
+
 // Optional broadcast hook — when the network layer is active it registers a
-// function here so dispatched actions are sent to peers as a side effect.
-// Kept here (rather than in networkStore) to avoid a circular module import.
-let broadcastHandler: ((action: Action) => void) | null = null;
-export function registerBroadcastHandler(fn: ((a: Action) => void) | null): void {
+// function here so dispatched actions are sent to the room as a side effect.
+// `before` is the state the action was applied to (the room may roll back to
+// it). Kept here (rather than in networkStore) to avoid a circular import.
+// `at` is when the action was made (it's logged with that time everywhere).
+let broadcastHandler: ((action: Action, before: GameSnapshot, at: number) => void) | null = null;
+export function registerBroadcastHandler(
+  fn: ((action: Action, before: GameSnapshot, at: number) => void) | null,
+): void {
   broadcastHandler = fn;
+}
+
+// Online, a device may only act for its own seat (and the host for AI
+// seats). The network layer registers the check; it returns an error
+// message to refuse the action, or null to allow it.
+let dispatchGuard: ((action: Action) => string | null) | null = null;
+export function registerDispatchGuard(fn: ((action: Action) => string | null) | null): void {
+  dispatchGuard = fn;
 }
 
 // Some store behavior (pass-device handoff) needs to know if we're in an
@@ -120,7 +138,7 @@ interface AppStore {
   // dispatch of one of UNDOABLE_ACTION_TYPES; cleared by any non-undoable
   // action, by undo, or by starting/resetting a game.
   // Bundles game state + log-store state so undo rewinds both together.
-  lastActionSnapshot: { game: GameState; log: LogStoreSnapshot } | null;
+  lastActionSnapshot: GameSnapshot | null;
   // The most-recent dice token to highlight on the board (production
   // pulse). null when nothing should pulse. Cleared by a timeout in
   // BoardSVG ~1.5s after a roll. Excluded from network sync — each
@@ -128,10 +146,16 @@ interface AppStore {
   lastRolledHighlight: number | null;
 
   newGame: (opts: CreateGameOptions) => void;
-  setGameState: (state: GameState) => void;
+  /** Show `state` as a fresh game; `startedAt` sets the game clock's start (default now). */
+  setGameState: (state: GameState, startedAt?: number) => void;
   resetGame: () => void;
   dispatch: (action: Action) => void;
-  applyLocal: (action: Action) => void;
+  /** Apply an action without broadcasting it (moves from the room), logged at time `at`. False when the engine rejects it. */
+  applyLocal: (action: Action, at?: number) => boolean;
+  /** Current game + log, for `restoreSnapshot`. */
+  takeSnapshot: () => GameSnapshot | null;
+  /** Put the game and its log back to a snapshot (online rollback). */
+  restoreSnapshot: (snap: GameSnapshot) => void;
   undo: () => void;
   setMode: (mode: UIMode) => void;
   openDialog: (d: DialogName) => void;
@@ -285,12 +309,18 @@ export const useGameStore = create<AppStore>((set, get) => ({
   dispatch: (action) => {
     const before = get().game;
     if (!before) return;
+    const refused = dispatchGuard?.(action);
+    if (refused) {
+      set({ error: refused });
+      return;
+    }
+    const at = Date.now();
     // Capture log snapshot BEFORE record(), so undo can rewind both stores.
     // Only matters for undoable actions — cheap enough to always do.
     const logBefore = useLogStore.getState().snapshot();
     try {
       const next = applyAction(before, action);
-      useLogStore.getState().record(before, action, next);
+      useLogStore.getState().record(before, action, next, at);
       applyTransition(set, get, before, next);
       // Production-pulse highlight: only on real production rolls (not 7).
       // Cleared by the BoardSVG effect ~1.5s later.
@@ -298,8 +328,8 @@ export const useGameStore = create<AppStore>((set, get) => ({
         const total = action.dice[0] + action.dice[1];
         set({ lastRolledHighlight: total !== 7 ? total : null });
       }
-      // Broadcast to peers only after local apply succeeds.
-      if (broadcastHandler) broadcastHandler(action);
+      // Broadcast only after the local apply succeeds.
+      if (broadcastHandler) broadcastHandler(action, { game: before, log: logBefore }, at);
       // Update snapshot bookkeeping for undo (solo/hot-seat only).
       const solo = !isOnlinePredicate();
       if (solo && UNDOABLE_ACTION_TYPES.has(action.type) && !revealedSomething(before, next)) {
@@ -312,12 +342,12 @@ export const useGameStore = create<AppStore>((set, get) => ({
     }
   },
 
-  applyLocal: (action) => {
+  applyLocal: (action, at) => {
     const before = get().game;
-    if (!before) return;
+    if (!before) return false;
     try {
       const next = applyAction(before, action);
-      useLogStore.getState().record(before, action, next);
+      useLogStore.getState().record(before, action, next, at);
       applyTransition(set, get, before, next);
       if (action.type === 'rollDice') {
         const total = action.dice[0] + action.dice[1];
@@ -325,10 +355,29 @@ export const useGameStore = create<AppStore>((set, get) => ({
       }
       // Remote actions never produce an undo snapshot — clear any stale one.
       set({ lastActionSnapshot: null });
+      return true;
     } catch (e) {
       // Remote action failed locally — log but don't surface as user error.
       console.warn('[gameStore] applyLocal rejected action:', (e as Error).message);
+      return false;
     }
+  },
+
+  takeSnapshot: () => {
+    const game = get().game;
+    return game ? { game, log: useLogStore.getState().snapshot() } : null;
+  },
+
+  restoreSnapshot: (snap) => {
+    useLogStore.getState().restore(snap.log);
+    set({
+      game: snap.game,
+      uiMode: phaseToMode(snap.game),
+      dialog: null,
+      pendingRobberHex: null,
+      pendingPirateHex: null,
+      lastActionSnapshot: null,
+    });
   },
 
   undo: () => {
@@ -346,10 +395,10 @@ export const useGameStore = create<AppStore>((set, get) => ({
     });
   },
 
-  setGameState: (state) => {
-    // Set on snapshot/rejoin — reset the log; we don't have history of the
-    // pre-join actions.
-    useLogStore.getState().reset(state);
+  setGameState: (state, startedAt) => {
+    // A fresh log from this state (online, the room's action log is then
+    // replayed into it).
+    useLogStore.getState().reset(state, startedAt);
     set({
       game: state,
       uiMode: phaseToMode(state),
