@@ -1,10 +1,8 @@
 import type { Topic } from '../topics';
 
-// Traders & Barbarians expansion rulebook entries. This commit covers the
-// Rivers of Catan scenario plus the Friendly Robber and Strongest Ports
-// variants. Future commits add Fishing on Catan, Merchant Trains, Barbarian
-// Attack, the Traders & Barbarians combo scenario, and the remaining
-// variants.
+// Traders & Barbarians expansion rulebook entries: the scenarios and the
+// variants (Friendly Robber, Strongest Ports, Catan Event Cards), which work
+// with any game.
 
 export const TRADERS_TOPICS: Topic[] = [
   {
@@ -146,14 +144,19 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          When the variant is active, you may <strong>not</strong> place the
-          robber on a hex whose only adjacent buildings belong to players with
-          {' '}<strong>2 or fewer visible victory points</strong>. The robber
-          targets the rich, not the new.
+          You may <strong>not</strong> move the robber to a hex with a building of a player who
+          has only <strong>2 VPs</strong> (or fewer) — even if richer players have buildings
+          there too. Only visible VPs count; hidden Victory Point cards don&apos;t.
         </p>
         <p>
-          The desert remains a legal target — if no other hex qualifies, you
-          must move the robber there.
+          If no hex is valid, the robber goes to the <strong>desert</strong>, and you may steal
+          only from a player there with <strong>more than 2 VPs</strong>. (On a board with no
+          desert it goes to a non-producing hex — a swamp or the watering hole.) The board only
+          highlights legal hexes.
+        </p>
+        <p className="rb-muted">
+          A variant: tick it under &quot;Traders &amp; Barbarians variants&quot; on the New Game
+          screen. It works with the base game, Seafarers and every T&amp;B scenario.
         </p>
       </>
     ),
@@ -164,16 +167,67 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          The first player to hold <strong>3 victory points worth of
-          port-buildings</strong> (1 per settlement-on-port, 2 per
-          city-on-port) takes the <strong>Strongest Ports</strong> bonus tile,
-          worth <strong>+2 VP</strong>. If anyone later exceeds that total,
-          the tile moves to them. Ties leave it unclaimed.
+          The first player to have <strong>3 VPs in buildings on harbors</strong> (a settlement
+          counts 1, a city 2) takes the <strong>Strongest Ports</strong> tile, worth{' '}
+          <strong>+2 VP</strong>. A player who gets <strong>more</strong> harbor VPs than the
+          holder takes it over at once; a tie doesn&apos;t.
         </p>
         <p>
-          To balance the bonus, the game's victory-point target is increased
-          by 1 (e.g. 10 → 11). Combine with any base or scenario game.
+          The game needs <strong>1 VP more</strong> to win (10 → 11). Works with the base game,
+          Seafarers, every T&amp;B scenario and Cities &amp; Knights.
         </p>
+      </>
+    ),
+  },
+  {
+    id: 'traders-event-cards',
+    title: 'Catan Event Cards (variant)',
+    body: (
+      <>
+        <p>
+          An event deck replaces the dice. At the start of your turn press{' '}
+          <strong>Flip event card</strong>: resolve the card&apos;s event, then everyone collects
+          resources — or you resolve a 7 — for the <strong>number on the card</strong>. The card
+          shows where the dice would be.
+        </p>
+        <p>
+          The deck is 36 numbered cards plus <strong>New Year</strong>, which sits 6th from the
+          bottom: when it turns up the whole deck is reshuffled the same way and the next card
+          flipped. The numbers follow the dice odds exactly (one 2, two 3s, … six 7s, … one 12),
+          so production is steadier than with dice.
+        </p>
+        <p>
+          Events that ask something of a player (take or give a card, steal, damage a road) open
+          a prompt for each player in turn order, starting with you; production follows.
+        </p>
+        <p className="rb-muted">
+          The rulebook doesn&apos;t print which number each card carries; this deck puts Robber
+          Attacks on the six 7s and spreads the other events over the other numbers. Not yet
+          combined with Cities &amp; Knights.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'traders-event-card-list',
+    title: 'Event card list',
+    body: (
+      <>
+        <ul>
+          <li><strong>A Beautiful Day</strong> — no event (16 cards).</li>
+          <li><strong>Calm Seas</strong> — the player(s) with the most buildings on harbors take 1 resource of their choice.</li>
+          <li><strong>Conflict</strong> — the Largest Army holder steals 1 random resource from any player; without one, the player with the most Knights played (if only one) may.</li>
+          <li><strong>Earthquake</strong> — everyone damages one of their roads. You can&apos;t build roads until you repair all yours (1 brick + 1 wood each, the 🔧 button); nobody may build a settlement next to a damaged road. Damaged roads still count for the Longest Route.</li>
+          <li><strong>Epidemic</strong> — cities collect only 1 resource this turn.</li>
+          <li><strong>Good Neighbors</strong> — everyone gives 1 resource of their choice to the player on their left (all at once).</li>
+          <li><strong>Helpful Neighbor</strong> — the player(s) with the most VPs give 1 resource to a player with fewer VPs.</li>
+          <li><strong>New Year</strong> — rebuild the deck and flip again.</li>
+          <li><strong>Plentiful Year</strong> — everyone takes 1 resource of their choice.</li>
+          <li><strong>Robber Attacks</strong> — resolve a 7: discard, move the robber, steal.</li>
+          <li><strong>Robber Flees</strong> — the robber goes back to the desert (off the board if there is none); no steal.</li>
+          <li><strong>Tournament</strong> — the player(s) with the most Knights played take 1 resource of their choice.</li>
+          <li><strong>Trade Advantage</strong> — the Longest Route holder steals 1 random resource from any player.</li>
+        </ul>
       </>
     ),
   },
@@ -269,41 +323,57 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          The desert is replaced by a <strong>watering hole</strong> at the
-          centre of the board — the origin of every trade wagon. Whenever
-          you build at least one piece on your turn, you acquire a wagon
-          token. At the end of your turn, all players bid wool and wheat
-          to decide where it lands.
+          The desert is replaced by the <strong>watering hole</strong> in the centre; the other
+          18 hexes and numbers are placed at random. The robber starts beside the board and comes
+          in on the first 7 or Knight. <strong>12 VP</strong> wins.
         </p>
         <ul>
           <li>
-            <strong>Acquiring.</strong> Building any number of pieces
-            (road, settlement, city, bridge) on your turn earns you exactly
-            one wagon.
+            <strong>Collecting a wagon.</strong> Build at least one <em>building</em> — a
+            settlement or a city — in your turn and you collect 1 wagon (never more than one a
+            turn; roads and bridges don&apos;t count). It&apos;s placed in a voting round when you
+            end your turn.
           </li>
           <li>
-            <strong>Voting.</strong> Each player commits some wool and/or
-            wheat to a single target edge — or passes. Cards spent are
-            forfeit to the supply.
-          </li>
-          <li>
-            <strong>Resolution.</strong> First, the unique location with
-            the most votes wins. Otherwise, the unique player with the most
-            votes picks the placement. Otherwise, the acquirer (active
-            builder) picks — even if they bid nothing.
+            <strong>Voting round.</strong> Starting with you and going clockwise, each player may
+            lay any number of wool and/or wheat face up — 1 card, 1 vote; later bidders see the
+            earlier bids. A player with <strong>more than half of all votes</strong> chooses
+            where the wagon goes. Otherwise each bidder gives all their votes to one spot:
+            <ol>
+              <li>a spot with the most votes gets the wagon;</li>
+              <li>otherwise the player with the most votes chooses;</li>
+              <li>otherwise you (the active player) choose — even if you bid nothing.</li>
+            </ol>
+            All bids go to the supply. The possible spots are shown on the board as lettered
+            ghost wagons. (With only one possible spot the wagon is placed without a vote.)
           </li>
         </ul>
-        <p>
-          Trains start at the watering hole and extend in chains. New
-          wagons must connect either to the watering hole or to a train
-          endpoint (a vertex with exactly one incident wagon). Merchant
-          trains do not branch — once two trains meet at a vertex, it's
-          locked.
-        </p>
-        <p className="rb-muted">
-          Robber starts off the board and enters on the first 7 or Knight.
-          The game ends when someone reaches <strong>12 VP</strong>.
-        </p>
+      </>
+    ),
+  },
+  {
+    id: 'traders-merchant-train-placement',
+    title: 'Placing wagons',
+    body: (
+      <>
+        <ul>
+          <li>
+            Trains start at the watering hole&apos;s three <strong>start corners</strong> (green
+            arrows: north-west, north-east, south — never the corners with a red cross). A new
+            train&apos;s first wagon goes on the edge leading <em>away</em> from the hex.
+          </li>
+          <li>
+            A wagon goes on an edge without a wagon (a road is fine). It either starts a new
+            train or is added <strong>nose to tail at the front</strong> of a train — each
+            wagon&apos;s cab shows which way its train runs. Trains never branch.
+          </li>
+          <li>
+            When a train&apos;s front reaches an intersection already on another train they{' '}
+            <strong>merge</strong>: meeting the other train&apos;s front, one train goes on from
+            there; meeting any other part of it, the arriving train ends. A train also ends when
+            its front can&apos;t go on, or when the 22-wagon supply runs out.
+          </li>
+        </ul>
       </>
     ),
   },
@@ -312,23 +382,21 @@ export const TRADERS_TOPICS: Topic[] = [
     title: 'Merchant Trains scoring',
     body: (
       <>
-        <p>
-          Wagons are <strong>neutral</strong> — they have no owner. They
-          score for whoever's road shares the edge:
-        </p>
+        <p>Wagons are neutral pieces. They score for the pieces they touch:</p>
         <ul>
           <li>
-            <strong>Longest Route.</strong> A wagon sharing an edge with
-            your road counts as an extra road on that edge — so a 3-road
-            chain with 2 wagons on it is worth 5 toward Longest Route.
+            <strong>Longest Route.</strong> A wagon on the same edge as your road counts as one
+            extra road — 3 roads with wagons on 2 of them make a route of 5.
           </li>
           <li>
-            <strong>Building bonus.</strong> Every settlement or city sat
-            between two wagons (vertex with ≥ 2 incident wagons) earns
-            {' '}<strong>+1 VP</strong>. Settlements jump from 1 → 2 VP,
-            cities from 2 → 3 VP.
+            <strong>Buildings between 2 wagons</strong> (2 or more wagon edges meet at the
+            intersection) are worth <strong>+1 VP</strong>: a settlement 2 VP, a city 3 VP.
           </li>
         </ul>
+        <p className="rb-muted">
+          The Scenario tab lists the trains, the wagon supply, the current bids and the last
+          vote.
+        </p>
       </>
     ),
   },

@@ -65,7 +65,9 @@ export function EventChoiceDialog() {
         <>
           <p className="eventdlg-ask">
             {me.name}: give 1 resource of your choice
-            {recipients.length === 1 ? ` to ${name(recipients[0]!)} (on your left).` : ' to a player with fewer VPs.'}
+            {recipients.length === 1
+              ? ` to ${name(recipients[0]!)}${pending.card.kind === 'goodNeighbors' ? ' (on your left)' : ' (fewer VPs)'}.`
+              : ' to a player with fewer VPs — pick who first.'}
           </p>
           {recipients.length > 1 && (
             <div className="eventdlg-row">
