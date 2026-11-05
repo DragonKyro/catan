@@ -42,7 +42,7 @@ export function DiscardDialog() {
   };
 
   return (
-    <DialogShell title={`${player.name} must discard ${required} cards`} blocking>
+    <DialogShell title={`${player.name} must discard ${required} card${required === 1 ? '' : 's'}`} blocking>
       <p style={{ marginTop: 0, color: 'var(--text-soft)' }}>
         Selected: <strong style={{ color: total === required ? 'var(--success)' : 'var(--accent)' }}>{total}</strong> / {required}
       </p>
