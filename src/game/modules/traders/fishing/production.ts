@@ -3,6 +3,7 @@ import { updatePlayer } from '../../../helpers';
 import { hexRollsOn } from '../../../board/hexNumbers';
 import { FISH_TOKEN_CAP } from '../constants';
 import { drawFish } from './pool';
+import { lakeHexes } from './lakes';
 
 // Fishing on Catan production (rulebook p. 10). Called from the base
 // `handleRollDice` after resource production. The lake (printed 2 / 3 / 11
@@ -18,7 +19,8 @@ import { drawFish } from './pool';
 // offer is the 'fishSwap' phase that follows this roll (players decide in
 // turn order, after everyone's normal draws).
 export function maybeDistributeFish(state: GameState, rolled: number): GameState {
-  if (!state.fishingGrounds && state.lakeHexId == null) return state;
+  const lakes = lakeHexes(state);
+  if (!state.fishingGrounds && lakes.length === 0) return state;
   const counts = new Map<PlayerId, number>();
   const bump = (pid: PlayerId, by: number) =>
     counts.set(pid, (counts.get(pid) ?? 0) + by);
@@ -29,10 +31,10 @@ export function maybeDistributeFish(state: GameState, rolled: number): GameState
     }
   };
 
-  if (state.lakeHexId != null) {
-    const lake = state.board.hexes[state.lakeHexId];
-    const robbed =
-      state.board.robberHex === state.lakeHexId && (state.robberActive ?? true);
+  // 5-6 players: two lakes (2/3/11/12 and 4/10); each pays its own corners.
+  for (const lakeId of lakes) {
+    const lake = state.board.hexes[lakeId];
+    const robbed = state.board.robberHex === lakeId && (state.robberActive ?? true);
     if (lake && !robbed && hexRollsOn(lake, rolled)) {
       for (const vid of lake.corners) payCorner(vid);
     }

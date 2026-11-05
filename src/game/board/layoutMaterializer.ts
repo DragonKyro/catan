@@ -114,7 +114,7 @@ export function materializeLayout(
     // Tribe and Cloth for Catan islands, Pirate Islands' bare hexes).
     if (pos.noToken) continue;
     // A tile with printed numbers (Fishing on Catan's lake) takes no disc.
-    const printed = layout.pools.printedNumbers?.[h.terrain];
+    const printed = pos.printedNumbers ?? layout.pools.printedNumbers?.[h.terrain];
     if (printed && printed.length > 0) {
       h.token = printed[0]!;
       if (printed.length > 1) h.extraTokens = printed.slice(1);

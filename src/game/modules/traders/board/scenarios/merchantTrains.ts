@@ -4,7 +4,8 @@ import type {
 } from '../../../../board/scenarioTypes';
 import type { TradersScenario } from './types';
 import { standardLand3_4 } from '../../../base/scenarios/standardShape';
-import { TB_FRAME_PORTS_3_4 } from '../frame';
+import { TB_FRAME_PORTS_3_4, TB_FRAME_PORTS_5_6 } from '../frame';
+import { TB_DISCS_5_6, tbPositions5_6 } from './board5_6';
 import { seaPositionsInDisk } from '../../../base/scenarios/helpers';
 import { MERCHANT_TRAINS_DEFAULT_VP } from '../../constants';
 
@@ -55,14 +56,43 @@ const LAYOUT_3_4: ScenarioLayout = {
   },
 };
 
+// ----- 5-6 players (T&B 5-6 rulebook p. 7; TB56-MAP-SPEC) -----
+//
+// "Return the 2 desert hexes to the box. Place the 2 watering holes as
+// shown" — at (-1,-1) and (0,1), both tiles the same way round as the 3-4
+// one, so each has its own NW / NE / S starts: "six locations for starting
+// a merchant train, three at each watering hole". The other 28 hexes and
+// all 28 CATAN 5-6 discs are random.
+
+const WATERING_HOLES_5_6 = [
+  { q: -1, r: -1 },
+  { q: 0, r: 1 },
+];
+
+const LAYOUT_5_6: ScenarioLayout = {
+  positions: tbPositions5_6((p) =>
+    WATERING_HOLES_5_6.some((w) => w.q === p.q && w.r === p.r)
+      ? { ...p, fixedTerrain: 'wateringHole' as const }
+      : p,
+  ),
+  portAnchors: TB_FRAME_PORTS_5_6,
+  pools: {
+    terrainCounts: { wood: 6, brick: 5, sheep: 6, wheat: 6, ore: 5 },
+    tokens: TB_DISCS_5_6,
+    portTypes: [],
+  },
+};
+
 export const merchantTrains: TradersScenario = {
   id: 'merchantTrains',
   name: 'Merchant Trains',
   description:
     "Merchant trains leave the central watering hole. Build a settlement or city to collect a wagon; at the end of your turn everyone bids wool and wheat to decide where it goes. A wagon on a road counts as an extra road for the Longest Route, and every building between two wagons is worth +1 VP. 12 VP wins.",
   minPlayers: 3,
-  maxPlayers: 4,
+  maxPlayers: 6,
   defaultVpToWin: MERCHANT_TRAINS_DEFAULT_VP,
   layout3p: LAYOUT_3_4,
   wateringHole: WATERING_HOLE_COORD,
+  layout5_6p: LAYOUT_5_6,
+  board5_6: { wateringHoles: WATERING_HOLES_5_6 },
 };

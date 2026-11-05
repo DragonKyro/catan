@@ -1,6 +1,7 @@
 import type { GameState, PlayerId, VertexId } from '@/game/types';
 import { hexPips, numberPips } from '@/game/board/hexNumbers';
 import { vertexIsOnRiverTile } from '@/game/modules/traders/coins/gold';
+import { lakeHexes } from '@/game/modules/traders/fishing/lakes';
 import { goldValue } from './gold';
 
 // Traders & Barbarians terms in the AI's vertex score.
@@ -26,8 +27,9 @@ export function tradersVertexBonus(
     bonus += goldValue(state, playerId, 1);
   }
   const vertex = state.board.vertices[vertexId];
-  if (state.lakeHexId && vertex?.hexes.includes(state.lakeHexId)) {
-    const lake = state.board.hexes[state.lakeHexId];
+  for (const lakeId of lakeHexes(state)) {
+    if (!vertex?.hexes.includes(lakeId)) continue;
+    const lake = state.board.hexes[lakeId];
     if (lake) bonus += hexPips(lake) * FISH_PIP_WEIGHT;
   }
   for (const fg of state.fishingGrounds ?? []) {

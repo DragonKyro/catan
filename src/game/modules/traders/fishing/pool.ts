@@ -3,12 +3,14 @@ import { rngInt, shuffle } from '../../../rng';
 
 // Initial fish-token pool per the rulebook component list:
 //   11 × "one fish", 10 × "two fish", 8 × "three fish", 1 × old boot.
-// Total 30 tokens. Mixed face-down at game start.
-export function buildInitialFishPool(): FishTokenType[] {
+// Total 30 tokens. Mixed face-down at game start. T&B 5-6 (p. 5) adds 14:
+// 4 × one, 5 × two, 5 × three (44 in all).
+export function buildInitialFishPool(numPlayers = 4): FishTokenType[] {
+  const big = numPlayers >= 5;
   return [
-    ...Array<FishTokenType>(11).fill('one'),
-    ...Array<FishTokenType>(10).fill('two'),
-    ...Array<FishTokenType>(8).fill('three'),
+    ...Array<FishTokenType>(big ? 15 : 11).fill('one'),
+    ...Array<FishTokenType>(big ? 15 : 10).fill('two'),
+    ...Array<FishTokenType>(big ? 13 : 8).fill('three'),
     'oldBoot',
   ];
 }

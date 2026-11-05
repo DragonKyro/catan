@@ -686,4 +686,48 @@ export const TRADERS_TOPICS: Topic[] = [
       </>
     ),
   },
+  {
+    id: 'traders-five-six',
+    title: 'Traders & Barbarians with 5-6 players',
+    body: (
+      <>
+        <p>
+          Every scenario plays with 5 or 6 on the larger CATAN 5-6 island (30 hexes) and its frame
+          of eleven printed harbors. The win targets don&apos;t change.
+        </p>
+        <p>
+          <strong>Paired turns.</strong> The player who rolls is <strong>Player 1</strong>; the
+          third player to their left is <strong>Player 2</strong>. Player 1 takes a whole turn,
+          the scenario&apos;s End of Turn phase included. Then Player 2 takes an Action phase —
+          building, coins, fish, bridges, buying development cards as usual, but trading only with
+          the supply — and their own End of Turn phase. Then both markers move one seat left.
+          Whoever of the two meets the winning condition during their part wins at once.
+        </p>
+        <ul>
+          <li>
+            <strong>Rivers of Catan:</strong> a third river tile (mountains → pasture → pasture,
+            no swamp) joins the two others; ten bridge sites. All 28 number discs are placed as
+            usual — the 2 is <em>not</em> stacked on the 12.
+          </li>
+          <li>
+            <strong>Fishing on Catan:</strong> two lakes in the inner area (one printed 2 / 3 /
+            11 / 12, the other 4 / 10), eight fishing grounds (two more, numbered 5 and 9) and 14
+            more fish tokens. Player 2 may spend fish and pass the old boot.
+          </li>
+          <li>
+            <strong>Merchant Trains:</strong> two watering holes with three train starts each (six
+            in all) and 33 wagons. If Player 2 builds a building they hold a voting round too,
+            as the active player.
+          </li>
+          <li>
+            <strong>Barbarian Attack:</strong> two castles and two deserts on the coast, printed
+            numbers with two 5s and two 9s on the coast — a 5 or a 9 lands a barbarian on both, so
+            a building can bring 3 to 5 barbarians — and 48 barbarians. Expelling starts at the
+            5 next to the left castle and goes clockwise. Player 2 moves their knights and expels
+            the barbarians at the end of their part too.
+          </li>
+        </ul>
+      </>
+    ),
+  },
 ];

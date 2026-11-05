@@ -46,6 +46,8 @@ export interface RiverDef {
 // with a barbarian. Resolved to hex ids by the generator.
 export interface BarbarianAttackDef {
   castle: { q: number; r: number };
+  // 5-6 players: a second castle (oriented the same way as the first).
+  extraCastles?: Array<{ q: number; r: number }>;
   expelOrder: Array<{ q: number; r: number }>;
   startBarbarians: Array<{ q: number; r: number }>;
 }
@@ -112,4 +114,30 @@ export interface TradersScenario {
   barbarianAttack?: BarbarianAttackDef;
   // Traders & Barbarians scenario: see TradersBarbariansDef.
   tradersBarbarians?: TradersBarbariansDef;
+  // Merchant Trains 5-6: several watering holes (each with its own three
+  // train starts). Takes precedence over `wateringHole`.
+  wateringHoles?: Array<{ q: number; r: number }>;
+  // Traders & Barbarians 5-6 (Phase 11): the 30-hex board for 5-6 players
+  // and the board facts that differ there. The generator reads the
+  // scenario as `{ ...scenario, ...board5_6 }` at 5+ players (see
+  // `scenarioForPlayers`), so only the fields that change are listed.
+  layout5_6p?: ScenarioLayout;
+  board5_6?: TradersBoardOverrides;
 }
+
+// Per-board-size overrides (the fields of a scenario that depend on the
+// board, not on the rules).
+export type TradersBoardOverrides = Partial<
+  Pick<
+    TradersScenario,
+    | 'rivers'
+    | 'robberStart'
+    | 'lake'
+    | 'fishingGrounds'
+    | 'fishingGroundTokens'
+    | 'wateringHole'
+    | 'wateringHoles'
+    | 'prepareLayout'
+    | 'barbarianAttack'
+  >
+>;

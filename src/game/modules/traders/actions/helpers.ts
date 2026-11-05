@@ -1,4 +1,5 @@
 import type { GameState, VertexId } from '../../../types';
+import { lakeHexes } from '../fishing/lakes';
 
 // River-tile tests live with the coins (src/game/modules/traders/coins/gold.ts).
 export { vertexIsOnRiverTile, edgeIsOnRiverTile } from '../coins/gold';
@@ -10,10 +11,8 @@ export function vertexIsOnFishingWater(
   state: GameState,
   vertexId: VertexId,
 ): boolean {
-  if (state.lakeHexId) {
-    const v = state.board.vertices[vertexId];
-    if (v && v.hexes.includes(state.lakeHexId)) return true;
-  }
+  const v = state.board.vertices[vertexId];
+  if (v && lakeHexes(state).some((h) => v.hexes.includes(h))) return true;
   for (const fg of state.fishingGrounds ?? []) {
     if (fg.vertices.includes(vertexId)) return true;
   }

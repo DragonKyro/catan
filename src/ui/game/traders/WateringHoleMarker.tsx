@@ -1,4 +1,5 @@
-import type { GameState } from '@/game/types';
+import type { GameState, HexId } from '@/game/types';
+import { wateringHoles } from '@/game/modules/traders/merchantTrains/trains';
 
 interface Props {
   game: GameState;
@@ -8,14 +9,25 @@ interface Props {
 // fence, like the rulebook tile — plus its three train start points. Each
 // start corner (NW, NE, S) gets a green disc with an arrow along the edge a
 // new train's first wagon takes (away from the hex); the other three
-// corners are marked with a small red cross (no train starts there).
+// corners are marked with a small red cross (no train starts there). At 5-6
+// players there are two watering holes, three starts each.
 export function WateringHoleMarker({ game }: Props) {
-  const hexId = game.wateringHoleHexId;
-  if (!hexId) return null;
+  const holes = wateringHoles(game);
+  if (holes.length === 0) return null;
+  return (
+    <>
+      {holes.map((hexId) => (
+        <OneWateringHole key={hexId} game={game} hexId={hexId} />
+      ))}
+    </>
+  );
+}
+
+function OneWateringHole({ game, hexId }: Props & { hexId: HexId }) {
   const board = game.board;
   const hex = board.hexes[hexId];
   if (!hex) return null;
-  const starts = game.wagonStarts ?? [];
+  const starts = (game.wagonStarts ?? []).filter((s) => hex.corners.includes(s.corner));
   const startCorners = new Set(starts.map((s) => s.corner));
   const { x: cx, y: cy } = hex.center;
   return (

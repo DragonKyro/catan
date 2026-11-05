@@ -149,14 +149,21 @@ export function barbarianAttackLogLines(
         out.push({ player: ev.playerId, text: '🗡 Treason: +2 gold, no barbarian could move' });
       }
     } else if (ev.kind === 'landing') {
-      const rolls = ev.rolls
-        .map((r) => {
-          const n = r.dice[0] + r.dice[1];
-          const where = describeHex(after, r.hex);
-          if (!r.placed) return `🎲 ${n}: ${where} already conquered`;
-          return `🎲 ${n}: +1 on the ${where}${r.conquered ? ' — conquered!' : ''}`;
-        })
-        .join(' · ');
+      // At 5-6 players one roll can hit two coastal hexes (two 5s, two 9s):
+      // consecutive entries with the same dice share one "🎲 n:".
+      const parts: string[] = [];
+      ev.rolls.forEach((r, i) => {
+        const n = r.dice[0] + r.dice[1];
+        const where = describeHex(after, r.hex);
+        const what = !r.placed
+          ? `${where} already conquered`
+          : `+1 on the ${where}${r.conquered ? ' — conquered!' : ''}`;
+        const prev = ev.rolls[i - 1];
+        const sameRoll = prev && prev.dice[0] === r.dice[0] && prev.dice[1] === r.dice[1];
+        if (sameRoll) parts[parts.length - 1] += ` and ${what}`;
+        else parts.push(`🎲 ${n}: ${what}`);
+      });
+      const rolls = parts.join(' · ');
       out.push({
         player: ev.playerId,
         text: `🪓 barbarians land: ${rolls || 'none'}${ev.supplyEmpty ? ' (supply empty)' : ''}`,

@@ -604,6 +604,9 @@ export interface BarbarianAttackState {
   // castle, ending with the castle hex.
   coastalHexes: HexId[];
   castleHex: HexId;
+  // 5-6 players: both castle hexes (`castleHex` is the first). Absent with
+  // one castle — read castles through `castleHexes(ba)` (barbarianAttack/state.ts).
+  castleHexes?: HexId[];
   // Knights on edges. One knight per edge.
   knights: Record<EdgeId, PlayerId>;
   // Barbarians taken prisoner, per player. Every 2 = 1 VP.
@@ -1174,6 +1177,9 @@ export interface GameState {
   // Hex id of the lake (a non-resource hex with a number that produces fish
   // on roll). Robber may sit on the lake to block its production.
   lakeHexId?: HexId;
+  // 5-6 players: every lake (two; `lakeHexId` is the first). Absent with one
+  // lake — read lakes through `lakeHexes(state)` (traders/fishing/lakes.ts).
+  lakeHexIds?: HexId[];
   // Fishing on Catan: present iff phase is 'fishSwap'. Players (turn order)
   // whose draws were cut off by the 7-token cap and may still swap one token.
   // `returnTo` is the phase play resumes in afterwards.
@@ -1185,6 +1191,9 @@ export interface GameState {
   // Merchant Trains: hex id of the watering hole (non-producing centre hex,
   // origin of every merchant train).
   wateringHoleHexId?: HexId;
+  // 5-6 players: both watering holes (`wateringHoleHexId` is the first).
+  // Absent with one — read them through `wateringHoles(state)` (trains.ts).
+  wateringHoleHexIds?: HexId[];
   // All placed trade wagons in the scenario. Neutral pieces — they extend
   // the road network of whichever player owns a road on the same edge.
   wagons?: TradeWagon[];

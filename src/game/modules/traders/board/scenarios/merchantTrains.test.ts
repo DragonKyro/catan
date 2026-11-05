@@ -77,10 +77,10 @@ describe('Merchant Trains scenario', () => {
     }
   });
 
-  it('rejects 5+ player merchant trains games', () => {
+  it('rejects 7+ player merchant trains games', () => {
     expect(() =>
       createGame({
-        playerNames: ['A', 'B', 'C', 'D', 'E'],
+        playerNames: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
         seed: 1,
         settings: {
           expansions: ['traders'],
@@ -88,6 +88,6 @@ describe('Merchant Trains scenario', () => {
         },
         randomizeTurnOrder: false,
       }),
-    ).toThrow(/3-4 players only/);
+    ).toThrow(/at most 6 players/);
   });
 });

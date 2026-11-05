@@ -28,10 +28,14 @@ export interface TradersBoardResult {
   // Fishing on Catan extras. Both undefined for Rivers / future scenarios
   // that don't use them.
   lakeHexId: HexId | null;
+  // Every lake (two at 5-6 players); `lakeHexId` is the first.
+  lakeHexIds: HexId[];
   fishingGrounds: FishingGround[];
   // Merchant Trains: the watering hole hex id (origin of every train).
   // null when the scenario doesn't have one.
   wateringHoleHexId: HexId | null;
+  // Every watering hole (two at 5-6 players); `wateringHoleHexId` is the first.
+  wateringHoleHexIds: HexId[];
   // Barbarian Attack: castle, coastal hexes in expel order, starting
   // barbarians. null in every other scenario.
   barbarianAttack: BarbarianBoardSetup | null;
@@ -45,7 +49,10 @@ export function generateTradersBoard(
   rngState: number,
   numPlayers = 3,
 ): TradersBoardResult {
-  const scenario = getTradersScenario(scenarioId ?? 'riversOfCatan');
+  const scenario = scenarioForPlayers(
+    getTradersScenario(scenarioId ?? 'riversOfCatan'),
+    numPlayers,
+  );
   let layout = pickLayout(scenario, numPlayers);
   if (!layout) {
     throw new Error(
@@ -59,9 +66,9 @@ export function generateTradersBoard(
   delete assembled.board.pirateHex;
   let rng = assembled.rngState;
   const { rivers, riverEdges } = resolveRivers(scenario.rivers ?? [], assembled.board);
-  const lakeHexId = scenario.lake
-    ? `${scenario.lake.q},${scenario.lake.r}`
-    : findHexByTerrain(assembled.board, 'lake');
+  const lakeHexIds = scenario.lake
+    ? [`${scenario.lake.q},${scenario.lake.r}`]
+    : findHexesByTerrain(assembled.board, 'lake');
   let fishingGrounds: FishingGround[];
   [fishingGrounds, rng] = resolveFishingGrounds(
     scenario.fishingGrounds ?? [],
@@ -69,9 +76,13 @@ export function generateTradersBoard(
     assembled.board,
     rng,
   );
-  const wateringHoleHexId = scenario.wateringHole
-    ? `${scenario.wateringHole.q},${scenario.wateringHole.r}`
-    : findHexByTerrain(assembled.board, 'wateringHole');
+  const holeCoords =
+    scenario.wateringHoles ?? (scenario.wateringHole ? [scenario.wateringHole] : null);
+  const wateringHoleHexIds = (
+    holeCoords
+      ? holeCoords.map((c) => `${c.q},${c.r}`)
+      : findHexesByTerrain(assembled.board, 'wateringHole')
+  ).filter((id) => assembled.board.hexes[id] !== undefined);
   const barbarianAttack = scenario.barbarianAttack
     ? resolveBarbarianBoard(scenario.barbarianAttack, assembled.board)
     : null;
@@ -90,28 +101,36 @@ export function generateTradersBoard(
     rngState: rng,
     riverEdges,
     rivers,
-    lakeHexId: lakeHexId && assembled.board.hexes[lakeHexId] ? lakeHexId : null,
+    lakeHexId: lakeHexIds.find((id) => assembled.board.hexes[id] !== undefined) ?? null,
+    lakeHexIds: lakeHexIds.filter((id) => assembled.board.hexes[id] !== undefined),
     fishingGrounds,
-    wateringHoleHexId:
-      wateringHoleHexId && assembled.board.hexes[wateringHoleHexId]
-        ? wateringHoleHexId
-        : null,
+    wateringHoleHexId: wateringHoleHexIds[0] ?? null,
+    wateringHoleHexIds,
     barbarianAttack,
     tradersBarbarians,
   };
 }
 
-function findHexByTerrain(
+function findHexesByTerrain(
   board: BoardState,
   terrain: BoardState['hexes'][string]['terrain'],
-): HexId | null {
-  for (const id of board.hexIds) {
-    if (board.hexes[id]?.terrain === terrain) return id;
-  }
-  return null;
+): HexId[] {
+  return board.hexIds.filter((id) => board.hexes[id]?.terrain === terrain);
+}
+
+// The scenario as played at this player count: at 5-6 players the board
+// facts of `board5_6` replace the 3-4 ones (rivers, fishing grounds,
+// watering holes, castles, …).
+export function scenarioForPlayers(
+  scenario: TradersScenario,
+  numPlayers: number,
+): TradersScenario {
+  if (numPlayers < 5 || !scenario.board5_6) return scenario;
+  return { ...scenario, ...scenario.board5_6 };
 }
 
 function pickLayout(scenario: TradersScenario, numPlayers: number) {
   if (numPlayers === 3 || numPlayers === 4) return scenario.layout3p ?? null;
+  if (numPlayers === 5 || numPlayers === 6) return scenario.layout5_6p ?? null;
   return null;
 }

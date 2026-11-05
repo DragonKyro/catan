@@ -70,6 +70,10 @@ export interface ScenarioPosition {
   // general pool like any land. Fishing on Catan's inner area (the lake
   // plus six random hexes) uses it.
   zone?: string;
+  // This position's tile carries its own printed numbers (overrides
+  // `pools.printedNumbers` for its terrain). Fishing on Catan 5-6 has two
+  // lakes with different numbers (2/3/11/12 and 4/10).
+  printedNumbers?: number[];
 }
 
 // Port anchor. The type is drawn from `ScenarioPools.portTypes` unless the
