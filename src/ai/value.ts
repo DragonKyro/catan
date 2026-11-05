@@ -38,7 +38,8 @@ export function terrainWeight(t: Terrain): number {
     t === 'swamp' ||
     t === 'lake' ||
     t === 'wateringHole' ||
-    t === 'castle'
+    t === 'castle' ||
+    t === 'commodity'
   )
     return 0;
   // Gold hexes pay any resource on roll — the player chooses, so they
