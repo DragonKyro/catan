@@ -20,9 +20,9 @@ export const MERCHANT_TRAINS_DEFAULT_VP = 12;
 // round. Other resources are rejected by `handleSubmitWagonVote`.
 export const MERCHANT_BID_RESOURCES = ['sheep', 'wheat'] as const;
 
-// Fishing on Catan: cap on fish tokens a player may hold (rulebook). Excess
-// draws are blocked once the cap is reached; the per-turn discard-and-
-// replace nicety is deferred.
+// Fishing on Catan: cap on fish tokens a player may hold, not counting the
+// old boot (rulebook). A draw that would go past it stops the player's
+// drawing; they may then swap one token for a fresh draw ('fishSwap').
 export const FISH_TOKEN_CAP = 7;
 
 // Fish-token face values (cost units). Old boot has no value — never
@@ -46,6 +46,13 @@ export const OLD_BOOT_VP_TAX = 1;
 
 // Bridge build payoff (rules: +3 gold per built bridge).
 export const BRIDGE_GOLD_REWARD = 3;
+
+// Bridges per player (3 in each colour).
+export const MAX_BRIDGES = 3;
+
+// Coins: 2 gold buys 1 resource card of your choice, at most twice a turn.
+export const GOLD_PER_RESOURCE = 2;
+export const MAX_GOLD_SPENDS_PER_TURN = 2;
 
 // River-tile build payoff (rules: +1 gold per road or settlement built on a
 // river-tile edge / vertex). Bridges have their own larger reward above.

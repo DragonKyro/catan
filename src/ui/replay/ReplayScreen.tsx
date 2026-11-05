@@ -46,6 +46,10 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'acceptTrade',
   'endTurn',
   'chooseGoldResource',
+  // Traders & Barbarians: Rivers of Catan bridges, Fishing on Catan fish
+  // spends (free roads, the robber leaving the board).
+  'buildBridge',
+  'spendFish',
 ]);
 
 const SPEED_PRESETS: Array<{ label: string; ms: number }> = [

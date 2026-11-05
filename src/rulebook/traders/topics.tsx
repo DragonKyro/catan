@@ -1,5 +1,6 @@
 import type { Topic } from '../topics';
 import { CastleEdgeKeyDiagram } from './barbarianAttackDiagrams';
+import { RiverTilesDiagram, FishingDiagram } from './diagrams';
 
 // Traders & Barbarians expansion rulebook entries: the scenarios and the
 // variants (Friendly Robber, Strongest Ports, Catan Event Cards), which work
@@ -32,34 +33,34 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          Two rivers cut through the island. To reach the far side of each
-          river you must build <strong>bridges</strong> on the marked river
-          edges. Every river-build pays in <strong>gold</strong>, and the
-          player with the most gold at any moment wears the
-          {' '}<strong>Wealthiest Catanian</strong> tile.
+          Two <strong>river tiles</strong> lie at fixed places, each running down from a mountain
+          where the river rises to a <strong>swamp</strong> where it meets the sea: one is mountains →
+          hills → pasture → swamp, the other mountains → hills → swamp. The other 12 hexes are
+          random (the base set minus 2 hills, 2 pastures, 2 mountains and the desert).
         </p>
+        <RiverTilesDiagram />
         <ul>
           <li>
-            <strong>Swamp hexes</strong> are non-producing. The robber starts
-            on one of them; it can move between swamps and other hexes
-            normally.
+            <strong>Numbers.</strong> The 2 disc is set aside; the other 17 go on the 17 non-swamp
+            hexes as usual, then the 2 joins the 12 on its hex. That hex produces on a 2{' '}
+            <em>and</em> on a 12 (the robber blocks both).
           </li>
           <li>
-            <strong>River edges</strong> are reserved for bridges — roads
-            cannot be built on them, and the Road Building dev card cannot
-            place bridges.
+            <strong>Swamps</strong> produce nothing. The robber starts on a swamp.
           </li>
           <li>
-            <strong>Building rewards.</strong> Each road or settlement built
-            on a river tile (i.e. touching a swamp) earns
-            {' '}<strong>1 gold</strong>. Each bridge earns
-            {' '}<strong>3 gold</strong>.
+            <strong>Bridge sites</strong> are every place a river crosses or meets an edge (seven in
+            all, dotted on the board). Roads may never go there, not even in setup.
+          </li>
+          <li>
+            <strong>Gold for building:</strong> 1 gold for each road on any edge of a river tile, 1
+            for each settlement on any corner of a river tile (setup included), 3 for each bridge.
+            Cities earn none.
+          </li>
+          <li>
+            <strong>Win:</strong> 10 VP on your turn.
           </li>
         </ul>
-        <p>
-          Bridges count as roads for Longest Road. They occupy the river edge
-          and block opponents from building one of their own.
-        </p>
       </>
     ),
   },
@@ -69,22 +70,15 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          A bridge spans a river edge (a "bridge site"). It costs the same as
-          a road — <strong>1 wood + 1 brick</strong> — and connects to your
-          network exactly like a road or ship:
+          A bridge costs <strong>2 brick + 1 lumber</strong>, is worth 0 VP and pays{' '}
+          <strong>3 gold</strong>. You have 3. It goes on an empty bridge site and must join one of
+          your roads, bridges or buildings; you may not build one past an opponent's settlement or
+          city (the same rule as a road).
         </p>
         <ul>
-          <li>Adjacent to one of your settlements or cities, OR</li>
-          <li>Connected to one of your roads or bridges at a vertex, OR</li>
-          <li>
-            On a vertex not blocked by an opponent's settlement / city.
-          </li>
+          <li>Bridges count as roads for Longest Route, and roads may continue from them.</li>
+          <li>The Road Building card can't place bridges.</li>
         </ul>
-        <p>
-          You start with 3 bridges in your supply. Bridges count toward Longest
-          Road. The <em>Road Building</em> dev card may not be used to place
-          bridges (rulebook).
-        </p>
       </>
     ),
   },
@@ -93,21 +87,19 @@ export const TRADERS_TOPICS: Topic[] = [
     title: 'Coins & gold',
     body: (
       <>
-        <p>
-          Gold is a separate currency from the resource hand:
-        </p>
+        <p>Gold is a currency, not a resource card (Rivers of Catan; the 🪙 Coins button):</p>
         <ul>
           <li>
-            <strong>Earned by</strong> building on a river tile (1 gold per
-            road/settlement) or a bridge (3 gold).
+            <strong>Spend</strong> 2 gold to take 1 resource card of your choice from the supply, up
+            to <strong>twice a turn</strong>.
           </li>
           <li>
-            <strong>Spendable</strong> 2-for-1 to take any resource from the
-            bank, up to 2 times per turn.
+            <strong>Buy</strong> 1 gold from the supply with resource cards at your bank rate: 4 of a
+            kind, 3 with a 3:1 harbor, 2 of a harbor's resource with its 2:1 harbor.
           </li>
           <li>
-            <strong>Safe</strong> from the robber and the 7-roll discard
-            threshold — gold doesn't count as a resource card.
+            Gold doesn't count toward your hand on a 7, can't be stolen and isn't taken by Monopoly.
+            Everyone's gold is public.
           </li>
         </ul>
       </>
@@ -118,23 +110,20 @@ export const TRADERS_TOPICS: Topic[] = [
     title: 'Wealthiest / Poor Catanian',
     body: (
       <>
-        <p>
-          Two VP tiles change hands as gold totals shift:
-        </p>
         <ul>
           <li>
-            <strong>Wealthiest Catanian</strong> (+1 VP). Held by the unique
-            player with the most gold (≥ 1 gold). On a tie, no-one holds it.
+            <strong>Wealthiest Catanian</strong> (+1 VP): the one player with the most gold. On a
+            tie for the most, nobody holds it.
           </li>
           <li>
-            <strong>Poor Catanian</strong> (-2 VP). Held by every player tied
-            at the lowest gold count, as long as someone else is ahead.
-            Multiple players can be Poor at once.
+            <strong>Poor Catanian</strong> (−2 VP): every player tied for the least gold, even when
+            that is everyone, so each player starts the game holding one. As soon as you are not
+            among the poorest you hand it back.
           </li>
         </ul>
         <p>
-          Both tiles recalculate every time anyone's gold total changes, so
-          building a single bridge can flip the leaderboard.
+          The tiles move the moment anyone's gold changes. Spending gold can drop you into the Poor
+          tile; buying a single coin can lift you out of it.
         </p>
       </>
     ),
@@ -238,40 +227,41 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          A <strong>lake</strong> replaces the desert at the centre of the
-          board, and six <strong>fishing grounds</strong> sit on the frame at
-          coastal vertices. Both produce fish tokens when their number is
-          rolled. Fish are not resources — they're a separate currency you
-          spend for special actions.
+          The desert is replaced by the <strong>lake</strong>, placed with six random hexes in the
+          inner ring of seven; the other 12 hexes form the outer ring. All 18 number discs go on
+          the land. Six <strong>fishing grounds</strong> (light-blue frame tiles, numbered 4, 5, 6,
+          8, 9, 10 at random) fill the coastal notches.
         </p>
+        <FishingDiagram />
         <ul>
           <li>
-            <strong>Production.</strong> When the lake's number rolls,
-            settlements and cities <em>adjacent</em> to the lake catch fish
-            (1 per settlement, 2 per city). When a fishing ground's number
-            rolls, only the building <em>at the anchor vertex</em> catches.
+            <strong>Catching.</strong> When a fishing ground's number is rolled, a settlement on any
+            of its 3 corners draws 1 fish token, a city 2. The lake produces on each of its printed
+            numbers <strong>2, 3, 11, 12</strong> for every building on its corners. Players draw one
+            token at a time, starting with the active player.
           </li>
           <li>
-            <strong>Drawing.</strong> Tokens come from a face-down bag of
-            29 fish (11×1, 10×2, 8×3) plus 1 old boot. The active player
-            draws first, then clockwise. Draw order matters when the boot is
-            still in the bag.
+            <strong>Setup.</strong> A second starting settlement next to a fishing ground or the
+            lake draws 1 fish token.
           </li>
           <li>
-            <strong>Cap.</strong> You may not hold more than 7 fish tokens
-            (the boot doesn't count). Excess draws are forfeit.
+            <strong>Tokens.</strong> 11 one-fish, 10 two-fish, 8 three-fish and the old boot, drawn
+            face down; the discards are reshuffled when the supply runs out. Fish are secret, aren't
+            resources (no discard, no theft, no trading).
           </li>
           <li>
-            <strong>Robber.</strong> The robber starts off-board and enters
-            on the first 7 or Knight. You may place it on the lake to block
-            lake production. You cannot place it on a fishing ground.
+            <strong>Limit.</strong> At most 7 fish tokens (the boot doesn't count). If you hold 7
+            and would catch more, you catch nothing more this roll, but may swap one token for a
+            fresh draw.
+          </li>
+          <li>
+            <strong>Robber.</strong> It starts beside the board and enters on the first 7 or Knight.
+            It may sit on the lake (blocking all four numbers), never on a fishing ground.
+          </li>
+          <li>
+            <strong>Win:</strong> 10 VP, or 11 VP while you hold the old boot.
           </li>
         </ul>
-        <p className="rb-muted">
-          The setup round 2 settlement adjacent to the lake or a fishing
-          ground draws 1 starting fish token (in addition to the usual
-          resources).
-        </p>
       </>
     ),
   },
@@ -281,21 +271,27 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          Discard fish tokens summing to at least the cost to take the
-          action. Excess fish on spent tokens is lost.
+          On your turn (🐟 Spend), pay for each action with its own tokens; fish on them beyond the
+          cost are lost, so the game picks the tokens that waste least.
         </p>
         <ul>
-          <li><strong>2 fish</strong> — Drive off the robber (returns next 7 / Knight).</li>
-          <li><strong>3 fish</strong> — Steal 1 random resource from any player.</li>
-          <li><strong>4 fish</strong> — Take 1 resource of your choice from the supply.</li>
-          <li><strong>5 fish</strong> — Build a free road.</li>
-          <li><strong>7 fish</strong> — Build a free development card.</li>
+          <li>
+            <strong>2 fish</strong>: remove the robber from the board (it returns on the next 7 or
+            Knight).
+          </li>
+          <li>
+            <strong>3 fish</strong>: steal a random resource card from a player of your choice.
+          </li>
+          <li>
+            <strong>4 fish</strong>: take a resource card of your choice from the supply.
+          </li>
+          <li>
+            <strong>5 fish</strong>: build a road for free (normal placement; then pick the edge).
+          </li>
+          <li>
+            <strong>7 fish</strong>: take the top development card for free.
+          </li>
         </ul>
-        <p className="rb-muted">
-          Fish never count toward the 7-card discard threshold, can't be
-          stolen, and can't be traded. (UI for the higher-tier spends —
-          steal, free road, free dev card — lands in a follow-up.)
-        </p>
       </>
     ),
   },
@@ -305,15 +301,9 @@ export const TRADERS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          The old boot is one of the 30 tokens in the fishing bag. The
-          player who draws it keeps it face-up — they now need
-          {' '}<strong>+1 VP</strong> to win (so 11 VP on the standard 10-VP
-          game).
-        </p>
-        <p>
-          On your turn you may pass the boot to any other player whose
-          {' '}<strong>visible VPs ≥ yours</strong>. Hidden Victory Point
-          dev cards don't count in that comparison.
+          Whoever draws the old boot reveals it at once and now needs{' '}
+          <strong>1 more VP to win</strong>. On your turn you may give it to any player with at
+          least as many VP as you; hidden Victory Point cards don't count.
         </p>
       </>
     ),

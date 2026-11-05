@@ -606,6 +606,36 @@ export function PlacementOverlay() {
     );
   }
 
+  // Fishing on Catan: a free road paid with fish (5). Same edges as a road.
+  if (uiMode.kind === 'fishRoad') {
+    const tokens = uiMode.tokens;
+    return (
+      <g className="overlay overlay-edges">
+        {game.board.edgeIds.map((eid) => {
+          if (!canConnectRoad(game, acting, eid)) return null;
+          return (
+            <EdgeGhost
+              key={eid}
+              eid={eid}
+              variant="road"
+              previewColor={previewColor}
+              isHovered={hoveredEid === eid}
+              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+              onClick={() =>
+                dispatch({
+                  type: 'spendFish',
+                  playerId: acting,
+                  tokens,
+                  effect: { kind: 'buildRoad', edge: eid },
+                })
+              }
+            />
+          );
+        })}
+      </g>
+    );
+  }
+
   // T&B Merchant Trains: the chosen player places the wagon, or (no
   // majority) a bidder gives their votes to a spot. The lettered spots are
   // drawn for everyone by BoardSVG (WagonSpots); these are the click

@@ -10,6 +10,7 @@ import { RESOURCES, COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import { handValue, partialValue, reportNeeds, pipsByResource } from './value';
 import { assessThreats, isRival } from './threats';
+import { goldValue } from './traders/gold';
 
 // Threshold for accepting a trade as-is. Lower than before so AI doesn't
 // stonewall reasonable swaps — colonist.io's AI accepts pretty liberally.
@@ -178,8 +179,15 @@ export function shouldAcceptTrade(state: GameState, playerId: PlayerId): boolean
   // From acceptor's perspective: we'd GIVE trade.receive, RECEIVE trade.give.
   // Refuse if accepting would reverse our own earlier trades this turn.
   if (tradeWouldReverse(state, playerId, trade.receive, trade.give)) return false;
+  // T&B coins in the offer: we must hold the gold asked of us; gold we'd
+  // gain or pay is priced like any other coin (wealth tiles included).
+  const goldIn = trade.giveGold ?? 0;
+  const goldOut = trade.receiveGold ?? 0;
+  const me = state.players.find((p) => p.id === playerId);
+  if (goldOut > (me?.gold ?? 0)) return false;
+  const goldTerm = goldIn !== goldOut ? goldValue(state, playerId, goldIn - goldOut) : 0;
   // Standard "is this swap valuable to me" score.
-  const score = tradeScore(state, playerId, trade.give, trade.receive);
+  const score = tradeScore(state, playerId, trade.give, trade.receive) + goldTerm;
   // Threat penalty: accepting means we GIVE `trade.receive` to the proposer.
   // If giving them those resources advances their win, refuse the trade.
   const penalty = threatPenaltyForGiving(state, playerId, trade.proposerId, trade.receive);
@@ -199,6 +207,8 @@ export function tryExtractCounter(
   const trade = state.pendingTrade;
   if (!trade) return null;
   if (trade.proposerId === playerId) return null;
+  // The counter search only edits cards; leave offers with coins alone.
+  if (trade.giveGold || trade.receiveGold) return null;
   // Only fires when we'd already accept the original — this is value
   // extraction, not a way to refuse trades.
   if (!shouldAcceptTrade(state, playerId)) return null;
@@ -287,6 +297,7 @@ export function tryCounterTrade(
   const trade = state.pendingTrade;
   if (!trade) return null;
   if (trade.proposerId === playerId) return null;
+  if (trade.giveGold || trade.receiveGold) return null;
   // If we'd already accept, no counter needed.
   if (shouldAcceptTrade(state, playerId)) return null;
   const proposer = state.players.find((p) => p.id === trade.proposerId);

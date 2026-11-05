@@ -12,6 +12,7 @@ import type { GameState, Player } from '@/game/types';
 import { BarbarianAttackPanel } from '@/ui/game/traders/BarbarianAttackPanel';
 import { MerchantTrainsBlock } from './MerchantTrainsBlock';
 import { TradersVariantsBlock, hasTradersVariantBlock } from './TradersVariantsBlock';
+import { RiversTracker, FishingTracker } from './traders/RiversFishingTrackers';
 import './ScenarioPanel.css';
 
 // Scenario-specific progress tracker. Returns whether ANY scenario tracker
@@ -369,76 +370,8 @@ function TradersScenarioPanel() {
       </header>
       <BarbarianAttackPanel game={game} />
       {isMerchantTrains && <MerchantTrainsBlock game={game} />}
-      {isRivers && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Gold</span>
-          </div>
-          <ul className="scenario-panel-chips">
-            {game.players.map((p) => (
-              <li key={p.id} className="scenario-panel-chip is-claimed">
-                <span className="scenario-panel-chip-vp">🪙 {p.gold ?? 0}</span>
-                <span
-                  className="scenario-panel-chip-swatch"
-                  style={{ background: playerColorVar(p.color) }}
-                  aria-hidden
-                />
-                <span className="scenario-panel-chip-name">
-                  {p.name}
-                  {game.wealthTiles?.wealthiest === p.id && ' 👑'}
-                  {game.wealthTiles?.poor.includes(p.id) && ' 👜'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {isFishing && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Fish</span>
-            <span className="scenario-panel-block-sum">
-              {(game.fishTokenPool?.length ?? 0)} in pool
-            </span>
-          </div>
-          <ul className="scenario-panel-chips">
-            {game.players.map((p) => {
-              const count = p.fishTokens?.length ?? 0;
-              const isBoot = game.oldBootHolder === p.id;
-              if (count === 0 && !isBoot) return null;
-              return (
-                <li
-                  key={p.id}
-                  className="scenario-panel-chip is-claimed"
-                >
-                  <span className="scenario-panel-chip-vp">
-                    🐟 {count}
-                  </span>
-                  <span
-                    className="scenario-panel-chip-swatch"
-                    style={{ background: playerColorVar(p.color) }}
-                    aria-hidden
-                  />
-                  <span className="scenario-panel-chip-name">
-                    {p.name}
-                    {isBoot && ' 👢 (+1 VP to win)'}
-                  </span>
-                </li>
-              );
-            })}
-            {game.players.every(
-              (p) => (p.fishTokens?.length ?? 0) === 0,
-            ) &&
-              game.oldBootHolder == null && (
-                <li className="scenario-panel-chip">
-                  <span className="scenario-panel-chip-name unclaimed">
-                    No fish caught yet
-                  </span>
-                </li>
-              )}
-          </ul>
-        </div>
-      )}
+      {isRivers && <RiversTracker game={game} />}
+      {isFishing && <FishingTracker game={game} />}
       <TradersVariantsBlock game={game} />
     </section>
   );

@@ -17,6 +17,7 @@ import { robberOrPirateChoicePhase } from '../modules/seafarers/routing';
 import { maybeDistributeFish } from '../modules/traders/fishing/production';
 import { distributeCloth } from '../modules/seafarers/cloth';
 import { rngInt } from '../rng';
+import { hexRollsOn } from '../board/hexNumbers';
 
 export function handleRollDice(state: GameState, action: RollDiceAction): GameState {
   if (state.phase !== 'rollOrPlayKnight') {
@@ -141,7 +142,8 @@ function distributeResources(state: GameState, rolled: number): GameState {
       hex.terrain === 'castle'
     )
       continue;
-    if (hex.numberToken !== rolled) continue;
+    // A hex may carry several numbers (T&B Rivers' 2 + 12 hex).
+    if (!hexRollsOn(hex, rolled)) continue;
     if (hex.id === state.board.robberHex && (state.robberActive ?? true)) continue;
     // Seafarers / Fog Islands: an unexplored hex isn't on the table yet.
     if (fog.has(hex.id)) continue;

@@ -10,6 +10,7 @@ import {
 } from '@/game/modules/traders/constants';
 import { REPAIR_ROAD_COST } from '@/game/modules/traders/variants/eventCards/events';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
+import { tradersCostNotes } from './traders/costNotes';
 
 interface Row {
   icon: string;
@@ -56,8 +57,10 @@ export function CostCheatsheet({ onClose }: Props) {
     rows = [BASE_ROWS[0]!, SHIP_ROW, ...BASE_ROWS.slice(1)];
   }
   if (hasTraders) {
-    // Bridge slots in just after Road — both span an edge, both cost wood + brick.
-    rows = [BASE_ROWS[0]!, BRIDGE_ROW, ...BASE_ROWS.slice(1)];
+    // Rivers of Catan: Bridge slots in just after Road (both span an edge).
+    if ((useGameStore.getState().game?.riverEdges?.length ?? 0) > 0) {
+      rows = [BASE_ROWS[0]!, BRIDGE_ROW, ...BASE_ROWS.slice(1)];
+    }
     if (useGameStore.getState().game?.barbarianAttack) {
       rows = [
         ...rows.map((r) => (r.label === 'Dev Card' ? BA_CARD_ROW : r)),
@@ -81,6 +84,7 @@ export function CostCheatsheet({ onClose }: Props) {
       ...rows.slice(cityIdx + 1),
     ];
   }
+  const notes = tradersCostNotes(useGameStore.getState().game);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -120,6 +124,15 @@ export function CostCheatsheet({ onClose }: Props) {
           </li>
         ))}
       </ul>
+      {notes.length > 0 && (
+        <ul className="cost-cheatsheet-list">
+          {notes.map((n) => (
+            <li key={n} className="cost-cheatsheet-row" style={{ fontSize: '0.85em' }}>
+              {n}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -48,6 +48,10 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   // T&B Catan Event Cards / Earthquake: a road damaged or repaired.
   'resolveEvent',
   'repairRoad',
+  // Traders & Barbarians: Rivers of Catan bridges, Fishing on Catan fish
+  // spends (free roads, the robber leaving the board).
+  'buildBridge',
+  'spendFish',
 ]);
 
 // Step + slider + auto-play replay. The slider/buttons step through a

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Hex } from '@/game/types';
+import { LakeArt } from './traders/LakeArt';
 
 // Each terrain gets a small, low-contrast motif scattered randomly across
 // its hex. The motifs are seeded by hex.id so they stay the same across
@@ -62,6 +63,9 @@ export function HexTexture({ hex }: Props) {
     }
     return out;
   }, [hex.id, hex.center.x, hex.center.y, hex.numberToken]);
+
+  // T&B Fishing on Catan: the lake tile has its own art.
+  if (hex.terrain === 'lake') return <LakeArt hex={hex} />;
 
   if (hex.terrain === 'desert') {
     // Desert gets a softer treatment — just a few tiny dunes/dots.

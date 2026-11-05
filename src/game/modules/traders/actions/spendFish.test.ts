@@ -59,6 +59,8 @@ describe('spendFish', () => {
     let s = newFishingSession();
     s = applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 5] });
     s = withFishHand(s, 'p0', ['two']);
+    s = { ...s, robberActive: true };
+    const held = s.players[0]!.fishTokens!.length;
     s = applyAction(s, {
       type: 'spendFish',
       playerId: 'p0',
@@ -66,7 +68,7 @@ describe('spendFish', () => {
       effect: { kind: 'removeRobber' },
     });
     expect(s.robberActive).toBe(false);
-    expect(s.players[0]!.fishTokens).toEqual([]);
+    expect(s.players[0]!.fishTokens).toHaveLength(held - 1);
     expect((s.fishTokenDiscard ?? []).includes('two')).toBe(true);
   });
 
@@ -89,6 +91,7 @@ describe('spendFish', () => {
     let s = newFishingSession();
     s = applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 5] });
     s = withFishHand(s, 'p0', ['three']); // 3 fish, cost 2
+    s = { ...s, robberActive: true };
     s = applyAction(s, {
       type: 'spendFish',
       playerId: 'p0',

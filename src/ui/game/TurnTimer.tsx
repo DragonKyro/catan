@@ -193,6 +193,8 @@ function autoFinish(
     initial.phase === 'wagonVoting' ||
     initial.phase === 'placeWagon' ||
     initial.phase === 'eventResolution' ||
+    // T&B Fishing on Catan: the full-hand swap choice.
+    initial.phase === 'fishSwap' ||
     isSetupPhase(initial.phase) ||
     initial.phase === 'rollOrPlayKnight'
   ) {

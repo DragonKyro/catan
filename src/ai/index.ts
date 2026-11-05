@@ -19,6 +19,7 @@ import {
   chooseBarbarianCardAction,
   chooseBarbarianKnightMove,
 } from './traders/barbarianAttack';
+import { chooseFishSwap } from './traders/fish';
 
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
@@ -124,6 +125,11 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
   // damage a road).
   if (state.phase === 'eventResolution') {
     return chooseEventAnswer(state, playerId);
+  }
+
+  // T&B Fishing on Catan: swap a token after a capped catch.
+  if (state.phase === 'fishSwap') {
+    return state.fishSwap?.queue[0] === playerId ? chooseFishSwap(state, playerId) : null;
   }
 
   // T&B Merchant Trains end-of-turn voting round and wagon placement.

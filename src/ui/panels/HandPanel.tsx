@@ -8,18 +8,8 @@ import { calculateVictoryPoints, calculateIslandBonusVp } from '@/game/scoring/p
 import { BarbarianAttackBadges } from '@/ui/game/traders/BarbarianAttackBadges';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
-import { FISH_TOKEN_VALUE } from '@/game/modules/traders/constants';
+import { TradersHandStrip } from './TradersHandStrip';
 import './HandPanel.css';
-
-function fishHandTooltip(tokens: Array<'one' | 'two' | 'three'>): string {
-  const counts = { one: 0, two: 0, three: 0 };
-  for (const t of tokens) counts[t]++;
-  const total = tokens.reduce(
-    (s, t) => s + (FISH_TOKEN_VALUE[t] ?? 0),
-    0,
-  );
-  return `Fish tokens: ${counts.one}×1 + ${counts.two}×2 + ${counts.three}×3 = ${total} fish total`;
-}
 
 export function HandPanel() {
   const { game, dispatch, openDialog, uiMode, setMode, handoffAcknowledgedForPlayer } = useGameStore();
@@ -206,43 +196,9 @@ export function HandPanel() {
               💰
             </span>
           )}
-          {(player.gold ?? 0) > 0 && (
-            <span
-              className="hand-flag"
-              title={`Gold — ${player.gold} coins. Spend 2 gold for any resource (max 2× per turn).`}
-            >
-              🪙 {player.gold}
-            </span>
-          )}
-          {game.wealthTiles?.wealthiest === player.id && (
-            <span className="hand-flag" title="Wealthiest Catanian (+1 VP)">
-              👑
-            </span>
-          )}
-          {game.wealthTiles?.poor.includes(player.id) && (
-            <span className="hand-flag" title="Poor Catanian (-2 VP)">
-              👜
-            </span>
-          )}
           {game.strongestPorts?.holder === player.id && (
             <span className="hand-flag" title="Strongest Ports (+2 VP)">
               ⚓
-            </span>
-          )}
-          {(player.fishTokens?.length ?? 0) > 0 && (
-            <span
-              className="hand-flag"
-              title={fishHandTooltip(player.fishTokens ?? [])}
-            >
-              🐟 {player.fishTokens!.length}
-            </span>
-          )}
-          {game.oldBootHolder === player.id && (
-            <span
-              className="hand-flag"
-              title="Old boot — you need +1 VP to win. Pass it during your turn to anyone with ≥ your VPs."
-            >
-              👢
             </span>
           )}
           <BarbarianAttackBadges game={game} playerId={player.id} className="hand-flag" />
@@ -287,6 +243,12 @@ export function HandPanel() {
             </span>
           </div>
         )}
+
+      <TradersHandStrip
+        game={game}
+        player={player}
+        ownTurn={game.playerOrder[game.currentPlayerIndex] === player.id}
+      />
 
       {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) && (
         <div className="hand-commodities">

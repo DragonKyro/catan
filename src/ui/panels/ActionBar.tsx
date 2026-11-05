@@ -18,7 +18,8 @@ import {
   CITIES_AND_KNIGHTS_EXPANSION_ID,
   MAX_CITY_WALLS,
 } from '@/game/modules/citiesAndKnights/constants';
-import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
+import { TRADERS_EXPANSION_ID, MAX_BRIDGES } from '@/game/modules/traders/constants';
+import { canPlaceBridge } from '@/game/placement';
 import {
   BarbarianAttackPhaseBar,
   BarbarianCardButton,
@@ -228,17 +229,31 @@ export function ActionBar() {
             ⛵ Move
           </Button>
         )}
-        {hasTraders && (
+        {hasTraders && (game.riverEdges?.length ?? 0) > 0 && (() => {
+          const left = MAX_BRIDGES - (player.bridges?.length ?? 0);
+          const site = (game.riverEdges ?? []).some((e) => canPlaceBridge(game, acting, e));
+          return (
+            <Button
+              disabled={!canAfford(player.resources, COSTS.bridge) || left <= 0 || !site}
+              onClick={() => setMode({ kind: 'buildBridge' })}
+              title={
+                left <= 0
+                  ? 'No bridges left (3 each)'
+                  : !site
+                    ? "No bridge site joins your roads or buildings (and not past an opponent's building)"
+                    : `Build Bridge (2🧱 1🌲) on a bridge site, +3 gold. ${left} left. Counts as a road for Longest Route.`
+              }
+            >
+              🌉 Bridge
+            </Button>
+          );
+        })()}
+        {game.coinsInPlay && (
           <Button
-            disabled={
-              !canAfford(player.resources, COSTS.bridge) ||
-              (player.bridges?.length ?? 0) >= 3 ||
-              (game.riverEdges?.length ?? 0) === 0
-            }
-            onClick={() => setMode({ kind: 'buildBridge' })}
-            title="Build Bridge (1🌲 1🧱) — required to cross river edges; pays +3 gold"
+            onClick={() => openDialog('coins')}
+            title="Coins: spend 2 gold for any card (twice a turn) or buy gold with cards at your bank rate"
           >
-            🌉 Bridge
+            🪙 Coins ({player.gold ?? 0})
           </Button>
         )}
         <Button
@@ -393,7 +408,7 @@ export function ActionBar() {
         {(player.fishTokens?.length ?? 0) > 0 && (
           <Button
             onClick={() => openDialog('spendFish')}
-            title="Spend fish tokens for an effect (drive off robber, take from bank)"
+            title="Spend fish: 2 remove the robber, 3 steal a card, 4 take a card, 5 free road, 7 free development card"
           >
             🐟 Spend ({player.fishTokens!.length})
           </Button>
@@ -461,6 +476,10 @@ function modeHint(mode: ReturnType<typeof useGameStore.getState>['uiMode']): str
       return 'Pick a highlighted intersection for your settlement.';
     case 'buildCity':
       return 'Pick one of your settlements to upgrade.';
+    case 'buildBridge':
+      return "Pick a highlighted bridge site: it must join your road or building, and not past an opponent's building.";
+    case 'fishRoad':
+      return 'Pick a highlighted edge for your free road (paid with fish).';
     default:
       return '';
   }
@@ -495,6 +514,11 @@ function phaseHint(game: GameState, pid: PlayerId): string | null {
   }
   if (game.phase === 'placeWagon') return 'Merchant Trains: click a lettered spot for the wagon.';
   if (game.phase === 'eventResolution') return 'Event card: answer the event above.';
+  if (game.phase === 'fishSwap') {
+    return game.fishSwap?.queue[0] === pid
+      ? 'Your fish hand is full: swap one token for a new draw, or keep your fish.'
+      : 'Waiting for a full fish hand to decide on a swap.';
+  }
   if (game.phase === 'movePirate') {
     return 'Move the pirate: pick a sea hex. Ships can\'t be built or moved on its edges.';
   }

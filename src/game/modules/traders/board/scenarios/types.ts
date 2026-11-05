@@ -5,10 +5,10 @@ import type { ScenarioLayout } from '../../../../board/scenarioTypes';
 // Catan only). Per-scenario layouts plus a fixed list of river-edge tuples
 // (the bridge sites) are the two T&B-specific extras.
 
-// An axial-coord edge identifier: the edge between hex (q, r) and its
-// neighbour in `direction` (0..5, same enum used by port anchors). Used to
-// declare river edges declaratively so the generator can resolve them to
-// actual EdgeId strings after the board graph is built.
+// An axial-coord edge identifier: edge `direction` of hex (q, r), i.e. the
+// edge between its corners `direction` and `direction + 1`. Same enum as
+// ScenarioPortAnchor: 0 E, 1 SE, 2 SW, 3 W, 4 NW, 5 NE (corners run 0 NE,
+// 1 SE, 2 S, 3 SW, 4 NW, 5 N). Resolved to an EdgeId by the generator.
 export interface ScenarioEdgeRef {
   q: number;
   r: number;
@@ -24,13 +24,20 @@ export interface ScenarioVertexRef {
   corner: 0 | 1 | 2 | 3 | 4 | 5;
 }
 
-// Fishing on Catan declarative entry: anchor + token. Resolved to a
-// concrete VertexId in the generator.
+// Fishing on Catan: one fishing-ground frame tile, named by the two coastal
+// edges of the notch it fills. The generator resolves the edges and their
+// three corners, and deals the tile a random number from
+// `fishingGroundTokens`.
 export interface FishingGroundDef {
-  q: number;
-  r: number;
-  corner: 0 | 1 | 2 | 3 | 4 | 5;
-  token: number;
+  edges: [ScenarioEdgeRef, ScenarioEdgeRef];
+}
+
+// Rivers of Catan: one river tile — the hexes it flows through (source
+// first) and the coastal edge where it reaches the sea. The shared edges
+// between consecutive hexes plus the mouth are the bridge sites.
+export interface RiverDef {
+  hexes: Array<{ q: number; r: number }>;
+  mouth?: ScenarioEdgeRef;
 }
 
 // Barbarian Attack board facts: the castle hex, the coastal hexes in expel
@@ -50,10 +57,13 @@ export interface TradersScenario {
   maxPlayers: number;
   defaultVpToWin?: number;
   layout3p?: ScenarioLayout;
-  // River-edge tuples. Resolved by the generator into a concrete
-  // `state.riverEdges` array (EdgeId[]). Edges may belong to either of the
-  // two hexes the edge spans — the generator dedupes.
-  riverEdges?: ScenarioEdgeRef[];
+  // Rivers of Catan: the river tiles. Resolved into `state.rivers` and the
+  // bridge sites `state.riverEdges`.
+  rivers?: RiverDef[];
+  // Coins are in play (`state.coinsInPlay`: spendGold / buyGold).
+  coins?: boolean;
+  // Wealthiest / Poor Catanian tiles are in play (`state.wealthTiles`).
+  wealthTiles?: boolean;
   // Optional explicit robber start (axial). Falls back to the layout's
   // robberStart, then to a desert/swamp scan. Rivers of Catan uses this to
   // pin the robber to one of the two swamps.
@@ -63,9 +73,11 @@ export interface TradersScenario {
   // resolve `state.lakeHexId` from. Falls back to scanning hexes with
   // `terrain === 'lake'` when absent.
   lake?: { q: number; r: number };
-  // Fishing on Catan: six fishing-ground tiles on coastal frame vertices.
-  // Resolved into `state.fishingGrounds: FishingGround[]` by the generator.
+  // Fishing on Catan: the six fishing-ground tiles in the frame notches and
+  // the numbers dealt to them at random (one each). Resolved into
+  // `state.fishingGrounds` by the generator.
   fishingGrounds?: FishingGroundDef[];
+  fishingGroundTokens?: number[];
   // Merchant Trains: hex position of the watering hole (centre, non-
   // producing). Scenario layout pins it via `fixedTerrain: 'wateringHole'`;
   // this field surfaces the coord to the generator for `state.wateringHoleHexId`.

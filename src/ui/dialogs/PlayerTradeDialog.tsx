@@ -6,6 +6,7 @@ import { getBankTradeRate } from '@/game/actions/trade';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
 import { ResourceChip, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
+import { CoinIcon } from '@/ui/game/traders/TradersIcons';
 import './PlayerTradeDialog.css';
 
 export function PlayerTradeDialog() {
@@ -20,6 +21,8 @@ export function PlayerTradeDialog() {
     wheat: 0,
     ore: 0,
   });
+  // T&B coins (state.coinsInPlay): signed gold, negative = give.
+  const [gold, setGold] = useState(0);
 
   // Determine if we are countering an existing pending trade.
   const pending = game?.pendingTrade ?? null;
@@ -46,6 +49,7 @@ export function PlayerTradeDialog() {
       seed[r] = ask - offer;
     }
     setValues(seed);
+    setGold((pending.giveGold ?? 0) - (pending.receiveGold ?? 0));
   }, [isCounter, pending]);
 
   if (!game || !acting) return null;
@@ -57,7 +61,14 @@ export function PlayerTradeDialog() {
     if (values[r] < 0) totalGive += -values[r];
     if (values[r] > 0) totalReceive += values[r];
   }
-  const canSubmit = totalGive > 0 && totalReceive > 0;
+  const coins = !!game.coinsInPlay;
+  const giveGold = coins && gold < 0 ? -gold : 0;
+  const receiveGold = coins && gold > 0 ? gold : 0;
+  const canSubmit = totalGive + giveGold > 0 && totalReceive + receiveGold > 0;
+  const goldFields = {
+    ...(giveGold > 0 ? { giveGold } : {}),
+    ...(receiveGold > 0 ? { receiveGold } : {}),
+  };
 
   const change = (r: Resource, delta: number) => {
     const cur = values[r];
@@ -74,7 +85,7 @@ export function PlayerTradeDialog() {
   // opponent would ever beat anyway. Multi-resource trades, or lopsided
   // single-resource trades, fall through to a player proposal as normal.
   const bankRoute = (() => {
-    if (isCounter) return null;
+    if (isCounter || giveGold > 0 || receiveGold > 0) return null;
     const giveEntries: Array<[Resource, number]> = [];
     const recvEntries: Array<[Resource, number]> = [];
     for (const r of RESOURCES) {
@@ -99,7 +110,7 @@ export function PlayerTradeDialog() {
       else if (values[r] > 0) receive[r] = values[r];
     }
     if (isCounter) {
-      dispatch({ type: 'counterTrade', playerId: acting, give, receive });
+      dispatch({ type: 'counterTrade', playerId: acting, give, receive, ...goldFields });
     } else if (bankRoute) {
       dispatch({
         type: 'bankTrade',
@@ -109,7 +120,7 @@ export function PlayerTradeDialog() {
         count: bankRoute.count,
       });
     } else {
-      dispatch({ type: 'proposeTrade', playerId: acting, give, receive });
+      dispatch({ type: 'proposeTrade', playerId: acting, give, receive, ...goldFields });
     }
     closeDialog();
   };
@@ -175,13 +186,48 @@ export function PlayerTradeDialog() {
             </div>
           );
         })}
+        {coins && (
+          <div className={`ptrade-row ${gold < 0 ? 'is-give' : gold > 0 ? 'is-get' : ''}`}>
+            <button
+              type="button"
+              className="ptrade-btn ptrade-btn-give"
+              onClick={() => setGold(gold - 1)}
+              disabled={-gold >= (player.gold ?? 0)}
+              aria-label="Give one gold"
+              title="Offer one more gold"
+            >
+              −
+            </button>
+            <div className="ptrade-mid">
+              <CoinIcon size={18} />
+              <span className="ptrade-name">Gold</span>
+              <span className="ptrade-have">have {player.gold ?? 0}</span>
+            </div>
+            <div className="ptrade-value">
+              {gold < 0 && <span className="ptrade-side ptrade-side-give">−{-gold}</span>}
+              {gold > 0 && <span className="ptrade-side ptrade-side-get">+{gold}</span>}
+              {gold === 0 && <span className="ptrade-side ptrade-side-zero">0</span>}
+            </div>
+            <button
+              type="button"
+              className="ptrade-btn ptrade-btn-get"
+              onClick={() => setGold(gold + 1)}
+              aria-label="Receive one gold"
+              title="Ask for one more gold"
+            >
+              +
+            </button>
+          </div>
+        )}
       </div>
       <div className="ptrade-summary">
         <span className="ptrade-summary-side">
           Give: <strong>{totalGive}</strong>
+          {giveGold > 0 && <> + {giveGold} gold</>}
         </span>
         <span className="ptrade-summary-side">
           Receive: <strong>{totalReceive}</strong>
+          {receiveGold > 0 && <> + {receiveGold} gold</>}
         </span>
       </div>
     </DialogShell>

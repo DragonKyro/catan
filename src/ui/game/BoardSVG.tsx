@@ -16,14 +16,14 @@ import { KnightPiece } from './citiesAndKnights/KnightPiece';
 import { MetropolisMarker } from './citiesAndKnights/MetropolisMarker';
 import { MerchantMarker } from './citiesAndKnights/MerchantMarker';
 import { Bridge } from './traders/Bridge';
-import { RiverEdgeMarker } from './traders/RiverEdgeMarker';
-import { FishingGroundMarker } from './traders/FishingGroundMarker';
+import { TradersBoardLayer } from './traders/TradersBoardLayer';
 import { Wagon } from './traders/Wagon';
 import { BarbarianAttackHexLayer, BarbarianAttackKnights } from './traders/BarbarianAttackBoard';
 import { conqueredBuildingVertices } from '@/game/modules/traders/barbarianAttack/state';
 import { WagonSpots } from './traders/WagonSpots';
 import { WateringHoleMarker } from './traders/WateringHoleMarker';
 import { DamagedRoadMarker } from './traders/DamagedRoadMarker';
+import { hexRollsOn } from '@/game/board/hexNumbers';
 import './Board.css';
 
 interface Props {
@@ -95,7 +95,7 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
                 board.robberHex === hid && (game.robberActive ?? true);
               const isFoggy = foggySet.has(hid);
               const shouldPulse =
-                pulseToken != null && hex.numberToken === pulseToken && !isRobbed && !isFoggy;
+                pulseToken != null && hexRollsOn(hex, pulseToken) && !isRobbed && !isFoggy;
               return (
                 <HexTile
                   key={hid}
@@ -121,18 +121,8 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           ))}
         </g>
 
-        {game.riverEdges && (
-          <g className="river-edges">
-            {game.riverEdges.map((eid) => {
-              // Hide the river decoration once a bridge spans the edge.
-              const hasBridge = game.players.some((p) =>
-                p.bridges?.includes(eid),
-              );
-              if (hasBridge) return null;
-              return <RiverEdgeMarker key={eid} board={board} edge={eid} />;
-            })}
-          </g>
-        )}
+        {/* T&B Rivers of Catan / Fishing on Catan board art. */}
+        <TradersBoardLayer game={game} pulseToken={pulseToken} />
 
         <g className="roads">
           {game.players.flatMap((player) =>
@@ -244,19 +234,6 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
             clickable — especially important for city upgrade, where the
             settlement icon would otherwise block clicks at the center. */}
         {overlay}
-
-        {game.fishingGrounds && (
-          <g className="fishing-grounds">
-            {game.fishingGrounds.map((fg) => (
-              <FishingGroundMarker
-                key={fg.vertex}
-                board={board}
-                fg={fg}
-                pulse={pulseToken != null && fg.token === pulseToken}
-              />
-            ))}
-          </g>
-        )}
 
         <Robber board={board} active={game.robberActive ?? true} />
         <PirateMarker board={board} fleet={game.pirateIslands !== undefined} />

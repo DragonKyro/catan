@@ -1,4 +1,4 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, WagonStartPoint, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, BarbarianAttackState } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, RiverPath, TradeWagon, WagonStartPoint, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, BarbarianAttackState } from './types';
 import { wondersForPlayerCount } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import {
@@ -293,6 +293,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let wonders: WonderState[] | undefined;
   let seafarers: SeafarersBoardResult | undefined;
   let riverEdges: EdgeId[] | undefined;
+  let rivers: RiverPath[] | undefined;
   let lakeHexId: HexId | undefined;
   let fishingGrounds: FishingGround[] | undefined;
   let wateringHoleHexId: HexId | undefined;
@@ -319,6 +320,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     board = result.board;
     rng = result.rngState;
     riverEdges = result.riverEdges.length > 0 ? result.riverEdges : undefined;
+    rivers = result.rivers.length > 0 ? result.rivers : undefined;
     lakeHexId = result.lakeHexId ?? undefined;
     fishingGrounds =
       result.fishingGrounds.length > 0 ? result.fishingGrounds : undefined;
@@ -490,9 +492,14 @@ export function createGame(opts: CreateGameOptions): GameState {
     rng = shuffled.rng;
   }
 
-  // T&B initial wealth/Strongest Ports state. Players start at 0 gold so
-  // wealthTiles encodes to { wealthiest: null, poor: [] }.
-  const wealthTilesInit = hasTraders
+  // T&B coins and wealth tiles, for the scenarios that use them (Rivers of
+  // Catan). Everyone starts at 0 gold, tied for least: each player takes a
+  // Poor Catanian tile at the start (rulebook setup).
+  const tradersScenario = hasTraders
+    ? getTradersScenario(settings.tradersScenarioId ?? 'riversOfCatan')
+    : undefined;
+  const coinsInPlay = tradersScenario?.coins ? true : undefined;
+  const wealthTilesInit = tradersScenario?.wealthTiles
     ? recalcWealthTiles({ players })
     : undefined;
   const strongestPortsInit = tradersVariants?.strongestPorts
@@ -609,8 +616,9 @@ export function createGame(opts: CreateGameOptions): GameState {
     metropolises,
     progressDecks,
     riverEdges,
-    // Barbarian Attack uses coins but has no Wealthiest / Poor tiles.
-    wealthTiles: isBarbarianAttack ? undefined : wealthTilesInit,
+    rivers,
+    coinsInPlay,
+    wealthTiles: wealthTilesInit,
     strongestPorts: strongestPortsInit,
     eventCards,
     lakeHexId,

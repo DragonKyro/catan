@@ -3,15 +3,15 @@ import type {
   EdgeId,
   FishingGround,
   HexId,
+  RiverPath,
 } from '../../../types';
 import { assembleBoardFromLayout } from '../../../board/scenarioAssembly';
 import { getTradersScenario } from './scenarios';
 import type {
   TradersScenario,
-  ScenarioEdgeRef,
-  FishingGroundDef,
 } from './scenarios/types';
 import { resolveBarbarianBoard, type BarbarianBoardSetup } from '../barbarianAttack/board';
+import { resolveFishingGrounds, resolveRivers } from './resolveRiversAndFishing';
 
 export interface TradersBoardResult {
   board: BoardState;
@@ -19,6 +19,8 @@ export interface TradersBoardResult {
   // Concrete river-edge ids (bridge sites). Roads forbidden here at the
   // engine level — see placement.ts and the buildBridge handler.
   riverEdges: EdgeId[];
+  // Rivers of Catan: the river tiles (hexes source → mouth). Empty otherwise.
+  rivers: RiverPath[];
   // Fishing on Catan extras. Both undefined for Rivers / future scenarios
   // that don't use them.
   lakeHexId: HexId | null;
@@ -45,18 +47,20 @@ export function generateTradersBoard(
   }
   if (scenario.prepareLayout) [layout, rngState] = scenario.prepareLayout(layout, rngState);
   const assembled = assembleBoardFromLayout(layout, rngState);
-  // The sea ring is just the frame: there is no pirate in T&B.
+  // T&B maps have no pirate; drop the sea hex the assembler parks one on so
+  // no pirate ship is drawn.
   delete assembled.board.pirateHex;
-  const riverEdges = resolveRiverEdges(
-    scenario.riverEdges ?? [],
-    assembled.board,
-  );
+  let rng = assembled.rngState;
+  const { rivers, riverEdges } = resolveRivers(scenario.rivers ?? [], assembled.board);
   const lakeHexId = scenario.lake
     ? `${scenario.lake.q},${scenario.lake.r}`
     : findHexByTerrain(assembled.board, 'lake');
-  const fishingGrounds = resolveFishingGrounds(
+  let fishingGrounds: FishingGround[];
+  [fishingGrounds, rng] = resolveFishingGrounds(
     scenario.fishingGrounds ?? [],
+    scenario.fishingGroundTokens ?? [],
     assembled.board,
+    rng,
   );
   const wateringHoleHexId = scenario.wateringHole
     ? `${scenario.wateringHole.q},${scenario.wateringHole.r}`
@@ -70,8 +74,9 @@ export function generateTradersBoard(
   // to flag whether the robber is on the board. createGame wires this.
   return {
     board: assembled.board,
-    rngState: assembled.rngState,
+    rngState: rng,
     riverEdges,
+    rivers,
     lakeHexId: lakeHexId && assembled.board.hexes[lakeHexId] ? lakeHexId : null,
     fishingGrounds,
     wateringHoleHexId:
@@ -92,51 +97,7 @@ function findHexByTerrain(
   return null;
 }
 
-function resolveFishingGrounds(
-  defs: FishingGroundDef[],
-  board: BoardState,
-): FishingGround[] {
-  const out: FishingGround[] = [];
-  for (const def of defs) {
-    const hex = board.hexes[`${def.q},${def.r}`];
-    if (!hex) continue;
-    const vertex = hex.corners[def.corner];
-    if (!vertex) continue;
-    out.push({ vertex, token: def.token });
-  }
-  return out;
-}
-
 function pickLayout(scenario: TradersScenario, numPlayers: number) {
   if (numPlayers === 3 || numPlayers === 4) return scenario.layout3p ?? null;
   return null;
-}
-
-// Resolve declarative river-edge tuples (hex coord + direction) into actual
-// EdgeId strings against the freshly built board. Mirrors `resolvePorts`.
-// Dedupes inverse-declared edges (an edge can be named from either of the
-// two hexes it spans).
-function resolveRiverEdges(
-  refs: ScenarioEdgeRef[],
-  board: BoardState,
-): EdgeId[] {
-  const out = new Set<EdgeId>();
-  for (const ref of refs) {
-    const hexId = `${ref.q},${ref.r}`;
-    const hex = board.hexes[hexId];
-    if (!hex) continue;
-    const v1 = hex.corners[ref.direction];
-    const v2 = hex.corners[(ref.direction + 1) % 6];
-    if (!v1 || !v2) continue;
-    for (const edge of Object.values(board.edges)) {
-      if (
-        (edge.vertices[0] === v1 && edge.vertices[1] === v2) ||
-        (edge.vertices[0] === v2 && edge.vertices[1] === v1)
-      ) {
-        out.add(edge.id);
-        break;
-      }
-    }
-  }
-  return Array.from(out);
 }

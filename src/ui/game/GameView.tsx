@@ -23,6 +23,8 @@ import { MonopolyDialog } from '@/ui/dialogs/MonopolyDialog';
 import { WondersDialog } from '@/ui/dialogs/WondersDialog';
 import { SpendFishDialog } from '@/ui/dialogs/SpendFishDialog';
 import { PassBootDialog } from '@/ui/dialogs/PassBootDialog';
+import { CoinsDialog } from '@/ui/dialogs/CoinsDialog';
+import { FishSwapDialog } from '@/ui/dialogs/FishSwapDialog';
 import { WagonVoteDialog } from '@/ui/dialogs/WagonVoteDialog';
 import { EventChoiceDialog } from '@/ui/dialogs/EventChoiceDialog';
 import { GoldResourceDialog } from '@/ui/dialogs/GoldResourceDialog';
@@ -74,6 +76,14 @@ export function GameView() {
   const wondersDialog = dialog === 'wonders' ? <WondersDialog /> : null;
   const spendFishDialog = dialog === 'spendFish' ? <SpendFishDialog /> : null;
   const passBootDialog = dialog === 'passBoot' ? <PassBootDialog /> : null;
+  // Traders & Barbarians: coins (Rivers of Catan) and the fish swap at the
+  // 7-token cap (Fishing on Catan).
+  const tradersDialog =
+    dialog === 'coins' ? (
+      <CoinsDialog />
+    ) : game.phase === 'fishSwap' && !handoffPending ? (
+      <FishSwapDialog />
+    ) : null;
   const wagonVoteDialog =
     (game.phase === 'wagonVoting' || game.phase === 'placeWagon') && !handoffPending ? (
       <WagonVoteDialog />
@@ -185,13 +195,14 @@ export function GameView() {
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
             bottom-center of the board, above the hand strip. */}
-        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || wagonVoteDialog || eventDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || tradersDialog || wagonVoteDialog || eventDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
             {monopolyDialog}
             {wondersDialog}
             {spendFishDialog}
             {passBootDialog}
+            {tradersDialog}
             {wagonVoteDialog}
             {eventDialog}
             {discardDialog}

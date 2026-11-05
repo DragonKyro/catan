@@ -123,6 +123,8 @@ export const barbarianAttack: TradersScenario = {
   minPlayers: 3,
   maxPlayers: 4,
   defaultVpToWin: BARBARIAN_ATTACK_DEFAULT_VP,
+  // Coins (spendGold / buyGold) but no Wealthiest / Poor tiles.
+  coins: true,
   layout3p: LAYOUT_3_4,
   prepareLayout: dealAreaTerrain,
   barbarianAttack: {

@@ -37,8 +37,10 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 - **The Wonders of Catan** — claim one of the rulebook's wonders and build its 4 levels; finish it, or reach 10 VP with the highest level, to win
 - **New World** (12 VP) — open map; +1 VP per island you didn't start on
 
-**Traders & Barbarians** — scenarios from the 2025 rulebook:
+**Traders & Barbarians expansion** (3–4 players, 2025 rulebook):
 
+- **Rivers of Catan** (10 VP) — two fixed river tiles run from the mountains to the swamps; seven bridge sites where roads can't go. Bridges (2 brick + 1 lumber) pay 3 gold, roads and settlements on a river tile 1 gold. Spend 2 gold for any card (twice a turn), buy gold at your bank rate, trade with it. The richest player alone is Wealthiest (+1 VP); everyone tied for the least gold is Poor (−2 VP). The 2 shares the 12's hex
+- **Fishing on Catan** (10 VP, 11 with the old boot) — the lake (fishes on 2, 3, 11, 12) sits somewhere in the inner ring and six fishing grounds fill the coastal notches. Spend fish to remove the robber (2), steal (3), take a card (4), build a free road (5) or take a development card (7); hold at most 7 tokens; pass the old boot to anyone with at least your VP
 - **Merchant Trains** (12 VP) — the watering hole replaces the desert; build a settlement or city to collect a wagon, then everyone bids wool / wheat (public, clockwise) for where it goes. Trains leave the watering hole's three start corners, run nose to tail, never branch and merge where their fronts meet. A wagon on a road is an extra road for the Longest Route; a building between two wagons is worth +1 VP
 - **Barbarian Attack** (12 VP, 2025 rulebook) — every building lands 3 barbarians on the coast (dice rolled for you, shown in the log); 3 on a hex conquer it and the buildings touching only conquered hexes stop counting. Buy the scenario's development cards (Capture, Knighthood, Swift Knight, Treason) to raise knights, move them at the end of your turn (3 edges, 5 for a wheat), and drive the barbarians off: every 2 prisoners = 1 VP. Second starting placement is a city; no robber — a 7 steals from anyone.
 
@@ -142,9 +144,9 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 
 **Traders & Barbarians (Phase 10):**
 
-- [ ] **2:1 gold spend action + UI** — Rivers of Catan rule (2 gold → any 1 resource, max 2× per turn). Constants defined; no `spendGold` action, no dialog. Gold currently only converts to VP via the Wealthiest Catanian tile.
-- [ ] **Fish spend UI completeness** — only 2 of 5 effects surfaced in `SpendFishDialog.tsx` (`removeRobber`, `takeFromBank`). The other three (`steal`, `buildRoad`, `buyDevCard`) are engine-complete but UI-unreachable.
-- [ ] **Fish 7-token "discard and replace" once-per-turn rule** — current cap is a hard stop; the rulebook nuance isn't implemented.
+- [x] **Coins** — `spendGold` (2 gold → 1 resource, 2× per turn), `buyGold` at your bank rate, gold in player trades; Coins dialog + gold in the trade dialogs.
+- [x] **Fish spend UI completeness** — all five spends in `SpendFishDialog` (the free road switches to board placement).
+- [x] **Fish 7-token swap** — once per turn, a full hand may swap a token for a new draw (`fishSwap` phase).
 - [x] **Smarter AI wagon voting** — the AI bids when steering the wagon is worth a VP / Longest Route to it (or keeps one from a rival), assigns its votes and places as chooser (`src/ai/traders/merchantTrains.ts`).
 - [ ] **Traders & Barbarians combo scenario** — all four T&B mechanics on one board; explicitly deferred.
 - [x] **Catan Event Cards variant** — 37-card deck replacing the dice, all 13 events (base-game versions).
@@ -154,7 +156,7 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 
 **Cross-cutting:**
 
-- [ ] **Replay slider action coverage** — `MEANINGFUL_ACTIONS` in `src/ui/replay/ReplayScreen.tsx` is missing every C&K and T&B action type (`buildBridge`, `spendFish`, `passOldBoot`, `submitWagonVote`, `placeWagon`, `recruitKnight`, `activateKnight`, `promoteKnight`, `buildCityWall`, `buildCityImprovement`, `playProgressCard`, etc.). Replays of expansion games skip the interesting bits on the slider.
+- [x] **Replay slider action coverage** — C&K and T&B actions (knights, improvements, progress cards, walls, bridges, fish, wagons, barbarian cards and knights, event cards) are stops on the replay slider.
 
 **Fun map ideas (not yet implemented):**
 

@@ -12,6 +12,7 @@ import { calculateRouteLength } from '@/game/engine';
 import { seafarersLogLines } from './seafarersLog';
 import { barbarianAttackLogLines } from './barbarianAttackLog';
 import { tradersLogLines } from './tradersLog';
+import { hexRollsOn } from '@/game/board/hexNumbers';
 import { pipsByResource } from '@/ai/value';
 
 // =======================================================================
@@ -937,7 +938,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         const robberHex = before.board.robberHex;
         for (const hexId of before.board.hexIds) {
           const hex = before.board.hexes[hexId]!;
-          if (hex.numberToken !== total) continue;
+          if (!hexRollsOn(hex, total)) continue;
           if (hexId !== robberHex) continue;
           // Identify each player with a settle/city on this hex.
           const blockedHere = new Set<PlayerId>();
