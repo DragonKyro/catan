@@ -37,6 +37,8 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 - **The Wonders of Catan** — claim one of the rulebook's wonders and build its 4 levels; finish it, or reach 10 VP with the highest level, to win
 - **New World** (12 VP) — open map; +1 VP per island you didn't start on
 
+**Traders & Barbarians — Barbarian Attack** (12 VP, 2025 rulebook) — every building lands 3 barbarians on the coast (dice rolled for you, shown in the log); 3 on a hex conquer it and the buildings touching only conquered hexes stop counting. Buy the scenario's development cards (Capture, Knighthood, Swift Knight, Treason) to raise knights, move them at the end of your turn (3 edges, 5 for a wheat), and drive the barbarians off: every 2 prisoners = 1 VP. Second starting placement is a city; no robber — a 7 steals from anyone.
+
 ### Notable mechanics
 
 - **Online multiplayer with no backend.** WebRTC peer-to-peer over Trystero (Nostr-relay signaling — works on cellular and corporate networks where BitTorrent trackers are blocked). Create a room, share a 4-character code, friends join. Full state replication; randomness baked into actions so all peers reduce to the same state. Drop out and rejoin mid-game with the same code — your seat is preserved via `localStorage` UUID. Late joiners without a saved UUID become read-only spectators.
@@ -141,7 +143,7 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 
 **Cross-cutting:**
 
-- [ ] **Replay slider action coverage** — `MEANINGFUL_ACTIONS` in `src/ui/replay/ReplayScreen.tsx` is missing every C&K and T&B action type (`buildBridge`, `spendFish`, `passOldBoot`, `submitWagonVote`, `placeWagon`, `hireKnight`, `recruitKnight`, `activateKnight`, `promoteKnight`, `buildCityWall`, `buildCityImprovement`, `playProgressCard`, etc.). Replays of expansion games skip the interesting bits on the slider.
+- [ ] **Replay slider action coverage** — `MEANINGFUL_ACTIONS` in `src/ui/replay/ReplayScreen.tsx` is missing every C&K and T&B action type (`buildBridge`, `spendFish`, `passOldBoot`, `submitWagonVote`, `placeWagon`, `recruitKnight`, `activateKnight`, `promoteKnight`, `buildCityWall`, `buildCityImprovement`, `playProgressCard`, etc.). Replays of expansion games skip the interesting bits on the slider.
 
 **Fun map ideas (not yet implemented):**
 
