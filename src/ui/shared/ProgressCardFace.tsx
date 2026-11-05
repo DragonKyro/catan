@@ -2,16 +2,17 @@ import type { ImprovementTrack, ProgressCardKind } from '@/game/types';
 import { PROGRESS_CARD_LABEL } from '@/game/modules/citiesAndKnights/progress/catalogue';
 import './ProgressCardFace.css';
 
-// The emblem on each progress deck's card back (2025 cards, p.3): science a
-// pair of dividers, trade a balance scale, politics a handshake.
+// A per-deck emblem for card faces and track labels: science a flask, trade
+// a balance scale (as on its card back), politics a handshake (ditto).
 export function TrackEmblem({ track, size = '1.2em' }: { track: ImprovementTrack; size?: string }) {
   return (
     <svg viewBox="0 0 20 20" width={size} height={size} aria-hidden focusable="false" style={{ verticalAlign: '-0.2em' }}>
       <g fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
         {track === 'science' && (
           <>
-            <circle cx={10} cy={4} r={1.6} />
-            <path d="M9.2,5.4 L5,17 M10.8,5.4 L15,17 M6.6,12.6 Q10,14 13.4,12.6" />
+            {/* Flask */}
+            <path d="M7.5,2.5 L12.5,2.5 M8.5,2.5 L8.5,8 L3.8,15.8 Q3.2,17.5 5,17.5 L15,17.5 Q16.8,17.5 16.2,15.8 L11.5,8 L11.5,2.5" />
+            <path d="M6,13 L14,13" />
           </>
         )}
         {track === 'trade' && (

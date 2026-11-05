@@ -15,6 +15,7 @@ import { isSetupPhase } from '@/game/actions/setup';
 import type { GameState, PlayerId } from '@/game/types';
 import { movableShips } from '@/ui/game/PlacementOverlay';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
+import { setupPlacesCity } from '@/game/modules/citiesAndKnights/actions/buildWrappers';
 import {
   CKMainButtons,
   CKModeExtras,
@@ -373,6 +374,10 @@ function phaseHint(game: GameState, pid: PlayerId): string | null {
           ? ' on one of the large islands'
           : ' on the main island'
         : '';
+      // Cities & Knights: the second starting piece is a city (p.5).
+      if (setupPlacesCity(game)) {
+        return 'Place your starting city — it collects 1 resource per adjacent hex.';
+      }
       return `Place starting settlement ${round}${where}${pays ? ' — it collects starting resources' : ''}.`;
     }
     return seafarers

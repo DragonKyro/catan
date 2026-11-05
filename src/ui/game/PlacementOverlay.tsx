@@ -28,6 +28,7 @@ import { canPlaceKnight } from '@/game/modules/traders/barbarianAttack/placement
 import type { EdgeId, GameState, PlayerColor, PlayerId, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { citiesKnightsOverlay } from './citiesAndKnights/CKPlacementOverlay';
+import { setupPlacesCity } from '@/game/modules/citiesAndKnights/actions/buildWrappers';
 
 export function PlacementOverlay() {
   const { game, uiMode, dispatch, setMode } = useGameStore();
@@ -65,7 +66,7 @@ export function PlacementOverlay() {
             <VertexGhost
               key={vid}
               vid={vid}
-              variant="settlement"
+              variant={isSetup && setupPlacesCity(game) ? 'city' : 'settlement'}
               previewColor={previewColor}
               isHovered={hoveredVid === vid}
               onHoverChange={(h) => setHoveredVid(h ? vid : null)}

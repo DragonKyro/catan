@@ -145,7 +145,9 @@ export function ImprovementsDialog() {
                         Play Crane → build for {craneCost.amount}
                       </Button>
                     )}
-                    {blocker && myTurn && <span className="ck-blocker">{blocker}</span>}
+                    {blocker && myTurn && player.cities.length > 0 && (
+                      <span className="ck-blocker">{blocker}</span>
+                    )}
                   </>
                 )}
               </div>

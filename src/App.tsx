@@ -1,4 +1,4 @@
-import { useGameStore } from '@/store/gameStore';
+import { type DialogName, type UIMode, useGameStore } from '@/store/gameStore';
 import { useNetworkStore } from '@/store/networkStore';
 import { useReplayStore } from '@/store/replayStore';
 import { HomeMenu } from '@/ui/newGame/HomeMenu';
@@ -21,6 +21,13 @@ if (PREVIEW_SPEC?.view === 'game') {
   useGameStore.getState().setGameState(previewGame);
   // One human at this device: skip the hot-seat "pass the device" screen.
   useGameStore.setState({ handoffAcknowledgedForPlayer: previewGame.players[0]!.id });
+  // `&dialog=<name>` opens a dialog for screenshots (e.g. progressCards).
+  // `&mode=<kind>` puts the board in a click mode (e.g. recruitKnight).
+  const params = new URLSearchParams(window.location.search);
+  const dialog = params.get('dialog');
+  if (dialog) useGameStore.setState({ dialog: dialog as DialogName });
+  const mode = params.get('mode');
+  if (mode) useGameStore.setState({ uiMode: { kind: mode } as UIMode });
 }
 
 export default function App() {

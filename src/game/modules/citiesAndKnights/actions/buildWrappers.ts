@@ -19,8 +19,17 @@ import { handlePlaceInitialSettlement as baseHandlePlaceInitialSettlement } from
 import { currentPlayerId, getPlayer, updatePlayer } from '../../../helpers';
 import { addResources, canAfford, subtractResources } from '../../../resources';
 import { canConnectRoad } from '../../../placement';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../constants';
 
 // Cities & Knights wrappers around the base build handlers.
+
+// Does the current setup placement put down a city (C&K round 2)?
+export function setupPlacesCity(state: GameState): boolean {
+  return (
+    state.phase === 'setupRound2' &&
+    state.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID)
+  );
+}
 
 // Setup (p.5): round 1 places a settlement, round 2 places a CITY, which
 // collects 1 resource per adjacent hex (the base handler already pays the

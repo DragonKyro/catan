@@ -301,9 +301,8 @@ export const TOPICS: Topic[] = [
   // Seafarers expansion topics — rendered with a section header so they're
   // visually separated from the base-game topics.
   ...SEAFARERS_TOPICS.map((t, i) => (i === 0 ? { ...t, section: 'Seafarers' } : t)),
-  // Cities & Knights — Phase 1 framework topics. The deeper mechanics
-  // (knights, city improvements, progress cards) get their own topics in
-  // later phases.
+  // Cities & Knights (2025 rules): turn, barbarians, knights, improvements,
+  // metropolises and the progress card reference.
   ...CITIES_AND_KNIGHTS_TOPICS.map((t, i) =>
     i === 0 ? { ...t, section: 'Cities & Knights' } : t,
   ),

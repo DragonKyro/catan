@@ -25,6 +25,8 @@ let steps = 0;
 let view = 'board';
 let out = 'board-renders';
 let size = '1100,1000';
+let dialog = '';
+let mode = '';
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--players') players = Number(args[++i]);
@@ -34,6 +36,8 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--view') view = args[++i];
   else if (a === '--out') out = args[++i];
   else if (a === '--size') size = args[++i];
+  else if (a === '--dialog') dialog = args[++i];
+  else if (a === '--mode') mode = args[++i];
   else specs.push(a);
 }
 if (specs.length === 0) {
@@ -58,8 +62,8 @@ if (!browser) {
 
 mkdirSync(out, { recursive: true });
 for (const spec of specs) {
-  const url = `${base}?preview=${encodeURIComponent(spec)}&players=${players}&seed=${seed}${coords ? '&coords=1' : ''}${steps ? `&steps=${steps}` : ''}${view === 'game' ? '&view=game' : ''}`;
-  const file = resolve(join(out, `${spec.replace(':', '-')}-${players}p-s${seed}${steps ? `-m${steps}` : ''}${view === 'game' ? '-game' : ''}.png`));
+  const url = `${base}?preview=${encodeURIComponent(spec)}&players=${players}&seed=${seed}${coords ? '&coords=1' : ''}${steps ? `&steps=${steps}` : ''}${view === 'game' ? '&view=game' : ''}${dialog ? `&dialog=${dialog}` : ''}${mode ? `&mode=${mode}` : ''}`;
+  const file = resolve(join(out, `${spec.replace(':', '-')}-${players}p-s${seed}${steps ? `-m${steps}` : ''}${view === 'game' ? '-game' : ''}${dialog ? `-${dialog}` : ''}${mode ? `-${mode}` : ''}.png`));
   // A fresh profile per shot: a second Chrome on a shared profile can hand
   // the URL to the first instance and exit without rendering.
   const profile = mkdtempSync(join(tmpdir(), 'catan-render-'));
