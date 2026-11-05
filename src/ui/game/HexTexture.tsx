@@ -276,6 +276,14 @@ function Glyph({ terrain }: { terrain: string }) {
           <rect x={1.1} y={-2.4} width={0.9} height={1.2} fill="#3a3f48" />
         </g>
       );
+    case 'spice':
+      // A tiny chili pepper with its green stem.
+      return (
+        <g opacity={0.6}>
+          <path d="M-2.6,-1.6 Q0,-2.4 2.4,0.6 Q2.8,2.6 1.4,2.4 Q-0.4,0.4 -2.6,-0.4 Z" fill="#7a1a0c" />
+          <path d="M-2.6,-1 L-3.4,-2.6" stroke="#3d6b22" strokeWidth={0.7} strokeLinecap="round" />
+        </g>
+      );
     default:
       return null;
   }

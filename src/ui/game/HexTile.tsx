@@ -42,6 +42,9 @@ const TERRAIN_FILL: Record<string, string> = {
   // T&B scenario commodity hexes; TradersBarbariansHexLayer paints each
   // location's own art on top.
   commodity: 'var(--terrain-commodity, #c9b48a)',
+  // Explorers & Pirates spice farm: warm paprika fields; the E&P board
+  // layer adds the farm's advantage, sacks and crews.
+  spice: 'var(--terrain-spice, #b9572a)',
 };
 
 export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse, foggy }: Props) {

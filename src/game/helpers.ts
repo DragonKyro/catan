@@ -90,6 +90,10 @@ export function getActingPlayerId(state: GameState): PlayerId {
     const choice = state.eventCards?.pending?.choices[0];
     if (choice) return choice.playerId;
   }
+  // Explorers & Pirates: the player placing their pirate ship.
+  if (state.phase === 'epPlacePirate' && state.explorersPirates?.pendingPirate) {
+    return state.explorersPirates.pendingPirate.playerId;
+  }
   // T&B Fishing on Catan 'fishSwap' phase: the head of the swap queue.
   if (state.phase === 'fishSwap' && state.fishSwap?.queue.length) {
     return state.fishSwap.queue[0]!;

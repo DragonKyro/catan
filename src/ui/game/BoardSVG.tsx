@@ -25,6 +25,8 @@ import { WateringHoleMarker } from './traders/WateringHoleMarker';
 import { DamagedRoadMarker } from './traders/DamagedRoadMarker';
 import { TradersBarbariansHexLayer, TradersBarbariansPieces } from './traders/TradersBarbariansBoard';
 import { hexRollsOn } from '@/game/board/hexNumbers';
+import { isHarbor } from '@/game/modules/explorersPirates/state';
+import { ExplorersPiratesHexLayer, ExplorersPiratesPieces } from './explorersPirates/ExplorersPiratesBoard';
 import './Board.css';
 
 interface Props {
@@ -117,6 +119,9 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         <TradersBarbariansHexLayer game={game} />
         {/* T&B Merchant Trains: watering hole art + train start points. */}
         <WateringHoleMarker game={game} />
+        {/* Explorers & Pirates: face-down backs, the Council, spice farms,
+            pirate lairs, fish shoals. */}
+        <ExplorersPiratesHexLayer game={game} />
 
         <g className="ports">
           {board.ports.map((p) => (
@@ -181,7 +186,9 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
 
         <g className="settlements">
           {game.players.flatMap((player) =>
-            player.settlements.map((vid) => (
+            // Explorers & Pirates harbor settlements are drawn as their own
+            // piece (ExplorersPiratesPieces).
+            player.settlements.filter((vid) => !isHarbor(game, vid)).map((vid) => (
               <Settlement
                 key={vid}
                 board={board}
@@ -212,6 +219,8 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
 
         {/* T&B scenario: barbarians on edges, players' wagons. */}
         <TradersBarbariansPieces game={game} />
+        {/* Explorers & Pirates: harbor settlements, ships, the pirate ship. */}
+        <ExplorersPiratesPieces game={game} />
         {/* Cities & Knights: knights on intersections + metropolis flags +
             merchant pawn. */}
         <g className="knights">

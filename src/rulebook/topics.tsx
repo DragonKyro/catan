@@ -11,6 +11,7 @@ import { SEAFARERS_TOPICS } from './seafarers/topics';
 import { FUN_MAPS_TOPICS } from './base/funMaps';
 import { CITIES_AND_KNIGHTS_TOPICS } from './citiesAndKnights/topics';
 import { TRADERS_TOPICS } from './traders/topics';
+import { EXPLORERS_PIRATES_TOPICS } from './explorersPirates/topics';
 
 export interface Topic {
   id: string;
@@ -309,5 +310,10 @@ export const TOPICS: Topic[] = [
   // Traders & Barbarians — the five scenarios and the variants.
   ...TRADERS_TOPICS.map((t, i) =>
     i === 0 ? { ...t, section: 'Traders & Barbarians' } : t,
+  ),
+  // Explorers & Pirates — the complete scenario: setup, the three turn
+  // phases, sailing, exploring, missions, the pirate ship and scoring.
+  ...EXPLORERS_PIRATES_TOPICS.map((t, i) =>
+    i === 0 ? { ...t, section: 'Explorers & Pirates' } : t,
   ),
 ];

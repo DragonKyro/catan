@@ -27,9 +27,11 @@ export interface LobbyVariants {
 /**
  * What the online game will be: the base game (on `baseScenarioId`, any Fun
  * Map), Seafarers (on `scenarioId`), Cities & Knights (on `baseScenarioId`,
- * the maps C&K allows) or Traders & Barbarians (on `tradersScenarioId`). At
- * most one of `seafarers` / `citiesKnights` / `traders` is on (they don't
- * combine yet); the variants stack on any of them. See store/lobbyGame.ts.
+ * the maps C&K allows), Traders & Barbarians (on `tradersScenarioId`) or
+ * Explorers & Pirates (its own map). At most one of `seafarers` /
+ * `citiesKnights` / `traders` / `explorersPirates` is on (they don't combine
+ * yet); the variants stack on any but Explorers & Pirates. See
+ * store/lobbyGame.ts.
  */
 export interface LobbyGame {
   seafarers: boolean;
@@ -38,6 +40,9 @@ export interface LobbyGame {
   citiesKnights: boolean;
   traders: boolean;
   tradersScenarioId: string;
+  // Optional so a lobby written by an older build still reads (normalized
+  // to false).
+  explorersPirates?: boolean;
   variants: LobbyVariants;
 }
 

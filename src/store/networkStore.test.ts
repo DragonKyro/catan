@@ -484,6 +484,23 @@ describe('playing online', () => {
     expect(types.has('buyDevCard') || types.has('resolveBarbarianCard')).toBe(true);
   }, 240000);
 
+  it('an Explorers & Pirates game stays in step, guests placing ships and sailing them', async () => {
+    const guests: [string, string][] = [['guest-uuid', 'Gus'], ['guest2-uuid', 'Gia']];
+    const { host, devices } = await startGame(guests, 1, (h) =>
+      h.net().hostSetGame({ ...h.net().lobby.game, explorersPirates: true }),
+      0.3,
+    );
+    const g = host.game().game!;
+    expect(g.settings).toMatchObject({ expansions: ['explorersPirates'], victoryPointsToWin: 17 });
+    expect(g.explorersPirates).toBeDefined();
+    await playExpansion(devices, 15, 600);
+    const types = guestActionTypes(host, guests.map(([u]) => u));
+    expect(types.has('placeInitialShip')).toBe(true);
+    expect(types.has('epMoveShip')).toBe(true);
+    // Hexes got explored somewhere on the table.
+    expect(Object.keys(host.game().game!.explorersPirates!.hidden).length).toBeLessThan(32);
+  }, 240000);
+
   it('a 5-player Fishing on Catan game stays in step (paired turns)', async () => {
     const guests: [string, string][] = [['guest-uuid', 'Gus'], ['guest2-uuid', 'Gia'], ['guest3-uuid', 'Gil']];
     const { host, devices } = await startGame(guests, 1, (h) =>

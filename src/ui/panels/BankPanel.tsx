@@ -12,7 +12,13 @@ export function BankPanel() {
     <section className="bank">
       <header className="bank-header">
         <span>Bank</span>
-        {!hasCK && (
+        {/* Explorers & Pirates: no development cards, but the fish hauls. */}
+        {game.explorersPirates && (
+          <span className="bank-deck" title="Fish hauls left in the supply">
+            🐟 {game.explorersPirates.fishSupply}
+          </span>
+        )}
+        {!hasCK && !game.explorersPirates && (
           <span className="bank-deck" title="Development cards left in the deck">
             🃏{' '}
             {game.barbarianAttack

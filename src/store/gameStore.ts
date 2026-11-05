@@ -1,5 +1,14 @@
 import { create } from 'zustand';
-import type { Action, BarbarianTreasonMove, EdgeId, HexId, KnightStrength, PlayerId, VertexId } from '@/game/types';
+import type {
+  Action,
+  BarbarianTreasonMove,
+  EdgeId,
+  EpLocation,
+  HexId,
+  KnightStrength,
+  PlayerId,
+  VertexId,
+} from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
@@ -70,6 +79,18 @@ export type UIMode =
   // a barbarian (`pick` = the barbarian chosen, before its edge).
   | { kind: 'tbWagon' }
   | { kind: 'tbBarbarian'; pick?: number }
+  // Explorers & Pirates — Action phase: a coastal settlement to upgrade to
+  // a harbor settlement; a sea edge for a new ship (`recycle` = the ship
+  // returned first when all 3 are on the board); where a new settler /
+  // crew goes (`at` = the full spot picked, waiting for what to evict).
+  // Setup round 3's ship. Movement phase: `ship` = the selected ship.
+  // Placing your pirate ship.
+  | { kind: 'epHarbor' }
+  | { kind: 'epShip'; recycle?: string }
+  | { kind: 'epPiece'; piece: 'settler' | 'crew'; at?: EpLocation }
+  | { kind: 'epSetupShip' }
+  | { kind: 'epMove'; ship?: string }
+  | { kind: 'epPirate' }
   // Cities & Knights — picking which of your own cities to put a wall under.
   | { kind: 'buildCityWall' }
   // Cities & Knights knight build/action modes.
@@ -133,7 +154,11 @@ export type DialogName =
   | 'progressCards'
   | 'alchemy'
   | 'knights'
-  | 'commercialHarbor';
+  | 'commercialHarbor'
+  // Explorers & Pirates: Fast Gold (1 card → 1 gold) and moving pieces
+  // between a ship and the harbor settlement next to it.
+  | 'epFastGold'
+  | 'epTransfer';
 
 interface AppStore {
   game: GameState | null;
@@ -200,6 +225,13 @@ const UNDOABLE_ACTION_TYPES = new Set<Action['type']>([
   'buyGold',
   // Traders & Barbarians scenario: a wagon upgrade reveals nothing.
   'upgradeWagon',
+  // Explorers & Pirates Action-phase builds (a ship that explores a hex
+  // can't be taken back — see revealedSomething).
+  'epBuildHarbor',
+  'epBuildShip',
+  'epBuildSettler',
+  'epBuildCrew',
+  'epFastGold',
 ]);
 
 // An otherwise-undoable action that uncovered something can't be taken back
@@ -215,6 +247,9 @@ function revealedSomething(before: GameState, next: GameState): boolean {
   const partners = (s: GameState) =>
     (s.clothVillages ?? []).reduce((n, v) => n + v.partners.length, 0);
   if (partners(before) !== partners(next)) return true;
+  // Explorers & Pirates: a new ship turned over a face-down hex.
+  const hidden = (s: GameState) => Object.keys(s.explorersPirates?.hidden ?? {}).length;
+  if (hidden(before) !== hidden(next)) return true;
   // Anything that rolled dice (T&B Barbarian Attack landings after a build).
   if (before.rngState !== next.rngState) return true;
   return next.phase !== before.phase;
@@ -226,10 +261,18 @@ const phaseToMode = (state: GameState): UIMode => {
     state.phase === 'setupRound2' ||
     state.phase === 'setupRound3'
   ) {
+    // Explorers & Pirates round 3: the ship (with a settler) after the road.
+    if (state.setupState?.step === 'ship' && state.explorersPirates) return { kind: 'epSetupShip' };
     return state.setupState?.step === 'settlement'
       ? { kind: 'placeSetupSettlement' }
       : { kind: 'placeSetupRoad' };
   }
+  // Explorers & Pirates: the Movement phase, placing your pirate ship.
+  if (state.phase === 'epMovement') {
+    const moving = state.explorersPirates?.movement?.moving;
+    return moving ? { kind: 'epMove', ship: moving } : { kind: 'epMove' };
+  }
+  if (state.phase === 'epPlacePirate') return { kind: 'epPirate' };
   if (state.phase === 'moveRobber') return { kind: 'moveRobber' };
   if (state.phase === 'movePirate') return { kind: 'movePirate' };
   if (state.phase === 'placeTribePort') return { kind: 'placeTribePort' };
@@ -274,10 +317,24 @@ function applyTransition(
     pendingRobberHex: null;
     pendingPirateHex: null;
   }>) => void,
-  get: () => { handoffAcknowledgedForPlayer: PlayerId | null },
+  get: () => { handoffAcknowledgedForPlayer: PlayerId | null; uiMode: UIMode },
   before: GameState,
   next: GameState,
 ): void {
+  let uiMode = phaseToMode(next);
+  // Explorers & Pirates Movement phase: a free ship action (loading,
+  // unloading, a crew landing…) keeps the ship the player had selected.
+  const prev = get().uiMode;
+  if (
+    uiMode.kind === 'epMove' &&
+    !uiMode.ship &&
+    before.phase === 'epMovement' &&
+    prev.kind === 'epMove' &&
+    prev.ship &&
+    next.explorersPirates?.ships.some((s) => s.id === prev.ship)
+  ) {
+    uiMode = { kind: 'epMove', ship: prev.ship };
+  }
   const beforeActor = getActingPlayerId(before);
   const nextActor =
     next.phase === 'gameOver' ? beforeActor : getActingPlayerId(next);
@@ -306,7 +363,7 @@ function applyTransition(
       : nextActor;
   set({
     game: next,
-    uiMode: phaseToMode(next),
+    uiMode,
     dialog: null,
     error: null,
     handoffPending: handoff,

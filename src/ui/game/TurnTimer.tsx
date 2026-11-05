@@ -7,6 +7,12 @@ import { reportNeeds, RESOURCE_WEIGHT } from '@/ai/value';
 import { RESOURCES, type Action, type GameState, type HexId, type Resource } from '@/game/types';
 import { isSetupPhase } from '@/game/actions/setup';
 import { pirateStealCandidates } from '@/game/modules/seafarers/actions/movePirate';
+import {
+  epBestVictim,
+  epDefaultPirateAction,
+  epDefaultSetupShip,
+  epUnblockMove,
+} from './explorersPirates/defaults';
 import './TurnTimer.css';
 
 // Optional per-turn time limit. When set in GameSettings, runs only for
@@ -161,12 +167,33 @@ function autoFinish(
     return;
   }
 
+  // Explorers & Pirates: the pirate ship's victim pick is open.
+  if (store.pendingPirateHex && initial.phase === 'epPlacePirate') {
+    const hex = store.pendingPirateHex;
+    ctx.setPendingPirateHex(null);
+    ctx.dispatch({ type: 'epPlacePirate', playerId, hex, stealFrom: epBestVictim(initial, playerId, hex) });
+    return;
+  }
+
   // Same for the pirate: let the AI heuristic pick the victim.
   if (store.pendingPirateHex) {
     const hex = store.pendingPirateHex;
     const victim = pirateStealCandidates(initial, playerId, hex)[0] ?? null;
     ctx.setPendingPirateHex(null);
     ctx.dispatch({ type: 'movePirate', playerId, hex, stealFrom: victim });
+    return;
+  }
+
+  // Explorers & Pirates: place the pirate ship where it robs the richest
+  // player; the setup ship goes on the first free edge if the AI can't say.
+  if (initial.phase === 'epPlacePirate') {
+    const action = epDefaultPirateAction(initial, playerId);
+    if (action) ctx.dispatch(action);
+    return;
+  }
+  if (initial.explorersPirates && initial.phase === 'setupRound3' && initial.setupState?.step === 'ship') {
+    const action = epDefaultSetupShip(initial, playerId);
+    if (action) ctx.dispatch(action);
     return;
   }
 
@@ -208,12 +235,21 @@ function autoFinish(
 
   // Main (and the T&B scenario's End of Turn wagon moves): just end the
   // turn — the player had their chance.
-  if (initial.phase === 'main' || initial.phase === 'wagonMoves') {
+  // Explorers & Pirates: the Movement phase too (a ship stopped on an edge
+  // with 2 others sails one more edge first).
+  if (initial.phase === 'main' || initial.phase === 'wagonMoves' || initial.phase === 'epMovement') {
+    const unblock = epUnblockMove(initial, playerId);
+    if (unblock) ctx.dispatch(unblock);
     ctx.dispatch({ type: 'endTurn', playerId });
     // Out of time in the Action phase: the wagon stays put too (no second
     // full countdown for the End of Turn phase).
     const after = useGameStore.getState().game;
     if (initial.phase === 'main' && after?.phase === 'wagonMoves' && getActingPlayerId(after) === playerId) {
+      ctx.dispatch({ type: 'endTurn', playerId });
+    }
+    // Explorers & Pirates: out of time in the Action phase, the ships stay
+    // put as well.
+    if (initial.phase === 'main' && after?.phase === 'epMovement' && getActingPlayerId(after) === playerId) {
       ctx.dispatch({ type: 'endTurn', playerId });
     }
     return;

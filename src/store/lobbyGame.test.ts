@@ -110,10 +110,40 @@ describe('online lobby game choice', () => {
     expect(withVariant.aiLevel).toBeUndefined();
   });
 
+  it('Explorers & Pirates: 17 VP, 3-4 seats, its own map, no variants', () => {
+    const g = withLobbyRules(
+      { ...defaultLobbyGame(), variants: { friendlyRobber: true, strongestPorts: true, eventCards: true } },
+      'explorersPirates',
+    );
+    expect(lobbyRules(g)).toBe('explorersPirates');
+    expect(g).toMatchObject({ seafarers: false, citiesKnights: false, traders: false, explorersPirates: true });
+    expect(g.variants).toEqual({ friendlyRobber: false, strongestPorts: false, eventCards: false });
+    const info = lobbyScenario(g);
+    expect(info).toMatchObject({ name: 'Explorers & Pirates', minPlayers: 3, maxPlayers: 4 });
+    expect(info.recommendedVp(4)).toBe(17);
+    expect(lobbyStartProblem(lobby(g, 5))).toMatch(/3–4 players/);
+    const s = lobbySettings(lobby(g));
+    expect(s).toMatchObject({ expansions: ['explorersPirates'], victoryPointsToWin: 17 });
+    expect(s.baseScenarioId).toBeUndefined();
+    expect(s.tradersVariants).toBeUndefined();
+    expect(s.aiLevel).toBeUndefined();
+    const game = startedGame(lobby(g, 3));
+    expect(game.explorersPirates).toBeDefined();
+    expect(game.settings.victoryPointsToWin).toBe(17);
+    // Switching away keeps the other rules intact.
+    expect(withLobbyRules(g, 'base')).toMatchObject({ explorersPirates: false });
+  });
+
   it('fills in a lobby from an older build (no C&K / T&B / variant fields)', () => {
     const old = { seafarers: true, scenarioId: 'fourIslands', baseScenarioId: 'standard' } as unknown as LobbyGame;
     const g = normalizeLobbyGame(old);
-    expect(g).toMatchObject({ seafarers: true, scenarioId: 'fourIslands', citiesKnights: false, traders: false });
+    expect(g).toMatchObject({
+      seafarers: true,
+      scenarioId: 'fourIslands',
+      citiesKnights: false,
+      traders: false,
+      explorersPirates: false,
+    });
     expect(g.variants).toEqual({ friendlyRobber: false, strongestPorts: false, eventCards: false });
     expect(lobbySettings(lobby(g)).expansions).toEqual(['seafarers']);
   });

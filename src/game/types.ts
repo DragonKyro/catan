@@ -169,7 +169,10 @@ export type Terrain =
   // Traders & Barbarians scenario: the quarry / castle / glassworks
   // commodity hexes (non-producing, no number). Which location a hex is
   // lives in `state.tradersBarbarians.locations`.
-  | 'commodity';
+  | 'commodity'
+  // Explorers & Pirates: a spice farm (land, no number). Its advantage
+  // lives in `state.explorersPirates.farms`.
+  | 'spice';
 
 export interface HexCoord {
   q: number;
@@ -730,6 +733,156 @@ export interface TradersBarbariansState {
   lastEvents?: { seq: number; events: TbEvent[] };
 }
 
+// ----- Explorers & Pirates -----
+
+// The two unexplored regions: parrot hexes (green, north) and goose hexes
+// (orange, south). Each has its own face-down number disc stack.
+export type EpRegion = 'parrot' | 'goose';
+
+// Pieces carried by ships and stored on harbor settlements. Settlers and
+// fish hauls are large (fill both slots); crews and spice sacks are small.
+export type EpCargo = 'settler' | 'crew' | 'fish' | 'spice';
+
+// Spice farm advantages (rulebook p. 15).
+export type EpSpiceAbility = 'swiftVoyage' | 'fastGold' | 'pirateBonus';
+
+export type EpMission = 'pirateLairs' | 'fish' | 'spice';
+
+// What lies under a face-down hex. The board shows sea until it's explored.
+export interface EpHiddenTile {
+  region: EpRegion;
+  terrain: Terrain;
+  // Fish shoal (terrain 'sea'): its die number 1-6.
+  shoal?: number;
+  // Spice farm (terrain 'spice'): its advantage (+ the Pirate Bonus number).
+  ability?: EpSpiceAbility;
+  pirateNumber?: number;
+}
+
+export interface EpShip {
+  id: string;
+  owner: PlayerId;
+  edge: EdgeId;
+  cargo: EpCargo[];
+}
+
+// A gold field found by exploring. Pirates hold it until the third crew
+// lands; `number` is the lair token's face-down number disc.
+export interface EpLair {
+  hex: HexId;
+  number: number;
+  crews: PlayerId[];
+  captured: boolean;
+}
+
+export interface EpSpiceFarm {
+  hex: HexId;
+  ability: EpSpiceAbility;
+  pirateNumber?: number;
+  // Players whose spice sack is still on the farm (one each).
+  sacks: PlayerId[];
+  // Players with a crew on the farm (permanent, one each).
+  crews: PlayerId[];
+}
+
+export interface EpShoal {
+  hex: HexId;
+  number: number;
+  haul: boolean;
+}
+
+// Where a piece sits: on a harbor settlement or on a ship.
+export type EpLocation = { harbor: VertexId } | { ship: string };
+
+export interface EpMovementState {
+  // The ship whose move is under way and its movement points left.
+  moving: string | null;
+  mp: number;
+  // Ships that have moved (or started moving) this turn — never battle-ready
+  // again this turn, and their move can't be resumed once another starts.
+  moved: string[];
+  // Ships boosted with 1 wool this turn (+2 MP, once per ship).
+  boosted: string[];
+  // Ships that already paid the pirate's tribute this turn.
+  paidTribute: string[];
+  // Ships that already tried to chase the pirate away this turn.
+  chased: string[];
+  // The once-per-turn fish roll.
+  fishRolled: boolean;
+}
+
+export type EpEvent =
+  | { kind: 'explore'; playerId: PlayerId; hex: HexId; terrain: Terrain; number?: number; reward: Resource | 'gold' | null }
+  | { kind: 'production'; total: number; gold: Record<PlayerId, number> }
+  | { kind: 'tribute'; playerId: PlayerId; to: PlayerId }
+  | { kind: 'chase'; playerId: PlayerId; die: number; success: boolean }
+  | { kind: 'pirate'; playerId: PlayerId; hex: HexId; stoleFrom: PlayerId | null; stoleGold: boolean; haulLost: boolean }
+  | { kind: 'fishRoll'; playerId: PlayerId; die: number; hex: HexId | null }
+  | { kind: 'loadFish'; playerId: PlayerId; hex: HexId }
+  | { kind: 'loadSpice'; playerId: PlayerId; hex: HexId }
+  | { kind: 'crewToFarm'; playerId: PlayerId; hex: HexId; ability: EpSpiceAbility }
+  | { kind: 'crewToLair'; playerId: PlayerId; hex: HexId; crews: number }
+  | { kind: 'deliver'; playerId: PlayerId; fish: number; spice: number }
+  | { kind: 'found'; playerId: PlayerId; vertex: VertexId }
+  | {
+      kind: 'lairCaptured';
+      hex: HexId;
+      number: number;
+      involved: PlayerId[];
+      rolls: Array<{ playerId: PlayerId; die: number; crews: number }>;
+      hero: PlayerId;
+    }
+  | { kind: 'track'; playerId: PlayerId; mission: EpMission; from: number; to: number }
+  | { kind: 'fastGold'; playerId: PlayerId; give: Resource };
+
+export interface ExplorersPiratesState {
+  // Face-down hexes and what lies under each (removed when explored).
+  hidden: Record<HexId, EpHiddenTile>;
+  // Region of every hex from the two unexplored areas (art for the backs).
+  regionOf: Record<HexId, EpRegion>;
+  // Face-down number disc stacks per region and the pirate lair tokens
+  // (drawn from the end).
+  discs: Record<EpRegion, number[]>;
+  lairTokens: number[];
+  // The Council of Catan hex and its two anchors (deliveries).
+  councilHex: HexId;
+  councilAnchors: VertexId[];
+  // Hexes of the starting island; the pirate may not go next to it.
+  startIsland: HexId[];
+  // Sea printed on the frame (ships sail there, the pirate may not).
+  frameHexes: HexId[];
+  // Setup intersections for the starting harbor settlements.
+  harborSites: VertexId[];
+  // Harbor settlements → the pieces stored on them. The owner is whoever
+  // has the vertex in `player.settlements` (a harbor settlement produces
+  // like a settlement and is worth 2 VP).
+  harbors: Record<VertexId, EpCargo[]>;
+  ships: EpShip[];
+  nextShipId: number;
+  // The pirate ship on the board (at most one at a time).
+  pirate: { owner: PlayerId; hex: HexId } | null;
+  lairs: EpLair[];
+  farms: EpSpiceFarm[];
+  shoals: EpShoal[];
+  fishSupply: number;
+  // Crews returned from captured lairs to the supply are just "not on the
+  // board"; crews on board are counted from ships / harbors / lairs / farms.
+  // Mission tracks: position per player (0 = start) and when the marker
+  // arrived on its space (lower = deeper in the stack, keeps the tile).
+  tracks: Record<EpMission, Record<PlayerId, number>>;
+  arrivals: Record<EpMission, Record<PlayerId, number>>;
+  trackSeq: number;
+  // Present iff phase is 'epMovement'.
+  movement?: EpMovementState;
+  // Lairs captured during this Movement phase; resolved when it ends.
+  pendingLairs: HexId[];
+  // Present iff phase is 'epPlacePirate'.
+  pendingPirate?: { playerId: PlayerId; reason: 'seven' | 'chase'; returnTo: 'main' | 'epMovement' };
+  // Fast Gold trades made this turn (once per Fast Gold farm with a crew).
+  fastGoldUsed: number;
+  lastEvents?: { seq: number; events: EpEvent[] };
+}
+
 // ============================================================================
 // Game phase & state
 // ============================================================================
@@ -789,10 +942,16 @@ export type GamePhase =
   | 'defenderTieDraw'
   // Barbarians won: a losing player with 2+ pillageable cities picks which
   // one is reduced to a settlement (pendingPillage).
-  | 'choosePillage';
+  | 'choosePillage'
+  // Explorers & Pirates: the Movement phase after the Action phase, and
+  // placing your pirate ship (after a 7 or a successful chase).
+  | 'epMovement'
+  | 'epPlacePirate';
 
 export interface SetupState {
-  step: 'settlement' | 'road';
+  // 'ship': Explorers & Pirates' third setup round places a ship (with a
+  // settler) next to the starting harbor settlement after the road.
+  step: 'settlement' | 'road' | 'ship';
   lastPlacedSettlement: VertexId | null;
 }
 
@@ -861,6 +1020,9 @@ export interface GameSettings {
   // settlement in normal order; only the third collects resources).
   // Set by createGame from the scenario; undefined = 2.
   setupRounds?: 2 | 3;
+  // Explorers & Pirates: scenario id (only 'explorersPirates', the
+  // Rulebook's complete scenario, ships today).
+  explorersPiratesScenarioId?: string;
 }
 
 export interface PendingTrade {
@@ -1233,6 +1395,11 @@ export interface GameState {
   // they repair them all, and nobody may build a settlement at either end.
   // They still count for the Longest Route.
   damagedRoads?: EdgeId[];
+  // ----- Explorers & Pirates -----
+  explorersPirates?: ExplorersPiratesState;
+  // Rate for trades with the supply when the player has no harbor
+  // (undefined = 4). Explorers & Pirates trades 3:1.
+  supplyTradeRate?: number;
 }
 
 // Seafarers island bonus. Every player earns an island's bonus once, on
@@ -1884,6 +2051,136 @@ export interface DefenderTieDrawAction extends ActionBase {
   deck: ImprovementTrack;
 }
 
+// ----------------------------------------------------------------------------
+// Explorers & Pirates actions
+// ----------------------------------------------------------------------------
+
+// Action phase: replace one of your coastal settlements with a harbor
+// settlement (2 wheat + 2 ore, 2 VP).
+export interface EpBuildHarborAction extends ActionBase {
+  type: 'epBuildHarbor';
+  vertex: VertexId;
+}
+
+// Action phase: a ship on an empty sea edge next to your harbor settlement.
+// With all 3 ships on the board, `recycle` names the one (and its cargo)
+// returned to your supply first.
+export interface EpBuildShipAction extends ActionBase {
+  type: 'epBuildShip';
+  edge: EdgeId;
+  recycle?: string;
+}
+
+// Action phase: a settler / crew onto a harbor settlement or a ship next to
+// one. `evict` returns a piece from that spot to the supply to make room.
+export interface EpBuildSettlerAction extends ActionBase {
+  type: 'epBuildSettler';
+  at: EpLocation;
+  evict?: EpCargo[];
+}
+
+export interface EpBuildCrewAction extends ActionBase {
+  type: 'epBuildCrew';
+  at: EpLocation;
+  evict?: EpCargo[];
+}
+
+// Fast Gold spice farm: trade 1 resource card for 1 gold (Action phase).
+export interface EpFastGoldAction extends ActionBase {
+  type: 'epFastGold';
+  give: Resource;
+}
+
+// Movement phase: move a ship one edge.
+export interface EpMoveShipAction extends ActionBase {
+  type: 'epMoveShip';
+  ship: string;
+  to: EdgeId;
+}
+
+// Movement phase: pay 1 wool for +2 MP on one ship (once per ship a turn).
+export interface EpBoostShipAction extends ActionBase {
+  type: 'epBoostShip';
+  ship: string;
+}
+
+// Movement phase: move pieces between a ship and an adjacent harbor
+// settlement (`load` harbor → ship, `unload` ship → harbor, at once).
+export interface EpTransferAction extends ActionBase {
+  type: 'epTransfer';
+  ship: string;
+  harbor: VertexId;
+  load: EpCargo[];
+  unload: EpCargo[];
+}
+
+// Movement phase: a ship with a settler builds a settlement at one of its
+// ends (ship and settler return to the supply).
+export interface EpFoundSettlementAction extends ActionBase {
+  type: 'epFoundSettlement';
+  ship: string;
+  vertex: VertexId;
+}
+
+// Movement phase: unload a crew onto a pirate lair (gold field).
+export interface EpCrewToLairAction extends ActionBase {
+  type: 'epCrewToLair';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: load one of your crews left on a captured gold field.
+export interface EpCrewFromLairAction extends ActionBase {
+  type: 'epCrewFromLair';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: unload a crew onto a spice farm (stays for the game).
+export interface EpCrewToFarmAction extends ActionBase {
+  type: 'epCrewToFarm';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: load your spice sack from a farm with your crew on it.
+export interface EpLoadSpiceAction extends ActionBase {
+  type: 'epLoadSpice';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: load the fish haul from a shoal next to the ship.
+export interface EpLoadFishAction extends ActionBase {
+  type: 'epLoadFish';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: unload fish hauls and spice sacks at the Council of Catan.
+export interface EpDeliverAction extends ActionBase {
+  type: 'epDeliver';
+  ship: string;
+}
+
+// Movement phase: a battle-ready ship tries to chase away the pirate ship.
+export interface EpChasePirateAction extends ActionBase {
+  type: 'epChasePirate';
+  ship: string;
+}
+
+// Movement phase: the once-per-turn fish roll.
+export interface EpFishRollAction extends ActionBase {
+  type: 'epFishRoll';
+}
+
+// Place your pirate ship (after a 7 or a chase) and rob a ship owner there.
+export interface EpPlacePirateAction extends ActionBase {
+  type: 'epPlacePirate';
+  hex: HexId;
+  stealFrom: PlayerId | null;
+}
+
 export type Action =
   | PlaceInitialSettlementAction
   | PlaceInitialRoadAction
@@ -1959,7 +2256,25 @@ export type Action =
   | BankTradeCKAction
   | ChoosePillagedCityAction
   | WeddingGiveAction
-  | DefenderTieDrawAction;
+  | DefenderTieDrawAction
+  | EpBuildHarborAction
+  | EpBuildShipAction
+  | EpBuildSettlerAction
+  | EpBuildCrewAction
+  | EpFastGoldAction
+  | EpMoveShipAction
+  | EpBoostShipAction
+  | EpTransferAction
+  | EpFoundSettlementAction
+  | EpCrewToLairAction
+  | EpCrewFromLairAction
+  | EpCrewToFarmAction
+  | EpLoadSpiceAction
+  | EpLoadFishAction
+  | EpDeliverAction
+  | EpChasePirateAction
+  | EpFishRollAction
+  | EpPlacePirateAction;
 
 export type ActionType = Action['type'];
 

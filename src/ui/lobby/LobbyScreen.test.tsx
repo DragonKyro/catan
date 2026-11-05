@@ -33,7 +33,7 @@ function select(label: string): HTMLSelectElement {
 afterEach(cleanup);
 
 describe('online lobby game settings', () => {
-  it('the host picks any of the four rule sets', () => {
+  it('the host picks any of the five rule sets', () => {
     showLobby(defaultLobbyGame(), 'host');
     const rules = select('Rules');
     expect([...rules.options].map((o) => o.text)).toEqual([
@@ -41,6 +41,7 @@ describe('online lobby game settings', () => {
       'Seafarers',
       'Cities & Knights',
       'Traders & Barbarians',
+      'Explorers & Pirates',
     ]);
   });
 
@@ -52,6 +53,15 @@ describe('online lobby game settings', () => {
     const box = (name: RegExp) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
     expect(box(/Catan Event Cards/).disabled).toBe(true);
     expect(box(/Friendly Robber/).disabled).toBe(false);
+  });
+
+  it('Explorers & Pirates: no map or scenario choice, and no variants', () => {
+    showLobby(withLobbyRules(defaultLobbyGame(), 'explorersPirates'), 'host');
+    expect(screen.queryByLabelText('Map')).toBeNull();
+    expect(screen.queryByLabelText('Scenario')).toBeNull();
+    const box = (name: RegExp) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
+    expect(box(/Friendly Robber/).disabled).toBe(true);
+    expect(box(/Catan Event Cards/).disabled).toBe(true);
   });
 
   it('Traders & Barbarians: every scenario', () => {

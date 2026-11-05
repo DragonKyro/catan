@@ -18,7 +18,7 @@ import {
   lobbyRules,
   lobbyScenario,
   lobbyStartProblem,
-  lobbyVariantAllowed,
+  lobbyVariantBlockReason,
   lobbyVariantLabels,
   lobbyVp,
   lobbyVpTarget,
@@ -188,12 +188,13 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
       <div className="lobby-variants" role="group" aria-label="Traders & Barbarians variants">
         <span className="lobby-variants-label">Variants</span>
         {LOBBY_VARIANTS.map((v) => {
-          const allowed = lobbyVariantAllowed(lobby.game, v.id);
+          const blocked = lobbyVariantBlockReason(lobby.game, v.id);
+          const allowed = blocked === null;
           return (
             <label
               key={v.id}
               className="lobby-variant"
-              title={allowed ? v.title : "Can't be combined with Cities & Knights yet"}
+              title={blocked ?? v.title}
             >
               <input
                 type="checkbox"

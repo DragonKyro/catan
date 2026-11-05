@@ -6,10 +6,13 @@
 //   node scripts/render-board.mjs traders:riversOfCatan traders:fishingOnCatan \
 //     --players 4 --seed 3 --coords --steps 300 [--view game] --out board-renders
 //
-// Each spec is <kind>:<id> (kind = base | seafarers | traders | ck), the same
+// Each spec is <kind>:<id> (kind = base | seafarers | traders | ck | ep), the same
 // format as the app's `?preview=` URL (src/ui/mapBuilder/ScenarioPreview.tsx).
 // Writes <out>/<kind>-<id>-<players>p-s<seed>[-m<steps>][-game].png. `--view game`
 // shows the whole game screen (seat 1 human) instead of the bare board.
+// `--zoom 3 --at 0.4,0.5` magnifies the bare board around that point
+// (fractions of its width / height) to check small pieces. `--stop-at
+// <phase>` (game view) plays on until seat 1 acts in that phase.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -27,6 +30,9 @@ let size = '1100,1000';
 let variants = '';
 let dialog = '';
 let mode = '';
+let zoom = '';
+let stopAt = '';
+let at = '';
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--players') players = Number(args[++i]);
@@ -39,6 +45,9 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--variants') variants = args[++i];
   else if (a === '--dialog') dialog = args[++i];
   else if (a === '--mode') mode = args[++i];
+  else if (a === '--zoom') zoom = args[++i];
+  else if (a === '--stop-at') stopAt = args[++i];
+  else if (a === '--at') at = args[++i];
   else specs.push(a);
 }
 if (specs.length === 0) {
@@ -59,8 +68,8 @@ try {
   await chrome.navigate(base);
   await chrome.waitFor('#root > *', 60000);
   for (const spec of specs) {
-    const url = `${base}?preview=${encodeURIComponent(spec)}&players=${players}&seed=${seed}${coords ? '&coords=1' : ''}${steps ? `&steps=${steps}` : ''}${view === 'game' ? '&view=game' : ''}${variants ? `&variants=${variants}` : ''}${dialog ? `&dialog=${dialog}` : ''}${mode ? `&mode=${mode}` : ''}`;
-    const file = resolve(join(out, `${spec.replace(':', '-')}-${players}p-s${seed}${steps ? `-m${steps}` : ''}${view === 'game' ? '-game' : ''}${variants ? `-${variants.replace(/,/g, '+')}` : ''}${dialog ? `-${dialog}` : ''}${mode ? `-${mode}` : ''}.png`));
+    const url = `${base}?preview=${encodeURIComponent(spec)}&players=${players}&seed=${seed}${coords ? '&coords=1' : ''}${steps ? `&steps=${steps}` : ''}${view === 'game' ? '&view=game' : ''}${variants ? `&variants=${variants}` : ''}${dialog ? `&dialog=${dialog}` : ''}${mode ? `&mode=${mode}` : ''}${zoom ? `&zoom=${zoom}` : ''}${at ? `&at=${at}` : ''}${stopAt ? `&stopAt=${stopAt}` : ''}`;
+    const file = resolve(join(out, `${spec.replace(':', '-')}-${players}p-s${seed}${steps ? `-m${steps}` : ''}${view === 'game' ? '-game' : ''}${variants ? `-${variants.replace(/,/g, '+')}` : ''}${dialog ? `-${dialog}` : ''}${mode ? `-${mode}` : ''}${zoom ? `-z${zoom}@${at.replace(',', '_')}` : ''}${stopAt ? `-${stopAt}` : ''}.png`));
     await chrome.navigate(url);
     // The fast-forward runs while the page loads; wait for the screen it
     // renders (or the preview's error message) before the shot.

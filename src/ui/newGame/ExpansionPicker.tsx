@@ -19,6 +19,12 @@ import {
   CITIES_AND_KNIGHTS_MAX_PLAYERS,
 } from '@/game/modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
+import {
+  EP_DEFAULT_VP,
+  EP_MAX_PLAYERS,
+  EP_MIN_PLAYERS,
+  EXPLORERS_PIRATES_EXPANSION_ID,
+} from '@/game/modules/explorersPirates/constants';
 import './ExpansionPicker.css';
 
 export interface ExpansionPickerValue {
@@ -28,6 +34,9 @@ export interface ExpansionPickerValue {
   // Traders & Barbarians — mutually exclusive with Seafarers and C&K in this
   // commit (board-merging and rule-combos are deferred).
   traders: boolean;
+  // Explorers & Pirates: its own map and turn; combines with nothing else
+  // (no T&B variants either).
+  explorersPirates: boolean;
   scenarioId: string;
   baseScenarioId: string;
   tradersScenarioId: string;
@@ -49,6 +58,16 @@ export const TRADERS_SCENARIOS_LIST = TRADERS_SCENARIO_ORDER;
 // loose because each scenario type carries its own metadata fields; callers
 // read what they need.
 export function activeScenario(v: ExpansionPickerValue) {
+  if (v.explorersPirates) {
+    return {
+      kind: 'explorersPirates' as const,
+      name: 'Explorers & Pirates',
+      minPlayers: EP_MIN_PLAYERS,
+      maxPlayers: EP_MAX_PLAYERS,
+      defaultVpToWin: EP_DEFAULT_VP,
+      defaultVpToWin5_6: undefined as number | undefined,
+    };
+  }
   if (v.traders) {
     const s = getTradersScenario(v.tradersScenarioId);
     return {
@@ -99,6 +118,7 @@ function expansionIds(v: ExpansionPickerValue): string[] {
   if (v.seafarers) out.push('seafarers');
   if (v.citiesKnights) out.push(CITIES_AND_KNIGHTS_EXPANSION_ID);
   if (v.traders) out.push(TRADERS_EXPANSION_ID);
+  if (v.explorersPirates) out.push(EXPLORERS_PIRATES_EXPANSION_ID);
   return out;
 }
 
@@ -115,6 +135,7 @@ export const DEFAULT_EXPANSIONS: ExpansionPickerValue = {
   seafarers: false,
   citiesKnights: false,
   traders: false,
+  explorersPirates: false,
   scenarioId: DEFAULT_SCENARIO_ID,
   baseScenarioId: DEFAULT_BASE_SCENARIO_ID,
   tradersScenarioId: 'riversOfCatan',
@@ -139,7 +160,7 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
           falls through to the legacy 19/30/37-hex generator; the other entries
           are colonist.io-style Fun Maps. Hidden when Seafarers or T&B is on
           because those expansions supply their own board shapes. */}
-      {!value.seafarers && !value.traders && (
+      {!value.seafarers && !value.traders && !value.explorersPirates && (
         <label className="expansion-picker-scenario">
           <span>Base map</span>
           <select
@@ -160,15 +181,15 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
       <label
         className="expansion-picker-row"
         title={
-          value.citiesKnights || value.traders
-            ? "Disable the other expansion first — Seafarers can't yet be combined with Cities & Knights or Traders & Barbarians."
+          value.citiesKnights || value.traders || value.explorersPirates
+            ? "Disable the other expansion first — Seafarers can't yet be combined with another expansion."
             : undefined
         }
       >
         <input
           type="checkbox"
           checked={value.seafarers}
-          disabled={value.citiesKnights || value.traders}
+          disabled={value.citiesKnights || value.traders || value.explorersPirates}
           onChange={(e) => onChange({ ...value, seafarers: e.target.checked })}
         />
         <span>Seafarers</span>
@@ -195,15 +216,15 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
       <label
         className="expansion-picker-row"
         title={
-          value.seafarers || value.traders
-            ? "Disable the other expansion first — C&K can't yet be combined with Seafarers or Traders & Barbarians."
+          value.seafarers || value.traders || value.explorersPirates
+            ? "Disable the other expansion first — C&K can't yet be combined with another expansion."
             : undefined
         }
       >
         <input
           type="checkbox"
           checked={value.citiesKnights}
-          disabled={value.seafarers || value.traders}
+          disabled={value.seafarers || value.traders || value.explorersPirates}
           onChange={(e) =>
             onChange({ ...value, citiesKnights: e.target.checked })
           }
@@ -214,7 +235,7 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
       <label
         className="expansion-picker-row"
         title={
-          value.seafarers || value.citiesKnights
+          value.seafarers || value.citiesKnights || value.explorersPirates
             ? "Disable the other expansion first — Traders & Barbarians can't yet be combined."
             : undefined
         }
@@ -222,7 +243,7 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
         <input
           type="checkbox"
           checked={value.traders}
-          disabled={value.seafarers || value.citiesKnights}
+          disabled={value.seafarers || value.citiesKnights || value.explorersPirates}
           onChange={(e) => onChange({ ...value, traders: e.target.checked })}
         />
         <span>Traders &amp; Barbarians</span>
@@ -247,21 +268,49 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
         </>
       )}
 
-      {/* T&B variants combine with any game (rulebook p. 4-6). */}
+      <label
+        className="expansion-picker-row"
+        title={
+          value.seafarers || value.citiesKnights || value.traders
+            ? "Disable the other expansion first — Explorers & Pirates can't be combined."
+            : 'The complete Explorers & Pirates scenario (3-4 players, 17 VP): explore, pirate lairs, fish and spices'
+        }
+      >
+        <input
+          type="checkbox"
+          checked={value.explorersPirates}
+          disabled={value.seafarers || value.citiesKnights || value.traders}
+          onChange={(e) => onChange({ ...value, explorersPirates: e.target.checked })}
+        />
+        <span>Explorers &amp; Pirates</span>
+      </label>
+
+      {/* T&B variants combine with any game (rulebook p. 4-6) except
+          Explorers & Pirates (no robber, harbors or plain dice roll). */}
       <span className="expansion-picker-label">Traders &amp; Barbarians variants</span>
       <VariantToggle
         value={value}
         onChange={onChange}
         flag="friendlyRobber"
         label="Friendly Robber"
-        title="The robber may not go to a hex with a building of a player who has only 2 VPs"
+        title={
+          value.explorersPirates
+            ? EP_NO_VARIANTS
+            : 'The robber may not go to a hex with a building of a player who has only 2 VPs'
+        }
+        disabled={value.explorersPirates}
       />
       <VariantToggle
         value={value}
         onChange={onChange}
         flag="strongestPorts"
         label="Strongest Ports (+1 VP target)"
-        title="3+ VPs in buildings on harbors takes a 2 VP tile; a player with more takes it over"
+        title={
+          value.explorersPirates
+            ? EP_NO_VARIANTS
+            : '3+ VPs in buildings on harbors takes a 2 VP tile; a player with more takes it over'
+        }
+        disabled={value.explorersPirates}
       />
       <VariantToggle
         value={value}
@@ -269,11 +318,13 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
         flag="eventCards"
         label="Catan Event Cards (deck replaces dice)"
         title={
-          value.citiesKnights
-            ? "Can't be combined with Cities & Knights yet"
-            : 'Flip an event card each turn instead of rolling: resolve its event, then produce for its number'
+          value.explorersPirates
+            ? EP_NO_VARIANTS
+            : value.citiesKnights
+              ? "Can't be combined with Cities & Knights yet"
+              : 'Flip an event card each turn instead of rolling: resolve its event, then produce for its number'
         }
-        disabled={value.citiesKnights}
+        disabled={value.citiesKnights || value.explorersPirates}
       />
     </div>
   );
@@ -311,9 +362,16 @@ function VariantToggle({
 }
 
 export function expansionListFrom(v: ExpansionPickerValue): string[] {
-  const out: string[] = [];
-  if (v.seafarers) out.push('seafarers');
-  if (v.citiesKnights) out.push(CITIES_AND_KNIGHTS_EXPANSION_ID);
-  if (v.traders) out.push(TRADERS_EXPANSION_ID);
-  return out;
+  return expansionIds(v);
+}
+
+const EP_NO_VARIANTS = "Can't be combined with Explorers & Pirates";
+
+// The T&B variants the picker value really turns on: none with Explorers &
+// Pirates, no Event Cards with Cities & Knights.
+export function activeVariants(
+  v: ExpansionPickerValue,
+): ExpansionPickerValue['tradersVariants'] | undefined {
+  if (v.explorersPirates) return undefined;
+  return { ...v.tradersVariants, eventCards: v.tradersVariants.eventCards && !v.citiesKnights };
 }

@@ -8,6 +8,7 @@ import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../modules/citiesAndKnights/con
 import { calculateIslandBonusVp } from '../modules/seafarers/islandBonus';
 import { calculateTribeVp } from '../modules/seafarers/tribe';
 import { calculateClothVp } from '../modules/seafarers/cloth';
+import { calculateExplorersPiratesVp } from '../modules/explorersPirates/state';
 
 // Cities & Knights — 2 VP per metropolis the player owns (1 each at level 4
 // temporary, locked at level 5 permanent — either way it's still 2 VP).
@@ -101,6 +102,9 @@ export function calculateVictoryPoints(
   // Traders & Barbarians scenario: 1 VP per delivered commodity token, +1
   // for a fully upgraded wagon.
   vp += calculateTradersBarbariansVp(state, playerId);
+  // Explorers & Pirates: harbor settlements (2 VP), mission tracks and the
+  // three bonus tiles.
+  vp += calculateExplorersPiratesVp(state, playerId);
   return vp;
 }
 

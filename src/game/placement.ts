@@ -5,6 +5,11 @@ import {
   edgeTouchesConqueredHex,
   vertexTouchesConqueredHex,
 } from './modules/traders/barbarianAttack/state';
+import {
+  epEdgeBuildable,
+  epSetupVertexAllowed,
+  epVertexBuildable,
+} from './modules/explorersPirates/state';
 
 // Placement predicates — shared between action handlers (for validation) and
 // the UI (for highlighting legal placements). Pure functions, no mutation.
@@ -48,6 +53,9 @@ export function canPlaceSettlement(
   if (state.knights?.[vertexId]) return false;
   // T&B / Barbarian Attack: nothing is built on a conquered hex's corners.
   if (vertexTouchesConqueredHex(state, vertexId)) return false;
+  // Explorers & Pirates: only next to explored hexes, captured gold fields
+  // and spice farms with your crew.
+  if (!epVertexBuildable(state, playerId, vertexId)) return false;
   // T&B Catan Event Cards / Earthquake: no settlement at either end of a
   // damaged road.
   if (state.damagedRoads?.some((e) => state.board.edges[e]?.vertices.includes(vertexId))) {
@@ -102,6 +110,8 @@ export function canConnectRoad(
   if (state.roadBlockedEdges?.includes(edgeId)) return false;
   // T&B / Barbarian Attack: nothing is built on a conquered hex's edges.
   if (edgeTouchesConqueredHex(state, edgeId)) return false;
+  // Explorers & Pirates: the same land rules as settlements.
+  if (!epEdgeBuildable(state, playerId, edgeId)) return false;
   for (const p of state.players) {
     if (p.roads.includes(edgeId)) return false;
     if (p.ships.includes(edgeId)) return false;
@@ -199,6 +209,9 @@ export function canPlaceInitialSettlement(
     }
   }
   if (!canStartOnIsland(state, vertexId)) return false;
+  // Explorers & Pirates: the harbor settlement on a marked intersection,
+  // then a settlement on the starting island.
+  if (!epSetupVertexAllowed(state, vertexId)) return false;
   return true;
 }
 

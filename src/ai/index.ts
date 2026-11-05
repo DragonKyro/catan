@@ -22,6 +22,7 @@ import {
 import { chooseFishSwap } from './traders/fish';
 import { chooseCitiesAndKnightsAction, isCitiesAndKnights } from './citiesAndKnights';
 import { chooseTradersBarbariansAction } from './traders/tradersBarbarians';
+import { chooseExplorersPiratesAction } from './explorersPirates';
 
 function randomDice(): [number, number] {
   return [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)];
@@ -32,6 +33,13 @@ function randomDice(): [number, number] {
 // The caller (React driver) dispatches the action and re-invokes after
 // the new state arrives.
 export function chooseAction(state: GameState, playerId: PlayerId): Action | null {
+  // Explorers & Pirates plays its own setup, turn and Movement phase (ships,
+  // settlers, crews, missions, the pirate ship).
+  if (state.explorersPirates) {
+    const ep = chooseExplorersPiratesAction(state, playerId, randomDice);
+    if (ep !== undefined) return ep;
+  }
+
   // Cities & Knights plays its own rules (knights, improvements, progress
   // cards, commodities); setup falls through to the shared code below.
   if (isCitiesAndKnights(state)) {

@@ -1,6 +1,7 @@
 // What the online lobby's choices mean for the game: the base game (any Fun
-// Map), Seafarers (any scenario), Cities & Knights (the maps it allows) or
-// Traders & Barbarians (any scenario), plus the T&B variants; the seat range
+// Map), Seafarers (any scenario), Cities & Knights (the maps it allows),
+// Traders & Barbarians (any scenario) or Explorers & Pirates, plus the T&B
+// variants; the seat range
 // each allows, the VP target, and the createGame settings. Shared by
 // networkStore (to start the game) and the lobby screen (to show it). The
 // rules mirror the New Game screen (ui/newGame/ExpansionPicker + NewGame).
@@ -28,6 +29,12 @@ import {
   CITIES_AND_KNIGHTS_MAX_PLAYERS,
 } from '@/game/modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
+import {
+  EP_DEFAULT_VP,
+  EP_MAX_PLAYERS,
+  EP_MIN_PLAYERS,
+  EXPLORERS_PIRATES_EXPANSION_ID,
+} from '@/game/modules/explorersPirates/constants';
 import { DEFAULT_AI_LEVEL, supportsNeuralAi } from '@/ai/nn';
 import type { LobbyGame, LobbyState, LobbyVariants } from '@/net/types';
 
@@ -40,14 +47,15 @@ export const ONLINE_TRADERS_SCENARIOS = TRADERS_SCENARIO_ORDER;
 /** Every base map; `lobbyBaseMaps` narrows it to what the chosen rules allow. */
 export const ONLINE_BASE_MAPS = BASE_SCENARIO_ORDER;
 
-/** The four rule sets the lobby offers (one expansion at a time, as offline). */
-export type LobbyRules = 'base' | 'seafarers' | 'citiesKnights' | 'traders';
+/** The rule sets the lobby offers (one expansion at a time, as offline). */
+export type LobbyRules = 'base' | 'seafarers' | 'citiesKnights' | 'traders' | 'explorersPirates';
 
 export const LOBBY_RULES: { id: LobbyRules; label: string }[] = [
   { id: 'base', label: 'Base game' },
   { id: 'seafarers', label: 'Seafarers' },
   { id: 'citiesKnights', label: 'Cities & Knights' },
   { id: 'traders', label: 'Traders & Barbarians' },
+  { id: 'explorersPirates', label: 'Explorers & Pirates' },
 ];
 
 export const LOBBY_VARIANTS: { id: keyof LobbyVariants; label: string; title: string }[] = [
@@ -78,6 +86,7 @@ export function defaultLobbyGame(): LobbyGame {
     citiesKnights: false,
     traders: false,
     tradersScenarioId: TRADERS_SCENARIO_ORDER[0]?.id ?? 'riversOfCatan',
+    explorersPirates: false,
     variants: { ...NO_VARIANTS },
   };
 }
@@ -86,6 +95,7 @@ export function lobbyRules(game: LobbyGame): LobbyRules {
   if (game.seafarers) return 'seafarers';
   if (game.citiesKnights) return 'citiesKnights';
   if (game.traders) return 'traders';
+  if (game.explorersPirates) return 'explorersPirates';
   return 'base';
 }
 
@@ -97,14 +107,27 @@ function lobbyExpansions(game: LobbyGame): string[] {
       return [CITIES_AND_KNIGHTS_EXPANSION_ID];
     case 'traders':
       return [TRADERS_EXPANSION_ID];
+    case 'explorersPirates':
+      return [EXPLORERS_PIRATES_EXPANSION_ID];
     case 'base':
       return [];
   }
 }
 
-/** Event Cards can't be combined with Cities & Knights yet (createGame refuses it). */
+/**
+ * Why a variant can't be picked with these rules (createGame refuses the
+ * combination), or null when it can: Event Cards with Cities & Knights, any
+ * variant with Explorers & Pirates (no robber, harbors or plain dice roll).
+ */
+export function lobbyVariantBlockReason(game: LobbyGame, id: keyof LobbyVariants): string | null {
+  const rules = lobbyRules(game);
+  if (rules === 'explorersPirates') return "Can't be combined with Explorers & Pirates";
+  if (id === 'eventCards' && rules === 'citiesKnights') return "Can't be combined with Cities & Knights yet";
+  return null;
+}
+
 export function lobbyVariantAllowed(game: LobbyGame, id: keyof LobbyVariants): boolean {
-  return !(id === 'eventCards' && game.citiesKnights);
+  return lobbyVariantBlockReason(game, id) === null;
 }
 
 /**
@@ -120,6 +143,7 @@ export function normalizeLobbyGame(game: LobbyGame): LobbyGame {
     seafarers: rules === 'seafarers',
     citiesKnights: rules === 'citiesKnights',
     traders: rules === 'traders',
+    explorersPirates: rules === 'explorersPirates',
     variants: { ...NO_VARIANTS, ...game.variants },
   };
   if (!baseScenarioAllowed(getBaseScenario(next.baseScenarioId), lobbyExpansions(next))) {
@@ -138,6 +162,7 @@ export function withLobbyRules(game: LobbyGame, rules: LobbyRules): LobbyGame {
     seafarers: rules === 'seafarers',
     citiesKnights: rules === 'citiesKnights',
     traders: rules === 'traders',
+    explorersPirates: rules === 'explorersPirates',
   });
 }
 
@@ -161,6 +186,12 @@ export function lobbyScenario(game: LobbyGame): LobbyScenarioInfo {
     maxPlayers: Math.min(MAX_SEATS, max),
   });
   switch (lobbyRules(game)) {
+    case 'explorersPirates':
+      return {
+        name: 'Explorers & Pirates',
+        ...seats(EP_MIN_PLAYERS, EP_MAX_PLAYERS),
+        recommendedVp: () => EP_DEFAULT_VP,
+      };
     case 'traders': {
       const s = getTradersScenario(game.tradersScenarioId);
       const vp = s.defaultVpToWin ?? 10;

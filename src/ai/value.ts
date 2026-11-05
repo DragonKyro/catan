@@ -17,6 +17,7 @@ import { hexPips } from '@/game/board/hexNumbers';
 import { tradersVertexBonus } from './traders/value';
 import { ckReportNeeds, ckVertexBonus } from './citiesAndKnights/value';
 import { isCitiesAndKnights } from './citiesAndKnights/common';
+import { epNeeds } from './explorersPirates/needs';
 
 // Resource weights tuned for typical Catan economy. Ore/wheat slightly
 // scarce; sheep slightly abundant.
@@ -41,7 +42,8 @@ export function terrainWeight(t: Terrain): number {
     t === 'lake' ||
     t === 'wateringHole' ||
     t === 'castle' ||
-    t === 'commodity'
+    t === 'commodity' ||
+    t === 'spice'
   )
     return 0;
   // Gold hexes pay any resource on roll — the player chooses, so they
@@ -285,13 +287,20 @@ export interface NeedReport {
   // Suggested goal. 'ship' = Seafarers, when a worthwhile ship is the way
   // forward (no settlement spot open on land).
   // 'knight' = Cities & Knights (recruit / activate), which has no dev cards.
-  goal: 'city' | 'settlement' | 'ship' | 'road' | 'devCard' | 'knight' | 'none';
+  // 'harbor' / 'settler' / 'crew' = Explorers & Pirates builds.
+  goal: 'city' | 'settlement' | 'ship' | 'road' | 'devCard' | 'knight' | 'harbor' | 'settler' | 'crew' | 'none';
 }
 
 export function reportNeeds(state: GameState, playerId: PlayerId): NeedReport {
   // Cities & Knights has its own build menu (no dev cards; knights, city
   // improvements) — its needs drive the shared trade / discard logic.
   if (isCitiesAndKnights(state)) return ckReportNeeds(state, playerId);
+  // Explorers & Pirates: harbor settlements, settlers, crews, ships (no
+  // cities or dev cards).
+  if (state.explorersPirates) {
+    const ep = epNeeds(state, playerId);
+    return { goal: ep.goal, byResource: ep.byResource };
+  }
   const player = state.players.find((p) => p.id === playerId)!;
   const r = player.resources;
   const byResource: Record<Resource, number> = {

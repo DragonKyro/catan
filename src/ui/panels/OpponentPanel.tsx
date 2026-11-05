@@ -14,6 +14,7 @@ import { playerColorVar } from '@/ui/shared/playerColors';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { CKOpponentStats } from './citiesAndKnights/CKOpponent';
+import { EpOpponentPieces, EpOpponentStats } from '@/ui/game/explorersPirates/ExplorersPiratesHand';
 import './OpponentPanel.css';
 
 // Base game piece limits per player. Engine already enforces these via the
@@ -40,6 +41,8 @@ export function OpponentPanel() {
   const actingId = getActingPlayerId(game);
   const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
+  // Explorers & Pirates: no development cards, its own pieces.
+  const hasEP = !!game.explorersPirates;
 
   // 5+ player paired-player rule: identify Player 1 (the dice-roller) and
   // Player 2 (third seat to P1's left) for the current paired turn so we
@@ -122,7 +125,7 @@ export function OpponentPanel() {
             </div>
             <div className="opp-stats">
               <span title="Resource cards">🂠 {totalResources(p.resources)}</span>
-              {!hasCK && <span title="Dev cards (face down)">🂡 {cards}</span>}
+              {!hasCK && !hasEP && <span title="Dev cards (face down)">🂡 {cards}</span>}
               {!game.noLargestArmy && !hasCK && (
                 <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
               )}
@@ -203,8 +206,12 @@ export function OpponentPanel() {
               )}
               <BarbarianAttackBadges game={game} playerId={p.id} />
               <TradersBarbariansBadges game={game} playerId={p.id} />
+              <EpOpponentStats game={game} player={p} />
             </div>
             {hasCK && <CKOpponentStats game={game} player={p} />}
+            {hasEP ? (
+              <EpOpponentPieces game={game} player={p} />
+            ) : (
             <div className="opp-pieces" title="Pieces remaining (built / cap)">
               <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>
                 🏠 {MAX_SETTLEMENTS - p.settlements.length}
@@ -221,6 +228,7 @@ export function OpponentPanel() {
                 </span>
               )}
             </div>
+            )}
           </div>
         );
       })}

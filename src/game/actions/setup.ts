@@ -81,7 +81,8 @@ export function handlePlaceInitialSettlement(
         t === 'lake' ||
         t === 'wateringHole' ||
         t === 'castle' ||
-        t === 'commodity'
+        t === 'commodity' ||
+        t === 'spice'
       )
         continue;
       grants[t] = (grants[t] ?? 0) + 1;

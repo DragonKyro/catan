@@ -8,6 +8,8 @@ import { pirateStealCandidates } from '@/game/modules/seafarers/actions/movePira
 import { stealResourceCandidates } from '@/game/modules/seafarers/pirateIslands';
 import { useCanAct } from '@/ui/shared/useCanAct';
 import { robberStealCandidates } from '@/game/engine';
+import { pirateVictims } from '@/game/modules/explorersPirates/state';
+import { epVictimNote } from './explorersPirates/EpDialogs';
 
 // "Steal from whom?" after the robber or pirate lands on a hex with several
 // victims, and on a 7 in Pirate Islands (no robber: rob anyone, or no one).
@@ -20,6 +22,8 @@ export function RobberStealDialog() {
   if (!game || !acting || !canAct) return null;
 
   let mode: 'robber' | 'pirate' | 'any' | null = null;
+  // Explorers & Pirates: placing your pirate ship robs a ship owner there.
+  const ep = !!game.explorersPirates && game.phase === 'epPlacePirate';
   if (pendingRobberHex) mode = 'robber';
   else if (pendingPirateHex) mode = 'pirate';
   else if (game.phase === 'stealResource') mode = 'any';
@@ -29,7 +33,9 @@ export function RobberStealDialog() {
   if (mode === 'robber') {
     candidates = robberStealCandidates(game, acting, pendingRobberHex!);
   } else if (mode === 'pirate') {
-    candidates = pirateStealCandidates(game, acting, pendingPirateHex!);
+    candidates = ep
+      ? pirateVictims(game, acting, pendingPirateHex!)
+      : pirateStealCandidates(game, acting, pendingPirateHex!);
   } else {
     candidates = stealResourceCandidates(game, acting);
   }
@@ -39,6 +45,8 @@ export function RobberStealDialog() {
     let action: Action;
     if (mode === 'robber') {
       action = { type: 'moveRobber', playerId: acting, hex: pendingRobberHex!, stealFrom: pid };
+    } else if (mode === 'pirate' && ep) {
+      action = { type: 'epPlacePirate', playerId: acting, hex: pendingPirateHex!, stealFrom: pid };
     } else if (mode === 'pirate') {
       action = {
         type: 'movePirate',
@@ -70,7 +78,9 @@ export function RobberStealDialog() {
           ? 'There is no robber in this scenario: you may steal one random resource card from any player.'
           : cloth
             ? 'Take one random resource card — or one cloth token — from a player with a ship here.'
-            : 'Pick a player to steal one resource card from at random.'}
+            : ep
+              ? 'Rob a player with a ship on this hex: one random resource card, or 1 gold if they have no cards.'
+              : 'Pick a player to steal one resource card from at random.'}
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {candidates.map((pid) => {
@@ -93,9 +103,9 @@ export function RobberStealDialog() {
           );
           return (
             <div key={pid} style={{ display: 'flex', gap: 8 }}>
-              <Button fullWidth disabled={cards === 0} onClick={() => steal(pid)}>
+              <Button fullWidth disabled={cards === 0 && !ep} onClick={() => steal(pid)}>
                 {swatch}
-                {p.name} ({cards} card{cards === 1 ? '' : 's'})
+                {p.name} ({ep ? epVictimNote(game, pid) : `${cards} card${cards === 1 ? '' : 's'}`})
               </Button>
               {cloth && (p.cloth ?? 0) > 0 && (
                 <Button onClick={() => steal(pid, true)} title="Take a cloth token instead">

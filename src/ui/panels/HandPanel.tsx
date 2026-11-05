@@ -11,6 +11,7 @@ import { TradersHandStrip } from './TradersHandStrip';
 import { CKHandCards, CKHandFlags } from './citiesAndKnights/CKHand';
 import { SwiftJourneyChips } from '@/ui/game/traders/TradersBarbariansHand';
 import { tbHiddenCardCount } from '@/game/modules/traders/tradersBarbarians/state';
+import { EpHandStrip, MissionChips } from '@/ui/game/explorersPirates/ExplorersPiratesHand';
 import './HandPanel.css';
 
 export function HandPanel() {
@@ -168,6 +169,8 @@ export function HandPanel() {
             </span>
           )}
           <BarbarianAttackBadges game={game} playerId={player.id} className="hand-flag" />
+          {/* Explorers & Pirates: mission track markers. */}
+          <MissionChips game={game} playerId={player.id} className="hand-flag" />
         </h3>
         <span
           className="hand-vp"
@@ -188,11 +191,21 @@ export function HandPanel() {
         ))}
       </div>
 
-      <TradersHandStrip
-        game={game}
-        player={player}
-        ownTurn={game.playerOrder[game.currentPlayerIndex] === player.id}
-      />
+      {/* Explorers & Pirates: gold and the pieces left share one row (no
+          development cards). */}
+      {game.explorersPirates ? (
+        <EpHandStrip
+          game={game}
+          player={player}
+          ownTurn={game.playerOrder[game.currentPlayerIndex] === player.id}
+        />
+      ) : (
+        <TradersHandStrip
+          game={game}
+          player={player}
+          ownTurn={game.playerOrder[game.currentPlayerIndex] === player.id}
+        />
+      )}
 
       {hasCK && (
         <CKHandCards
@@ -201,7 +214,7 @@ export function HandPanel() {
         />
       )}
 
-      {!hasCK && (
+      {!hasCK && !game.explorersPirates && (
       <div className="hand-section">
         <div className="hand-cards">
           {Object.entries(cardCounts).map(([card, count]) => {

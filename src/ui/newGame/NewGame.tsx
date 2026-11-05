@@ -13,6 +13,7 @@ import {
   DEFAULT_EXPANSIONS,
   expansionListFrom,
   activeScenario,
+  activeVariants,
   type ExpansionPickerValue,
 } from './ExpansionPicker';
 import { ScenarioPreview } from './ScenarioPreview';
@@ -59,6 +60,8 @@ export function NewGame({ onBack }: Props = {}) {
   const newGame = useGameStore((s) => s.newGame);
 
   const scenario = activeScenario(expansions);
+  // Seafarers, T&B and Explorers & Pirates bring their own boards.
+  const usesBaseMap = !expansions.seafarers && !expansions.traders && !expansions.explorersPirates;
   // Fun Maps and Cities & Knights bring their own seat limits.
   const isFunMap =
     scenario.kind === 'base' &&
@@ -68,7 +71,7 @@ export function NewGame({ onBack }: Props = {}) {
     ? customMap.minPlayers
     : isFunMap
       ? scenario.minPlayers
-      : scenario.kind === 'seafarers' || scenario.kind === 'traders'
+      : scenario.kind === 'seafarers' || scenario.kind === 'traders' || scenario.kind === 'explorersPirates'
         ? scenario.minPlayers
         : 3;
   // T&B scenarios: 3-6 (the T&B 5-6 boards; no 7-8).
@@ -76,15 +79,15 @@ export function NewGame({ onBack }: Props = {}) {
     ? customMap.maxPlayers
     : isFunMap
       ? scenario.maxPlayers
-      : scenario.kind === 'seafarers' || scenario.kind === 'traders'
+      : scenario.kind === 'seafarers' || scenario.kind === 'traders' || scenario.kind === 'explorersPirates'
         ? scenario.maxPlayers
         : 8;
   const recommendedVpValue = customMap?.defaultVpToWin ?? recommendedVp(numPlayers, expansions);
   // Trained-network AI levels exist for the base game on the standard board only.
   const neuralAi = !customMap && supportsNeuralAi({
     expansions: expansionListFrom(expansions),
-    baseScenarioId: expansions.seafarers || expansions.traders ? undefined : expansions.baseScenarioId,
-    tradersVariants: expansions.tradersVariants,
+    baseScenarioId: usesBaseMap ? expansions.baseScenarioId : undefined,
+    tradersVariants: activeVariants(expansions),
   });
   const hasAiSeat = types.slice(0, numPlayers).includes('ai');
   const vp = vpOverride ?? recommendedVpValue;
@@ -115,19 +118,12 @@ export function NewGame({ onBack }: Props = {}) {
           : expansionListFrom(expansions),
         scenarioId:
           !customMap && expansions.seafarers ? expansions.scenarioId : undefined,
-        baseScenarioId:
-          !customMap && !expansions.seafarers && !expansions.traders
-            ? expansions.baseScenarioId
-            : undefined,
+        baseScenarioId: !customMap && usesBaseMap ? expansions.baseScenarioId : undefined,
         tradersScenarioId:
           !customMap && expansions.traders ? expansions.tradersScenarioId : undefined,
-        // T&B variants work with any rule set; C&K can't take Event Cards yet.
-        tradersVariants: !customMap
-          ? {
-              ...expansions.tradersVariants,
-              eventCards: expansions.tradersVariants.eventCards && !expansions.citiesKnights,
-            }
-          : undefined,
+        // T&B variants work with any rule set but Explorers & Pirates; C&K
+        // can't take Event Cards yet.
+        tradersVariants: !customMap ? activeVariants(expansions) : undefined,
         turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
         aiLevel: neuralAi ? aiLevel : undefined,
         customMap: customMap ?? undefined,
@@ -175,13 +171,10 @@ export function NewGame({ onBack }: Props = {}) {
   // form state so the preview tracks every setting change.
   const previewExpansions = expansionListFrom(expansions);
   const previewScenarioId = expansions.seafarers ? expansions.scenarioId : undefined;
-  const previewBaseScenarioId =
-    !expansions.seafarers && !expansions.traders
-      ? expansions.baseScenarioId
-      : undefined;
+  const previewBaseScenarioId = usesBaseMap ? expansions.baseScenarioId : undefined;
   const previewCaption = customMap
     ? `${customMap.name} (${numPlayers}p)`
-    : scenario.kind === 'traders'
+    : scenario.kind === 'traders' || scenario.kind === 'explorersPirates'
       ? `${scenario.name} (${numPlayers}p)`
       : isFunMap
         ? `${scenario.name} (${numPlayers}p)`

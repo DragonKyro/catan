@@ -38,6 +38,13 @@ import {
   TradersBarbariansMainButtons,
   TradersBarbariansPhaseBar,
 } from '@/ui/game/traders/TradersBarbariansActions';
+import {
+  EpMainButtons,
+  EpModeExtras,
+  EpPhaseBar,
+  epModeHint,
+  epPhaseHint,
+} from '@/ui/game/explorersPirates/ExplorersPiratesActions';
 import './ActionBar.css';
 
 export function ActionBar() {
@@ -157,7 +164,7 @@ export function ActionBar() {
           : null;
       return wrap(
         <div className="actionbar">
-          <div className="actionbar-hint actionbar-slot-wide">{modeHint(uiMode)}</div>
+          <div className="actionbar-hint actionbar-slot-wide">{modeHint(uiMode, game)}</div>
           {rb?.first && (
             <Button
               onClick={() =>
@@ -175,11 +182,21 @@ export function ActionBar() {
           )}
           {back && <Button onClick={back}>◂ Pick another ship</Button>}
           {hasCK && <CKModeExtras acting={acting} uiMode={uiMode} />}
+          {game.explorersPirates && <EpModeExtras game={game} acting={acting} uiMode={uiMode} />}
           <div className="actionbar-slot">
             <Button fullWidth onClick={cancel}>
               Cancel
             </Button>
           </div>
+        </div>,
+      );
+    }
+    // Explorers & Pirates: its own Action phase (harbor settlements, ships,
+    // settlers, crews; no cities or development cards).
+    if (game.explorersPirates) {
+      return wrap(
+        <div className="actionbar">
+          <EpMainButtons game={game} acting={acting} />
         </div>,
       );
     }
@@ -381,6 +398,10 @@ export function ActionBar() {
   if (phase === 'moveBarbarian' || phase === 'wagonMoves') {
     return wrap(<TradersBarbariansPhaseBar game={game} acting={acting} />);
   }
+  // Explorers & Pirates: the Movement phase, placing your pirate ship.
+  if (phase === 'epMovement' || phase === 'epPlacePirate') {
+    return wrap(<EpPhaseBar game={game} acting={acting} />);
+  }
 
   // Other phases are driven by board highlights or dialogs; say what's
   // expected so a player is never left guessing.
@@ -394,7 +415,7 @@ function hasShipSpot(game: GameState, pid: PlayerId): boolean {
   );
 }
 
-function modeHint(mode: ReturnType<typeof useGameStore.getState>['uiMode']): string {
+function modeHint(mode: ReturnType<typeof useGameStore.getState>['uiMode'], game: GameState): string {
   switch (mode.kind) {
     case 'buildRoad':
       return 'Pick a highlighted edge for your road.';
@@ -417,12 +438,14 @@ function modeHint(mode: ReturnType<typeof useGameStore.getState>['uiMode']): str
     case 'fishRoad':
       return 'Pick a highlighted edge for your free road (paid with fish).';
     default:
-      return ckModeHint(mode) ?? '';
+      return epModeHint(mode, game) ?? ckModeHint(mode) ?? '';
   }
 }
 
 function phaseHint(game: GameState, pid: PlayerId): string | null {
   const seafarers = game.settings.expansions.includes('seafarers');
+  const ep = epPhaseHint(game);
+  if (ep) return ep;
   if (isSetupPhase(game.phase)) {
     const step = game.setupState?.step;
     const round =

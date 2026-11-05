@@ -37,7 +37,11 @@ export function TradersHandStrip({ game, player, ownTurn }: Props) {
       {coins && (
         <span
           className="hand-traders-group"
-          title={`Gold: ${gold}. Spend 2 gold for any resource card (${spendsLeft} of ${MAX_GOLD_SPENDS_PER_TURN} left this turn); buy 1 gold with cards at your bank rate. Coins aren't cards: no discard, no theft.`}
+          title={`Gold: ${gold}. Spend 2 gold for any resource card (${spendsLeft} of ${MAX_GOLD_SPENDS_PER_TURN} left this turn); buy 1 gold with cards at your bank rate. ${
+            game.explorersPirates
+              ? "Coins aren't cards: no discard — but a pirate takes 1 gold from a player with no cards, and tributes are paid in gold."
+              : "Coins aren't cards: no discard, no theft."
+          }`}
         >
           <CoinIcon size={18} />
           <span className="hand-traders-count">{gold}</span>

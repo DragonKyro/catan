@@ -13,6 +13,7 @@ import { seafarersLogLines } from './seafarersLog';
 import { barbarianAttackLogLines } from './barbarianAttackLog';
 import { tradersLogLines } from './tradersLog';
 import { tradersBarbariansLogLines } from './tradersBarbariansLog';
+import { explorersPiratesLogLines } from './explorersPiratesLog';
 import { hexRollsOn } from '@/game/board/hexNumbers';
 import { citiesKnightsLogLines } from './citiesKnightsLog';
 import { pipsByResource } from '@/ai/value';
@@ -757,6 +758,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     for (const line of tradersBarbariansLogLines(before, action, after)) {
       append.push({ id: stamp(), kind: 'seafarers', ...line });
     }
+    // Explorers & Pirates: exploration, ships, missions, the pirate ship.
+    for (const line of explorersPiratesLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
     // T&B Merchant Trains voting round + Catan Event Cards (same plain-text
     // entry shape as the Seafarers lines).
     for (const line of tradersLogLines(before, action, after)) {
@@ -787,6 +792,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
       const isRevolutionStart =
         turnHolderIdx === 0 && (get().turnNumber === 0 ||
           before.phase === 'main' ||
+          // Turns that end in their own phase: Explorers & Pirates'
+          // Movement phase, the T&B wagon / knight moves.
+          before.phase === 'epMovement' ||
+          before.phase === 'wagonMoves' ||
+          before.phase === 'barbarianKnightMoves' ||
           before.phase === 'setupRound2' ||
           before.phase === 'setupRound3');
       if (isRevolutionStart) {

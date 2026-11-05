@@ -32,6 +32,7 @@ import { RobberOrPirateDialog } from '@/ui/dialogs/RobberOrPirateDialog';
 import { CitiesKnightsDialogs } from '@/ui/dialogs/citiesAndKnights/CKDialogs';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { AlchemyDialog } from '@/ui/dialogs/AlchemyDialog';
+import { EpFastGoldDialog, EpTransferDialog } from '@/ui/dialogs/explorersPirates/EpDialogs';
 import { GameOverDialog } from '@/ui/dialogs/GameOverDialog';
 import { PassDeviceScreen } from '@/ui/handoff/PassDeviceScreen';
 import { Rulebook } from '@/rulebook/Rulebook';
@@ -105,6 +106,9 @@ export function GameView() {
       <RobberStealDialog />
     ) : null;
   const alchemyDialog = dialog === 'alchemy' ? <AlchemyDialog /> : null;
+  // Explorers & Pirates: Fast Gold, loading / unloading a ship.
+  const epDialog =
+    dialog === 'epFastGold' ? <EpFastGoldDialog /> : dialog === 'epTransfer' ? <EpTransferDialog /> : null;
 
   return (
     <div className="gameview">
@@ -153,6 +157,8 @@ export function GameView() {
             </button>
             {showCosts && <CostCheatsheet onClose={() => setShowCosts(false)} />}
           </div>
+          {/* Explorers & Pirates has no development cards. */}
+          {!game.explorersPirates && (
           <div className="gameview-topctrl-pop">
             <button
               type="button"
@@ -174,6 +180,7 @@ export function GameView() {
                 <DevCardCheatsheet game={game} onClose={() => setShowDevCards(false)} />
               ))}
           </div>
+          )}
         </div>
         {/* Compact screens: the side panel (players, scores, log, chat) is a
             drawer, opened from here. Hidden by CSS on large screens. */}
@@ -196,7 +203,7 @@ export function GameView() {
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
             bottom-center of the board, above the hand strip. */}
-        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || tradersDialog || wagonVoteDialog || eventDialog || alchemyDialog) && (
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || tradersDialog || wagonVoteDialog || eventDialog || alchemyDialog || epDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
             {monopolyDialog}
@@ -211,6 +218,7 @@ export function GameView() {
             {goldDialog}
             {robberOrPirateDialog}
             {alchemyDialog}
+            {epDialog}
           </div>
         )}
         {/* Cities & Knights prompts (sub-phases, cards, knights, tracks). */}

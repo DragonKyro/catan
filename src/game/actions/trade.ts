@@ -17,9 +17,10 @@ import { addGold } from '../modules/traders/coins/gold';
 
 export function getBankTradeRate(state: GameState, playerId: string, give: Resource): number {
   const player = getPlayer(state, playerId);
-  let rate = 4;
+  // Explorers & Pirates trades 3:1 with the supply (state.supplyTradeRate).
+  let rate = state.supplyTradeRate ?? 4;
   if (player.ports.includes(give)) rate = 2;
-  else if (player.ports.includes('generic')) rate = 3;
+  else if (player.ports.includes('generic')) rate = Math.min(rate, 3);
   // C&K Merchant token: 2:1 on the resource the merchant's hex produces.
   if (state.merchant?.ownerId === playerId) {
     const hex = state.board.hexes[state.merchant.hexId];

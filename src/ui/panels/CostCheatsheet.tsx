@@ -15,6 +15,7 @@ import {
   TB_BOOST_COST,
   TB_WAGON_UPGRADE_COSTS,
 } from '@/game/modules/traders/tradersBarbarians/constants';
+import { EP_COSTS } from '@/game/modules/explorersPirates/constants';
 
 interface Row {
   icon: string;
@@ -54,6 +55,17 @@ const TB_ROWS: Row[] = [
   { icon: '🛒', label: 'Wagon L1→2 / L2→3', cost: TB_WAGON_UPGRADE_COSTS[1]! },
   { icon: '🛒', label: 'Wagon L3→4 / L4→5', cost: TB_WAGON_UPGRADE_COSTS[3]! },
   { icon: '🌾', label: 'Wagon +2 MP', cost: TB_BOOST_COST },
+];
+
+// Explorers & Pirates (player aid): no cities or development cards.
+const EP_ROWS: Row[] = [
+  BASE_ROWS[0]!,
+  BASE_ROWS[1]!,
+  { icon: '⚓', label: 'Harbor settlement', cost: EP_COSTS.harbor },
+  { icon: '⛵', label: 'Ship', cost: EP_COSTS.ship },
+  { icon: '🧑', label: 'Settler', cost: EP_COSTS.settler },
+  { icon: '👥', label: 'Crew', cost: EP_COSTS.crew },
+  { icon: '🐑', label: 'Ship +2 MP', cost: EP_COSTS.boost },
 ];
 
 interface Props {
@@ -104,6 +116,7 @@ export function CostCheatsheet({ onClose }: Props) {
       ...CK_KNIGHT_ROWS,
     ];
   }
+  if (useGameStore.getState().game?.explorersPirates) rows = EP_ROWS;
   const notes = tradersCostNotes(useGameStore.getState().game);
   const ref = useRef<HTMLDivElement>(null);
 

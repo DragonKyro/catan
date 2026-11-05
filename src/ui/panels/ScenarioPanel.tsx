@@ -14,6 +14,7 @@ import { MerchantTrainsBlock } from './MerchantTrainsBlock';
 import { TradersVariantsBlock, hasTradersVariantBlock } from './TradersVariantsBlock';
 import { RiversTracker, FishingTracker } from './traders/RiversFishingTrackers';
 import { TradersBarbariansTracker } from './traders/TradersBarbariansTracker';
+import { ExplorersPiratesTracker } from './explorersPirates/ExplorersPiratesTracker';
 import './ScenarioPanel.css';
 
 // Scenario-specific progress tracker. Returns whether ANY scenario tracker
@@ -21,6 +22,8 @@ import './ScenarioPanel.css';
 // Scenario tab at all.
 export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getState>['game']): boolean {
   if (!state) return false;
+  // Explorers & Pirates: missions, exploration, lairs, farms, fish, pirate.
+  if (state.explorersPirates) return true;
   // T&B variants (Strongest Ports, Event Cards, Friendly Robber) show in any game.
   if (hasTradersVariantBlock(state)) return true;
   const hasSeafarers = state.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
@@ -86,6 +89,16 @@ export function ScenarioPanel() {
   if (!game) return null;
   const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const hasTraders = game.settings.expansions.includes(TRADERS_EXPANSION_ID);
+  if (game.explorersPirates) {
+    return (
+      <section className="scenario-panel">
+        <header className="scenario-panel-header">
+          <span className="scenario-panel-title">Explorers & Pirates</span>
+        </header>
+        <ExplorersPiratesTracker game={game} />
+      </section>
+    );
+  }
   // T&B path: own simpler tracker (no chip / fog / wonder machinery).
   if (hasTraders) {
     return <TradersScenarioPanel />;

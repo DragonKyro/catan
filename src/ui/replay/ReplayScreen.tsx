@@ -11,6 +11,7 @@ import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { DEV_ICON, DEV_LABEL } from '@/ui/shared/DevCardChip';
 import { useReplayStore, downloadReplay } from '@/store/replayStore';
+import { EP_MEANINGFUL_ACTIONS, epActionDescription } from '@/ui/game/explorersPirates/replay';
 import './ReplayScreen.css';
 
 // Stops we render slider notches for. proposeTrade / cancelTrade /
@@ -80,6 +81,8 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'moveTbBarbarian',
   'moveWagon',
   'upgradeWagon',
+  // Explorers & Pirates.
+  ...EP_MEANINGFUL_ACTIONS,
 ]);
 
 const SPEED_PRESETS: Array<{ label: string; ms: number }> = [
@@ -570,6 +573,6 @@ function actionDescription(action: Action, players: Player[]): string {
     case 'upgradeWagon':
       return `${who} upgrades their wagon`;
     default:
-      return `${who} — ${(action as Action).type}`;
+      return epActionDescription(action, who, name) ?? `${who} — ${(action as Action).type}`;
   }
 }

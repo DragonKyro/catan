@@ -3,6 +3,7 @@ import type { Action, GameState, Player } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { BoardSVG } from '@/ui/game/BoardSVG';
 import { Button } from '@/ui/shared/Button';
+import { EP_BOARD_CHANGING_ACTIONS, epActionDescription } from '@/ui/game/explorersPirates/replay';
 import './Replay.css';
 
 interface Props {
@@ -74,6 +75,8 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   'moveTbBarbarian',
   'moveWagon',
   'upgradeWagon',
+  // Explorers & Pirates: pieces, ships, exploration, the pirate ship.
+  ...EP_BOARD_CHANGING_ACTIONS,
 ]);
 
 // Step + slider + auto-play replay. The slider/buttons step through a
@@ -316,7 +319,7 @@ function actionDescription(action: Action, players: Player[]): string {
     case 'upgradeWagon':
       return `${who} upgrades their wagon`;
     default:
-      return `${who} — ${(action as Action).type}`;
+      return epActionDescription(action, who, name) ?? `${who} — ${(action as Action).type}`;
   }
 }
 

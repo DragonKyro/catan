@@ -36,6 +36,7 @@ import type { EdgeId, GameState, PlayerColor, PlayerId, VertexId } from '@/game/
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { citiesKnightsOverlay } from './citiesAndKnights/CKPlacementOverlay';
 import { setupPlacesCity } from '@/game/modules/citiesAndKnights/actions/buildWrappers';
+import { ExplorersPiratesOverlay, isExplorersPiratesMode } from './explorersPirates/ExplorersPiratesOverlay';
 
 export function PlacementOverlay() {
   const { game, uiMode, dispatch, setMode } = useGameStore();
@@ -64,7 +65,13 @@ export function PlacementOverlay() {
     const isSetup = uiMode.kind === 'placeSetupSettlement';
     // T&B Barbarian Attack / Traders & Barbarians: the second starting
     // placement is a city.
-    const ghost = isSetup && setupPlacementIsCity(game) ? 'city' : 'settlement';
+    // Explorers & Pirates: the first starting piece is a harbor settlement.
+    const ghost =
+      isSetup && setupPlacementIsCity(game)
+        ? 'city'
+        : isSetup && game.explorersPirates && game.phase === 'setupRound1'
+          ? 'harbor'
+          : 'settlement';
     return (
       <g className="overlay overlay-vertices">
         {game.board.vertexIds.map((vid) => {
@@ -482,6 +489,11 @@ export function PlacementOverlay() {
   if (isTradersBarbariansMode(uiMode)) {
     return <TradersBarbariansOverlay game={game} acting={acting} mode={uiMode} color={previewColor} />;
   }
+  // Explorers & Pirates: harbor upgrades, ships, settlers / crews, the
+  // setup ship, the Movement phase and the pirate ship.
+  if (isExplorersPiratesMode(uiMode)) {
+    return <ExplorersPiratesOverlay game={game} acting={acting} mode={uiMode} color={previewColor} />;
+  }
 
   if (uiMode.kind === 'moveRobber') {
     return (
@@ -600,7 +612,7 @@ export function VertexGhost({
   onClick,
 }: {
   vid: VertexId;
-  variant: 'settlement' | 'city';
+  variant: 'settlement' | 'city' | 'harbor';
   previewColor: PlayerColor;
   isHovered: boolean;
   onHoverChange: (hovered: boolean) => void;
@@ -608,7 +620,7 @@ export function VertexGhost({
 }) {
   const game = useGameStore((s) => s.game!);
   const p = game.board.vertices[vid]!.position;
-  const r = variant === 'city' ? 13 : 10;
+  const r = variant === 'city' ? 13 : variant === 'harbor' ? 12 : 10;
   const path = variant === 'city' ? CITY_PATH_D : SETTLEMENT_PATH_D;
   return (
     <g
@@ -640,6 +652,13 @@ export function VertexGhost({
         strokeWidth={2}
         strokeDasharray="3 3"
       />
+      {/* Explorers & Pirates harbor settlement: an anchor in the ring (in
+          setup the board's ✓ marks already show the harbor sites). */}
+      {variant === 'harbor' && !isHovered && game.phase !== 'setupRound1' && (
+        <text textAnchor="middle" dominantBaseline="central" fontSize={10} pointerEvents="none">
+          ⚓
+        </text>
+      )}
     </g>
   );
 }

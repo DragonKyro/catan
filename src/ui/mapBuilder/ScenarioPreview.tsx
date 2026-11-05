@@ -12,6 +12,10 @@ import { TRADERS_SCENARIO_ORDER } from '@/game/modules/traders/board/scenarios';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
+import {
+  EXPLORERS_PIRATES_EXPANSION_ID,
+  EXPLORERS_PIRATES_SCENARIO_ID,
+} from '@/game/modules/explorersPirates/constants';
 import './ScenarioPreview.css';
 
 // Scenario preview: renders the board a scenario generates, so a map can be
@@ -20,12 +24,15 @@ import './ScenarioPreview.css';
 //   - URL `?preview=<kind>:<id>&players=4&seed=1&coords=1&steps=0` — renders only
 //     the board, full-window, for headless screenshots
 //     (`scripts/render-board.sh` drives Chrome with these URLs).
-// <kind> is base | seafarers | traders | ck. `coords=1` overlays each hex's
+// <kind> is base | seafarers | traders | ck | ep. `coords=1` overlays each hex's
 // axial (q, r), the coordinates scenario files are written in. `steps=N`
 // lets heuristic AIs play N moves first (seeded dice), to see pieces
 // (roads, knights, wagons, barbarians…) on a mid-game board.
 
-export type PreviewKind = 'base' | 'seafarers' | 'traders' | 'ck';
+export type PreviewKind = 'base' | 'seafarers' | 'traders' | 'ck' | 'ep';
+
+// Explorers & Pirates ships one scenario (the Rulebook's complete one).
+const EP_PREVIEW_OPTIONS = [{ id: EXPLORERS_PIRATES_SCENARIO_ID, label: 'Explorers & Pirates' }];
 
 export interface PreviewSpec {
   kind: PreviewKind;
@@ -41,6 +48,12 @@ export interface PreviewSpec {
   view?: 'board' | 'game';
   // T&B variants to switch on (`variants=eventCards,friendlyRobber,…`).
   variants?: string[];
+  // Board view only: magnify the board `zoom`× around `at` (fractions of
+  // its width / height), to check small pieces in a screenshot.
+  zoom?: { scale: number; x: number; y: number };
+  // Game view only: keep playing (AIs for every seat) until seat 1 acts in
+  // this phase, e.g. `stopAt=epMovement` for the Movement phase bar.
+  stopAt?: string;
 }
 
 export function previewOptions(kind: PreviewKind): { id: string; label: string }[] {
@@ -52,6 +65,8 @@ export function previewOptions(kind: PreviewKind): { id: string; label: string }
       return SCENARIO_ORDER;
     case 'traders':
       return TRADERS_SCENARIO_ORDER;
+    case 'ep':
+      return EP_PREVIEW_OPTIONS;
   }
 }
 
@@ -65,6 +80,8 @@ export function previewSettings(spec: PreviewSpec): Partial<GameSettings> {
       return { expansions: [SEAFARERS_EXPANSION_ID], scenarioId: spec.id };
     case 'traders':
       return { expansions: [TRADERS_EXPANSION_ID], tradersScenarioId: spec.id };
+    case 'ep':
+      return { expansions: [EXPLORERS_PIRATES_EXPANSION_ID] };
   }
 }
 
@@ -95,10 +112,16 @@ export function buildPreviewGame(spec: PreviewSpec): GameState {
 
 // Keep playing until `playerId` must act (so the game screen opens on the
 // human's move rather than mid-AI-turn). Gives up after `limit` moves.
-function simulateUntilActor(start: GameState, playerId: string, seed: number, limit = 600): GameState {
+function simulateUntilActor(
+  start: GameState,
+  playerId: string,
+  seed: number,
+  limit = 600,
+  phase?: string,
+): GameState {
   let s = start;
   for (let n = 0; n < limit && s.phase !== 'gameOver'; n++) {
-    if (getActingPlayerId(s) === playerId && !s.pendingTrade) return s;
+    if (getActingPlayerId(s) === playerId && !s.pendingTrade && (!phase || s.phase === phase)) return s;
     const next = simulate(s, 1, seed + n);
     if (next === s) return s;
     s = next;
@@ -144,7 +167,7 @@ export function parsePreviewQuery(search: string): PreviewSpec | null {
   const raw = params.get('preview');
   if (!raw) return null;
   const [kindRaw, idRaw] = raw.split(':');
-  const kind = (['base', 'seafarers', 'traders', 'ck'] as const).find((k) => k === kindRaw) ?? 'base';
+  const kind = (['base', 'seafarers', 'traders', 'ck', 'ep'] as const).find((k) => k === kindRaw) ?? 'base';
   const id = idRaw || previewOptions(kind)[0]?.id || 'standard';
   const players = Number(params.get('players') ?? 4) || 4;
   const seed = Number(params.get('seed') ?? 1) || 1;
@@ -152,7 +175,11 @@ export function parsePreviewQuery(search: string): PreviewSpec | null {
   const steps = Number(params.get('steps') ?? 0) || 0;
   const view = params.get('view') === 'game' ? 'game' : 'board';
   const variants = (params.get('variants') ?? '').split(',').filter(Boolean);
-  return { kind, id, players, seed, coords, steps, view, variants };
+  const scale = Number(params.get('zoom') ?? 0);
+  const [zx, zy] = (params.get('at') ?? '0.5,0.5').split(',').map(Number);
+  const zoom = scale > 1 ? { scale, x: zx ?? 0.5, y: zy ?? 0.5 } : undefined;
+  const stopAt = params.get('stopAt') ?? undefined;
+  return { kind, id, players, seed, coords, steps, view, variants, ...(zoom ? { zoom } : {}), ...(stopAt ? { stopAt } : {}) };
 }
 
 function PreviewBoard({ spec }: { spec: PreviewSpec }) {
@@ -168,8 +195,13 @@ function PreviewBoard({ spec }: { spec: PreviewSpec }) {
     return <div className="scenario-preview-error">Could not build board: {result.error}</div>;
   }
   const game = result.game;
+  const z = spec.zoom;
   return (
-    <div className="scenario-preview-board" data-ready="1">
+    <div
+      className="scenario-preview-board"
+      data-ready="1"
+      style={z ? { transform: `scale(${z.scale})`, transformOrigin: `${z.x * 100}% ${z.y * 100}%` } : undefined}
+    >
       <BoardSVG
         game={game}
         className="scenario-preview-svg"
@@ -213,7 +245,9 @@ function CoordLabels({ game }: { game: GameState }) {
 export function buildPreviewGameForView(spec: PreviewSpec): GameState {
   const first = buildPreviewGame(spec);
   const humanId = first.players[0]!.id;
-  const game = simulateUntilActor(first, humanId, spec.seed + 7919);
+  const game = spec.stopAt
+    ? simulateUntilActor(first, humanId, spec.seed + 7919, 3000, spec.stopAt)
+    : simulateUntilActor(first, humanId, spec.seed + 7919);
   return {
     ...game,
     players: game.players.map((p) => (p.id === humanId ? { ...p, isAI: false } : p)),
@@ -262,6 +296,7 @@ export function ScenarioPreviewScreen({ onBack }: { onBack: () => void }) {
             <option value="ck">Cities &amp; Knights</option>
             <option value="seafarers">Seafarers</option>
             <option value="traders">Traders &amp; Barbarians</option>
+            <option value="ep">Explorers &amp; Pirates</option>
           </select>
         </label>
         <label>

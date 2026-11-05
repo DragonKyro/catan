@@ -47,6 +47,17 @@ import { getScenario } from './modules/seafarers/board/scenarios';
 import { getTradersScenario } from './modules/traders/board/scenarios';
 import { recalcWealthTiles } from './modules/traders/scoring/wealthTiles';
 import { generateCustomMapBoard } from './customMap/generator';
+import {
+  EP_DEFAULT_VP,
+  EP_MAX_PLAYERS,
+  EP_MIN_PLAYERS,
+  EP_START_GOLD,
+  EP_SUPPLY_RATE,
+  EXPLORERS_PIRATES_EXPANSION_ID,
+  EXPLORERS_PIRATES_SCENARIO_ID,
+} from './modules/explorersPirates/constants';
+import { generateExplorersPiratesBoard, type EpBoardSetup } from './modules/explorersPirates/board';
+import { initialExplorersPiratesState } from './modules/explorersPirates/init';
 import { shuffle } from './rng';
 import { emptyBank, bankFull } from './resources';
 import { emptyCommodities, commoditiesFull } from './commodities';
@@ -197,6 +208,28 @@ export function createGame(opts: CreateGameOptions): GameState {
 
   const hasCitiesKnights = expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
   const hasTraders = expansions.includes(TRADERS_EXPANSION_ID);
+  const hasExplorers = expansions.includes(EXPLORERS_PIRATES_EXPANSION_ID);
+
+  // Explorers & Pirates plays its own board and turn (3-4 players; the 5-6
+  // extension isn't built yet). It doesn't combine with the other
+  // expansions or the T&B variants (no robber, ports or plain dice roll).
+  if (hasExplorers) {
+    if (numPlayers < EP_MIN_PLAYERS || numPlayers > EP_MAX_PLAYERS) {
+      throw new Error(
+        `Explorers & Pirates supports ${EP_MIN_PLAYERS}-${EP_MAX_PLAYERS} players (got ${numPlayers}).`,
+      );
+    }
+    if (expansions.length > 1) {
+      throw new Error('Explorers & Pirates cannot be combined with other expansions.');
+    }
+    const v = opts.settings?.tradersVariants;
+    if (v && (v.friendlyRobber || v.strongestPorts || v.eventCards)) {
+      throw new Error('The Traders & Barbarians variants cannot be used with Explorers & Pirates.');
+    }
+    if (opts.settings?.customMap) {
+      throw new Error('Explorers & Pirates plays its own map.');
+    }
+  }
 
   // Cities & Knights + Seafarers can be combined per the rulebook, but the
   // combined ruleset has its own intercept points (knights on ships, pirate
@@ -247,7 +280,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   const tradersVariants = opts.settings?.tradersVariants;
   // Base-game maps tied to (or ruled out by) an expansion: the C&K first-game
   // board needs C&K; Gold Rush / Volcano can't be played with it.
-  if (!customMap && !hasTraders && !expansions.includes(SEAFARERS_EXPANSION_ID)) {
+  if (!customMap && !hasTraders && !hasExplorers && !expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const map = getBaseScenario(baseScenarioId);
     if (!baseScenarioAllowed(map, expansions)) {
       throw new Error(`The "${map.name}" map can't be played with these expansions.`);
@@ -255,6 +288,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   }
   const scenarioVp = ((): number | undefined => {
     if (customMap) return customMap.defaultVpToWin;
+    if (hasExplorers) return EP_DEFAULT_VP;
     if (hasTraders) {
       const sc = getTradersScenario(tradersScenarioId ?? 'riversOfCatan');
       return sc.defaultVpToWin;
@@ -297,6 +331,9 @@ export function createGame(opts: CreateGameOptions): GameState {
     turnTimerSec: opts.settings?.turnTimerSec,
     aiLevel: opts.settings?.aiLevel,
     customMap,
+    ...(hasExplorers
+      ? { explorersPiratesScenarioId: EXPLORERS_PIRATES_SCENARIO_ID, setupRounds: 3 as const }
+      : {}),
   };
   // Cloth for Catan: three starting settlements.
   if (
@@ -324,6 +361,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let wateringHoleHexIds: HexId[] | undefined;
   let barbarianBoard: BarbarianBoardSetup | undefined;
   let tradersBarbariansBoard: TradersBarbariansBoardSetup | undefined;
+  let explorersBoard: EpBoardSetup | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (customMap) {
@@ -337,6 +375,11 @@ export function createGame(opts: CreateGameOptions): GameState {
           ? result.unrevealedFogHexes
           : undefined;
     }
+  } else if (hasExplorers) {
+    const result = generateExplorersPiratesBoard(rng);
+    board = result.board;
+    rng = result.rngState;
+    explorersBoard = result.setup;
   } else if (hasTraders) {
     const result = generateTradersBoard(
       settings.tradersScenarioId,
@@ -392,7 +435,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   // intercepts every dev card action to throw so a stale dispatch can't
   // exercise it.
   let devCardDeck: DevCardType[];
-  if (hasCitiesKnights) {
+  if (hasCitiesKnights || hasExplorers) {
     devCardDeck = [];
   } else {
     let deck = devDeckFor(numPlayers);
@@ -443,6 +486,8 @@ export function createGame(opts: CreateGameOptions): GameState {
         }
       : {}),
     ...(hasTraders ? { gold: 0, bridges: [] } : {}),
+    // Explorers & Pirates: each player starts with 2 gold.
+    ...(hasExplorers ? { gold: EP_START_GOLD } : {}),
     ...(hasTraders && settings.tradersScenarioId === TRADERS_SCENARIO_FISHING
       ? { fishTokens: [] as Array<'one' | 'two' | 'three'> }
       : {}),
@@ -621,6 +666,13 @@ export function createGame(opts: CreateGameOptions): GameState {
   // Pirate Islands has no robber at all.
   if (pirateIslands) robberActive = false;
 
+  // Explorers & Pirates: no robber, coins in play, 3:1 supply trades, no
+  // Longest Road / Largest Army (the bonus tiles stay in the CATAN box).
+  const explorersPirates = explorersBoard
+    ? initialExplorersPiratesState(explorersBoard, playerOrder)
+    : undefined;
+  if (explorersPirates) robberActive = false;
+
   return {
     settings,
     rngState: rng,
@@ -687,6 +739,15 @@ export function createGame(opts: CreateGameOptions): GameState {
     merchantTrains: isMerchantTrains ? [] : undefined,
     ...(barbarianAttack
       ? { barbarianAttack, coinsInPlay: true, noLargestArmy: true }
+      : {}),
+    ...(explorersPirates
+      ? {
+          explorersPirates,
+          coinsInPlay: true,
+          supplyTradeRate: EP_SUPPLY_RATE,
+          noLongestRoad: true,
+          noLargestArmy: true,
+        }
       : {}),
     ...(tradersBarbarians
       ? {

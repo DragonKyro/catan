@@ -85,7 +85,9 @@ export function CoinsDialog() {
         })}
       </div>
       <p style={{ marginBottom: 0, fontSize: '0.8em', color: 'var(--text-soft)' }}>
-        Coins aren't resource cards: they don't count for a 7, can't be stolen or taken by Monopoly.
+        {game.explorersPirates
+          ? "Coins aren't resource cards: they don't count for a 7. A pirate takes 1 gold from a player with no cards to steal."
+          : "Coins aren't resource cards: they don't count for a 7, can't be stolen or taken by Monopoly."}
         {tiles && ' The richest player alone is Wealthiest (+1 VP); everyone tied for the least gold is Poor (−2 VP).'}
       </p>
     </DialogShell>

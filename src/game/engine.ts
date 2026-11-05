@@ -4,6 +4,8 @@ import { baseModule } from './modules/base';
 import { seafarersModule } from './modules/seafarers';
 import { citiesAndKnightsModule } from './modules/citiesAndKnights';
 import { tradersModule } from './modules/traders';
+import { explorersPiratesModule } from './modules/explorersPirates';
+import { EXPLORERS_PIRATES_EXPANSION_ID } from './modules/explorersPirates/constants';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from './modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from './modules/traders/constants';
@@ -28,6 +30,9 @@ export function getActiveModules(state: GameState): RuleModule[] {
   // Event Cards) layer on top of any rule set, so they go first; a variant
   // that wraps an action hands it on with `applyNextModuleHandler`.
   const out: RuleModule[] = tradersVariantModules(state.settings);
+  if (state.settings.expansions.includes(EXPLORERS_PIRATES_EXPANSION_ID)) {
+    out.push(explorersPiratesModule);
+  }
   if (state.settings.expansions.includes(TRADERS_EXPANSION_ID)) {
     out.push(tradersModule);
   }
