@@ -656,7 +656,7 @@ export interface TbWagonTurn {
   boosted: boolean;
   // The wagon entered a plaza: this move action is over.
   ended: boolean;
-  // Edges moved in this move action.
+  // Edges moved this turn (both move actions).
   steps: number;
   // Barbarians (indices into `barbarians`) already driven at this turn.
   triedBarbarians: number[];

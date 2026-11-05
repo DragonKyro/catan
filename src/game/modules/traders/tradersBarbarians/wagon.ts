@@ -50,7 +50,7 @@ export function freshWagonTurn(level: number, prior?: TbWagonTurn): TbWagonTurn 
     moveAction: prior ? 2 : 1,
     boosted: false,
     ended: false,
-    steps: 0,
+    steps: prior?.steps ?? 0,
     triedBarbarians: prior?.triedBarbarians ?? [],
     swiftJourney: prior !== undefined,
   };

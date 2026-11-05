@@ -2,6 +2,8 @@ import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints, calculateIslandBonusVp } from '@/game/scoring/points';
 import { BarbarianAttackBadges } from '@/ui/game/traders/BarbarianAttackBadges';
+import { TradersBarbariansBadges } from '@/ui/game/traders/TradersBarbariansHand';
+import { tbHiddenCardCount } from '@/game/modules/traders/tradersBarbarians/state';
 import { CoinIcon, FishTokenIcon, MoneyBagIcon, OldBootIcon } from '@/ui/game/traders/TradersIcons';
 import { calculateRouteLength } from '@/game/engine';
 import { isSetupPhase } from '@/game/actions/setup';
@@ -71,7 +73,8 @@ export function OpponentPanel() {
     <section className="opps">
       {opponents.map((p) => {
         const visibleVp = calculateVictoryPoints(game, p.id, false);
-        const cards = p.devCards.unplayed.length + p.devCards.boughtThisTurn.length;
+        const cards =
+          p.devCards.unplayed.length + p.devCards.boughtThisTurn.length + tbHiddenCardCount(game, p.id);
         const isActing = p.id === actingId;
         const isPartner = !!partnerId && p.id === partnerId;
         const uuid = uuidForPlayer(p.id);
@@ -209,6 +212,7 @@ export function OpponentPanel() {
                 </span>
               )}
               <BarbarianAttackBadges game={game} playerId={p.id} />
+              <TradersBarbariansBadges game={game} playerId={p.id} />
             </div>
             <div className="opp-pieces" title="Pieces remaining (built / cap)">
               <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>

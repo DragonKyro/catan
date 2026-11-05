@@ -39,6 +39,9 @@ const TERRAIN_FILL: Record<string, string> = {
   // a battlement silhouette on top so the hex reads as fortified at a
   // glance.
   castle: 'var(--terrain-castle, #5a6473)',
+  // T&B scenario commodity hexes; TradersBarbariansHexLayer paints each
+  // location's own art on top.
+  commodity: 'var(--terrain-commodity, #c9b48a)',
 };
 
 export function HexTile({ board, hex, isRobberOnHex, clickable, onClick, pulse, foggy }: Props) {

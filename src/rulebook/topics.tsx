@@ -307,9 +307,7 @@ export const TOPICS: Topic[] = [
   ...CITIES_AND_KNIGHTS_TOPICS.map((t, i) =>
     i === 0 ? { ...t, section: 'Cities & Knights' } : t,
   ),
-  // Traders & Barbarians — Rivers of Catan + Friendly Robber + Strongest
-  // Ports for now; remaining scenarios (Fishing, Merchant Trains, etc.)
-  // land in follow-up commits.
+  // Traders & Barbarians — the five scenarios and the variants.
   ...TRADERS_TOPICS.map((t, i) =>
     i === 0 ? { ...t, section: 'Traders & Barbarians' } : t,
   ),

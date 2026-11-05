@@ -23,6 +23,7 @@ import { conqueredBuildingVertices } from '@/game/modules/traders/barbarianAttac
 import { WagonSpots } from './traders/WagonSpots';
 import { WateringHoleMarker } from './traders/WateringHoleMarker';
 import { DamagedRoadMarker } from './traders/DamagedRoadMarker';
+import { TradersBarbariansHexLayer, TradersBarbariansPieces } from './traders/TradersBarbariansBoard';
 import { hexRollsOn } from '@/game/board/hexNumbers';
 import './Board.css';
 
@@ -112,6 +113,8 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         </g>
 
         <BarbarianAttackHexLayer game={game} />
+        {/* T&B scenario: quarry / castle / glassworks with paths, plaza, X markers. */}
+        <TradersBarbariansHexLayer game={game} />
         {/* T&B Merchant Trains: watering hole art + train start points. */}
         <WateringHoleMarker game={game} />
 
@@ -205,6 +208,8 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         </g>
 
         <CityWallMarker game={game} />
+        {/* T&B scenario: barbarians on edges, players' wagons. */}
+        <TradersBarbariansPieces game={game} />
 
         {/* Cities & Knights: knights on intersections + metropolis flags +
             merchant pawn. */}

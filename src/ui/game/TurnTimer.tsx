@@ -189,6 +189,8 @@ function autoFinish(
     // moves any knight that must leave the castle, then ends the turn).
     initial.phase === 'barbarianCard' ||
     initial.phase === 'barbarianKnightMoves' ||
+    // T&B scenario: placing a barbarian.
+    initial.phase === 'moveBarbarian' ||
     // T&B: Merchant Trains voting round / wagon placement, Event Card answers.
     initial.phase === 'wagonVoting' ||
     initial.phase === 'placeWagon' ||
@@ -204,9 +206,16 @@ function autoFinish(
     return;
   }
 
-  // Main: just end the turn — the player had their chance.
-  if (initial.phase === 'main') {
+  // Main (and the T&B scenario's End of Turn wagon moves): just end the
+  // turn — the player had their chance.
+  if (initial.phase === 'main' || initial.phase === 'wagonMoves') {
     ctx.dispatch({ type: 'endTurn', playerId });
+    // Out of time in the Action phase: the wagon stays put too (no second
+    // full countdown for the End of Turn phase).
+    const after = useGameStore.getState().game;
+    if (initial.phase === 'main' && after?.phase === 'wagonMoves' && getActingPlayerId(after) === playerId) {
+      ctx.dispatch({ type: 'endTurn', playerId });
+    }
   }
 }
 

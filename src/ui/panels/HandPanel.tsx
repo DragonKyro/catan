@@ -9,6 +9,8 @@ import { BarbarianAttackBadges } from '@/ui/game/traders/BarbarianAttackBadges';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { TradersHandStrip } from './TradersHandStrip';
+import { SwiftJourneyChips } from '@/ui/game/traders/TradersBarbariansHand';
+import { tbHiddenCardCount } from '@/game/modules/traders/tradersBarbarians/state';
 import './HandPanel.css';
 
 export function HandPanel() {
@@ -67,7 +69,10 @@ export function HandPanel() {
   const canPlayCards =
     !player.isAI &&
     isMyTurn &&
-    (game.phase === 'main' || game.phase === 'rollOrPlayKnight') &&
+    (game.phase === 'main' ||
+      game.phase === 'rollOrPlayKnight' ||
+      // T&B scenario: a Knight may also clear the wagon's way.
+      (game.phase === 'wagonMoves' && !!game.tradersBarbarians)) &&
     !game.hasPlayedDevCardThisTurn &&
     uiMode.kind === 'idle';
   const vp = calculateVictoryPoints(game, player.id, true);
@@ -79,7 +84,8 @@ export function HandPanel() {
   const hasAnyCards =
     Object.keys(cardCounts).length > 0 ||
     player.devCards.boughtThisTurn.length > 0 ||
-    player.devCards.victoryPoints > 0;
+    player.devCards.victoryPoints > 0 ||
+    tbHiddenCardCount(game, player.id) > 0;
 
   const onPlay = (card: string) => {
     if (card === 'knight') {
@@ -286,7 +292,9 @@ export function HandPanel() {
                   playable
                     ? `Play ${label}`
                     : canPlayCards
-                      ? 'Only a Knight may be played before you roll'
+                      ? game.phase === 'wagonMoves'
+                        ? 'Only a Knight (or Swift Journey) may be played while your wagon moves'
+                        : 'Only a Knight may be played before you roll'
                       : 'Cannot play right now'
                 }
               />
@@ -307,6 +315,7 @@ export function HandPanel() {
               title="Hidden victory point (counts at game end)"
             />
           )}
+          <SwiftJourneyChips game={game} player={player} isMyTurn={isMyTurn} />
           {!hasAnyCards && <span className="hand-empty">no dev cards</span>}
         </div>
       </div>

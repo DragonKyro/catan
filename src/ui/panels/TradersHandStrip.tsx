@@ -7,6 +7,7 @@ import {
   MoneyBagIcon,
   OldBootIcon,
 } from '@/ui/game/traders/TradersIcons';
+import { TbWagonStrip } from '@/ui/game/traders/TradersBarbariansHand';
 import './TradersHandStrip.css';
 
 interface Props {
@@ -74,6 +75,8 @@ export function TradersHandStrip({ game, player, ownTurn }: Props) {
           )}
         </span>
       )}
+      {/* T&B scenario: the wagon board. */}
+      <TbWagonStrip game={game} player={player} />
     </div>
   );
 }

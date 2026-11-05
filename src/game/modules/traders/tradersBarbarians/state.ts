@@ -205,3 +205,13 @@ export function calculateTradersBarbariansVp(state: GameState, playerId: PlayerI
   if (!wagon) return 0;
   return wagon.delivered + (wagon.level >= TB_MAX_WAGON_LEVEL ? TB_FULL_UPGRADE_VP : 0);
 }
+
+// Is the starting placement being made now a city? (Barbarian Attack and
+// this scenario: "your second placement is a city".) For prompts / ghosts.
+export function setupPlacementIsCity(state: GameState): boolean {
+  return (
+    state.phase === 'setupRound2' &&
+    state.setupState?.step === 'settlement' &&
+    (isTradersBarbarians(state) || state.barbarianAttack !== undefined)
+  );
+}

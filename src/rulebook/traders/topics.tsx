@@ -1,6 +1,7 @@
 import type { Topic } from '../topics';
 import { CastleEdgeKeyDiagram } from './barbarianAttackDiagrams';
 import { RiverTilesDiagram, FishingDiagram } from './diagrams';
+import { CommodityHexDiagram, WagonBoardTable, WagonCostTable } from './tradersBarbariansDiagrams';
 
 // Traders & Barbarians expansion rulebook entries: the scenarios and the
 // variants (Friendly Robber, Strongest Ports, Catan Event Cards), which work
@@ -15,14 +16,12 @@ export const TRADERS_TOPICS: Topic[] = [
         <p>
           The Traders & Barbarians expansion is a collection of mini-scenarios
           and rule tweaks that each highlight a different facet of Catan: trade,
-          travel, defence, and luck. This build ships <strong>Rivers of
-          Catan</strong> plus two small variants — Friendly Robber and Strongest
-          Ports — that work with any base game.
-        </p>
-        <p>
-          More scenarios are on the way. The architecture for gold (coins),
-          bridges, and bonus VP tiles lands first so the rest can build on top
-          without rewriting state shape.
+          travel, defence, and luck. This build ships five scenarios —{' '}
+          <strong>Rivers of Catan</strong>, <strong>Fishing on Catan</strong>,{' '}
+          <strong>Merchant Trains</strong>, <strong>Barbarian Attack</strong> and
+          the big <strong>Traders &amp; Barbarians</strong> scenario — plus the
+          Friendly Robber, Strongest Ports and Catan Event Cards variants, which
+          work with any game.
         </p>
       </>
     ),
@@ -546,6 +545,144 @@ export const TRADERS_TOPICS: Topic[] = [
           </li>
         </ul>
         <CastleEdgeKeyDiagram />
+      </>
+    ),
+  },
+  {
+    id: 'traders-tb-scenario',
+    title: 'Traders & Barbarians (scenario)',
+    body: (
+      <>
+        <p>
+          The barbarians were driven back, but the castle needs repairs. Haul
+          goods between the <strong>quarry</strong>, the <strong>castle</strong>{' '}
+          and the <strong>glassworks</strong>: every token you deliver is worth{' '}
+          <strong>1 VP</strong> and pays gold. First to <strong>13 VP</strong> on
+          their turn wins. 3-4 players.
+        </p>
+        <ul>
+          <li>
+            <strong>The board</strong>: the three commodity hexes sit on corner
+            hexes of the island, frame side out. The other 16 hexes are dealt
+            from 4 forests, 3 pastures, 3 fields, 3 hills and 3 mountains; the
+            number discs minus the 2 and the 12 go on them as usual. The
+            frame harbors are the expansion's usual nine.
+          </li>
+          <li>
+            <strong>Commodity hexes</strong> produce nothing. Each has four
+            interior paths from its inland corners to a centre plaza. You may
+            build roads on the paths (not on the edges with the red “X”), but no
+            settlement on the plaza.
+          </li>
+          <li>
+            <strong>Goods</strong>: the quarry provides sand and marble and buys
+            tools; the castle provides tools and sand and buys marble and glass;
+            the glassworks provides glass and tools and buys sand. Each location
+            has a face-down stack of 12 tokens; only the mix of what is left is
+            known (drawn tokens are face up).
+          </li>
+          <li>
+            <strong>No robber, no Longest Road, no base development cards.</strong>{' '}
+            Largest Army is in play (the scenario's Knights count).
+          </li>
+          <li>
+            <strong>Setup</strong>: everyone starts with 5 gold. Your second
+            starting placement is a <strong>city</strong> (1 card per adjacent
+            hex); your wagon starts on it. The corners of a commodity hex
+            between two “X” edges take no starting settlement — no road could
+            leave them.
+          </li>
+          <li>
+            <strong>Dice</strong>: a 2 or a 12 is re-rolled (the app does it and
+            logs it). A 7: nobody produces, players discard as usual, then the
+            roller moves one of the three barbarians to an edge without a
+            barbarian. On a road it robs that road's owner of 1 random card.
+          </li>
+          <li>
+            <strong>Coins</strong>: 2 gold buy 1 resource of your choice (up to
+            twice a turn); resources buy gold at your supply trade rate; gold
+            may go into player trades. Coins aren't cards: not in your hand
+            size, never stolen.
+          </li>
+          <li>Roads may be built on edges with barbarians.</li>
+        </ul>
+        <CommodityHexDiagram />
+      </>
+    ),
+  },
+  {
+    id: 'traders-tb-wagons',
+    title: 'Wagons: moving, delivering, driving off barbarians',
+    body: (
+      <>
+        <p>
+          <strong>End of Turn phase</strong>: after your Action phase (the 🛒
+          Move wagon button), you may move your wagon from intersection to
+          intersection. You get the movement points (MP) of your wagon board;
+          you must afford a whole edge, may stop any time, and lose unused MP.
+          Buildings and other wagons never block. Press <strong>Done</strong>{' '}
+          to pass the turn.
+        </p>
+        <WagonCostTable />
+        <ul>
+          <li>
+            <strong>Plazas</strong>: entering a commodity hex's plaza ends the
+            move. If your token is one that location buys, you deliver it (kept
+            face down: 1 VP) and take the gold of your wagon level. Then, if
+            your wagon is empty, you draw the top token of that location's
+            stack (face up). You carry one token at a time.
+          </li>
+          <li>
+            <strong>Drive off a barbarian</strong> (upgraded wagons): when your
+            wagon stands at either end of a barbarian's edge, roll one die. In
+            your level's range, you move that barbarian to any edge without
+            one (no robbing). Each barbarian once per turn; you keep moving
+            either way.
+          </li>
+          <li>
+            <strong>Upgrades</strong> (Action phase): pay the cost to move your
+            wagon one column right. Level 5 is worth 1 VP.
+          </li>
+        </ul>
+        <WagonBoardTable />
+        <p>
+          The rules say wheat adds +2 MP “once per turn”, the player aid “up to
+          2× per turn”; this app allows it once per move, so twice only when a
+          Swift Journey gives you a second move.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'traders-tb-cards',
+    title: 'Traders & Barbarians development cards',
+    body: (
+      <>
+        <p>
+          The scenario's own 25 cards at the usual price (1 sheep, 1 wheat, 1
+          ore), with the normal rules: hidden, one played per turn, not the
+          turn you buy it.
+        </p>
+        <ul>
+          <li>
+            <strong>Knight</strong> (16): move 1 barbarian to an edge without a
+            barbarian; if it lands on a road, rob that road's owner of 1 random
+            card. Play it before you roll, in your Action phase or while your
+            wagon moves. Knights count for Largest Army.
+          </li>
+          <li>
+            <strong>Road Building</strong> (3): 2 free roads.
+          </li>
+          <li>
+            <strong>Swift Journey</strong> (3): during your End of Turn phase,
+            end this wagon move and take another with full MP.
+          </li>
+          <li>
+            <strong>Victory Point</strong> (3: Stonecutting, Glassmaking,
+            Toolmaking): 1 VP each, revealed when it wins you the game (even
+            the turn you buy it).
+          </li>
+        </ul>
       </>
     ),
   },

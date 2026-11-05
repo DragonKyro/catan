@@ -28,6 +28,11 @@ import {
   REPAIR_ROAD_COST,
   damagedRoadsOf,
 } from '@/game/modules/traders/variants/eventCards/events';
+import { setupPlacementIsCity } from '@/game/modules/traders/tradersBarbarians/state';
+import {
+  TradersBarbariansMainButtons,
+  TradersBarbariansPhaseBar,
+} from '@/ui/game/traders/TradersBarbariansActions';
 import './ActionBar.css';
 
 export function ActionBar() {
@@ -91,7 +96,11 @@ export function ActionBar() {
     // pre-roll. Phase 8c will introduce the equivalent Alchemy pre-roll.
     // Pirate Islands: a Knight makes a warship (before the roll it counts
     // against this roll's fleet attack).
-    const knightLabel = game.pirateIslands ? '⚔️ Knight → warship' : '⚔️ Play Knight';
+    const knightLabel = game.pirateIslands
+      ? '⚔️ Knight → warship'
+      : game.tradersBarbarians
+        ? '⚔️ Knight (move a barbarian)'
+        : '⚔️ Play Knight';
     const hasKnight =
       !hasCK &&
       !game.hasPlayedDevCardThisTurn &&
@@ -369,7 +378,9 @@ export function ActionBar() {
           );
         })()}
         {game.barbarianAttack && <BarbarianCardButton game={game} acting={acting} />}
-        {!hasCK && !game.barbarianAttack && (
+        {/* T&B scenario: wagon upgrade + the scenario's own deck. */}
+        {game.tradersBarbarians && <TradersBarbariansMainButtons game={game} acting={acting} />}
+        {!hasCK && !game.barbarianAttack && !game.tradersBarbarians && (
           <Button
             disabled={
               !canAfford(player.resources, COSTS.devCard) ||
@@ -429,12 +440,16 @@ export function ActionBar() {
             title={
               game.pirateIslands && lineReachesFortress(game, acting)
                 ? 'Your ships reach your pirate fortress: ending your turn attacks it (roll a die vs your warships)'
-                : undefined
+                : game.tradersBarbarians
+                  ? 'End your Action phase: move your wagon, then Done passes the turn'
+                  : undefined
             }
           >
             {game.pirateIslands && lineReachesFortress(game, acting)
               ? '⚔ End & attack ▸'
-              : 'End turn ▸'}
+              : game.tradersBarbarians
+                ? '🛒 Move wagon ▸'
+                : 'End turn ▸'}
           </Button>
         </div>
       </div>,
@@ -444,6 +459,10 @@ export function ActionBar() {
   // T&B Barbarian Attack: card choices and the end-of-turn knight moves.
   if (phase === 'barbarianCard' || phase === 'barbarianKnightMoves') {
     return wrap(<BarbarianAttackPhaseBar game={game} acting={acting} />);
+  }
+  // T&B scenario: placing a barbarian, the End of Turn wagon moves.
+  if (phase === 'moveBarbarian' || phase === 'wagonMoves') {
+    return wrap(<TradersBarbariansPhaseBar game={game} acting={acting} />);
   }
 
   // Other phases are driven by board highlights or dialogs; say what's
@@ -498,8 +517,9 @@ function phaseHint(game: GameState, pid: PlayerId): string | null {
           ? ' on one of the large islands'
           : ' on the main island'
         : '';
-      // T&B Barbarian Attack: the second starting placement is a city.
-      const piece = game.barbarianAttack && round === 2 ? 'city' : 'settlement';
+      // T&B Barbarian Attack / Traders & Barbarians: the second starting
+      // placement is a city.
+      const piece = setupPlacementIsCity(game) ? 'city' : 'settlement';
       return `Place starting ${piece} ${round}${where}${pays ? ' — it collects starting resources' : ''}.`;
     }
     return seafarers

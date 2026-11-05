@@ -48,6 +48,10 @@ export type UIMode =
   | { kind: 'baCard' }
   | { kind: 'baTreason'; moves: BarbarianTreasonMove[]; from?: HexId | null }
   | { kind: 'baKnightMove'; from?: EdgeId }
+  // Traders & Barbarians scenario — the End of Turn wagon moves, and placing
+  // a barbarian (`pick` = the barbarian chosen, before its edge).
+  | { kind: 'tbWagon' }
+  | { kind: 'tbBarbarian'; pick?: number }
   // Cities & Knights — picking which of your own cities to put a wall under.
   | { kind: 'buildCityWall' }
   // Cities & Knights knight build/action modes.
@@ -166,6 +170,8 @@ const UNDOABLE_ACTION_TYPES = new Set<Action['type']>([
   'buildBridge',
   'spendGold',
   'buyGold',
+  // Traders & Barbarians scenario: a wagon upgrade reveals nothing.
+  'upgradeWagon',
 ]);
 
 // An otherwise-undoable action that uncovered something can't be taken back
@@ -208,6 +214,13 @@ const phaseToMode = (state: GameState): UIMode => {
       : { kind: 'baCard' };
   }
   if (state.phase === 'barbarianKnightMoves') return { kind: 'baKnightMove' };
+  // T&B scenario: placing a barbarian (a drive-off fixes which one), and
+  // the End of Turn wagon moves.
+  if (state.phase === 'moveBarbarian') {
+    const pick = state.tradersBarbarians?.pendingBarbarian?.barbarian;
+    return pick !== undefined ? { kind: 'tbBarbarian', pick } : { kind: 'tbBarbarian' };
+  }
+  if (state.phase === 'wagonMoves') return { kind: 'tbWagon' };
   // Cities & Knights sub-phases that drive board interactions.
   if (state.phase === 'displacedKnightMove') return { kind: 'displacedKnightMove' };
   if (state.phase === 'placeMerchant') return { kind: 'placeMerchant' };
