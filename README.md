@@ -37,6 +37,11 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 - **The Wonders of Catan** — claim one of the rulebook's wonders and build its 4 levels; finish it, or reach 10 VP with the highest level, to win
 - **New World** (12 VP) — open map; +1 VP per island you didn't start on
 
+**Traders & Barbarians expansion** (3–4 players, 2025 rulebook):
+
+- **Rivers of Catan** (10 VP) — two fixed river tiles run from the mountains to the swamps; seven bridge sites where roads can't go. Bridges (2 brick + 1 lumber) pay 3 gold, roads and settlements on a river tile 1 gold. Spend 2 gold for any card (twice a turn), buy gold at your bank rate, trade with it. The richest player alone is Wealthiest (+1 VP); everyone tied for the least gold is Poor (−2 VP). The 2 shares the 12's hex
+- **Fishing on Catan** (10 VP, 11 with the old boot) — the lake (fishes on 2, 3, 11, 12) sits somewhere in the inner ring and six fishing grounds fill the coastal notches. Spend fish to remove the robber (2), steal (3), take a card (4), build a free road (5) or take a development card (7); hold at most 7 tokens; pass the old boot to anyone with at least your VP
+
 ### Notable mechanics
 
 - **Online multiplayer with no backend.** WebRTC peer-to-peer over Trystero (Nostr-relay signaling — works on cellular and corporate networks where BitTorrent trackers are blocked). Create a room, share a 4-character code, friends join. Full state replication; randomness baked into actions so all peers reduce to the same state. Drop out and rejoin mid-game with the same code — your seat is preserved via `localStorage` UUID. Late joiners without a saved UUID become read-only spectators.
@@ -131,9 +136,6 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 
 **Traders & Barbarians (Phase 10):**
 
-- [ ] **2:1 gold spend action + UI** — Rivers of Catan rule (2 gold → any 1 resource, max 2× per turn). Constants defined; no `spendGold` action, no dialog. Gold currently only converts to VP via the Wealthiest Catanian tile.
-- [ ] **Fish spend UI completeness** — only 2 of 5 effects surfaced in `SpendFishDialog.tsx` (`removeRobber`, `takeFromBank`). The other three (`steal`, `buildRoad`, `buyDevCard`) are engine-complete but UI-unreachable.
-- [ ] **Fish 7-token "discard and replace" once-per-turn rule** — current cap is a hard stop; the rulebook nuance isn't implemented.
 - [ ] **Smarter AI wagon voting** — `trySubmitWagonVote` always abstains. AI doesn't compete for Merchant Trains wagon placement.
 - [ ] **Traders & Barbarians combo scenario** — all four T&B mechanics on one board; explicitly deferred.
 - [ ] **Catan Event Cards variant** — 37-card deck replacing dice; not implemented.
@@ -141,7 +143,7 @@ Items uncovered by a full audit of the two in-progress expansions, in rough prio
 
 **Cross-cutting:**
 
-- [ ] **Replay slider action coverage** — `MEANINGFUL_ACTIONS` in `src/ui/replay/ReplayScreen.tsx` is missing every C&K and T&B action type (`buildBridge`, `spendFish`, `passOldBoot`, `submitWagonVote`, `placeWagon`, `hireKnight`, `recruitKnight`, `activateKnight`, `promoteKnight`, `buildCityWall`, `buildCityImprovement`, `playProgressCard`, etc.). Replays of expansion games skip the interesting bits on the slider.
+- [ ] **Replay slider action coverage** — `MEANINGFUL_ACTIONS` in `src/ui/replay/ReplayScreen.tsx` is missing most C&K and T&B action types (`buildBridge` and `spendFish` are in; `passOldBoot`, `submitWagonVote`, `placeWagon`, `hireKnight`, `recruitKnight`, `activateKnight`, `promoteKnight`, `buildCityWall`, `buildCityImprovement`, `playProgressCard`, etc.). Replays of expansion games skip the interesting bits on the slider.
 
 **Fun map ideas (not yet implemented):**
 

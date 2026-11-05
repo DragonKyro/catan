@@ -133,6 +133,13 @@ export function vertexScore(
       shoreline += 1;
       continue;
     }
+    // Non-producing scenario hexes (T&B swamp, lake, watering hole,
+    // castle) count like the desert. Without this their missing resource
+    // weight made the whole score NaN. Fish / gold value is added below.
+    if (hex.terrain !== 'gold' && !(RESOURCES as readonly string[]).includes(hex.terrain)) {
+      shoreline += 0.5;
+      continue;
+    }
     // Every number the hex carries (T&B Rivers' 2 + 12 hex).
     const pips = hexPips(hex);
     // Gold pays the player's choice on roll. Bump it further with a small

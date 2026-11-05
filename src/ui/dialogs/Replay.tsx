@@ -38,6 +38,10 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   'playRoadBuilding',
   'playYearOfPlenty',
   'playMonopoly',
+  // Traders & Barbarians: Rivers of Catan bridges, Fishing on Catan fish
+  // spends (free roads, the robber leaving the board).
+  'buildBridge',
+  'spendFish',
 ]);
 
 // Step + slider + auto-play replay. The slider/buttons step through a
