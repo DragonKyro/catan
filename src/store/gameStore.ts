@@ -36,6 +36,8 @@ export type UIMode =
   | { kind: 'placeTribePort' }
   // Traders & Barbarians — picking a river edge to span with a bridge.
   | { kind: 'buildBridge' }
+  // Fishing on Catan — picking the edge for a road paid with these fish.
+  | { kind: 'fishRoad'; tokens: Array<'one' | 'two' | 'three'> }
   // Traders & Barbarians / Merchant Trains — placing a trade wagon after a
   // vote resolution that named a placer (no clear vote-winner edge).
   | { kind: 'placeWagon' }
@@ -84,6 +86,8 @@ export type DialogName =
   // Traders & Barbarians / Fishing on Catan
   | 'spendFish'
   | 'passBoot'
+  // Traders & Barbarians coins (spend / buy gold)
+  | 'coins'
   // Cities & Knights dialogs.
   | 'cityImprovements'
   | 'progressCards'
@@ -154,6 +158,10 @@ const UNDOABLE_ACTION_TYPES = new Set<Action['type']>([
   'bankTrade',
   'buildShip',
   'moveShip',
+  // Traders & Barbarians: bridges and coin trades reveal nothing.
+  'buildBridge',
+  'spendGold',
+  'buyGold',
 ]);
 
 // An otherwise-undoable action that uncovered something can't be taken back

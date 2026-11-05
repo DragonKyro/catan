@@ -6,6 +6,7 @@ import { SEAFARERS_EXPANSION_ID, SHIP_COST } from '@/game/modules/seafarers/cons
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
+import { tradersCostNotes } from './traders/costNotes';
 
 interface Row {
   icon: string;
@@ -48,8 +49,10 @@ export function CostCheatsheet({ onClose }: Props) {
     rows = [BASE_ROWS[0]!, SHIP_ROW, ...BASE_ROWS.slice(1)];
   }
   if (hasTraders) {
-    // Bridge slots in just after Road — both span an edge, both cost wood + brick.
-    rows = [BASE_ROWS[0]!, BRIDGE_ROW, ...BASE_ROWS.slice(1)];
+    // Rivers of Catan: Bridge slots in just after Road (both span an edge).
+    if ((useGameStore.getState().game?.riverEdges?.length ?? 0) > 0) {
+      rows = [BASE_ROWS[0]!, BRIDGE_ROW, ...BASE_ROWS.slice(1)];
+    }
     // Barbarian Attack: surface the knight row only when the scenario is
     // active (the dropdown picker for T&B scenarios already gates this).
     const castles = useGameStore.getState().game?.castles;
@@ -69,6 +72,7 @@ export function CostCheatsheet({ onClose }: Props) {
       ...rows.slice(cityIdx + 1),
     ];
   }
+  const notes = tradersCostNotes(useGameStore.getState().game);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -108,6 +112,15 @@ export function CostCheatsheet({ onClose }: Props) {
           </li>
         ))}
       </ul>
+      {notes.length > 0 && (
+        <ul className="cost-cheatsheet-list">
+          {notes.map((n) => (
+            <li key={n} className="cost-cheatsheet-row" style={{ fontSize: '0.85em' }}>
+              {n}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

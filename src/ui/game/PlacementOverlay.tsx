@@ -601,6 +601,36 @@ export function PlacementOverlay() {
     );
   }
 
+  // Fishing on Catan: a free road paid with fish (5). Same edges as a road.
+  if (uiMode.kind === 'fishRoad') {
+    const tokens = uiMode.tokens;
+    return (
+      <g className="overlay overlay-edges">
+        {game.board.edgeIds.map((eid) => {
+          if (!canConnectRoad(game, acting, eid)) return null;
+          return (
+            <EdgeGhost
+              key={eid}
+              eid={eid}
+              variant="road"
+              previewColor={previewColor}
+              isHovered={hoveredEid === eid}
+              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+              onClick={() =>
+                dispatch({
+                  type: 'spendFish',
+                  playerId: acting,
+                  tokens,
+                  effect: { kind: 'buildRoad', edge: eid },
+                })
+              }
+            />
+          );
+        })}
+      </g>
+    );
+  }
+
   if (uiMode.kind === 'placeWagon') {
     // Only the placer chosen by the vote may click. Other players see nothing.
     const placerId = game.pendingWagonPlacement?.placerId;

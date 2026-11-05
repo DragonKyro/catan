@@ -2,6 +2,7 @@ import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
 import { calculateVictoryPoints, calculateIslandBonusVp } from '@/game/scoring/points';
 import { calculateBarbarianDefenderVp } from '@/game/modules/traders/scoring/barbarianAttack';
+import { CoinIcon, FishTokenIcon, MoneyBagIcon, OldBootIcon } from '@/ui/game/traders/TradersIcons';
 import { calculateRouteLength } from '@/game/engine';
 import { isSetupPhase } from '@/game/actions/setup';
 import { MAX_SHIPS } from '@/game/modules/seafarers/constants';
@@ -184,27 +185,36 @@ export function OpponentPanel() {
                   🧱 {p.cityWalls}
                 </span>
               )}
-              {(p.gold ?? 0) > 0 && (
-                <span title={`Gold — ${p.gold} coins`}>🪙 {p.gold}</span>
+              {(game.coinsInPlay || (p.gold ?? 0) > 0) && (
+                <span className="opp-icon" title={`Gold: ${p.gold ?? 0} (coins are public)`}>
+                  <CoinIcon size={14} /> {p.gold ?? 0}
+                </span>
               )}
               {game.wealthTiles?.wealthiest === p.id && (
-                <span title="Wealthiest Catanian (+1 VP)">👑</span>
+                <span className="opp-icon" title="Wealthiest Catanian: the most gold (+1 VP)">
+                  <MoneyBagIcon size={15} /> +1
+                </span>
               )}
               {game.wealthTiles?.poor.includes(p.id) && (
-                <span title="Poor Catanian (-2 VP)">👜</span>
+                <span className="opp-icon" title="Poor Catanian: tied for the least gold (-2 VP)">
+                  <MoneyBagIcon size={15} poor /> −2
+                </span>
               )}
               {game.strongestPorts?.holder === p.id && (
                 <span title="Strongest Ports (+2 VP)">⚓</span>
               )}
               {(p.fishTokens?.length ?? 0) > 0 && (
                 <span
-                  title={`Fish tokens — ${p.fishTokens!.length} held`}
+                  className="opp-icon"
+                  title={`Fish tokens: ${p.fishTokens!.length} held (values are secret)`}
                 >
-                  🐟 {p.fishTokens!.length}
+                  <FishTokenIcon size={14} fish={1} /> {p.fishTokens!.length}
                 </span>
               )}
               {game.oldBootHolder === p.id && (
-                <span title="Old boot — needs +1 VP to win">👢</span>
+                <span className="opp-icon" title="Old boot: needs 1 more VP to win">
+                  <OldBootIcon size={14} />
+                </span>
               )}
               {(p.defenderKnights?.length ?? 0) > 0 && (
                 <span title={`Defender knights — ${p.defenderKnights!.length}`}>

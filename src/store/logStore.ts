@@ -10,6 +10,7 @@ import { RESOURCES } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { calculateRouteLength } from '@/game/engine';
 import { seafarersLogLines } from './seafarersLog';
+import { tradersLogLines } from './tradersLog';
 import { hexRollsOn } from '@/game/board/hexNumbers';
 import { pipsByResource } from '@/ai/value';
 
@@ -866,6 +867,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     }
 
     for (const line of seafarersLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    // Traders & Barbarians (Rivers / Fishing): same generic line shape.
+    for (const line of tradersLogLines(before, action, after)) {
       append.push({ id: stamp(), kind: 'seafarers', ...line });
     }
 

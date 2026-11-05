@@ -1,0 +1,55 @@
+/* T&B coins / fish row in HandPanel. Shares the grid row C&K uses for
+   commodities (the two expansions never combine). */
+.hand-traders {
+  grid-area: commodities;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 0.85em;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.hand-traders-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hand-traders-group svg {
+  flex-shrink: 0;
+}
+
+.hand-traders-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.hand-traders-note {
+  color: var(--text-soft);
+  font-size: 0.9em;
+}
+
+.hand-traders-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px 1px 3px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.hand-traders-badge.good {
+  color: #2f7a3a;
+}
+
+.hand-traders-badge.bad {
+  color: #b23a2e;
+}
