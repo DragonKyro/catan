@@ -24,8 +24,8 @@ export function handleBuildSettlementWithRiverGold(
   if (next.strongestPorts) {
     next = { ...next, strongestPorts: recalcStrongestPorts(next) };
   }
-  // Merchant Trains: any successful build flags the active player for the
-  // end-of-turn voting round.
+  // Merchant Trains: building a settlement or city collects the turn's
+  // wagon (roads and bridges don't).
   if (next.wateringHoleHexId) next = { ...next, builtThisTurn: true };
   return next;
 }

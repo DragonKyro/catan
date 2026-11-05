@@ -24,6 +24,7 @@ import { WondersDialog } from '@/ui/dialogs/WondersDialog';
 import { SpendFishDialog } from '@/ui/dialogs/SpendFishDialog';
 import { PassBootDialog } from '@/ui/dialogs/PassBootDialog';
 import { WagonVoteDialog } from '@/ui/dialogs/WagonVoteDialog';
+import { EventChoiceDialog } from '@/ui/dialogs/EventChoiceDialog';
 import { GoldResourceDialog } from '@/ui/dialogs/GoldResourceDialog';
 import { RobberOrPirateDialog } from '@/ui/dialogs/RobberOrPirateDialog';
 import { ImprovementsDialog } from '@/ui/dialogs/ImprovementsDialog';
@@ -74,7 +75,12 @@ export function GameView() {
   const spendFishDialog = dialog === 'spendFish' ? <SpendFishDialog /> : null;
   const passBootDialog = dialog === 'passBoot' ? <PassBootDialog /> : null;
   const wagonVoteDialog =
-    game.phase === 'wagonVoting' && !handoffPending ? <WagonVoteDialog /> : null;
+    (game.phase === 'wagonVoting' || game.phase === 'placeWagon') && !handoffPending ? (
+      <WagonVoteDialog />
+    ) : null;
+  // T&B Catan Event Cards: answers an event waits for.
+  const eventDialog =
+    game.phase === 'eventResolution' && !handoffPending ? <EventChoiceDialog /> : null;
   const discardDialog =
     game.phase === 'discard' && !handoffPending ? <DiscardDialog /> : null;
   const goldDialog =
@@ -179,7 +185,7 @@ export function GameView() {
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
             bottom-center of the board, above the hand strip. */}
-        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || wagonVoteDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || wagonVoteDialog || eventDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
             {monopolyDialog}
@@ -187,6 +193,7 @@ export function GameView() {
             {spendFishDialog}
             {passBootDialog}
             {wagonVoteDialog}
+            {eventDialog}
             {discardDialog}
             {robberDialog}
             {goldDialog}

@@ -5,6 +5,7 @@ import { useGameStore } from '@/store/gameStore';
 import { SEAFARERS_EXPANSION_ID, SHIP_COST } from '@/game/modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
+import { REPAIR_ROAD_COST } from '@/game/modules/traders/variants/eventCards/events';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 
 interface Row {
@@ -23,6 +24,7 @@ const BASE_ROWS: Row[] = [
 const SHIP_ROW: Row = { icon: '⛵', label: 'Ship', cost: SHIP_COST };
 const CITY_WALL_ROW: Row = { icon: '🧱', label: 'City Wall', cost: COSTS.cityWall };
 const BRIDGE_ROW: Row = { icon: '🌉', label: 'Bridge', cost: COSTS.bridge };
+const REPAIR_ROAD_ROW: Row = { icon: '🔧', label: 'Repair road', cost: REPAIR_ROAD_COST };
 const HIRE_KNIGHT_ROW: Row = {
   icon: '🛡',
   label: 'Knight',
@@ -56,6 +58,10 @@ export function CostCheatsheet({ onClose }: Props) {
     if (castles && castles.length > 0) {
       rows = [...rows, HIRE_KNIGHT_ROW];
     }
+  }
+  // T&B Catan Event Cards: repairing an Earthquake-damaged road.
+  if (useGameStore.getState().game?.eventCards) {
+    rows = [...rows, REPAIR_ROAD_ROW];
   }
   if (hasCK) {
     // Cities & Knights replaces dev cards with progress cards (drawn on the

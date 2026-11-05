@@ -19,6 +19,9 @@ import { Bridge } from './traders/Bridge';
 import { RiverEdgeMarker } from './traders/RiverEdgeMarker';
 import { FishingGroundMarker } from './traders/FishingGroundMarker';
 import { Wagon } from './traders/Wagon';
+import { WagonSpots } from './traders/WagonSpots';
+import { WateringHoleMarker } from './traders/WateringHoleMarker';
+import { DamagedRoadMarker } from './traders/DamagedRoadMarker';
 import { Knight as DefenderKnight } from './traders/Knight';
 import { CastleMarker } from './traders/CastleMarker';
 import { Barbarian } from './traders/Barbarian';
@@ -107,6 +110,9 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           })()}
         </g>
 
+        {/* T&B Merchant Trains: watering hole art + train start points. */}
+        <WateringHoleMarker game={game} />
+
         <g className="ports">
           {board.ports.map((p) => (
             <PortMarker key={p.edge} board={board} port={p} />
@@ -142,13 +148,24 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           )}
         </g>
 
-        {game.wagons && (
-          <g className="wagons">
-            {game.wagons.map((w) => (
-              <Wagon key={w.edge} board={board} edge={w.edge} />
+        {/* T&B Catan Event Cards / Earthquake: damaged roads. */}
+        {game.damagedRoads && (
+          <g className="damaged-roads">
+            {game.damagedRoads.map((eid) => (
+              <DamagedRoadMarker key={eid} board={board} edge={eid} />
             ))}
           </g>
         )}
+
+        {game.wagons && (
+          <g className="wagons">
+            {game.wagons.map((w) => (
+              <Wagon key={w.edge} board={board} edge={w.edge} front={w.front} />
+            ))}
+          </g>
+        )}
+        {/* Merchant Trains voting round: the lettered places the wagon could go. */}
+        <WagonSpots game={game} />
 
         {/* T&B / Barbarian Attack: castle markers, defender knights on
             castle-bordering edges, and barbarian tokens striding along

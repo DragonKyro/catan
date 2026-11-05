@@ -92,7 +92,7 @@ describe('Strongest Ports scoring', () => {
     expect(recalcStrongestPorts(s)).toEqual({ holder: null });
   });
 
-  it('leaves the tile unowned on a tie', () => {
+  it('nobody takes the tile on a tie when nobody holds it yet', () => {
     const s = mockState({
       ports: [
         { edge: 'e1', vertices: ['v1', 'v2'] },
@@ -104,5 +104,47 @@ describe('Strongest Ports scoring', () => {
       ],
     });
     expect(recalcStrongestPorts(s)).toEqual({ holder: null });
+  });
+
+  // Rulebook p. 4: "The first player to have 3 VPs in buildings on ports
+  // receives the tile. If another player has MORE, they immediately receive
+  // this tile."
+  it('the holder keeps the tile when another player only ties', () => {
+    const s = mockState({
+      ports: [
+        { edge: 'e1', vertices: ['v1', 'v2'] },
+        { edge: 'e2', vertices: ['v3', 'v4'] },
+      ],
+      players: [
+        { id: 'p0', settlements: ['v1'], cities: ['v3'] }, // 3 vp
+        { id: 'p1', settlements: ['v2'], cities: ['v4'] }, // 3 vp
+      ],
+    });
+    expect(recalcStrongestPorts({ ...s, strongestPorts: { holder: 'p0' } })).toEqual({ holder: 'p0' });
+  });
+
+  it('a player with more port VPs takes the tile over', () => {
+    const s = mockState({
+      ports: [
+        { edge: 'e1', vertices: ['v1', 'v2'] },
+        { edge: 'e2', vertices: ['v3', 'v4'] },
+      ],
+      players: [
+        { id: 'p0', settlements: ['v1'], cities: ['v3'] }, // 3 vp
+        { id: 'p1', settlements: [], cities: ['v2', 'v4'] }, // 4 vp
+      ],
+    });
+    expect(recalcStrongestPorts({ ...s, strongestPorts: { holder: 'p0' } })).toEqual({ holder: 'p1' });
+  });
+
+  it('a holder who drops below 3 loses the tile', () => {
+    const s = mockState({
+      ports: [{ edge: 'e1', vertices: ['v1', 'v2'] }],
+      players: [
+        { id: 'p0', settlements: ['v1'], cities: [] }, // 1 vp
+        { id: 'p1', settlements: [], cities: [] },
+      ],
+    });
+    expect(recalcStrongestPorts({ ...s, strongestPorts: { holder: 'p0' } })).toEqual({ holder: null });
   });
 });

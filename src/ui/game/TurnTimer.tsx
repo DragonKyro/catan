@@ -185,6 +185,10 @@ function autoFinish(
     initial.phase === 'chooseRobberOrPirate' ||
     initial.phase === 'placeTribePort' ||
     initial.phase === 'stealResource' ||
+    // T&B: Merchant Trains voting round / wagon placement, Event Card answers.
+    initial.phase === 'wagonVoting' ||
+    initial.phase === 'placeWagon' ||
+    initial.phase === 'eventResolution' ||
     isSetupPhase(initial.phase) ||
     initial.phase === 'rollOrPlayKnight'
   ) {

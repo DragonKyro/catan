@@ -1,4 +1,4 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, CastleState } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, WagonStartPoint, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, CastleState } from './types';
 import { wondersForPlayerCount } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import {
@@ -10,6 +10,9 @@ import { CLOTH_GENERAL_SUPPLY } from './modules/seafarers/cloth';
 import { getPortAtVertex } from './board/adjacency';
 import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
 import { generateTradersBoard } from './modules/traders/board/generator';
+import { resolveWagonStarts } from './modules/traders/merchantTrains/trains';
+import { hasTradersVariant } from './modules/traders/variants';
+import { buildEventDeck } from './modules/traders/variants/eventCards/deck';
 import { buildInitialFishPool } from './modules/traders/fishing/pool';
 import {
   TRADERS_SCENARIO_FISHING,
@@ -249,8 +252,12 @@ export function createGame(opts: CreateGameOptions): GameState {
   const cnkVp = hasCitiesKnights ? CITIES_AND_KNIGHTS_DEFAULT_VP : undefined;
   // Strongest Ports variant: rulebook explicitly says "increase the number
   // of VPs needed to win by 1." Stacks on top of whatever else picked the VP.
-  const strongestPortsBump =
-    hasTraders && tradersVariants?.strongestPorts ? 1 : 0;
+  // Variants combine with any rule set (rulebook p. 4-6), not only T&B.
+  const strongestPortsBump = tradersVariants?.strongestPorts ? 1 : 0;
+  if (tradersVariants?.eventCards && hasCitiesKnights) {
+    // C&K rolls the event die and red die alongside the card — not wired yet.
+    throw new Error('Catan Event Cards cannot be combined with Cities & Knights yet.');
+  }
   const settings: GameSettings = {
     numPlayers,
     victoryPointsToWin:
@@ -262,7 +269,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     scenarioId,
     baseScenarioId,
     tradersScenarioId: hasTraders ? tradersScenarioId ?? 'riversOfCatan' : undefined,
-    tradersVariants: hasTraders ? tradersVariants : undefined,
+    tradersVariants: hasTradersVariant({ tradersVariants }) ? tradersVariants : undefined,
     turnTimerSec: opts.settings?.turnTimerSec,
     aiLevel: opts.settings?.aiLevel,
     customMap,
@@ -491,10 +498,16 @@ export function createGame(opts: CreateGameOptions): GameState {
   const wealthTilesInit = hasTraders
     ? recalcWealthTiles({ players })
     : undefined;
-  const strongestPortsInit =
-    hasTraders && tradersVariants?.strongestPorts
-      ? { holder: null }
-      : undefined;
+  const strongestPortsInit = tradersVariants?.strongestPorts
+    ? { holder: null }
+    : undefined;
+  // Catan Event Cards: the event deck replaces the dice.
+  let eventCards: GameState['eventCards'];
+  if (tradersVariants?.eventCards) {
+    let deck;
+    [deck, rng] = buildEventDeck(rng);
+    eventCards = { deck, current: null };
+  }
 
   // Fishing on Catan seeding. The robber starts off-board (rulebook: "It
   // will enter the game when you Resolve a 7 or play a Knight card"), the
@@ -522,9 +535,13 @@ export function createGame(opts: CreateGameOptions): GameState {
     settings.tradersScenarioId === TRADERS_SCENARIO_MERCHANT_TRAINS;
   let wagons: TradeWagon[] | undefined;
   let wagonSupply: number | undefined;
+  let wagonStarts: WagonStartPoint[] | undefined;
   if (isMerchantTrains) {
     wagons = [];
     wagonSupply = MERCHANT_WAGON_SUPPLY;
+    wagonStarts = wateringHoleHexId
+      ? resolveWagonStarts(board, wateringHoleHexId)
+      : undefined;
     robberActive = false;
   }
 
@@ -592,6 +609,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     riverEdges,
     wealthTiles: wealthTilesInit,
     strongestPorts: strongestPortsInit,
+    eventCards,
     lakeHexId,
     fishingGrounds,
     fishTokenPool,
@@ -600,6 +618,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     wateringHoleHexId,
     wagons,
     wagonSupply,
+    wagonStarts,
+    merchantTrains: isMerchantTrains ? [] : undefined,
     castles,
     barbarianKnightSupply,
   };

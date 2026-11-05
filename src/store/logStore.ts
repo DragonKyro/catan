@@ -10,6 +10,7 @@ import { RESOURCES } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { calculateRouteLength } from '@/game/engine';
 import { seafarersLogLines } from './seafarersLog';
+import { tradersLogLines } from './tradersLog';
 import { pipsByResource } from '@/ai/value';
 
 // =======================================================================
@@ -510,13 +511,16 @@ export const useLogStore = create<LogStore>((set, get) => ({
     switch (action.type) {
       case 'rollDice': {
         // Log the roll itself only — per-player resource gains are derivable
-        // from the board, so the log stays uncluttered.
-        append.push({
-          id: stamp(),
-          kind: 'roll',
-          player: action.playerId,
-          dice: action.dice,
-        });
+        // from the board, so the log stays uncluttered. (With Catan Event
+        // Cards there are no dice: tradersLog names the flipped card.)
+        if (!after.eventCards) {
+          append.push({
+            id: stamp(),
+            kind: 'roll',
+            player: action.playerId,
+            dice: action.dice,
+          });
+        }
         // Volcano scenario: detect eruption by comparing settlement / city
         // counts before/after. Eruption fires inline inside the dice handler,
         // so any settlement/city that vanished from a volcano-adjacent vertex
@@ -867,6 +871,16 @@ export const useLogStore = create<LogStore>((set, get) => ({
     for (const line of seafarersLogLines(before, action, after)) {
       append.push({ id: stamp(), kind: 'seafarers', ...line });
     }
+    // T&B Merchant Trains voting round + Catan Event Cards (same plain-text
+    // entry shape as the Seafarers lines).
+    for (const line of tradersLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    // The production number this action ran, if any: a dice roll, or with
+    // Catan Event Cards the flipped card's number (possibly after the
+    // event's choices, on a later action).
+    const rolled =
+      after.lastRoll && after.lastRoll !== before.lastRoll ? after.lastRoll.total : null;
 
     // Turn detection: one "turn" = one full revolution of the table.
     // We bump the turn counter only when the active turn-holder wraps
@@ -910,8 +924,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       rollCounts: { ...get().stats.rollCounts },
       resourcesInCirculation: { ...get().stats.resourcesInCirculation },
     };
-    if (action.type === 'rollDice') {
-      const total = action.dice[0] + action.dice[1];
+    if (rolled !== null) {
+      const total = rolled;
       newStats.rollCounts[total] = (newStats.rollCounts[total] ?? 0) + 1;
     }
     for (const r of RESOURCES) {
@@ -1000,8 +1014,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       newSteals[action.playerId] = (newSteals[action.playerId] ?? 0) + 1;
       newSteals[action.stealFrom] = (newSteals[action.stealFrom] ?? 0) - 1;
     }
-    if (action.type === 'rollDice') {
-      const total = action.dice[0] + action.dice[1];
+    if (rolled !== null) {
+      const total = rolled;
       if (total !== 7) {
         // For each producing hex matching the rolled token whose robber
         // is currently sitting on it, tally one "blocked" event per

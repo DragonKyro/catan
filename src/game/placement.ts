@@ -42,6 +42,11 @@ export function canPlaceSettlement(
   if (!hasSettleableLand(state, vertexId)) return false;
   // Cities & Knights: a knight occupies a vertex like a building.
   if (state.knights?.[vertexId]) return false;
+  // T&B Catan Event Cards / Earthquake: no settlement at either end of a
+  // damaged road.
+  if (state.damagedRoads?.some((e) => state.board.edges[e]?.vertices.includes(vertexId))) {
+    return false;
+  }
   for (const p of state.players) {
     if (p.settlements.includes(vertexId) || p.cities.includes(vertexId)) return false;
     for (const n of vertex.neighborVertices) {
@@ -92,6 +97,9 @@ export function canConnectRoad(
   }
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
+  // T&B Catan Event Cards / Earthquake: no new roads until every one of
+  // your damaged roads is repaired.
+  if (state.damagedRoads?.some((e) => player.roads.includes(e))) return false;
   const [v1, v2] = edge.vertices;
   for (const v of [v1, v2]) {
     let blocked = false;

@@ -294,8 +294,10 @@ export const useGameStore = create<AppStore>((set, get) => ({
       applyTransition(set, get, before, next);
       // Production-pulse highlight: only on real production rolls (not 7).
       // Cleared by the BoardSVG effect ~1.5s later.
-      if (action.type === 'rollDice') {
-        const total = action.dice[0] + action.dice[1];
+      // A new roll (or, with Catan Event Cards, the production after the
+      // flipped card's event) pulses the hexes of its number.
+      if (next.lastRoll && next.lastRoll !== before.lastRoll) {
+        const total = next.lastRoll.total;
         set({ lastRolledHighlight: total !== 7 ? total : null });
       }
       // Broadcast to peers only after local apply succeeds.
@@ -319,8 +321,10 @@ export const useGameStore = create<AppStore>((set, get) => ({
       const next = applyAction(before, action);
       useLogStore.getState().record(before, action, next);
       applyTransition(set, get, before, next);
-      if (action.type === 'rollDice') {
-        const total = action.dice[0] + action.dice[1];
+      // A new roll (or, with Catan Event Cards, the production after the
+      // flipped card's event) pulses the hexes of its number.
+      if (next.lastRoll && next.lastRoll !== before.lastRoll) {
+        const total = next.lastRoll.total;
         set({ lastRolledHighlight: total !== 7 ? total : null });
       }
       // Remote actions never produce an undo snapshot — clear any stale one.

@@ -83,6 +83,7 @@ export function NewGame({ onBack }: Props = {}) {
   const neuralAi = !customMap && supportsNeuralAi({
     expansions: expansionListFrom(expansions),
     baseScenarioId: expansions.seafarers || expansions.traders ? undefined : expansions.baseScenarioId,
+    tradersVariants: expansions.tradersVariants,
   });
   const hasAiSeat = types.slice(0, numPlayers).includes('ai');
   const vp = vpOverride ?? recommendedVpValue;
@@ -119,8 +120,13 @@ export function NewGame({ onBack }: Props = {}) {
             : undefined,
         tradersScenarioId:
           !customMap && expansions.traders ? expansions.tradersScenarioId : undefined,
-        tradersVariants:
-          !customMap && expansions.traders ? expansions.tradersVariants : undefined,
+        // T&B variants work with any rule set; C&K can't take Event Cards yet.
+        tradersVariants: !customMap
+          ? {
+              ...expansions.tradersVariants,
+              eventCards: expansions.tradersVariants.eventCards && !expansions.citiesKnights,
+            }
+          : undefined,
         turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
         aiLevel: neuralAi ? aiLevel : undefined,
         customMap: customMap ?? undefined,

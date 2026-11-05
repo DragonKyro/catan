@@ -8,8 +8,8 @@ import {
   canPlaceInitialSettlement,
   canPlaceInitialRoad,
   canPlaceBridge,
-  canMoveRobberTo,
 } from '@/game/placement';
+import { robberHexAllowed, robberStealCandidates } from '@/game/engine';
 import {
   canBuildShip,
   canPlaceInitialShip,
@@ -23,7 +23,12 @@ import {
 } from '@/game/modules/seafarers/actions/movePirate';
 import { validTribePortEdges } from '@/game/modules/seafarers/tribe';
 import { totalResources } from '@/game/resources';
-import { canPlaceWagon as canPlaceWagonHelper } from '@/game/modules/traders/merchantTrains/placement';
+import {
+  placementFront,
+  placementKey,
+  placementTags,
+} from '@/game/modules/traders/merchantTrains/trains';
+import { Wagon } from './traders/Wagon';
 import { canPlaceKnight } from '@/game/modules/traders/barbarianAttack/placement';
 import type { EdgeId, GameState, PlayerColor, PlayerId, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
@@ -601,28 +606,98 @@ export function PlacementOverlay() {
     );
   }
 
-  if (uiMode.kind === 'placeWagon') {
-    // Only the placer chosen by the vote may click. Other players see nothing.
-    const placerId = game.pendingWagonPlacement?.placerId;
-    if (!placerId || placerId !== acting) return null;
+  // T&B Merchant Trains: the chosen player places the wagon, or (no
+  // majority) a bidder gives their votes to a spot. The lettered spots are
+  // drawn for everyone by BoardSVG (WagonSpots); these are the click
+  // targets for the seat whose turn it is.
+  const wagonPick =
+    (game.phase === 'placeWagon' && game.pendingWagonPlacement?.placerId === acting) ||
+    (game.phase === 'wagonVoting' && game.wagonVote?.stage === 'assign');
+  if (wagonPick) {
+    const tags = placementTags(game);
+    const perEdge = new Map<string, number>();
+    for (const t of tags) perEdge.set(t.placement.edge, (perEdge.get(t.placement.edge) ?? 0) + 1);
     return (
       <g className="overlay overlay-edges">
-        {game.board.edgeIds.map((eid) => {
-          if (!canPlaceWagonHelper(game, eid)) return null;
+        {tags.map(({ placement, tag }) => {
+          const key = placementKey(placement);
+          const front = placementFront(game, placement) ?? undefined;
+          const shared = (perEdge.get(placement.edge) ?? 1) > 1;
+          const e = game.board.edges[placement.edge]!;
+          const tail = front === e.vertices[0] ? e.vertices[1] : e.vertices[0];
+          const head = front ?? e.vertices[1];
+          const a = game.board.vertices[shared ? tail : e.vertices[0]]!.position;
+          const b = game.board.vertices[shared ? head : e.vertices[1]]!.position;
+          // Two spots on one edge split it: each owns the half by its front.
+          const from = shared ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : a;
           return (
-            <EdgeGhost
-              key={eid}
-              eid={eid}
-              variant="road"
-              previewColor={previewColor}
-              isHovered={hoveredEid === eid}
-              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+            <g
+              key={key}
+              style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHoveredEid(key)}
+              onMouseLeave={() => setHoveredEid(null)}
               onClick={() =>
-                dispatch({ type: 'placeWagon', playerId: acting, edge: eid })
+                dispatch(
+                  game.phase === 'placeWagon'
+                    ? { type: 'placeWagon', playerId: acting, edge: placement.edge, train: placement.train }
+                    : { type: 'assignWagonVotes', playerId: acting, location: placement },
+                )
               }
-            />
+            >
+              <line x1={from.x} y1={from.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={22} />
+              {hoveredEid === key && (
+                <Wagon
+                  board={game.board}
+                  edge={placement.edge}
+                  front={front}
+                  ghost
+                  active
+                  tag={tag}
+                  at={shared ? 0.7 : 0.5}
+                />
+              )}
+            </g>
           );
         })}
+      </g>
+    );
+  }
+
+  // T&B Catan Event Cards / Earthquake: pick one of your roads to damage.
+  const eventChoice = game.phase === 'eventResolution' ? game.eventCards?.pending?.choices[0] : undefined;
+  if (eventChoice?.kind === 'damageRoad' && eventChoice.playerId === acting) {
+    const damaged = new Set(game.damagedRoads ?? []);
+    return (
+      <g className="overlay overlay-edges">
+        {(actingPlayer?.roads ?? [])
+          .filter((eid) => !damaged.has(eid))
+          .map((eid) => {
+            const e = game.board.edges[eid]!;
+            const p1 = game.board.vertices[e.vertices[0]]!.position;
+            const p2 = game.board.vertices[e.vertices[1]]!.position;
+            return (
+              <g
+                key={eid}
+                style={{ cursor: 'pointer' }}
+                onMouseEnter={() => setHoveredEid(eid)}
+                onMouseLeave={() => setHoveredEid(null)}
+                onClick={() => dispatch({ type: 'resolveEvent', playerId: acting, edge: eid })}
+              >
+                <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="transparent" strokeWidth={20} />
+                <line
+                  x1={p1.x}
+                  y1={p1.y}
+                  x2={p2.x}
+                  y2={p2.y}
+                  stroke="#f2b705"
+                  strokeOpacity={hoveredEid === eid ? 0.95 : 0.6}
+                  strokeWidth={hoveredEid === eid ? 11 : 9}
+                  strokeDasharray="5 3"
+                  strokeLinecap="round"
+                />
+              </g>
+            );
+          })}
       </g>
     );
   }
@@ -656,8 +731,9 @@ export function PlacementOverlay() {
     return (
       <g className="overlay overlay-hexes">
         {game.board.hexIds.map((hid) => {
-          // Land hexes on the table that the scenario allows.
-          if (!canMoveRobberTo(game, hid)) return null;
+          // Land hexes on the table that the rules allow (scenario bans,
+          // T&B Friendly Robber, ...).
+          if (!robberHexAllowed(game, hid, acting)) return null;
           const hex = game.board.hexes[hid]!;
           return (
             <circle
@@ -673,7 +749,7 @@ export function PlacementOverlay() {
               strokeWidth={2}
               style={{ cursor: 'pointer' }}
               onClick={() => {
-                const candidates = stealCandidatesOnHex(game, acting, hid);
+                const candidates = robberStealCandidates(game, acting, hid);
                 if (candidates.length === 0) {
                   dispatch({
                     type: 'moveRobber',
@@ -1014,32 +1090,6 @@ function vertexConnectedToOwnRoadNetwork(
     if (p.bridges?.includes(eid)) return true;
   }
   return false;
-}
-
-// Returns IDs of opponent players with a settlement/city on the given hex
-// who still have at least one resource card. Mirrors engine logic.
-function stealCandidatesOnHex(
-  game: import('@/game/types').GameState,
-  actorId: string,
-  hexId: string,
-): string[] {
-  const out: string[] = [];
-  for (const v of Object.values(game.board.vertices)) {
-    if (!v.hexes.includes(hexId)) continue;
-    for (const p of game.players) {
-      if (p.id === actorId) continue;
-      if (p.settlements.includes(v.id) || p.cities.includes(v.id)) {
-        const total =
-          p.resources.wood +
-          p.resources.brick +
-          p.resources.sheep +
-          p.resources.wheat +
-          p.resources.ore;
-        if (total > 0 && !out.includes(p.id)) out.push(p.id);
-      }
-    }
-  }
-  return out;
 }
 
 // Seafarers ship moves: legal destinations (Pirate Islands line rules

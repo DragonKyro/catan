@@ -13,10 +13,8 @@ import { chooseMainPhaseAction } from './main';
 import { chooseDevCardPlay } from './devcard';
 import { chooseGoldResourcePicks } from './seafarers/gold';
 import { choosePirateMove, preferPirate } from './seafarers/pirate';
-import {
-  trySubmitWagonVote,
-  tryPlaceWagon,
-} from './traders/merchantTrains';
+import { chooseMerchantTrainsAction } from './traders/merchantTrains';
+import { chooseEventAnswer } from './traders/eventCards';
 
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
@@ -118,12 +116,15 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
     return chooseMainPhaseAction(state, playerId);
   }
 
-  // T&B Merchant Trains end-of-turn phases.
-  if (state.phase === 'wagonVoting') {
-    return trySubmitWagonVote(state, playerId);
+  // T&B Catan Event Cards: answer the flipped event (pick / give / steal /
+  // damage a road).
+  if (state.phase === 'eventResolution') {
+    return chooseEventAnswer(state, playerId);
   }
-  if (state.phase === 'placeWagon') {
-    return tryPlaceWagon(state, playerId);
+
+  // T&B Merchant Trains end-of-turn voting round and wagon placement.
+  if (state.phase === 'wagonVoting' || state.phase === 'placeWagon') {
+    return chooseMerchantTrainsAction(state, playerId);
   }
 
   return null;

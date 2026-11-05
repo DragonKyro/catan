@@ -9,6 +9,8 @@ import {
 } from '@/game/modules/seafarers/cloth';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import type { CastleState, GameState, Player } from '@/game/types';
+import { MerchantTrainsBlock } from './MerchantTrainsBlock';
+import { TradersVariantsBlock, hasTradersVariantBlock } from './TradersVariantsBlock';
 import './ScenarioPanel.css';
 
 // Scenario-specific progress tracker. Returns whether ANY scenario tracker
@@ -16,6 +18,8 @@ import './ScenarioPanel.css';
 // Scenario tab at all.
 export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getState>['game']): boolean {
   if (!state) return false;
+  // T&B variants (Strongest Ports, Event Cards, Friendly Robber) show in any game.
+  if (hasTradersVariantBlock(state)) return true;
   const hasSeafarers = state.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const hasTraders = state.settings.expansions.includes(TRADERS_EXPANSION_ID);
   if (hasSeafarers) {
@@ -108,10 +112,21 @@ export function ScenarioPanel() {
   if (!game) return null;
   const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const hasTraders = game.settings.expansions.includes(TRADERS_EXPANSION_ID);
-  if (!hasSeafarers && !hasTraders) return null;
   // T&B path: own simpler tracker (no chip / fog / wonder machinery).
   if (hasTraders) {
     return <TradersScenarioPanel />;
+  }
+  if (!hasSeafarers) {
+    // Base game with T&B variants only.
+    if (!hasTradersVariantBlock(game)) return null;
+    return (
+      <section className="scenario-panel">
+        <header className="scenario-panel-header">
+          <span className="scenario-panel-title">Traders & Barbarians variants</span>
+        </header>
+        <TradersVariantsBlock game={game} />
+      </section>
+    );
   }
   const scenario = game.settings.scenarioId ? getScenario(game.settings.scenarioId) : null;
   const byId = (pid: string) => game.players.find((p) => p.id === pid);
@@ -362,6 +377,7 @@ export function ScenarioPanel() {
           </div>
         );
       })()}
+      <TradersVariantsBlock game={game} />
     </section>
   );
 }
@@ -421,23 +437,7 @@ function TradersScenarioPanel() {
           </div>
         </div>
       )}
-      {isMerchantTrains && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Wagons</span>
-            <span className="scenario-panel-block-sum">
-              {game.wagons?.length ?? 0} placed · {game.wagonSupply ?? 0} in
-              supply
-            </span>
-          </div>
-          <div className="scenario-panel-note">
-            Every build acquires a wagon at the end of your turn. All
-            players bid wool/wheat to steer where it goes. Wagons on the
-            same edge as a road count for that player's Longest Route, and
-            buildings between two wagons earn +1 VP each.
-          </div>
-        </div>
-      )}
+      {isMerchantTrains && <MerchantTrainsBlock game={game} />}
       {isRivers && (
         <div className="scenario-panel-block">
           <div className="scenario-panel-block-head">
@@ -508,39 +508,7 @@ function TradersScenarioPanel() {
           </ul>
         </div>
       )}
-      {game.strongestPorts && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Strongest Ports</span>
-            <span className="scenario-panel-block-sum">+2 VP</span>
-          </div>
-          {(() => {
-            const holderId = game.strongestPorts.holder;
-            if (!holderId) {
-              return (
-                <div className="scenario-panel-note">
-                  No-one has 3+ VPs in port buildings yet.
-                </div>
-              );
-            }
-            const holder = game.players.find((p) => p.id === holderId);
-            if (!holder) return null;
-            return (
-              <ul className="scenario-panel-chips">
-                <li className="scenario-panel-chip is-claimed">
-                  <span className="scenario-panel-chip-vp">⚓</span>
-                  <span
-                    className="scenario-panel-chip-swatch"
-                    style={{ background: playerColorVar(holder.color) }}
-                    aria-hidden
-                  />
-                  <span className="scenario-panel-chip-name">{holder.name}</span>
-                </li>
-              </ul>
-            );
-          })()}
-        </div>
-      )}
+      <TradersVariantsBlock game={game} />
     </section>
   );
 }

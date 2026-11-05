@@ -1,35 +1,14 @@
 import type { GameState, EdgeId, VertexId } from '../../../types';
+import { legalWagonPlacements } from './trains';
 
-// Is this edge a legal merchant-train extension?
-// Rules summary:
-//   - Edge cannot already have a wagon.
-//   - Edge must be adjacent to the watering hole hex, OR share a vertex
-//     with an existing wagon at an open endpoint (vertex with exactly
-//     one incident wagon).
-//   - Merchant trains do not branch — a vertex that already has 2 incident
-//     wagons is no longer a valid extension point (it's a merge).
+// Can the next wagon go on this edge (as a new train on a start edge, or at
+// the front of a train)? See `legalWagonPlacements` for the rules.
 export function canPlaceWagon(state: GameState, edgeId: EdgeId): boolean {
-  if (!state.wateringHoleHexId) return false;
-  const edge = state.board.edges[edgeId];
-  if (!edge) return false;
-  if ((state.wagonSupply ?? 0) <= 0) return false;
-  const wagons = state.wagons ?? [];
-  if (wagons.some((w) => w.edge === edgeId)) return false;
-
-  // 1) Watering-hole adjacency: edge touches the watering hole hex.
-  if (edge.hexes.includes(state.wateringHoleHexId)) return true;
-
-  // 2) Endpoint adjacency: at least one of the edge's vertices is a
-  //    train endpoint — a vertex with exactly 1 incident wagon AND not
-  //    on the watering hole (which has its own slots).
-  for (const v of edge.vertices) {
-    const degree = wagonDegreeAtVertex(state, v);
-    if (degree === 1) return true;
-  }
-  return false;
+  return legalWagonPlacements(state).some((p) => p.edge === edgeId);
 }
 
-// Count of wagons touching this vertex.
+// Count of wagons touching this vertex. A building where 2+ wagon edges
+// meet is "between 2 wagons" (+1 VP).
 export function wagonDegreeAtVertex(
   state: GameState,
   vertexId: VertexId,

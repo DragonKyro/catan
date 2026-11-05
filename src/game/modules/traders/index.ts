@@ -8,10 +8,13 @@ import { handlePlaceInitialSettlementWithRiverGold } from './actions/placeInitia
 import { handlePlaceInitialRoadWithRiverGold } from './actions/placeInitialRoad';
 import { handleSpendFish } from './actions/spendFish';
 import { handlePassOldBoot } from './actions/passOldBoot';
-import { handleSubmitWagonVote, handlePlaceWagon } from './merchantTrains/voting';
+import {
+  handleSubmitWagonVote,
+  handleAssignWagonVotes,
+  handlePlaceWagon,
+} from './merchantTrains/voting';
 import { handleEndTurnTraders } from './turn';
 import { handleHireKnight } from './actions/hireKnight';
-import { validateMoveRobberFriendlyRobber } from './variants/friendlyRobber';
 import { TRADERS_EXPANSION_ID } from './constants';
 
 // The Traders & Barbarians module. Wraps build* actions to award scenario
@@ -38,13 +41,14 @@ export const tradersModule: RuleModule = {
     spendFish: handleSpendFish as never,
     passOldBoot: handlePassOldBoot as never,
     submitWagonVote: handleSubmitWagonVote as never,
+    assignWagonVotes: handleAssignWagonVotes as never,
     placeWagon: handlePlaceWagon as never,
     hireKnight: handleHireKnight as never,
     endTurn: handleEndTurnTraders as never,
   },
   validators: {
+    // (The Friendly Robber variant has its own module — see ./variants.)
     moveRobber: combineRobberValidators(
-      validateMoveRobberFriendlyRobber,
       validateMoveRobberFishingScenario,
       validateMoveRobberCastle,
     ),

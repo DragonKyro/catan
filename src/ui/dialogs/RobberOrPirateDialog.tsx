@@ -1,7 +1,6 @@
 import type { GameState, PlayerId } from '@/game/types';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
-import { canMoveRobberTo } from '@/game/placement';
-import { totalResources } from '@/game/resources';
+import { robberHexAllowed, robberStealCandidates } from '@/game/engine';
 import {
   canMovePirateTo,
   pirateStealCandidates,
@@ -14,13 +13,8 @@ import { useCanAct } from '@/ui/shared/useCanAct';
 function robberVictims(game: GameState, acting: PlayerId): Set<PlayerId> {
   const out = new Set<PlayerId>();
   for (const hid of game.board.hexIds) {
-    if (!canMoveRobberTo(game, hid)) continue;
-    for (const v of game.board.hexes[hid]!.corners) {
-      for (const p of game.players) {
-        if (p.id === acting || totalResources(p.resources) === 0) continue;
-        if (p.settlements.includes(v) || p.cities.includes(v)) out.add(p.id);
-      }
-    }
+    if (!robberHexAllowed(game, hid, acting)) continue;
+    for (const pid of robberStealCandidates(game, acting, hid)) out.add(pid);
   }
   return out;
 }
