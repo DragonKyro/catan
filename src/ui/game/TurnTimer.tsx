@@ -185,6 +185,8 @@ function autoFinish(
     initial.phase === 'chooseRobberOrPirate' ||
     initial.phase === 'placeTribePort' ||
     initial.phase === 'stealResource' ||
+    // T&B Fishing on Catan: the full-hand swap choice.
+    initial.phase === 'fishSwap' ||
     isSetupPhase(initial.phase) ||
     initial.phase === 'rollOrPlayKnight'
   ) {
