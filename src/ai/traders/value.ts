@@ -33,5 +33,16 @@ export function tradersVertexBonus(
   for (const fg of state.fishingGrounds ?? []) {
     if (fg.vertices.includes(vertexId)) bonus += numberPips(fg.token) * FISH_PIP_WEIGHT;
   }
+  // Traders & Barbarians scenario: the second starting placement (a city)
+  // is where the wagon starts — a corner on or next to an interior path
+  // reaches a plaza on the first turn.
+  if (state.tradersBarbarians && state.phase === 'setupRound2') {
+    const plazas = new Set(state.tradersBarbarians.locations.map((l) => l.plaza));
+    const near = vertex?.neighborVertices ?? [];
+    if (near.some((n) => plazas.has(n))) bonus += 1.2;
+    else if (near.some((n) => state.board.vertices[n]?.neighborVertices.some((m) => plazas.has(m)))) {
+      bonus += 0.5;
+    }
+  }
   return bonus;
 }
