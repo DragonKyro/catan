@@ -130,10 +130,16 @@ export function trySubmitWagonVote(state: GameState, playerId: PlayerId): Action
       leaderVotes = n;
     }
   }
-  if (leader === playerId) return pass;
-  const theirs = bestPlacementFor(state, leader, options)!;
-  const stake = mine.score - wagonPlacementScore(state, playerId, theirs.placement);
   const iAmActive = playerId === vote.acquirerId;
+  // What we'd get if someone else ends up choosing: the leading bidder's
+  // pick, or — bidding first as the active player — the worst pick any
+  // rival could make if they outbid us.
+  let fallback = Infinity;
+  for (const pid of iAmActive ? vote.order.filter((id) => id !== playerId) : [leader]) {
+    const theirs = bestPlacementFor(state, pid, options)!;
+    fallback = Math.min(fallback, wagonPlacementScore(state, playerId, theirs.placement));
+  }
+  const stake = mine.score - fallback;
   // The active player bids first, and nobody bidding means they choose
   // anyway, so they bid one card only to guard a valuable spot (a lone
   // 1-card rival then ties, and ties fall back to the active player).
