@@ -37,12 +37,14 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 - **The Wonders of Catan** — claim one of the rulebook's wonders and build its 4 levels; finish it, or reach 10 VP with the highest level, to win
 - **New World** (12 VP) — open map; +1 VP per island you didn't start on
 
-**Traders & Barbarians expansion** (3–4 players, 2025 rulebook):
+**Traders & Barbarians expansion** (3–6 players, 2025 rulebooks; 5–6 players use the T&B 5–6 boards and paired turns, see below):
 
 - **Rivers of Catan** (10 VP) — two fixed river tiles run from the mountains to the swamps; seven bridge sites where roads can't go. Bridges (2 brick + 1 lumber) pay 3 gold, roads and settlements on a river tile 1 gold. Spend 2 gold for any card (twice a turn), buy gold at your bank rate, trade with it. The richest player alone is Wealthiest (+1 VP); everyone tied for the least gold is Poor (−2 VP). The 2 shares the 12's hex
 - **Fishing on Catan** (10 VP, 11 with the old boot) — the lake (fishes on 2, 3, 11, 12) sits somewhere in the inner ring and six fishing grounds fill the coastal notches. Spend fish to remove the robber (2), steal (3), take a card (4), build a free road (5) or take a development card (7); hold at most 7 tokens; pass the old boot to anyone with at least your VP
 - **Merchant Trains** (12 VP) — the watering hole replaces the desert; build a settlement or city to collect a wagon, then everyone bids wool / wheat (public, clockwise) for where it goes. Trains leave the watering hole's three start corners, run nose to tail, never branch and merge where their fronts meet. A wagon on a road is an extra road for the Longest Route; a building between two wagons is worth +1 VP
 - **Barbarian Attack** (12 VP, 2025 rulebook) — every building lands 3 barbarians on the coast (dice rolled for you, shown in the log); 3 on a hex conquer it and the buildings touching only conquered hexes stop counting. Buy the scenario's development cards (Capture, Knighthood, Swift Knight, Treason) to raise knights, move them at the end of your turn (3 edges, 5 for a wheat), and drive the barbarians off: every 2 prisoners = 1 VP. Second starting placement is a city; no robber — a 7 steals from anyone.
+
+**Traders & Barbarians 5–6** (2025 T&B 5–6 rulebook) — all four scenarios at 5 or 6 players on the CATAN 5–6 island with its eleven printed harbors, same win targets. Paired turns: Player 1 rolls and takes a whole turn (scenario End of Turn phase included), then Player 2 (third seat to the left) takes an Action phase — supply trades only — and their own End of Turn phase (a Merchant Trains voting round as the active player, Barbarian Attack knight moves + expel; coins and fish as normal). Rivers adds a third river (mountains → pasture → pasture, ten bridge sites, no 2-on-12); Fishing has two lakes (2 / 3 / 11 / 12 and 4 / 10), eight fishing grounds and 44 fish tokens; Merchant Trains two watering holes (six starts) and 33 wagons; Barbarian Attack two castles, two deserts, two coastal 5s and 9s (both get the barbarian) and 48 barbarians.
 
 **Traders & Barbarians variants** — work with any game (base, Seafarers, T&B scenarios), ticked on the New Game screen:
 
@@ -119,7 +121,7 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 - [~] Phase 8 — Cities & Knights expansion (engine complete: knights, commodities, barbarian advance + attack, all 3 improvement tracks with L3 abilities + metropolis, 54 progress cards with effects, city walls. **AI support missing** — AI seats default to base play; see Outstanding work)
 - [ ] Phase 9 — Cities & Knights 5–6 player extension
 - [~] Phase 10 — Traders & Barbarians expansion (4 of 5 scenarios shipping: Rivers of Catan + Fishing on Catan + Merchant Trains + Barbarian Attack, plus the Friendly Robber, Strongest Ports and Catan Event Cards variants, which combine with any game. The Traders & Barbarians combo scenario and Catan for Two variant are deferred; see Outstanding work)
-- [ ] Phase 11 — Traders & Barbarians 5–6 player extension
+- [x] Phase 11 — Traders & Barbarians 5–6 player extension (Rivers of Catan, Fishing on Catan, Merchant Trains and Barbarian Attack on their T&B 5–6 maps, with the paired-player turn; the combo scenario is still 3–4 / deferred)
 - [ ] Phase 12 — Explorers & Pirates expansion
 - [ ] Phase 13 — Explorers & Pirates 5–6 player extension
 - [ ] Phase 14 — *Rivals for Catan* (2-player card-game variant)
