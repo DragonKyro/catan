@@ -7,13 +7,22 @@ import { PLAYER_COLOR_LABEL, playerColorVar } from '@/ui/shared/playerColors';
 import { ColorPicker } from '@/ui/shared/ColorPicker';
 import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL } from '@/ai/nn';
 import {
+  LOBBY_RULES,
+  LOBBY_VARIANTS,
   MAX_SEATS,
-  ONLINE_BASE_MAPS,
   ONLINE_SEAFARERS_SCENARIOS,
+  ONLINE_TRADERS_SCENARIOS,
+  type LobbyRules,
+  lobbyBaseMaps,
   lobbyHasAiLevels,
+  lobbyRules,
   lobbyScenario,
   lobbyStartProblem,
+  lobbyVariantAllowed,
+  lobbyVariantLabels,
   lobbyVp,
+  lobbyVpTarget,
+  withLobbyRules,
 } from '@/store/lobbyGame';
 import './LobbyScreen.css';
 
@@ -99,13 +108,16 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
   const hasAi = lobby.seats.some((s) => s.isAI);
   const aiLevels = lobbyHasAiLevels(lobby);
   const aiLevel = lobby.aiLevel ?? DEFAULT_AI_LEVEL;
+  const rules = lobbyRules(lobby.game);
+  const variants = lobbyVariantLabels(lobby.game);
 
   if (!isHost) {
     return (
       <div className="lobby-settings">
         <h3>Game</h3>
         <p className="lobby-summary">
-          {info.name} · {vp} VP to win
+          {info.name} · {lobbyVpTarget(lobby)} VP to win
+          {variants.length > 0 && ` · ${variants.join(', ')}`}
           {hasAi && aiLevels && ` · ${AI_LEVELS[aiLevel].label} AI`}
         </p>
       </div>
@@ -118,14 +130,17 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
       <label className="lobby-vp">
         <span>Rules</span>
         <select
-          value={lobby.game.seafarers ? 'seafarers' : 'base'}
-          onChange={(e) => hostSetGame({ ...lobby.game, seafarers: e.target.value === 'seafarers' })}
+          value={rules}
+          onChange={(e) => hostSetGame(withLobbyRules(lobby.game, e.target.value as LobbyRules))}
         >
-          <option value="base">Base game</option>
-          <option value="seafarers">Seafarers</option>
+          {LOBBY_RULES.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.label}
+            </option>
+          ))}
         </select>
       </label>
-      {lobby.game.seafarers ? (
+      {rules === 'seafarers' && (
         <label className="lobby-vp">
           <span>Scenario</span>
           <select
@@ -139,14 +154,15 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
             ))}
           </select>
         </label>
-      ) : (
+      )}
+      {rules === 'traders' && (
         <label className="lobby-vp">
-          <span>Map</span>
+          <span>Scenario</span>
           <select
-            value={lobby.game.baseScenarioId}
-            onChange={(e) => hostSetGame({ ...lobby.game, baseScenarioId: e.target.value })}
+            value={lobby.game.tradersScenarioId}
+            onChange={(e) => hostSetGame({ ...lobby.game, tradersScenarioId: e.target.value })}
           >
-            {ONLINE_BASE_MAPS.map((s) => (
+            {ONLINE_TRADERS_SCENARIOS.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
               </option>
@@ -154,10 +170,54 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
           </select>
         </label>
       )}
+      {(rules === 'base' || rules === 'citiesKnights') && (
+        <label className="lobby-vp">
+          <span>Map</span>
+          <select
+            value={lobby.game.baseScenarioId}
+            onChange={(e) => hostSetGame({ ...lobby.game, baseScenarioId: e.target.value })}
+          >
+            {lobbyBaseMaps(lobby.game).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <div className="lobby-variants" role="group" aria-label="Traders & Barbarians variants">
+        <span className="lobby-variants-label">Variants</span>
+        {LOBBY_VARIANTS.map((v) => {
+          const allowed = lobbyVariantAllowed(lobby.game, v.id);
+          return (
+            <label
+              key={v.id}
+              className="lobby-variant"
+              title={allowed ? v.title : "Can't be combined with Cities & Knights yet"}
+            >
+              <input
+                type="checkbox"
+                checked={allowed && lobby.game.variants[v.id]}
+                disabled={!allowed}
+                onChange={(e) =>
+                  hostSetGame({
+                    ...lobby.game,
+                    variants: { ...lobby.game.variants, [v.id]: e.target.checked },
+                  })
+                }
+              />
+              <span>{v.label}</span>
+            </label>
+          );
+        })}
+      </div>
       <label className="lobby-vp">
         <span>
           Victory points to win{' '}
-          <span className="lobby-vp-hint">(recommended {recommended})</span>
+          <span className="lobby-vp-hint">
+            (recommended {recommended}
+            {lobby.game.variants.strongestPorts && ', +1 for Strongest Ports'})
+          </span>
         </span>
         <span className="lobby-vp-controls">
           {lobby.victoryPointsToWin !== null && lobby.victoryPointsToWin !== recommended && (

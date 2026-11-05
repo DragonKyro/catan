@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chooseAction } from '@/ai';
 import { getActingPlayerId } from '@/game/helpers';
+import { defaultLobbyGame } from '@/store/lobbyGame';
 import type { Action } from '@/game/types';
 
 const LIVE = process.env.FIREBASE_LIVE === '1';
@@ -176,7 +177,7 @@ describe.skipIf(!LIVE)('online play on the real Firebase project', () => {
     const noop = { lobby: () => {}, start: () => {}, action: () => {}, chat: () => {}, presence: () => {}, connected: () => {} };
     const code = `T${run.slice(-3).toUpperCase().replace(/[^A-Z0-9]/g, 'X')}`;
     rooms.push(code);
-    const lobby = { hostUuid: 'ua', seats: [], victoryPointsToWin: null, seed: 1, game: { seafarers: false, scenarioId: 'x', baseScenarioId: 'standard' } };
+    const lobby = { hostUuid: 'ua', seats: [], victoryPointsToWin: null, seed: 1, game: defaultLobbyGame() };
     const ca = await a.createRoom(code, { hostUuid: 'ua', createdAt: Date.now(), build: 'live-test' }, lobby, { uuid: 'ua', name: 'A' }, noop);
     expect(ca).not.toBeNull();
     // Someone else can't take over the code.
@@ -239,7 +240,7 @@ describe.skipIf(!LIVE)('online play on the real Firebase project', () => {
     const noop = { lobby: () => {}, start: () => {}, action: () => {}, chat: () => {}, presence: () => {}, connected: () => {} };
     const code = `S${tag}`;
     rooms.push(code);
-    const lobby = { hostUuid: 'h', seats: [], victoryPointsToWin: null, seed: 1, game: { seafarers: false, scenarioId: 'x', baseScenarioId: 'standard' } };
+    const lobby = { hostUuid: 'h', seats: [], victoryPointsToWin: null, seed: 1, game: defaultLobbyGame() };
     // Making a room sweeps: the idle week-old room goes, the busy one (and its day) stay.
     const c = await host.createRoom(code, { hostUuid: 'h', createdAt: Date.now(), build: 'live-test' }, lobby, { uuid: 'h', name: 'H' }, noop);
     expect(c).not.toBeNull();

@@ -30,7 +30,13 @@ import {
   type GameSnapshot,
 } from './gameStore';
 import { ActionSync } from './actionSync';
-import { MAX_SEATS, defaultLobbyGame, lobbySettings, lobbyStartProblem } from './lobbyGame';
+import {
+  MAX_SEATS,
+  defaultLobbyGame,
+  lobbySettings,
+  lobbyStartProblem,
+  normalizeLobbyGame,
+} from './lobbyGame';
 
 const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink', 'teal', 'gold'];
 const SYSTEM_NAME = 'System';
@@ -226,7 +232,10 @@ export const useNetworkStore = create<NetStore>((set, get) => {
     });
   }
 
-  function onLobby(lobby: LobbyState): void {
+  function onLobby(raw: LobbyState): void {
+    // A lobby written by another app build may lack newer game fields
+    // (e.g. the T&B variants): fill them in before anything reads them.
+    const lobby: LobbyState = { ...raw, game: normalizeLobbyGame(raw.game ?? defaultLobbyGame()) };
     const s = get();
     const me = s.myUuid;
     // A started lobby means the game record is on its way: stay on the
@@ -316,7 +325,8 @@ export const useNetworkStore = create<NetStore>((set, get) => {
 
   function editLobby(edit: (lobby: LobbyState) => LobbyState | null): Promise<LobbyState | null> {
     if (!conn) return Promise.resolve(null);
-    return conn.updateLobby(edit).catch((e: unknown) => {
+    const normalized = (l: LobbyState) => edit({ ...l, game: normalizeLobbyGame(l.game ?? defaultLobbyGame()) });
+    return conn.updateLobby(normalized).catch((e: unknown) => {
       console.warn('[net] lobby update failed:', (e as Error).message);
       return null;
     });
@@ -541,8 +551,16 @@ export const useNetworkStore = create<NetStore>((set, get) => {
 
     hostSetGame: (game) => {
       if (get().role !== 'host') return;
-      // A new scenario brings its own recommended VP target.
-      void editLobby((l) => (l.started ? null : { ...l, game, victoryPointsToWin: null }));
+      // One expansion at a time, a map and variants the rules allow.
+      const next = normalizeLobbyGame(game);
+      // A new scenario brings its own recommended VP target (a variant
+      // toggle alone keeps the host's VP choice).
+      void editLobby((l) => {
+        if (l.started) return null;
+        const sameScenario =
+          JSON.stringify({ ...l.game, variants: null }) === JSON.stringify({ ...next, variants: null });
+        return { ...l, game: next, victoryPointsToWin: sameScenario ? l.victoryPointsToWin : null };
+      });
     },
 
     hostStartGame: async () => {

@@ -17,11 +17,28 @@ export interface LobbySeat {
   color: PlayerColor;
 }
 
-/** What the online game will be: Seafarers (on `scenarioId`) or the base game (on `baseScenarioId`). */
+/** The Traders & Barbarians variants, which go with any rules (Event Cards: not with Cities & Knights). */
+export interface LobbyVariants {
+  friendlyRobber: boolean;
+  strongestPorts: boolean;
+  eventCards: boolean;
+}
+
+/**
+ * What the online game will be: the base game (on `baseScenarioId`, any Fun
+ * Map), Seafarers (on `scenarioId`), Cities & Knights (on `baseScenarioId`,
+ * the maps C&K allows) or Traders & Barbarians (on `tradersScenarioId`). At
+ * most one of `seafarers` / `citiesKnights` / `traders` is on (they don't
+ * combine yet); the variants stack on any of them. See store/lobbyGame.ts.
+ */
 export interface LobbyGame {
   seafarers: boolean;
   scenarioId: string;
   baseScenarioId: string;
+  citiesKnights: boolean;
+  traders: boolean;
+  tradersScenarioId: string;
+  variants: LobbyVariants;
 }
 
 export interface LobbyState {

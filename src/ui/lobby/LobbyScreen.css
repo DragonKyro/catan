@@ -270,3 +270,30 @@
   transform: scale(1.1);
   box-shadow: 0 0 0 2px var(--accent);
 }
+
+/* Traders & Barbarians variants (any rules; Event Cards not with C&K). */
+.lobby-variants {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 0.9em;
+  color: var(--text-soft);
+}
+
+.lobby-variants-label {
+  flex-basis: 100%;
+}
+
+.lobby-variant {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.lobby-variant input:disabled + span {
+  color: var(--text-soft);
+  cursor: not-allowed;
+}

@@ -415,4 +415,84 @@ describe('playing online', () => {
     expect(late.net().role).toBe('spectator');
     expectInStep([host, late]);
   }, 180000);
+
+  // Cities & Knights and Traders & Barbarians online: guests' own moves
+  // (on and off their turn: wagon bids, discards, knight moves, …) go
+  // through the log and every device ends with the same game.
+  async function playExpansion(devices: Device[], seed: number, moves: number) {
+    const host = devices[0]!;
+    const roll = diceRng(seed);
+    for (let i = 0; i < moves && !host.game().game!.winner; i++) {
+      await playMove(devices, roll);
+      if (i % 50 === 0) expectInStep(devices);
+    }
+    expectInStep(devices);
+  }
+  // Action types the guests' seats made (the host owns seat p0 and the AI).
+  function guestActionTypes(host: Device, guestUuids: string[]): Set<string> {
+    return new Set(
+      host
+        .log()
+        .actions.filter((a) => guestUuids.includes(host.net().uuidForPlayer(a.playerId) ?? ''))
+        .map((a) => a.type),
+    );
+  }
+
+  it('a Cities & Knights game stays in step, guests recruiting knights and building improvements', async () => {
+    const guests: [string, string][] = [['guest-uuid', 'Gus'], ['guest2-uuid', 'Gia']];
+    const { host, devices } = await startGame(guests, 1, (h) =>
+      h.net().hostSetGame({ ...h.net().lobby.game, citiesKnights: true }),
+      0.3, // a fixed board, so the run is repeatable
+    );
+    const g = host.game().game!;
+    expect(g.settings.expansions).toEqual(['citiesAndKnights']);
+    expect(g.settings.victoryPointsToWin).toBe(13);
+    await playExpansion(devices, 11, 450);
+    const types = guestActionTypes(host, guests.map(([u]) => u));
+    expect(types.has('recruitKnight')).toBe(true);
+    expect(types.has('buildCityImprovement')).toBe(true);
+  }, 240000);
+
+  it('a Merchant Trains game stays in step, every device bidding in the wagon votes', async () => {
+    const guests: [string, string][] = [['guest-uuid', 'Gus'], ['guest2-uuid', 'Gia']];
+    const { host, devices } = await startGame(guests, 1, (h) =>
+      h.net().hostSetGame({ ...h.net().lobby.game, traders: true, tradersScenarioId: 'merchantTrains' }),
+      0.3,
+    );
+    expect(host.game().game!.settings).toMatchObject({ expansions: ['traders'], tradersScenarioId: 'merchantTrains' });
+    await playExpansion(devices, 12, 450);
+    expect(guestActionTypes(host, guests.map(([u]) => u)).has('submitWagonVote')).toBe(true);
+    expect(host.game().game!.wagons!.length).toBeGreaterThan(0);
+  }, 240000);
+
+  it('a Barbarian Attack game with Event Cards and Strongest Ports stays in step', async () => {
+    const guests: [string, string][] = [['guest-uuid', 'Gus']];
+    const { host, devices } = await startGame(guests, 1, (h) =>
+      h.net().hostSetGame({
+        ...h.net().lobby.game,
+        traders: true,
+        tradersScenarioId: 'barbarianAttack',
+        variants: { friendlyRobber: false, strongestPorts: true, eventCards: true },
+      }),
+      0.3,
+    );
+    const g = host.game().game!;
+    expect(g.settings.victoryPointsToWin).toBe(13);
+    expect(g.eventCards).toBeDefined();
+    await playExpansion(devices, 13, 450);
+    const types = guestActionTypes(host, guests.map(([u]) => u));
+    expect(types.has('buyDevCard') || types.has('resolveBarbarianCard')).toBe(true);
+  }, 240000);
+
+  it('a 5-player Fishing on Catan game stays in step (paired turns)', async () => {
+    const guests: [string, string][] = [['guest-uuid', 'Gus'], ['guest2-uuid', 'Gia'], ['guest3-uuid', 'Gil']];
+    const { host, devices } = await startGame(guests, 1, (h) =>
+      h.net().hostSetGame({ ...h.net().lobby.game, traders: true, tradersScenarioId: 'fishingOnCatan' }),
+      0.3,
+    );
+    expect(host.game().game!.players).toHaveLength(5);
+    await playExpansion(devices, 14, 450);
+    const fish = host.game().game!.players.reduce((n, p) => n + (p.fishTokens?.length ?? 0), 0);
+    expect(fish + (host.game().game!.fishTokenDiscard?.length ?? 0)).toBeGreaterThan(0);
+  }, 240000);
 });

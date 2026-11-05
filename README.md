@@ -57,7 +57,7 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 
 ### Notable mechanics
 
-- **Online multiplayer, no sign-in.** Create a room, share the 4-character code (or the invite link), friends join, pick their colors, and play from their own devices: base game on any map, or any Seafarers scenario. The room lives in a Firebase Realtime Database: every move goes into an ordered, write-once log, so every device applies the same moves in the same order, and two players acting at the same moment (both accepting one trade) can't split the game. Your own moves show instantly; if someone else's lands first, yours is replayed on top or taken back. Drop out, reload, or lose signal and come back: the device replays the log and is back in its seat with the full history and the real game clock. Others joining mid-game spectate. Devices sign in anonymously behind the scenes, only so the security rules can tie writes to a device.
+- **Online multiplayer, no sign-in.** Create a room, share the 4-character code (or the invite link), friends join, pick their colors, and play from their own devices: the base game on any map, any Seafarers scenario, Cities & Knights (any map it allows) or any Traders & Barbarians scenario, with the Friendly Robber / Strongest Ports / Event Cards variants. The room lives in a Firebase Realtime Database: every move goes into an ordered, write-once log, so every device applies the same moves in the same order, and two players acting at the same moment (both accepting one trade) can't split the game. Your own moves show instantly; if someone else's lands first, yours is replayed on top or taken back. Drop out, reload, or lose signal and come back: the device replays the log and is back in its seat with the full history and the real game clock. Others joining mid-game spectate. Devices sign in anonymously behind the scenes, only so the security rules can tie writes to a device.
 - **End-of-game match graph.** Tabbed line charts (VP, resources earned per-player and per-resource, hand size, knights, longest road, trade count, trade efficiency) and bar charts (dice frequency, cumulative bank circulation). Hover snaps to the nearest timeline step with an x-unified crosshair; x-axis is labeled in turn numbers.
 - **End-of-game replay.** Scrub through your finished game step by step, or auto-play at 0.5×–4×. Slider stops only on board-changing actions; rolls and trades fold in but skip.
 - **Heuristic AI with encoded win plans.** Six 10-VP templates (city+army, sprawl+road, etc.); AI scores each by resource cost + production mismatch and picks the cheapest reachable plan. Threat model flags opponents close to win, longest road, or largest army, and refuses trades that hand them the resource they need. In Seafarers it values the island bonuses it can still earn, weights gold above any single resource, looks a few ship-steps ahead to cross open sea, moves ships, and plays each scenario's mechanic (tribe pickups, cloth routes, the pirate-fortress line, wonders).
@@ -110,9 +110,8 @@ One checklist, in build order: the app itself, then each game with its player ex
 - [x] Hot-seat UI (SVG board, panels, dialogs, phones and tablets)
 - [x] Heuristic AI opponents + player-to-player trading
 - [x] Trained-network AI levels (Easy / Normal / Hard) for the base game
-- [x] Online multiplayer with room codes, rejoin, spectators and in-game chat (base game)
-- [ ] Online multiplayer on Firebase Realtime Database — in progress on `develop` (adds Fun Maps and Seafarers to the online lobby)
-- [ ] Online lobby for Cities & Knights and Traders & Barbarians (scenarios, variants, maps) — both are hot-seat / vs. AI only today
+- [x] Online multiplayer on Firebase Realtime Database: room codes and invite links, rejoin, spectators, in-game chat
+- [x] Every rule set online: base game (any map), Seafarers, Cities & Knights, Traders & Barbarians, plus the T&B variants
 - [x] End-of-game match graph + step-by-step replay
 - [x] In-app rulebook with search
 - [x] Map builder (custom maps) + scenario preview for checking boards against the rulebooks
