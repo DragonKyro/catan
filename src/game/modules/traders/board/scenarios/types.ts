@@ -1,4 +1,5 @@
 import type { ScenarioLayout } from '../../../../board/scenarioTypes';
+import type { CommodityLocationId } from '../../../../types';
 
 // Mirrors the Seafarers / base Scenario shape, trimmed to fields meaningful
 // for the Traders & Barbarians scenarios we ship in this commit (Rivers of
@@ -49,6 +50,26 @@ export interface BarbarianAttackDef {
   startBarbarians: Array<{ q: number; r: number }>;
 }
 
+// Traders & Barbarians scenario: the three commodity hexes (each with its
+// "X"-marked frame edges and the corners its interior paths start from) and
+// the barbarians' start edges. Resolved by `resolveTradersBarbariansBoard`,
+// which adds each hex's centre plaza and paths to the board graph.
+export interface TradersBarbariansDef {
+  locations: Array<{
+    id: CommodityLocationId;
+    q: number;
+    r: number;
+    // Edge directions with an "X" marker (same enum as ScenarioEdgeRef:
+    // 0 E, 1 SE, 2 SW, 3 W, 4 NW, 5 NE).
+    xEdges: Array<0 | 1 | 2 | 3 | 4 | 5>;
+    // Corners with an interior path to the plaza (0 NE, 1 SE, 2 S, 3 SW,
+    // 4 NW, 5 N).
+    pathCorners: Array<0 | 1 | 2 | 3 | 4 | 5>;
+  }>;
+  // Each barbarian starts on the edge these two hexes share.
+  barbarians: Array<[{ q: number; r: number }, { q: number; r: number }]>;
+}
+
 export interface TradersScenario {
   id: string;
   name: string;
@@ -89,4 +110,6 @@ export interface TradersScenario {
   prepareLayout?: (layout: ScenarioLayout, rngState: number) => [ScenarioLayout, number];
   // Barbarian Attack: see BarbarianAttackDef.
   barbarianAttack?: BarbarianAttackDef;
+  // Traders & Barbarians scenario: see TradersBarbariansDef.
+  tradersBarbarians?: TradersBarbariansDef;
 }

@@ -12,6 +12,7 @@ import { calculateRouteLength } from '@/game/engine';
 import { seafarersLogLines } from './seafarersLog';
 import { barbarianAttackLogLines } from './barbarianAttackLog';
 import { tradersLogLines } from './tradersLog';
+import { tradersBarbariansLogLines } from './tradersBarbariansLog';
 import { hexRollsOn } from '@/game/board/hexNumbers';
 import { citiesKnightsLogLines } from './citiesKnightsLog';
 import { pipsByResource } from '@/ai/value';
@@ -748,6 +749,10 @@ export const useLogStore = create<LogStore>((set, get) => ({
     }
     // T&B Barbarian Attack lines use the same plain "player + text" entry.
     for (const line of barbarianAttackLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    // T&B scenario: wagons, barbarians on edges, re-rolls.
+    for (const line of tradersBarbariansLogLines(before, action, after)) {
       append.push({ id: stamp(), kind: 'seafarers', ...line });
     }
     // T&B Merchant Trains voting round + Catan Event Cards (same plain-text

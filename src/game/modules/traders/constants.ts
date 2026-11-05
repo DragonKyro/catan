@@ -7,6 +7,7 @@ export const TRADERS_SCENARIO_RIVERS = 'riversOfCatan';
 export const TRADERS_SCENARIO_FISHING = 'fishingOnCatan';
 export const TRADERS_SCENARIO_MERCHANT_TRAINS = 'merchantTrains';
 export const TRADERS_SCENARIO_BARBARIAN_ATTACK = 'barbarianAttack';
+export const TRADERS_SCENARIO_TRADERS_BARBARIANS = 'tradersAndBarbarians';
 
 // Merchant Trains: rulebook ships 22 wagon tokens in a shared neutral
 // supply. Each successful `placeWagon` action draws one.

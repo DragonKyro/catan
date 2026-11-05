@@ -18,10 +18,14 @@ import {
   TRADERS_SCENARIO_FISHING,
   TRADERS_SCENARIO_MERCHANT_TRAINS,
   TRADERS_SCENARIO_BARBARIAN_ATTACK,
+  TRADERS_SCENARIO_TRADERS_BARBARIANS,
   MERCHANT_WAGON_SUPPLY,
 } from './modules/traders/constants';
 import type { BarbarianBoardSetup } from './modules/traders/barbarianAttack/board';
 import { initialBarbarianAttackState } from './modules/traders/barbarianAttack/init';
+import type { TradersBarbariansBoardSetup } from './modules/traders/tradersBarbarians/board';
+import { initialTradersBarbariansState } from './modules/traders/tradersBarbarians/init';
+import { TB_START_GOLD } from './modules/traders/tradersBarbarians/constants';
 import {
   getBaseScenario,
   baseScenarioAllowed,
@@ -314,6 +318,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let fishingGrounds: FishingGround[] | undefined;
   let wateringHoleHexId: HexId | undefined;
   let barbarianBoard: BarbarianBoardSetup | undefined;
+  let tradersBarbariansBoard: TradersBarbariansBoardSetup | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (customMap) {
@@ -342,6 +347,7 @@ export function createGame(opts: CreateGameOptions): GameState {
       result.fishingGrounds.length > 0 ? result.fishingGrounds : undefined;
     wateringHoleHexId = result.wateringHoleHexId ?? undefined;
     barbarianBoard = result.barbarianAttack ?? undefined;
+    tradersBarbariansBoard = result.tradersBarbarians ?? undefined;
   } else if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
     seafarers = result;
@@ -583,6 +589,25 @@ export function createGame(opts: CreateGameOptions): GameState {
     robberActive = false;
   }
 
+  // Traders & Barbarians scenario: barbarians on edges, the commodity
+  // stacks, the scenario's 25-card deck (no base cards, robber or Longest
+  // Road), 5 gold each, coins in play. Wagons arrive with the setup cities.
+  let tradersBarbarians: GameState['tradersBarbarians'];
+  if (
+    hasTraders &&
+    settings.tradersScenarioId === TRADERS_SCENARIO_TRADERS_BARBARIANS &&
+    tradersBarbariansBoard
+  ) {
+    [tradersBarbarians, rng] = initialTradersBarbariansState(
+      tradersBarbariansBoard,
+      players.map((p) => p.id),
+      rng,
+    );
+    devCardDeck = [];
+    robberActive = false;
+    for (let i = 0; i < players.length; i++) players[i] = { ...players[i]!, gold: TB_START_GOLD };
+  }
+
   // Pirate Islands has no robber at all.
   if (pirateIslands) robberActive = false;
 
@@ -650,6 +675,15 @@ export function createGame(opts: CreateGameOptions): GameState {
     merchantTrains: isMerchantTrains ? [] : undefined,
     ...(barbarianAttack
       ? { barbarianAttack, coinsInPlay: true, noLargestArmy: true }
+      : {}),
+    ...(tradersBarbarians
+      ? {
+          tradersBarbarians,
+          coinsInPlay: true,
+          noLongestRoad: true,
+          roadBlockedEdges: tradersBarbarians.locations.flatMap((l) => l.xEdges),
+          setupBlockedVertices: tradersBarbariansBoard?.setupBlocked,
+        }
       : {}),
   };
 }

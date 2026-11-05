@@ -30,6 +30,8 @@ import {
 } from '@/game/modules/traders/merchantTrains/trains';
 import { Wagon } from './traders/Wagon';
 import { BarbarianAttackOverlay, isBarbarianAttackMode } from './traders/BarbarianAttackOverlay';
+import { TradersBarbariansOverlay, isTradersBarbariansMode } from './traders/TradersBarbariansOverlay';
+import { setupPlacementIsCity } from '@/game/modules/traders/tradersBarbarians/state';
 import type { EdgeId, GameState, PlayerColor, PlayerId, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { citiesKnightsOverlay } from './citiesAndKnights/CKPlacementOverlay';
@@ -60,6 +62,9 @@ export function PlacementOverlay() {
 
   if (uiMode.kind === 'buildSettlement' || uiMode.kind === 'placeSetupSettlement') {
     const isSetup = uiMode.kind === 'placeSetupSettlement';
+    // T&B Barbarian Attack / Traders & Barbarians: the second starting
+    // placement is a city.
+    const ghost = isSetup && setupPlacementIsCity(game) ? 'city' : 'settlement';
     return (
       <g className="overlay overlay-vertices">
         {game.board.vertexIds.map((vid) => {
@@ -71,7 +76,7 @@ export function PlacementOverlay() {
             <VertexGhost
               key={vid}
               vid={vid}
-              variant={isSetup && setupPlacesCity(game) ? 'city' : 'settlement'}
+              variant={isSetup && setupPlacesCity(game) ? 'city' : ghost}
               previewColor={previewColor}
               isHovered={hoveredVid === vid}
               onHoverChange={(h) => setHoveredVid(h ? vid : null)}
@@ -472,6 +477,10 @@ export function PlacementOverlay() {
   // T&B Barbarian Attack: card choices, Treason, end-of-turn knight moves.
   if (isBarbarianAttackMode(uiMode)) {
     return <BarbarianAttackOverlay game={game} acting={acting} mode={uiMode} color={previewColor} />;
+  }
+  // T&B scenario: wagon moves / drive-offs, placing a barbarian.
+  if (isTradersBarbariansMode(uiMode)) {
+    return <TradersBarbariansOverlay game={game} acting={acting} mode={uiMode} color={previewColor} />;
   }
 
   if (uiMode.kind === 'moveRobber') {

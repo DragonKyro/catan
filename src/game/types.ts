@@ -165,7 +165,11 @@ export type Terrain =
   | 'swamp'
   | 'lake'
   | 'wateringHole'
-  | 'castle';
+  | 'castle'
+  // Traders & Barbarians scenario: the quarry / castle / glassworks
+  // commodity hexes (non-producing, no number). Which location a hex is
+  // lives in `state.tradersBarbarians.locations`.
+  | 'commodity';
 
 export interface HexCoord {
   q: number;
@@ -619,6 +623,110 @@ export interface BarbarianAttackState {
   lastEvents?: { seq: number; events: BarbarianAttackEvent[] };
 }
 
+// ----------------------------------------------------------------------------
+// Traders & Barbarians scenario (2025 rulebook pp. 20-24)
+// ----------------------------------------------------------------------------
+
+export type CommodityLocationId = 'quarry' | 'castle' | 'glassworks';
+export type CommodityGood = 'sand' | 'marble' | 'tools' | 'glass';
+// The scenario's 25-card development deck. Knight / Road Building / VP go
+// into `player.devCards` like base cards; Swift Journey is held in
+// `TradersBarbariansState.swiftJourney` (it isn't a base DevCardType).
+export type TbDevCard = 'knight' | 'roadBuilding' | 'swiftJourney' | 'victoryPoint';
+
+export interface CommodityLocation {
+  id: CommodityLocationId;
+  hex: HexId;
+  // The centre plaza: an extra board vertex at the hex centre (no
+  // settlement; a wagon entering it ends its move, delivers, picks up).
+  plaza: VertexId;
+  // The 4 interior paths (corner -> plaza), ordinary road-buildable edges.
+  paths: EdgeId[];
+  // The 3 frame-side edges with an "X" marker (no roads).
+  xEdges: EdgeId[];
+  // Face-down token stack, drawn from the END (top = last element).
+  stack: CommodityGood[];
+  // Goods this location buys.
+  needs: CommodityGood[];
+}
+
+export interface TbWagon {
+  vertex: VertexId;
+  // Wagon board column, 1..5.
+  level: number;
+  // The token on the wagon board (face up), with the location it came from.
+  cargo: { good: CommodityGood; from: CommodityLocationId } | null;
+  // Tokens delivered (kept face down, 1 VP each).
+  delivered: number;
+}
+
+// The End of Turn phase ('wagonMoves'): the active player's movement.
+export interface TbWagonTurn {
+  // Movement points left in the current "Move your wagon" action.
+  mp: number;
+  // 1 = the normal move; 2 = the extra move a Swift Journey grants.
+  moveAction: 1 | 2;
+  // Wheat already spent for +2 MP in this move action.
+  boosted: boolean;
+  // The wagon entered a plaza: this move action is over.
+  ended: boolean;
+  // Edges moved this turn (both move actions).
+  steps: number;
+  // Barbarians (indices into `barbarians`) already driven at this turn.
+  triedBarbarians: number[];
+  // A Swift Journey was played this turn.
+  swiftJourney: boolean;
+}
+
+export type TbEvent =
+  | { kind: 'reroll'; playerId: PlayerId; dice: [number, number]; rerolled: Array<[number, number]> }
+  | {
+      kind: 'barbarianMoved';
+      playerId: PlayerId;
+      reason: 'seven' | 'knight' | 'driveOff';
+      barbarian: number;
+      from: EdgeId;
+      to: EdgeId;
+      // Road owner robbed (7 / Knight on a road), and whether a card was taken.
+      victim?: PlayerId;
+      stole?: boolean;
+    }
+  | { kind: 'driveOff'; playerId: PlayerId; barbarian: number; die: number; success: boolean }
+  | { kind: 'toll'; playerId: PlayerId; owner: PlayerId }
+  | { kind: 'deliver'; playerId: PlayerId; good: CommodityGood; location: CommodityLocationId; gold: number }
+  | { kind: 'pickUp'; playerId: PlayerId; good: CommodityGood; location: CommodityLocationId }
+  | { kind: 'stackEmpty'; playerId: PlayerId; location: CommodityLocationId }
+  | { kind: 'upgrade'; playerId: PlayerId; level: number }
+  | { kind: 'boost'; playerId: PlayerId }
+  | { kind: 'swiftJourney'; playerId: PlayerId }
+  | { kind: 'wagonDone'; playerId: PlayerId; steps: number };
+
+export interface TradersBarbariansState {
+  locations: CommodityLocation[];
+  // The 3 barbarians, each on an edge. Index = the barbarian's identity
+  // (drive-offs are once per barbarian per turn).
+  barbarians: EdgeId[];
+  wagons: Record<PlayerId, TbWagon>;
+  // The scenario's face-down development deck (drawn from the end).
+  deck: TbDevCard[];
+  // Swift Journey cards held (bought this turn = not yet playable).
+  swiftJourney: Record<PlayerId, { unplayed: number; boughtThisTurn: number }>;
+  // Present iff phase is 'wagonMoves'.
+  wagonTurn?: TbWagonTurn;
+  // Present iff phase is 'moveBarbarian': who moves which barbarian, why,
+  // and the phase play resumes in.
+  pendingBarbarian?: {
+    playerId: PlayerId;
+    reason: 'seven' | 'knight' | 'driveOff';
+    // Drive-off: the barbarian that must move. Otherwise any of the 3.
+    barbarian?: number;
+    returnTo: 'rollOrPlayKnight' | 'main' | 'wagonMoves';
+  };
+  // Events of the most recent action that produced any (log). `seq`
+  // increments each time.
+  lastEvents?: { seq: number; events: TbEvent[] };
+}
+
 // ============================================================================
 // Game phase & state
 // ============================================================================
@@ -641,6 +749,10 @@ export type GamePhase =
   // card played on purchase, and the end-of-turn knight movement step.
   | 'barbarianCard'
   | 'barbarianKnightMoves'
+  // Traders & Barbarians scenario: placing a barbarian (after a 7, a Knight
+  // or a successful drive-off), and the End of Turn wagon movement.
+  | 'moveBarbarian'
+  | 'wagonMoves'
   // Traders & Barbarians / Catan Event Cards: players answer the flipped
   // event (pick / give / steal / damage a road) before production.
   | 'eventResolution'
@@ -1098,6 +1210,11 @@ export interface GameState {
   // on edges, prisoners and the scenario's development deck. Undefined in
   // every other game.
   barbarianAttack?: BarbarianAttackState;
+  // Traders & Barbarians scenario: commodity locations, barbarians on edges,
+  // wagons, the scenario deck. Undefined in every other game.
+  tradersBarbarians?: TradersBarbariansState;
+  // Edges where no road may be built (T&B scenario "X" markers).
+  roadBlockedEdges?: EdgeId[];
   // The latest voting round's outcome (Scenario panel / log).
   lastWagonVote?: WagonVoteResult;
   // ----- Traders & Barbarians variant: Catan Event Cards -----
@@ -1531,6 +1648,42 @@ export interface MoveBarbarianKnightAction extends ActionBase {
   boost?: boolean;
 }
 
+// Traders & Barbarians scenario.
+// Move a barbarian (phase 'moveBarbarian'): `barbarian` indexes
+// `tradersBarbarians.barbarians`; `edge` must hold no barbarian.
+export interface MoveTbBarbarianAction extends ActionBase {
+  type: 'moveTbBarbarian';
+  barbarian: number;
+  edge: EdgeId;
+}
+
+// One step of the wagon along an edge (phase 'wagonMoves').
+export interface MoveWagonAction extends ActionBase {
+  type: 'moveWagon';
+  to: VertexId;
+}
+
+// Spend 1 wheat for +2 MP (once per move action).
+export interface BoostWagonAction extends ActionBase {
+  type: 'boostWagon';
+}
+
+// Try to drive off a barbarian whose edge touches the wagon's intersection.
+export interface DriveOffBarbarianAction extends ActionBase {
+  type: 'driveOffBarbarian';
+  barbarian: number;
+}
+
+// Move the wagon-board cube one column right (Action phase).
+export interface UpgradeWagonAction extends ActionBase {
+  type: 'upgradeWagon';
+}
+
+// Swift Journey: a second "Move your wagon" action this turn.
+export interface PlaySwiftJourneyAction extends ActionBase {
+  type: 'playSwiftJourney';
+}
+
 // ----------------------------------------------------------------------------
 // Cities & Knights expansion actions
 // ----------------------------------------------------------------------------
@@ -1765,6 +1918,12 @@ export type Action =
   | PlaceWagonAction
   | ResolveBarbarianCardAction
   | MoveBarbarianKnightAction
+  | MoveTbBarbarianAction
+  | MoveWagonAction
+  | BoostWagonAction
+  | DriveOffBarbarianAction
+  | UpgradeWagonAction
+  | PlaySwiftJourneyAction
   | ResolveEventAction
   | RepairRoadAction
   | BuildCityWallAction

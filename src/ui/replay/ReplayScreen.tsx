@@ -76,6 +76,10 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'commercialHarborOffer',
   'weddingGive',
   'bankTradeCK',
+  // Traders & Barbarians scenario: barbarians on edges, wagons.
+  'moveTbBarbarian',
+  'moveWagon',
+  'upgradeWagon',
 ]);
 
 const SPEED_PRESETS: Array<{ label: string; ms: number }> = [
@@ -559,6 +563,12 @@ function actionDescription(action: Action, players: Player[]): string {
           : `${who} moves barbarians (Treason)`;
     case 'moveBarbarianKnight':
       return `${who} moves a knight`;
+    case 'moveTbBarbarian':
+      return `${who} moves a barbarian`;
+    case 'moveWagon':
+      return `${who} moves their wagon`;
+    case 'upgradeWagon':
+      return `${who} upgrades their wagon`;
     default:
       return `${who} — ${(action as Action).type}`;
   }

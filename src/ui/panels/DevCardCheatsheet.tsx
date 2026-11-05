@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { DevCardType, GameState } from '@/game/types';
 import { devDeckTotalsFor } from '@/game/createGame';
 import { BarbarianCardList } from '@/ui/game/traders/BarbarianCardList';
+import { TbDevCardList } from '@/ui/game/traders/TradersBarbariansHand';
 
 interface CardInfo {
   type: DevCardType;
@@ -92,6 +93,14 @@ export function DevCardCheatsheet({ game, onClose }: Props) {
   const deckTotal = game.devCardDeck.length;
   const grandTotal = (Object.values(totals) as number[]).reduce((a, b) => a + b, 0);
 
+  // T&B Traders & Barbarians scenario: its own 25-card deck.
+  if (game.tradersBarbarians) {
+    return (
+      <div className="cost-cheatsheet is-devcards" ref={ref} role="dialog" aria-label="Dev cards">
+        <TbDevCardList game={game} />
+      </div>
+    );
+  }
   // T&B Barbarian Attack has its own deck.
   if (game.barbarianAttack) {
     return (

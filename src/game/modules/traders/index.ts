@@ -29,6 +29,23 @@ import { TRADERS_EXPANSION_ID } from './constants';
 import { handleSpendGold, handleBuyGold } from './coins/actions';
 import { handleSwapFish } from './fishing/swap';
 import { withTradersTurnFlags } from './turnFlags';
+import { handlePlayKnight as baseHandlePlayKnight } from '../../actions/devcard';
+import {
+  withTbDevCards,
+  withTbDiscard,
+  withTbEndTurn,
+  withTbKnight,
+  withTbRoll,
+  withTbSetupCity,
+} from './tradersBarbarians/hooks';
+import { handleMoveTbBarbarian } from './tradersBarbarians/barbarians';
+import {
+  handleBoostWagon,
+  handleDriveOffBarbarian,
+  handleMoveWagon,
+  handlePlaySwiftJourney,
+  handleUpgradeWagon,
+} from './tradersBarbarians/wagon';
 
 // The Traders & Barbarians module. Wraps build* actions to award scenario
 // gold (Rivers of Catan) and refresh Strongest Ports / Wealthiest tile
@@ -49,18 +66,20 @@ export const tradersModule: RuleModule = {
     buildRoad: handleBuildRoadWithRiverGold as never,
     buildSettlement: withBarbarianLandingOnSettlement(handleBuildSettlementWithRiverGold) as never,
     buildCity: withBarbarianLandingOnCity(handleBuildCityWithStrongestPortsRefresh) as never,
-    placeInitialSettlement: withBarbarianSetupCity(handlePlaceInitialSettlementWithRiverGold) as never,
+    placeInitialSettlement: withTbSetupCity(
+      withBarbarianSetupCity(handlePlaceInitialSettlementWithRiverGold),
+    ) as never,
     placeInitialRoad: handlePlaceInitialRoadWithRiverGold as never,
     spendFish: handleSpendFish as never,
     passOldBoot: handlePassOldBoot as never,
     submitWagonVote: handleSubmitWagonVote as never,
     assignWagonVotes: handleAssignWagonVotes as never,
     placeWagon: handlePlaceWagon as never,
-    endTurn: handleEndTurnTraders as never,
+    endTurn: withTbEndTurn(handleEndTurnTraders) as never,
     // Barbarian Attack (each passes through to base outside the scenario).
-    rollDice: handleRollDiceBarbarianAttack as never,
-    discard: handleDiscardBarbarianAttack as never,
-    buyDevCard: handleBuyDevCardTraders as never,
+    rollDice: withTbRoll(handleRollDiceBarbarianAttack) as never,
+    discard: withTbDiscard(handleDiscardBarbarianAttack) as never,
+    buyDevCard: withTbDevCards(handleBuyDevCardTraders) as never,
     stealResource: handleStealResource as never,
     resolveBarbarianCard: handleResolveBarbarianCard as never,
     moveBarbarianKnight: handleMoveBarbarianKnight as never,
@@ -69,6 +88,15 @@ export const tradersModule: RuleModule = {
     buyGold: handleBuyGold as never,
     // Fishing on Catan: the 7-token swap after a capped production.
     swapFish: handleSwapFish as never,
+    // The Traders & Barbarians scenario (each throws / passes through
+    // outside the scenario): barbarians on edges, wagons, Swift Journey.
+    playKnight: withTbKnight(baseHandlePlayKnight) as never,
+    moveTbBarbarian: handleMoveTbBarbarian as never,
+    moveWagon: handleMoveWagon as never,
+    boostWagon: handleBoostWagon as never,
+    driveOffBarbarian: handleDriveOffBarbarian as never,
+    upgradeWagon: handleUpgradeWagon as never,
+    playSwiftJourney: handlePlaySwiftJourney as never,
   }),
   validators: {
     // (The Friendly Robber variant has its own module — see ./variants.)

@@ -13,6 +13,7 @@ import { BarbarianAttackPanel } from '@/ui/game/traders/BarbarianAttackPanel';
 import { MerchantTrainsBlock } from './MerchantTrainsBlock';
 import { TradersVariantsBlock, hasTradersVariantBlock } from './TradersVariantsBlock';
 import { RiversTracker, FishingTracker } from './traders/RiversFishingTrackers';
+import { TradersBarbariansTracker } from './traders/TradersBarbariansTracker';
 import './ScenarioPanel.css';
 
 // Scenario-specific progress tracker. Returns whether ANY scenario tracker
@@ -39,6 +40,7 @@ export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getStat
     if (state.lakeHexId) return true;
     if (state.wateringHoleHexId) return true;
     if (state.barbarianAttack) return true;
+    if (state.tradersBarbarians) return true;
   }
   return false;
 }
@@ -369,6 +371,7 @@ function TradersScenarioPanel() {
         <span className="scenario-panel-title">Traders & Barbarians</span>
       </header>
       <BarbarianAttackPanel game={game} />
+      <TradersBarbariansTracker game={game} />
       {isMerchantTrains && <MerchantTrainsBlock game={game} />}
       {isRivers && <RiversTracker game={game} />}
       {isFishing && <FishingTracker game={game} />}

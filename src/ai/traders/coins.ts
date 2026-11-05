@@ -23,7 +23,8 @@ export function tryCoinAction(state: GameState, playerId: PlayerId): Action | nu
   if (!state.coinsInPlay || state.phase !== 'main') return null;
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return null;
-  const gold = player.gold ?? 0;
+  // T&B scenario: keep a coin for the toll on a rival's road.
+  const gold = (player.gold ?? 0) - (state.tradersBarbarians ? 1 : 0);
   const needs = reportNeeds(state, playerId);
 
   // 1) Spend 2 gold for a card the current goal is short of.

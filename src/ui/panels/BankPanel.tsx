@@ -14,7 +14,12 @@ export function BankPanel() {
         <span>Bank</span>
         {!hasCK && (
           <span className="bank-deck" title="Development cards left in the deck">
-            🃏 {game.barbarianAttack ? game.barbarianAttack.deck.length : game.devCardDeck.length}
+            🃏{' '}
+            {game.barbarianAttack
+              ? game.barbarianAttack.deck.length
+              : game.tradersBarbarians
+                ? game.tradersBarbarians.deck.length
+                : game.devCardDeck.length}
           </span>
         )}
       </header>

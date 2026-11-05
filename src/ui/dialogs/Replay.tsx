@@ -70,6 +70,10 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   'placeMerchant',
   'treasonRemoveKnight',
   'treasonPlaceKnight',
+  // Traders & Barbarians scenario: barbarians on edges, wagons.
+  'moveTbBarbarian',
+  'moveWagon',
+  'upgradeWagon',
 ]);
 
 // Step + slider + auto-play replay. The slider/buttons step through a
@@ -305,6 +309,12 @@ function actionDescription(action: Action, players: Player[]): string {
           : `${who} moves barbarians (Treason)`;
     case 'moveBarbarianKnight':
       return `${who} moves a knight`;
+    case 'moveTbBarbarian':
+      return `${who} moves a barbarian`;
+    case 'moveWagon':
+      return `${who} moves their wagon`;
+    case 'upgradeWagon':
+      return `${who} upgrades their wagon`;
     default:
       return `${who} — ${(action as Action).type}`;
   }

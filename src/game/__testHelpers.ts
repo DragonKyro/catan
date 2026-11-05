@@ -27,6 +27,8 @@ export function findValidRoadFromVertex(state: GameState, vid: VertexId): EdgeId
     if (edge.hexes.every((h) => state.board.hexes[h]!.terrain === 'sea')) continue;
     // T&B Rivers of Catan: bridge sites take no roads.
     if (state.riverEdges?.includes(eid)) continue;
+    // T&B scenario "X" markers take no roads.
+    if (state.roadBlockedEdges?.includes(eid)) continue;
     let used = false;
     for (const p of state.players) {
       if (p.roads.includes(eid)) {

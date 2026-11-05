@@ -22,6 +22,13 @@ import { tryFishSpend, tryPassBoot } from './traders/fish';
 import { tryBuyBarbarianCard, barbarianAttackNeedsRoads } from './traders/barbarianAttack';
 import { tryRepairRoad } from './traders/eventCards';
 import { tryCoinAction } from './traders/coins';
+import {
+  chooseTbDevCardPlay,
+  tbDeckRemaining,
+  tryTbBuyGold,
+  tryTbRouteRoad,
+  tryUpgradeWagon,
+} from './traders/tradersBarbarians';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { tryBuildWonder } from './seafarers/wonders';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
@@ -67,7 +74,11 @@ export function chooseMainPhaseAction(
 
   // 0) Play a dev card if it would clearly help (knight to clear robber etc.)
   if (allowDevCardPlay) {
-    const cardPlay = chooseDevCardPlay(state, playerId);
+    // T&B scenario: its Knights move barbarians, Road Building follows the
+    // wagon routes.
+    const cardPlay = state.tradersBarbarians
+      ? chooseTbDevCardPlay(state, playerId)
+      : chooseDevCardPlay(state, playerId);
     if (cardPlay) return cardPlay;
   }
 
@@ -137,6 +148,12 @@ export function chooseMainPhaseAction(
   //      Catanian / spending. Same cost as a road but with a higher
   //      payoff, so the threshold is a notch lower than a road's.
   if (state.settings.expansions.includes(TRADERS_EXPANSION_ID)) {
+    // 2.55) UPGRADE THE WAGON (T&B scenario): more MP, drive-offs, more gold
+    //       per delivery; the fifth column is +1 VP.
+    const upgrade = tryUpgradeWagon(state, playerId);
+    if (upgrade) return upgrade;
+    const tollCoin = tryTbBuyGold(state, playerId);
+    if (tollCoin) return tollCoin;
     const bridgeAction = tryBuildBridge(state, playerId);
     if (bridgeAction) return bridgeAction;
     // 2.65) COINS (Rivers of Catan): 2 gold for a missing card, or buy gold
@@ -178,6 +195,11 @@ export function chooseMainPhaseAction(
   const road = tryBuildRoad(state, playerId);
   if (road) return road;
 
+  // 3.2) ROAD ON A WAGON ROUTE (T&B scenario): every road on the trips
+  //      between plazas turns 2 MP into 1 (and makes rivals pay a toll).
+  const routeRoad = tryTbRouteRoad(state, playerId);
+  if (routeRoad) return routeRoad;
+
   // 3.5) BUILD WONDER (normal level). Each level is a guaranteed +1 VP
   //      and locks the wonder to us so opponents can't race the prereq.
   //      Lower than direct expansion (city / settle / road→settle) because
@@ -196,7 +218,8 @@ export function chooseMainPhaseAction(
   //    a dev card now would spend wheat+ore we need for that city.
   if (
     canAfford(player.resources, COSTS.devCard) &&
-    state.devCardDeck.length > 0
+    // (T&B scenario: its own 25-card deck; the base deck is empty.)
+    (state.devCardDeck.length > 0 || tbDeckRemaining(state) > 0)
   ) {
     const needs = reportNeeds(state, playerId);
     let handSize = 0;

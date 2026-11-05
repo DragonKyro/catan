@@ -5,7 +5,7 @@ import { simulate } from './simSupport';
 // variants are built to stack on any game), all-heuristic-AI at 3 and 4
 // players: each game must reach gameOver without a rejected action.
 // Scenario agents tested their own rules; this catches the interplay.
-const SCENARIOS = ['riversOfCatan', 'fishingOnCatan', 'merchantTrains', 'barbarianAttack'];
+const SCENARIOS = ['riversOfCatan', 'fishingOnCatan', 'merchantTrains', 'barbarianAttack', 'tradersAndBarbarians'];
 const VARIANTS: Record<string, { friendlyRobber?: boolean; strongestPorts?: boolean; eventCards?: boolean }> = {
   none: {},
   friendlyRobber: { friendlyRobber: true },

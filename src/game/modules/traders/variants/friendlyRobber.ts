@@ -45,7 +45,7 @@ function shelters(state: GameState, hexId: HexId): boolean {
   );
 }
 
-const NON_PRODUCING = new Set(['swamp', 'wateringHole', 'castle']);
+const NON_PRODUCING = new Set(['swamp', 'wateringHole', 'castle', 'commodity']);
 
 // Hexes the robber may go to under the variant (always non-empty while the
 // board has a hex the base rules allow).

@@ -11,6 +11,10 @@ import {
 import { REPAIR_ROAD_COST } from '@/game/modules/traders/variants/eventCards/events';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 import { tradersCostNotes } from './traders/costNotes';
+import {
+  TB_BOOST_COST,
+  TB_WAGON_UPGRADE_COSTS,
+} from '@/game/modules/traders/tradersBarbarians/constants';
 
 interface Row {
   icon: string;
@@ -44,6 +48,14 @@ const BA_KNIGHT_BOOST_ROW: Row = {
   cost: BARBARIAN_KNIGHT_BOOST_COST,
 };
 
+// T&B scenario: wagon upgrades (one column right on the wagon board) and
+// the wheat boost.
+const TB_ROWS: Row[] = [
+  { icon: '🛒', label: 'Wagon L1→2 / L2→3', cost: TB_WAGON_UPGRADE_COSTS[1]! },
+  { icon: '🛒', label: 'Wagon L3→4 / L4→5', cost: TB_WAGON_UPGRADE_COSTS[3]! },
+  { icon: '🌾', label: 'Wagon +2 MP', cost: TB_BOOST_COST },
+];
+
 interface Props {
   onClose: () => void;
 }
@@ -67,6 +79,7 @@ export function CostCheatsheet({ onClose }: Props) {
     if ((useGameStore.getState().game?.riverEdges?.length ?? 0) > 0) {
       rows = [BASE_ROWS[0]!, BRIDGE_ROW, ...BASE_ROWS.slice(1)];
     }
+    if (useGameStore.getState().game?.tradersBarbarians) rows = [...rows, ...TB_ROWS];
     if (useGameStore.getState().game?.barbarianAttack) {
       rows = [
         ...rows.map((r) => (r.label === 'Dev Card' ? BA_CARD_ROW : r)),

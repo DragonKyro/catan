@@ -21,6 +21,7 @@ import {
 } from './traders/barbarianAttack';
 import { chooseFishSwap } from './traders/fish';
 import { chooseCitiesAndKnightsAction, isCitiesAndKnights } from './citiesAndKnights';
+import { chooseTradersBarbariansAction } from './traders/tradersBarbarians';
 
 function randomDice(): [number, number] {
   return [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)];
@@ -115,7 +116,9 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
 
   if (state.phase === 'rollOrPlayKnight') {
     // Optionally play knight first (e.g., to clear robber off our hex)
-    const knight = chooseDevCardPlay(state, playerId);
+    // (T&B scenario: Knights move barbarians — played in the Action / End of
+    // Turn phases by its own logic, not on the robber rule here.)
+    const knight = state.tradersBarbarians ? null : chooseDevCardPlay(state, playerId);
     if (knight && knight.type === 'playKnight') return knight;
     // Roll
     const d1 = 1 + Math.floor(Math.random() * 6);
@@ -156,6 +159,12 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
   }
   if (state.phase === 'barbarianKnightMoves') {
     return chooseBarbarianKnightMove(state, playerId);
+  }
+
+  // T&B "Traders & Barbarians" scenario: placing a barbarian, then the End
+  // of Turn wagon movement (null = done, the driver ends the turn).
+  if (state.phase === 'moveBarbarian' || state.phase === 'wagonMoves') {
+    return chooseTradersBarbariansAction(state, playerId);
   }
 
   return null;
