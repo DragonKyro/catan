@@ -37,11 +37,21 @@ export function endTurnCK(state: GameState): GameState {
     const { activatedThisTurn: _a, promotedThisTurn: _p, ...rest } = k;
     knights[vid] = rest;
   }
+  // Every per-turn C&K effect ends with the turn — including the hand-over
+  // from Player 1 to Player 2 in a 5-6 paired turn, which the base handler
+  // doesn't treat as a new turn (Merchant Fleet, Crane etc. are Player 1's).
   return {
     ...next,
     knights,
     activatedKnightsThisTurn: [],
     commercialHarbor: undefined,
     endTurnAfterProgressDiscard: undefined,
+    merchantFleetActive: undefined,
+    craneActive: false,
+    engineeringActive: false,
+    medicineActive: false,
+    diplomacyFreeRoad: false,
+    hasPlayedProgressCardThisTurn: false,
+    pendingAlchemy: undefined,
   };
 }

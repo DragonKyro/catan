@@ -439,6 +439,17 @@ describe('C&K 5-6 players (ck56 p.2-3)', () => {
   });
 });
 
+describe('C&K per-turn effects', () => {
+  it("Player 1's Merchant Fleet / Crane don't carry over to Player 2 of a paired turn", () => {
+    let s = toMainPaired(ckAfterSetup(5));
+    s = { ...s, merchantFleetActive: { kind: 'resource', which: 'ore' }, craneActive: true };
+    s = applyAction(s, { type: 'endTurn', playerId: 'p0' });
+    expect(s.playerOrder[s.currentPlayerIndex]).toBe('p3');
+    expect(s.merchantFleetActive).toBeUndefined();
+    expect(s.craneActive).toBe(false);
+  });
+});
+
 function toMainPaired(s: GameState): GameState {
   return roll(s, [5, 6], 'science');
 }

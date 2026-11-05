@@ -145,6 +145,15 @@ export function handleProposeTradeCK(state: GameState, action: ProposeTradeActio
       rejectedBy: [],
     },
     tradesProposedThisTurn: state.tradesProposedThisTurn + 1,
+    // Same bookkeeping as the base handler (the AI won't re-send an offer
+    // it already made this turn).
+    proposedTradesThisTurn: {
+      ...(state.proposedTradesThisTurn ?? {}),
+      [action.playerId]: [
+        ...(state.proposedTradesThisTurn?.[action.playerId] ?? []),
+        { give: { ...action.give }, receive: { ...action.receive } },
+      ],
+    },
   };
 }
 
