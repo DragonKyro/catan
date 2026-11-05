@@ -82,6 +82,28 @@ describe('Traders & Barbarians scenario UI', () => {
     expect(text).toContain('Done');
   });
 
+  it('wagon bar reports a delivery and the token picked up', () => {
+    const base = afterSetup();
+    const q = base.tradersBarbarians!.locations.find((l) => l.id === 'quarry')!;
+    const corner = base.board.edges[q.paths[0]!]!.vertices.find((v) => v !== q.plaza)!;
+    let game: GameState = {
+      ...base,
+      tradersBarbarians: {
+        ...base.tradersBarbarians!,
+        wagons: {
+          ...base.tradersBarbarians!.wagons,
+          p0: { vertex: corner, level: 1, cargo: { good: 'tools', from: 'castle' }, delivered: 0 },
+        },
+      },
+    };
+    game = applyAction(game, { type: 'endTurn', playerId: 'p0' });
+    game = applyAction(game, { type: 'moveWagon', playerId: 'p0', to: q.plaza });
+    useGameStore.setState({ game, uiMode: { kind: 'tbWagon' } });
+    const { container } = render(<TradersBarbariansPhaseBar game={game} acting="p0" />);
+    expect(container.textContent).toContain('Delivered tools: +1 VP, +1 gold');
+    expect(container.textContent).toMatch(/Carrying (sand|marble) for the (glassworks|castle)/);
+  });
+
   it('main-phase buttons: wagon upgrade with its cost, the scenario deck', () => {
     const game = afterSetup();
     useGameStore.setState({ game });

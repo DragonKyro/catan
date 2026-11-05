@@ -5,6 +5,7 @@ import { COSTS, RESOURCES } from '@/game/types';
 import type { GameState, PlayerId, ResourceBank } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import {
+  destinationOf,
   driveOffTargets,
   legalWagonSteps,
   locationAtPlaza,
@@ -129,9 +130,21 @@ export function TradersBarbariansPhaseBar({ game, acting }: { game: GameState; a
       : '';
   let hint: string;
   if (turn.ended) {
-    hint = `Your wagon reached the ${at ? LOCATION_LABEL[at.id].toLowerCase() : 'plaza'}: its move is over.${
-      wagon.cargo ? ` Now carrying ${GOOD_LABEL[wagon.cargo.good].toLowerCase()}.` : ''
-    }`;
+    // What just happened at the plaza (the move that entered it).
+    const events = tb.lastEvents?.events ?? [];
+    const delivered = events.find((e) => e.kind === 'deliver' && e.playerId === acting);
+    const emptyStack = events.some((e) => e.kind === 'stackEmpty' && e.playerId === acting);
+    const parts = [`Your wagon reached the ${at ? LOCATION_LABEL[at.id].toLowerCase() : 'plaza'}: its move is over.`];
+    if (delivered && delivered.kind === 'deliver') {
+      parts.push(`📦 Delivered ${GOOD_LABEL[delivered.good].toLowerCase()}: +1 VP, +${delivered.gold} gold.`);
+    }
+    if (wagon.cargo) {
+      parts.push(`Carrying ${GOOD_LABEL[wagon.cargo.good].toLowerCase()} for the ${LOCATION_LABEL[destinationOf(wagon.cargo.good)].toLowerCase()}.`);
+    } else if (emptyStack) {
+      parts.push('Its stack is empty.');
+    }
+    if (canSwift) parts.push('A Swift Journey would move you on.');
+    hint = parts.join(' ');
   } else if (steps.length === 0) {
     hint = `${turn.mp} MP left — no edge you can afford.${lastDrive}`;
   } else {
