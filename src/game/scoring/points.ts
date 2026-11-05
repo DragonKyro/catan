@@ -3,6 +3,7 @@ import { calculateWealthTilesVp } from '../modules/traders/scoring/wealthTiles';
 import { calculateStrongestPortsVp } from '../modules/traders/scoring/strongestPorts';
 import { calculateMerchantTrainsVp } from '../modules/traders/scoring/merchantTrains';
 import { calculateBarbarianAttackVp } from '../modules/traders/barbarianAttack/scoring';
+import { calculateTradersBarbariansVp } from '../modules/traders/tradersBarbarians/state';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../modules/citiesAndKnights/constants';
 import { calculateIslandBonusVp } from '../modules/seafarers/islandBonus';
 import { calculateTribeVp } from '../modules/seafarers/tribe';
@@ -107,6 +108,9 @@ export function calculateVictoryPoints(
   // Traders & Barbarians / Barbarian Attack: 1 VP per 2 prisoners; conquered
   // buildings are worth nothing.
   vp += calculateBarbarianAttackVp(state, playerId);
+  // Traders & Barbarians scenario: 1 VP per delivered commodity token, +1
+  // for a fully upgraded wagon.
+  vp += calculateTradersBarbariansVp(state, playerId);
   return vp;
 }
 

@@ -139,7 +139,8 @@ function distributeResources(state: GameState, rolled: number): GameState {
       hex.terrain === 'swamp' ||
       hex.terrain === 'lake' ||
       hex.terrain === 'wateringHole' ||
-      hex.terrain === 'castle'
+      hex.terrain === 'castle' ||
+      hex.terrain === 'commodity'
     )
       continue;
     // A hex may carry several numbers (T&B Rivers' 2 + 12 hex).

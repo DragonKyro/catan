@@ -12,6 +12,10 @@ import type {
 } from './scenarios/types';
 import { resolveBarbarianBoard, type BarbarianBoardSetup } from '../barbarianAttack/board';
 import { resolveFishingGrounds, resolveRivers } from './resolveRiversAndFishing';
+import {
+  resolveTradersBarbariansBoard,
+  type TradersBarbariansBoardSetup,
+} from '../tradersBarbarians/board';
 
 export interface TradersBoardResult {
   board: BoardState;
@@ -31,6 +35,9 @@ export interface TradersBoardResult {
   // Barbarian Attack: castle, coastal hexes in expel order, starting
   // barbarians. null in every other scenario.
   barbarianAttack: BarbarianBoardSetup | null;
+  // Traders & Barbarians scenario: commodity hexes (plazas + interior
+  // paths, already added to `board`), X edges, barbarian start edges.
+  tradersBarbarians: TradersBarbariansBoardSetup | null;
 }
 
 export function generateTradersBoard(
@@ -68,6 +75,12 @@ export function generateTradersBoard(
   const barbarianAttack = scenario.barbarianAttack
     ? resolveBarbarianBoard(scenario.barbarianAttack, assembled.board)
     : null;
+  let tradersBarbarians: TradersBarbariansBoardSetup | null = null;
+  if (scenario.tradersBarbarians) {
+    const tb = resolveTradersBarbariansBoard(scenario.tradersBarbarians, assembled.board);
+    assembled.board = tb.board;
+    tradersBarbarians = tb.setup;
+  }
   // Fishing on Catan: the robber starts off-board. We can't represent
   // "no robber hex" in BoardState, so we keep robberHex pointing at the
   // lake (or whatever the assembly picked) and rely on `state.robberActive`
@@ -84,6 +97,7 @@ export function generateTradersBoard(
         ? wateringHoleHexId
         : null,
     barbarianAttack,
+    tradersBarbarians,
   };
 }
 

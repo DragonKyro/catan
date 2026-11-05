@@ -98,6 +98,8 @@ export function canConnectRoad(
   // T&B / Rivers of Catan: river edges are reserved for bridges. The
   // buildBridge handler is the only entry point that may occupy them.
   if (state.riverEdges?.includes(edgeId)) return false;
+  // Edges a scenario closes to roads (T&B scenario "X" markers).
+  if (state.roadBlockedEdges?.includes(edgeId)) return false;
   // T&B / Barbarian Attack: nothing is built on a conquered hex's edges.
   if (edgeTouchesConqueredHex(state, edgeId)) return false;
   for (const p of state.players) {
@@ -214,6 +216,7 @@ export function canPlaceInitialRoad(
   // affordance — the player must anchor their starting road on a non-river
   // edge of their settlement.
   if (state.riverEdges?.includes(edgeId)) return false;
+  if (state.roadBlockedEdges?.includes(edgeId)) return false;
   if (edge.vertices[0] !== placedSettlement && edge.vertices[1] !== placedSettlement) {
     return false;
   }
