@@ -49,7 +49,7 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 
 **Traders & Barbarians 5–6** (2025 T&B 5–6 rulebook) — all four scenarios at 5 or 6 players on the CATAN 5–6 island with its eleven printed harbors, same win targets. Paired turns: Player 1 rolls and takes a whole turn (scenario End of Turn phase included), then Player 2 (third seat to the left) takes an Action phase — supply trades only — and their own End of Turn phase (a Merchant Trains voting round as the active player, Barbarian Attack knight moves + expel; coins and fish as normal). Rivers adds a third river (mountains → pasture → pasture, ten bridge sites, no 2-on-12); Fishing has two lakes (2 / 3 / 11 / 12 and 4 / 10), eight fishing grounds and 44 fish tokens; Merchant Trains two watering holes (six starts) and 33 wagons; Barbarian Attack two castles, two deserts, two coastal 5s and 9s (both get the barbarian) and 48 barbarians.
 
-**Traders & Barbarians variants** — work with any game (base, Seafarers, T&B scenarios), ticked on the New Game screen:
+**Traders & Barbarians variants** — work with any game (Event Cards: all but Cities & Knights), ticked on the New Game screen:
 
 - **Friendly Robber** — the robber can't go to a hex with a building of a player who has only 2 VPs (desert fallback, and no stealing from them)
 - **Strongest Ports** — the first player with 3 VPs in buildings on harbors takes a 2 VP tile; someone with more takes it over (+1 VP target)
@@ -110,64 +110,76 @@ Pushing to `main` triggers `.github/workflows/deploy.yml`, which builds the site
 
 ## Roadmap
 
-- [x] Phase 0 — Project scaffold
-- [x] Phase 1 — Game logic engine (base rules, tests)
-- [x] Phase 2 — Hot-seat UI (SVG board, panels, dialogs)
-- [x] Phase 3 — AI opponents + player-to-player trading
-- [x] Phase 4 — Online multiplayer (Trystero peer-to-peer) + in-game chat
-- [x] Phase 5 — Base game 5–6 player extension
-- [x] Phase 5b — Base game 7–8 player extension (unofficial; 37-hex board, scaled bank + dev deck, VP target stays at 10)
-- [x] Phase 6 — Seafarers expansion (9 official scenarios, each with its rulebook headline mechanic — see Features)
-- [x] Phase 7 — Seafarers 5–6 player extension (all 9 scenarios have a `layout5_6p` matching the 5-6 player rulebook's component counts; the rulebook's "Six Islands" scenario is implemented as Four Islands' 5-6p geometry. Hex positions are approximate, pending visual verification against [docs/.scenario-renders/seafarers-56-*.png])
-- [x] Phase 7c — Base-game colonist.io Fun Maps: Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl. Selectable from a base-map dropdown alongside Standard. Volcano implements full eruption rules (setup block, inline destruction on roll, AI penalty, dedicated rulebook entry). Gold Rush and Pond ship 5-6p layouts; the rest are 3-4p
-- [ ] Phase 7b — Seafarers 7–8 player extension (no official version exists; engine currently rejects Seafarers + >6 players. Revisit after Phase 7)
-- [x] Phase 8 — Cities & Knights expansion (audited rule by rule against the 2025 rulebook: turn flow, barbarians, knights, improvements + metropolises, all 54 progress cards, commodity trading. Every action playable in the UI with drawn pieces (knights by strength, standing / lying; walls; metropolis gates; merchant; barbarian track). The rulebook's first-game board as a map. Heuristic AI plays the expansion: knights vs. the barbarians, improvements + metropolises, progress cards, commodity trades)
-- [x] Phase 9 — Cities & Knights 5–6 player extension (5–6 board, paired turns — Player 2 may not trade with players — and 6 more of each commodity)
-- [~] Phase 10 — Traders & Barbarians expansion (all 5 scenarios shipping: Rivers of Catan + Fishing on Catan + Merchant Trains + Barbarian Attack + the Traders & Barbarians scenario, plus the Friendly Robber, Strongest Ports and Catan Event Cards variants, which combine with any game. The Catan for Two variant is deferred; see Outstanding work)
-- [x] Phase 11 — Traders & Barbarians 5–6 player extension (Rivers of Catan, Fishing on Catan, Merchant Trains and Barbarian Attack on their T&B 5–6 maps, with the paired-player turn — the Traders & Barbarians scenario stays 3–4)
-- [ ] Phase 12 — Explorers & Pirates expansion
-- [ ] Phase 13 — Explorers & Pirates 5–6 player extension
-- [ ] Phase 14 — *Rivals for Catan* (2-player card-game variant)
-- [ ] Phase 15 — Rivals expansion: Era of Gold
-- [ ] Phase 16 — Rivals expansion: Era of Turmoil
-- [ ] Phase 17 — Rivals expansion: Era of Progress
-- [ ] Phase 18 — Rivals expansion: Era of Barbarians
-- [ ] Phase 19 — Rivals expansion: Era of Merchants
+One checklist, in build order: the app itself, then each game with its player extensions. `[x]` = done and playable, `[ ]` = still to do. Unfinished pieces of a finished game are listed under that game.
 
-**Beyond the expansion roadmap:**
-- Post-game AI analysis — highlight likely misplays from the action log (held wood+brick instead of building; bank-traded into a 7-out; settled on a sub-optimal vertex)
+### 1. The app
 
-### Outstanding work (audit, 2026-05)
+- [x] Project scaffold (Vite, React, TypeScript, Vitest; GitHub Pages deploy)
+- [x] Game engine (base rules, deterministic `applyAction`, tests)
+- [x] Hot-seat UI (SVG board, panels, dialogs, phones and tablets)
+- [x] Heuristic AI opponents + player-to-player trading
+- [x] Trained-network AI levels (Easy / Normal / Hard) for the base game
+- [x] Online multiplayer with room codes, rejoin, spectators and in-game chat (base game)
+- [ ] Online multiplayer on Firebase Realtime Database — in progress on `develop` (adds Fun Maps and Seafarers to the online lobby)
+- [ ] Online lobby for Cities & Knights and Traders & Barbarians (scenarios, variants, maps) — both are hot-seat / vs. AI only today
+- [x] End-of-game match graph + step-by-step replay
+- [x] In-app rulebook with search
+- [x] Map builder (custom maps) + scenario preview for checking boards against the rulebooks
+- [ ] Post-game AI analysis — highlight likely misplays from the action log (held wood + brick instead of building; bank-traded into a 7-out; settled on a weak spot)
 
-Items uncovered by a full audit of the two in-progress expansions, in rough priority order:
+### 2. CATAN (base game)
 
-**Cities & Knights (Phase 8):**
+- [x] 3–4 players
+- [x] 5–6 player extension (CATAN 5–6 board and number tokens, paired-player turns)
+- [x] 7–8 players (unofficial: 37-hex board, scaled bank and dev deck, VP target stays 10)
+- [ ] The rulebooks' beginner boards (fixed "starting set-up for new players" maps for 3–4 and 5–6)
+- [x] Fun Maps (colonist.io-style) at 3–4 players: Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl
+- [x] Fun Maps at 5–6 players: Gold Rush, Pond
+- [ ] Fun Maps at 5–6 players: Black Forest, Diamond, Gear, Lakes, Twirl, Volcano
+- [ ] Tighten the Diamond / Gear / Twirl hex positions (shapes are close, not exact)
 
-- [x] **AI support** — `src/ai/citiesAndKnights/` plays C&K: answers every C&K decision on or off its turn, defends against the barbarians (activates / promotes / recruits from the ship position and every seat's strength, holds back a city it can't defend), raises improvement tracks toward level 3 and the metropolises, plays each progress card by a simple rule, builds walls, chases the robber, and trades commodities with the bank and players. Seeded all-AI games finish at 3–6 players (`playCitiesAndKnights.test.ts`). Still simple: one difficulty, little knight-based blocking / displacement, no long-term plan beyond the next build.
-- [x] **Rules audit + tests** — a test per rule (`rules2025.test.ts`, `knights.test.ts`, `improvementsTrade.test.ts`, `progressCards.test.ts`, `board/firstGame.test.ts`), covering the roll flow, draws, attacks, knights, metropolises, trading and every progress card.
-- [x] **Progress-card dialogs** — every card with a follow-up (Intrigue, Espionage, Treason, Wedding, Commercial Harbor, Guild Dues, Merchant Fleet, Invention, Diplomacy, Taxation, monopolies, Smithing, Road Building, Engineering, Medicine, Alchemy) is playable from the cards dialog or the board, with component tests in `src/ui/dialogs/citiesAndKnights/`.
-- [ ] **C&K + Seafarers** — the rulebook combination (ships as roads, pirate on the track, knights on sea intersections) isn't wired; `createGame` refuses it.
-- [ ] **Gold Rush / Volcano with C&K** — the C&K roll has no gold pick or eruption step, so those two maps are refused under C&K.
-- [ ] **Out of settlements on a pillage** — the rulebook turns the city on its side; here it becomes a 6th settlement.
-- [ ] **Online lobby** — the online lobby doesn't offer C&K yet (hot-seat / vs. AI only).
+### 3. Seafarers
 
-**Traders & Barbarians (Phase 10):**
+- [x] 3–4 players: all 9 scenarios (2025 rulebook), plus alternate "… 2" maps of the first four
+- [x] 5–6 player extension: all 9 scenarios (The Six Islands is The Four Islands' 5–6 map)
+- [ ] Check the 5–6 maps hex by hex against the 5–6 rulebook (component counts match; positions are approximate)
+- [ ] New World: random land each game, as in the rulebook (today: fixed maps)
+- [ ] 7–8 players — no official version; would need new boards per scenario (`createGame` refuses Seafarers above 6)
 
-- [x] **Coins** — `spendGold` (2 gold → 1 resource, 2× per turn), `buyGold` at your bank rate, gold in player trades; Coins dialog + gold in the trade dialogs.
-- [x] **Fish spend UI completeness** — all five spends in `SpendFishDialog` (the free road switches to board placement).
-- [x] **Fish 7-token swap** — once per turn, a full hand may swap a token for a new draw (`fishSwap` phase).
-- [x] **Smarter AI wagon voting** — the AI bids when steering the wagon is worth a VP / Longest Route to it (or keeps one from a rival), assigns its votes and places as chooser (`src/ai/traders/merchantTrains.ts`).
-- [x] **Traders & Barbarians scenario** — commodity hexes with paths and plazas, wagons, barbarians on edges, the scenario's deck, AI that plans deliveries (`src/game/modules/traders/tradersBarbarians/`, `src/ai/traders/tradersBarbarians.ts`).
-- [x] **Catan Event Cards variant** — 37-card deck replacing the dice, all 13 events (base-game versions).
-- [ ] **Catan Event Cards with Cities & Knights** — the event die + red die alongside the card, and the C&K versions of Conflict / Epidemic / Good Neighbors / Helpful Neighbor / Tournament; `createGame` rejects the combination for now.
-- [ ] **Catan Event Cards: the printed deck** — the rulebook doesn't list each card's number; the shipped deck follows the dice odds with Robber Attacks on the 7s (`variants/eventCards/deck.ts`). Swap in the real per-card table if it turns up.
-- [ ] **Catan for Two variant** — neutral players for 2p; not implemented.
+### 4. Cities & Knights
 
-**Cross-cutting:**
+- [x] 3–4 players (2025 rulebook): knights, barbarians, commodities, city improvements + metropolises, all 54 progress cards, city walls, merchant; drawn pieces; heuristic AI; the rulebook's first-game board
+- [x] 5–6 player extension (5–6 board, paired turns, extra commodities)
+- [ ] Combined with Seafarers (ships as roads, pirate on the barbarian track, knights on sea intersections) — refused today
+- [ ] Gold Rush and Volcano maps under C&K (the C&K roll has no gold pick or eruption step) — refused today
+- [ ] Pillage when you're out of settlements: the rulebook turns the city on its side; here it becomes a 6th settlement
 
-- [x] **Replay slider action coverage** — C&K and T&B actions (knights, improvements, progress cards, walls, bridges, fish, wagons, barbarian cards and knights, event cards) are stops on the replay slider.
+### 5. Traders & Barbarians
 
-**Fun map ideas (not yet implemented):**
+- [x] 3–4 players (2025 rulebook), all five scenarios: Rivers of Catan, Fishing on Catan, Merchant Trains, Barbarian Attack, Traders & Barbarians
+- [x] Variants: Friendly Robber, Strongest Ports, Catan Event Cards — work with any game (Event Cards: all but Cities & Knights)
+- [ ] Catan for Two variant (2 players + neutral pieces and trade tokens, with its per-scenario changes)
+- [ ] Catan Event Cards with Cities & Knights (event die + red die alongside the card, the C&K versions of five events) — refused today
+- [ ] Catan Event Cards' printed deck: the rulebook doesn't list each card's number, so the deck follows the dice odds with an assumed event mix
+- [ ] The T&B scenarios combined with Seafarers (the rulebook allows it) — refused today
+- [x] 5–6 player extension: Rivers of Catan, Fishing on Catan, Merchant Trains, Barbarian Attack on the T&B 5–6 maps
+- [ ] 5–6 player extension: the Traders & Barbarians scenario (its 5–6 map is in the T&B 5–6 rulebook)
+
+### 6. Explorers & Pirates
+
+- [ ] 3–4 players: the Mission Guide's four scenarios (Land Ho!, Pirate Lairs, Fish for Catan, Spices for Catan) and the full Explorers & Pirates scenario. `docs/` has the rulebook; the Mission Guide (book 2) isn't there yet
+- [ ] 5–6 player extension
+
+### 7. Rivals for Catan (2-player card game)
+
+- [ ] Base game
+- [ ] Era of Gold
+- [ ] Era of Turmoil
+- [ ] Era of Progress
+- [ ] Era of Barbarians
+- [ ] Era of Merchants
+
+### Fun Map ideas (optional backlog, not on the roadmap)
 
 *Shape-only variants (cheap to ship — just position arrays):*
 
