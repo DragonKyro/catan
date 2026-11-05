@@ -1,8 +1,10 @@
 import { useLayoutEffect } from 'react';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import { RESOURCES } from '@/game/types';
+import type { CommodityBank, Player } from '@/game/types';
+import { COMMODITIES, RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
+import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { Button } from '@/ui/shared/Button';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import './PendingTradeBanner.css';
@@ -32,6 +34,8 @@ export function PendingTradeBanner() {
           break;
         }
       }
+      // Cities & Knights: commodities asked for too.
+      if (!holdsCommodities(p, t.receiveCommodities)) canAccept = false;
       if (!canAccept) {
         dispatch({ type: 'rejectTrade', playerId: p.id });
       }
@@ -67,14 +71,11 @@ export function PendingTradeBanner() {
   }
   const viewer = viewerId ? game.players.find((p) => p.id === viewerId) : null;
 
-  const hasResources = (
-    p: { resources: typeof proposer.resources },
-    bank: typeof trade.receive,
-  ): boolean => {
+  const hasResources = (p: Player, bank: typeof trade.receive): boolean => {
     for (const r of RESOURCES) {
       if ((bank[r] ?? 0) > p.resources[r]) return false;
     }
-    return true;
+    return holdsCommodities(p, bank === trade.receive ? trade.receiveCommodities : undefined);
   };
 
   const isProposer = viewerId === trade.proposerId;
@@ -111,11 +112,17 @@ export function PendingTradeBanner() {
             {RESOURCES.filter((r) => (trade.give[r] ?? 0) > 0).map((r) => (
               <ResourceChip key={r} resource={r} count={trade.give[r]} size="sm" />
             ))}
+            {COMMODITIES.filter((c) => (trade.giveCommodities?.[c] ?? 0) > 0).map((c) => (
+              <CommodityChip key={c} commodity={c} count={trade.giveCommodities![c]} size="sm" />
+            ))}
           </span>
           <span style={{ color: 'var(--text-soft)' }}>→</span>
           <span className="ptbanner-basket">
             {RESOURCES.filter((r) => (trade.receive[r] ?? 0) > 0).map((r) => (
               <ResourceChip key={r} resource={r} count={trade.receive[r]} size="sm" />
+            ))}
+            {COMMODITIES.filter((c) => (trade.receiveCommodities?.[c] ?? 0) > 0).map((c) => (
+              <CommodityChip key={c} commodity={c} count={trade.receiveCommodities![c]} size="sm" />
             ))}
           </span>
         </span>
@@ -199,4 +206,13 @@ export function PendingTradeBanner() {
       </div>
     </div>
   );
+}
+
+// Cities & Knights: does the player hold the commodities a trade asks for?
+function holdsCommodities(p: Player, want: Partial<CommodityBank> | undefined): boolean {
+  if (!want) return true;
+  for (const c of COMMODITIES) {
+    if ((want[c] ?? 0) > (p.commodities?.[c] ?? 0)) return false;
+  }
+  return true;
 }

@@ -22,6 +22,12 @@ const BASE_ROWS: Row[] = [
 
 const SHIP_ROW: Row = { icon: '⛵', label: 'Ship', cost: SHIP_COST };
 const CITY_WALL_ROW: Row = { icon: '🧱', label: 'City Wall', cost: COSTS.cityWall };
+// Cities & Knights knights (p.9).
+const CK_KNIGHT_ROWS: Row[] = [
+  { icon: '⚔', label: 'Recruit knight', cost: COSTS.knight },
+  { icon: '⬆', label: 'Promote knight', cost: COSTS.promoteKnight },
+  { icon: '⚡', label: 'Activate knight', cost: COSTS.activateKnight },
+];
 const BRIDGE_ROW: Row = { icon: '🌉', label: 'Bridge', cost: COSTS.bridge };
 const HIRE_KNIGHT_ROW: Row = {
   icon: '🛡',
@@ -67,6 +73,7 @@ export function CostCheatsheet({ onClose }: Props) {
       ...rows.slice(0, cityIdx + 1),
       CITY_WALL_ROW,
       ...rows.slice(cityIdx + 1),
+      ...CK_KNIGHT_ROWS,
     ];
   }
   const ref = useRef<HTMLDivElement>(null);
@@ -108,6 +115,12 @@ export function CostCheatsheet({ onClose }: Props) {
           </li>
         ))}
       </ul>
+      {hasCK && (
+        <div className="cost-cheatsheet-title" style={{ fontWeight: 400, fontSize: '0.8em', marginTop: 6 }}>
+          City improvement level n: n 📜 paper (science), n 🧵 cloth (trade) or n 🪙 coin
+          (politics). Needs a city. Progress cards are drawn, not bought.
+        </div>
+      )}
     </div>
   );
 }

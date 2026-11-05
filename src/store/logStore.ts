@@ -10,6 +10,7 @@ import { RESOURCES } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { calculateRouteLength } from '@/game/engine';
 import { seafarersLogLines } from './seafarersLog';
+import { citiesKnightsLogLines } from './citiesKnightsLog';
 import { pipsByResource } from '@/ai/value';
 
 // =======================================================================
@@ -182,6 +183,8 @@ export type LogEntry =
       text: string;
       gained?: Partial<ResourceBank>;
     }
+  // Cities & Knights lines (src/store/citiesKnightsLog.ts).
+  | { id: number; kind: 'ck'; player: PlayerId | null; text: string }
   | {
       id: number;
       kind: 'turnBegins';
@@ -515,7 +518,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
           id: stamp(),
           kind: 'roll',
           player: action.playerId,
-          dice: action.dice,
+          // Alchemy (C&K) replaces the payload's dice with the chosen ones.
+          dice: after.lastRoll?.dice ?? action.dice,
         });
         // Volcano scenario: detect eruption by comparing settlement / city
         // counts before/after. Eruption fires inline inside the dice handler,
@@ -561,44 +565,6 @@ export const useLogStore = create<LogStore>((set, get) => ({
           }
         }
 
-        // Cities & Knights: derive barbarian-ship advance and any attack
-        // resolution from before/after barbarian state. Attack-counter
-        // changes are unambiguous; ship-position changes only matter when
-        // there wasn't a wrap-to-0 (which means an attack — handled in the
-        // attack branch below).
-        if (before.barbarian && after.barbarian) {
-          const attacksDelta =
-            after.barbarian.attacksResolved - before.barbarian.attacksResolved;
-          if (attacksDelta > 0) {
-            // An attack just resolved. Detect pillaged cities by diffing each
-            // player's city count.
-            const pillaged: PlayerId[] = [];
-            for (const beforeP of before.players) {
-              const afterP = after.players.find((p) => p.id === beforeP.id);
-              if (!afterP) continue;
-              if (afterP.cities.length < beforeP.cities.length) {
-                pillaged.push(beforeP.id);
-              }
-            }
-            append.push({
-              id: stamp(),
-              kind: 'barbarianAttack',
-              outcome: pillaged.length > 0 ? 'lost' : 'won',
-              pillaged,
-            });
-            if (before.robberActive === false && after.robberActive === true) {
-              append.push({ id: stamp(), kind: 'robberActivated' });
-            }
-          } else if (after.barbarian.position > before.barbarian.position) {
-            // Pure advance — no attack this roll.
-            append.push({
-              id: stamp(),
-              kind: 'barbarianAdvance',
-              position: after.barbarian.position,
-              total: 7,
-            });
-          }
-        }
         break;
       }
       case 'buildCityWall': {
@@ -617,10 +583,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
         append.push({ id: stamp(), kind: 'activateKnight', player: action.playerId });
         break;
       }
-      case 'promoteKnight': {
-        append.push({ id: stamp(), kind: 'promoteKnight', player: action.playerId });
+      case 'promoteKnight':
+        // Logged with the new strength by citiesKnightsLogLines.
         break;
-      }
       case 'moveKnight': {
         append.push({ id: stamp(), kind: 'moveKnight', player: action.playerId });
         break;
@@ -866,6 +831,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
     for (const line of seafarersLogLines(before, action, after)) {
       append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    for (const line of citiesKnightsLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'ck', ...line });
     }
 
     // Turn detection: one "turn" = one full revolution of the table.

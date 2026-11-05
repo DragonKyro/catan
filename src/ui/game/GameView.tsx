@@ -26,8 +26,8 @@ import { PassBootDialog } from '@/ui/dialogs/PassBootDialog';
 import { WagonVoteDialog } from '@/ui/dialogs/WagonVoteDialog';
 import { GoldResourceDialog } from '@/ui/dialogs/GoldResourceDialog';
 import { RobberOrPirateDialog } from '@/ui/dialogs/RobberOrPirateDialog';
-import { ImprovementsDialog } from '@/ui/dialogs/ImprovementsDialog';
-import { ProgressCardsDialog } from '@/ui/dialogs/ProgressCardsDialog';
+import { CitiesKnightsDialogs } from '@/ui/dialogs/citiesAndKnights/CKDialogs';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { AlchemyDialog } from '@/ui/dialogs/AlchemyDialog';
 import { GameOverDialog } from '@/ui/dialogs/GameOverDialog';
 import { PassDeviceScreen } from '@/ui/handoff/PassDeviceScreen';
@@ -86,10 +86,6 @@ export function GameView() {
     (pendingRobberHex || pendingPirateHex || game.phase === 'stealResource') && !handoffPending ? (
       <RobberStealDialog />
     ) : null;
-  const improvementsDialog =
-    dialog === 'cityImprovements' ? <ImprovementsDialog /> : null;
-  const progressCardsDialog =
-    dialog === 'progressCards' ? <ProgressCardsDialog /> : null;
   const alchemyDialog = dialog === 'alchemy' ? <AlchemyDialog /> : null;
 
   return (
@@ -179,7 +175,7 @@ export function GameView() {
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
             bottom-center of the board, above the hand strip. */}
-        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || wagonVoteDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || wagonVoteDialog || alchemyDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
             {monopolyDialog}
@@ -191,9 +187,13 @@ export function GameView() {
             {robberDialog}
             {goldDialog}
             {robberOrPirateDialog}
-            {improvementsDialog}
-            {progressCardsDialog}
             {alchemyDialog}
+          </div>
+        )}
+        {/* Cities & Knights prompts (sub-phases, cards, knights, tracks). */}
+        {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) && (
+          <div className="gameview-dialog-overlay">
+            <CitiesKnightsDialogs />
           </div>
         )}
       </main>

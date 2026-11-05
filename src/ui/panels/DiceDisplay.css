@@ -19,21 +19,9 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Cities & Knights event die (an SVG die like the production dice). */
 .event-die {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
   margin-left: 6px;
-  font-size: 1.2em;
-  border: 1px solid #1a1a1a;
-  background: #fefefe;
+  flex: none;
 }
-
-.event-die-barbarian { background: #e9d4b3; }
-.event-die-science   { background: #cfe5cf; }
-.event-die-trade     { background: #f3e1c4; }
-.event-die-politics  { background: #d4dde6; }
 

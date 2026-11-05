@@ -31,6 +31,9 @@ export function generateBaseScenarioBoard(
     );
   }
   const assembled = assembleBoardFromLayout(layout, rngState);
+  // The assembler parks a pirate on the first sea hex for Seafarers; base
+  // maps have no pirate (it was drawn on the sea frame of every Fun Map).
+  delete assembled.board.pirateHex;
 
   let volcanoHexId: string | null = null;
   if (scenario.volcano) {

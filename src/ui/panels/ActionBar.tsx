@@ -14,10 +14,14 @@ import {
 import { isSetupPhase } from '@/game/actions/setup';
 import type { GameState, PlayerId } from '@/game/types';
 import { movableShips } from '@/ui/game/PlacementOverlay';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import {
-  CITIES_AND_KNIGHTS_EXPANSION_ID,
-  MAX_CITY_WALLS,
-} from '@/game/modules/citiesAndKnights/constants';
+  CKMainButtons,
+  CKModeExtras,
+  CKRollExtras,
+  ckModeHint,
+  ckPhaseHint,
+} from './citiesAndKnights/CKActionBar';
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import './ActionBar.css';
 
@@ -113,6 +117,7 @@ export function ActionBar() {
             </Button>
           </div>
         )}
+        {hasCK && <CKRollExtras game={game} acting={acting} />}
       </div>,
     );
   }
@@ -145,6 +150,7 @@ export function ActionBar() {
             </Button>
           )}
           {back && <Button onClick={back}>◂ Pick another ship</Button>}
+          {hasCK && <CKModeExtras acting={acting} uiMode={uiMode} />}
           <div className="actionbar-slot">
             <Button fullWidth onClick={cancel}>
               Cancel
@@ -246,97 +252,7 @@ export function ActionBar() {
         >
           🏛 City
         </Button>
-        {hasCK && (
-          <Button
-            disabled={
-              !canAfford(player.resources, COSTS.cityWall) ||
-              player.cities.length === 0 ||
-              (player.cityWalls ?? 0) >= MAX_CITY_WALLS
-            }
-            onClick={() => setMode({ kind: 'buildCityWall' })}
-            title="Build City Wall (2🧱) — adds +2 to your 7-roll hand limit"
-          >
-            🧱 Wall
-          </Button>
-        )}
-        {hasCK && (
-          <Button
-            disabled={
-              !canAfford(player.resources, COSTS.knight) ||
-              (game.knightSupply?.[acting]?.[1] ?? 0) <= 0
-            }
-            onClick={() => setMode({ kind: 'recruitKnight' })}
-            title="Recruit Knight (1🐑 1🪨)"
-          >
-            🛡 Recruit
-          </Button>
-        )}
-        {hasCK && (
-          <Button
-            disabled={
-              !canAfford(player.resources, COSTS.activateKnight) ||
-              !Object.values(game.knights ?? {}).some(
-                (k) => k.playerId === acting && !k.active,
-              )
-            }
-            onClick={() => setMode({ kind: 'activateKnight' })}
-            title="Activate Knight (1🌾)"
-          >
-            ⚡ Activate
-          </Button>
-        )}
-        {hasCK && (
-          <Button
-            disabled={
-              !!game.promotedKnightThisTurn ||
-              !canAfford(player.resources, COSTS.promoteKnight) ||
-              !Object.values(game.knights ?? {}).some(
-                (k) => k.playerId === acting && k.strength < 3,
-              )
-            }
-            onClick={() => setMode({ kind: 'promoteKnight' })}
-            title="Promote Knight (1🐑 1🪨) — once per turn"
-          >
-            ⬆ Promote
-          </Button>
-        )}
-        {hasCK && (
-          <Button
-            disabled={
-              !Object.values(game.knights ?? {}).some(
-                (k) => k.playerId === acting && k.active,
-              )
-            }
-            onClick={() => setMode({ kind: 'moveKnight' })}
-            title="Move an active knight (then click destination)"
-          >
-            ➡ Move Knight
-          </Button>
-        )}
-        {hasCK && (
-          <Button
-            onClick={() => openDialog('cityImprovements')}
-            title="Build a city improvement (spends commodities)"
-          >
-            📜 Improve
-          </Button>
-        )}
-        {hasCK && (() => {
-          const p = game.players.find((x) => x.id === acting);
-          const cards = p?.progressCards;
-          const total = cards
-            ? cards.science.length + cards.trade.length + cards.politics.length
-            : 0;
-          return (
-            <Button
-              disabled={total === 0}
-              onClick={() => openDialog('progressCards')}
-              title={`Play a progress card (${total} in hand)`}
-            >
-              🃏 Cards ({total})
-            </Button>
-          );
-        })()}
+        {hasCK && <CKMainButtons game={game} acting={acting} player={player} />}
         {!hasCK && (
           <Button
             disabled={
@@ -440,7 +356,7 @@ function modeHint(mode: ReturnType<typeof useGameStore.getState>['uiMode']): str
     case 'buildCity':
       return 'Pick one of your settlements to upgrade.';
     default:
-      return '';
+      return ckModeHint(mode) ?? '';
   }
 }
 
@@ -463,6 +379,8 @@ function phaseHint(game: GameState, pid: PlayerId): string | null {
       ? 'Place a road next to it — or, on the coast, a ship (⛵) instead.'
       : 'Place a road next to it.';
   }
+  const ck = ckPhaseHint(game, pid);
+  if (ck) return ck;
   if (game.phase === 'moveRobber') return 'Move the robber: pick a highlighted hex.';
   if (game.phase === 'movePirate') {
     return 'Move the pirate: pick a sea hex. Ships can\'t be built or moved on its edges.';

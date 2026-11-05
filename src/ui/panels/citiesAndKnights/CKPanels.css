@@ -1,0 +1,61 @@
+.ck-hand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ck-hand-cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px;
+}
+.ck-hand-levels {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+}
+.ck-hand-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.8em;
+  font-weight: 700;
+}
+.ck-hand-level-science { background: rgba(47, 125, 58, 0.45); }
+.ck-hand-level-trade { background: rgba(155, 207, 79, 0.35); }
+.ck-hand-level-politics { background: rgba(157, 180, 220, 0.35); }
+.ck-hand-over {
+  color: #ffb4a8;
+  font-weight: 800;
+  font-size: 0.8em;
+}
+
+/* Opponent panel row */
+.ck-opp {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8em;
+}
+.ck-opp-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.ck-opp-backs {
+  display: inline-flex;
+  gap: 2px;
+}
+.ck-opp-back {
+  display: inline-block;
+  width: 9px;
+  height: 13px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+.ck-opp-back-science { background: #2f7d3a; }
+.ck-opp-back-trade { background: #9bcf4f; }
+.ck-opp-back-politics { background: #9db4dc; }

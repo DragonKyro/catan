@@ -6,11 +6,11 @@ import { calculateRouteLength } from '@/game/engine';
 import { isSetupPhase } from '@/game/actions/setup';
 import { MAX_SHIPS } from '@/game/modules/seafarers/constants';
 import { totalResources } from '@/game/resources';
-import { totalCommodities } from '@/game/commodities';
 import { pairedPlayer2Index, usesPairedRules } from '@/game/helpers';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
+import { CKOpponentStats } from './citiesAndKnights/CKOpponent';
 import './OpponentPanel.css';
 
 // Base game piece limits per player. Engine already enforces these via the
@@ -126,8 +126,8 @@ export function OpponentPanel() {
             </div>
             <div className="opp-stats">
               <span title="Resource cards">🂠 {totalResources(p.resources)}</span>
-              <span title="Dev cards (face down)">🂡 {cards}</span>
-              {!game.noLargestArmy && (
+              {!hasCK && <span title="Dev cards (face down)">🂡 {cards}</span>}
+              {!game.noLargestArmy && !hasCK && (
                 <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
               )}
               {!game.noLongestRoad && (
@@ -142,8 +142,8 @@ export function OpponentPanel() {
                 </span>
               )}
               {p.hasLongestRoad && (
-                <span title={hasSeafarers ? 'Longest Route bonus' : 'Longest Road bonus'}>
-                  ★ {hasSeafarers ? 'Route' : 'Road'}
+                <span title={hasSeafarers || hasCK ? 'Longest Route bonus' : 'Longest Road bonus'}>
+                  ★ {hasSeafarers || hasCK ? 'Route' : 'Road'}
                 </span>
               )}
               {p.hasLargestArmy && <span title="Largest Army bonus">★ Army</span>}
@@ -174,16 +174,6 @@ export function OpponentPanel() {
                   </span>
                 ) : null;
               })()}
-              {hasCK && p.commodities && totalCommodities(p.commodities) > 0 && (
-                <span title="Commodity cards (paper / cloth / coin)">
-                  📜 {totalCommodities(p.commodities)}
-                </span>
-              )}
-              {hasCK && (p.cityWalls ?? 0) > 0 && (
-                <span title={`City walls (+${(p.cityWalls ?? 0) * 2} 7-roll hand limit)`}>
-                  🧱 {p.cityWalls}
-                </span>
-              )}
               {(p.gold ?? 0) > 0 && (
                 <span title={`Gold — ${p.gold} coins`}>🪙 {p.gold}</span>
               )}
@@ -217,6 +207,7 @@ export function OpponentPanel() {
                 </span>
               )}
             </div>
+            {hasCK && <CKOpponentStats game={game} player={p} />}
             <div className="opp-pieces" title="Pieces remaining (built / cap)">
               <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>
                 🏠 {MAX_SETTLEMENTS - p.settlements.length}

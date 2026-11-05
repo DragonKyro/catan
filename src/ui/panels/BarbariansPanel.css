@@ -119,3 +119,50 @@
   vertical-align: middle;
   border: 1px solid rgba(0, 0, 0, 0.3);
 }
+
+/* Drawn barbarian track + strength bars */
+.bp-track-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+}
+.bp-hint {
+  font-size: 0.8em;
+  color: var(--text-soft);
+}
+.bp-last {
+  font-size: 0.82em;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--panel-soft);
+}
+.bp-decks {
+  display: flex;
+  gap: 6px;
+}
+.bp-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bp-bar-row {
+  display: grid;
+  grid-template-columns: 76px 1fr 24px;
+  align-items: center;
+  gap: 6px;
+}
+.bp-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.bp-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.bp-bar-barb { background: #c0392b; }
+.bp-bar-good { background: #3fa45b; }
+.bp-bar-weak { background: #c9a227; }

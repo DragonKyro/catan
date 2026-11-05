@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Action, EdgeId, HexId, PlayerId, VertexId } from '@/game/types';
+import type { Action, EdgeId, HexId, KnightStrength, PlayerId, VertexId } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
@@ -63,6 +63,19 @@ export type UIMode =
   | { kind: 'removeRoad' }
   // Cities & Knights / Invention — pick two number-token hexes to swap.
   | { kind: 'swapTokens'; firstHex?: HexId }
+  // Cities & Knights — barbarians won: pick which of your cities is pillaged.
+  | { kind: 'choosePillage' }
+  // Cities & Knights / Treason — the target removes a knight; the attacker
+  // places one (strength picked in the dialog first).
+  | { kind: 'treasonRemoveKnight' }
+  | { kind: 'treasonPlaceKnight'; strength?: KnightStrength }
+  // Cities & Knights progress cards played by clicking the board: the card
+  // is only played (with its payload) once the picks are complete.
+  | { kind: 'progressRoadBuilding'; first?: EdgeId }
+  | { kind: 'smithing'; selected: VertexId[] }
+  | { kind: 'intrigue' }
+  | { kind: 'engineering' }
+  | { kind: 'medicine' }
   | { kind: 'placeSetupSettlement' }
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }
@@ -100,7 +113,9 @@ export type DialogName =
   | 'weddingGive'
   | 'progressCardDiscard'
   | 'defenderTieDraw'
-  | 'aqueductPick';
+  | 'aqueductPick'
+  | 'knights'
+  | 'commercialHarbor';
 
 interface AppStore {
   game: GameState | null;
@@ -152,6 +167,7 @@ const UNDOABLE_ACTION_TYPES = new Set<Action['type']>([
   'buildCity',
   'buyDevCard',
   'bankTrade',
+  'bankTradeCK',
   'buildShip',
   'moveShip',
 ]);
@@ -191,6 +207,10 @@ const phaseToMode = (state: GameState): UIMode => {
   if (state.phase === 'displacedKnightMove') return { kind: 'displacedKnightMove' };
   if (state.phase === 'placeMerchant') return { kind: 'placeMerchant' };
   if (state.phase === 'removeRoad') return { kind: 'removeRoad' };
+  if (state.phase === 'placeMetropolis') return { kind: 'placeMetropolis' };
+  if (state.phase === 'choosePillage') return { kind: 'choosePillage' };
+  if (state.phase === 'treasonRemoveKnight') return { kind: 'treasonRemoveKnight' };
+  if (state.phase === 'treasonPlaceKnight') return { kind: 'treasonPlaceKnight' };
   return { kind: 'idle' };
 };
 
@@ -295,7 +315,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       // Production-pulse highlight: only on real production rolls (not 7).
       // Cleared by the BoardSVG effect ~1.5s later.
       if (action.type === 'rollDice') {
-        const total = action.dice[0] + action.dice[1];
+        const total = next.lastRoll?.total ?? action.dice[0] + action.dice[1];
         set({ lastRolledHighlight: total !== 7 ? total : null });
       }
       // Broadcast to peers only after local apply succeeds.
@@ -320,7 +340,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       useLogStore.getState().record(before, action, next);
       applyTransition(set, get, before, next);
       if (action.type === 'rollDice') {
-        const total = action.dice[0] + action.dice[1];
+        const total = next.lastRoll?.total ?? action.dice[0] + action.dice[1];
         set({ lastRolledHighlight: total !== 7 ? total : null });
       }
       // Remote actions never produce an undo snapshot — clear any stale one.

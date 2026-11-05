@@ -29,7 +29,11 @@ export function RobberStealDialog() {
     for (const v of game.board.hexes[pendingRobberHex!]!.corners) {
       for (const p of game.players) {
         if (p.id === acting || candidates.includes(p.id)) continue;
-        if ((p.settlements.includes(v) || p.cities.includes(v)) && totalResources(p.resources) > 0) {
+        // Cities & Knights: commodity cards can be stolen too.
+        const cards =
+          totalResources(p.resources) +
+          (p.commodities ? p.commodities.paper + p.commodities.cloth + p.commodities.coin : 0);
+        if ((p.settlements.includes(v) || p.cities.includes(v)) && cards > 0) {
           candidates.push(p.id);
         }
       }
@@ -81,7 +85,9 @@ export function RobberStealDialog() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {candidates.map((pid) => {
           const p = game.players.find((x) => x.id === pid)!;
-          const cards = totalResources(p.resources);
+          const cards =
+            totalResources(p.resources) +
+            (p.commodities ? p.commodities.paper + p.commodities.cloth + p.commodities.coin : 0);
           const swatch = (
             <span
               style={{
