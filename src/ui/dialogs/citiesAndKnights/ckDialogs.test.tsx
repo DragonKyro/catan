@@ -157,3 +157,48 @@ describe('C&K panels', () => {
     expect(screen.getAllByTitle('Cloth').length).toBeGreaterThan(0);
   });
 });
+
+describe('C&K board click modes', () => {
+  it('moves a knight: pick the knight, then a highlighted destination', async () => {
+    const { PlacementOverlay } = await import('@/ui/game/PlacementOverlay');
+    let s = main();
+    // An acting knight at the free end of p0's first road.
+    const road = s.players[0]!.roads[0]!;
+    const end = s.board.edges[road]!.vertices.find(
+      (v) => !s.players.some((p) => p.settlements.includes(v) || p.cities.includes(v)),
+    )!;
+    // Give p0 a second road out of the far end so the knight can move.
+    const next = s.board.vertices[end]!.edges.find(
+      (e) => e !== road && !s.players.some((p) => p.roads.includes(e)),
+    )!;
+    s = updatePlayer(s, 'p0', (p) => ({ ...p, roads: [...p.roads, next] }));
+    const dest = s.board.edges[next]!.vertices.find((v) => v !== end)!;
+    s = putKnight(s, 'p0', end, 1, true);
+    load(s);
+    useGameStore.setState({ uiMode: { kind: 'moveKnight' } });
+    const { container, rerender } = render(
+      <svg>
+        <PlacementOverlay />
+      </svg>,
+    );
+    const ghosts = () => Array.from(container.querySelectorAll('g.ghost'));
+    expect(ghosts()).toHaveLength(1);
+    fireEvent.click(ghosts()[0]!);
+    expect(useGameStore.getState().uiMode).toMatchObject({ kind: 'moveKnight', sourceVertex: end });
+    rerender(
+      <svg>
+        <PlacementOverlay />
+      </svg>,
+    );
+    expect(ghosts().length).toBeGreaterThan(0);
+    const destGhost = ghosts().find((g) => {
+      const t = g.getAttribute('transform') ?? '';
+      const p = s.board.vertices[dest]!.position;
+      return t.includes(`${p.x}, ${p.y}`);
+    })!;
+    fireEvent.click(destGhost);
+    const g = useGameStore.getState().game!;
+    expect(g.knights![dest]).toMatchObject({ playerId: 'p0', active: false });
+    expect(g.knights![end]).toBeUndefined();
+  });
+});

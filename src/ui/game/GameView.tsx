@@ -35,6 +35,7 @@ import { Rulebook } from '@/rulebook/Rulebook';
 import { Button } from '@/ui/shared/Button';
 import { CostCheatsheet } from '@/ui/panels/CostCheatsheet';
 import { DevCardCheatsheet } from '@/ui/panels/DevCardCheatsheet';
+import { CKCardCheatsheet } from '@/ui/panels/citiesAndKnights/CKCardCheatsheet';
 import './GameView.css';
 
 export function GameView() {
@@ -56,6 +57,7 @@ export function GameView() {
   const [sideOpen, setSideOpen] = useState(false);
 
   const isGameOver = game.phase === 'gameOver';
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
 
   const quitToMenu = () => {
     if (isOnline) leaveRoom();
@@ -143,15 +145,18 @@ export function GameView() {
                 setShowDevCards((s) => !s);
                 setShowCosts(false);
               }}
-              aria-label="Show dev cards"
+              aria-label={hasCK ? 'Show progress cards' : 'Show dev cards'}
               aria-expanded={showDevCards}
-              title="Dev cards: effects & deck counts"
+              title={hasCK ? 'Progress cards: effects & deck counts' : 'Dev cards: effects & deck counts'}
             >
               🃏
             </button>
-            {showDevCards && (
-              <DevCardCheatsheet game={game} onClose={() => setShowDevCards(false)} />
-            )}
+            {showDevCards &&
+              (hasCK ? (
+                <CKCardCheatsheet game={game} onClose={() => setShowDevCards(false)} />
+              ) : (
+                <DevCardCheatsheet game={game} onClose={() => setShowDevCards(false)} />
+              ))}
           </div>
         </div>
         {/* Compact screens: the side panel (players, scores, log, chat) is a
@@ -191,7 +196,7 @@ export function GameView() {
           </div>
         )}
         {/* Cities & Knights prompts (sub-phases, cards, knights, tracks). */}
-        {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) && (
+        {hasCK && (
           <div className="gameview-dialog-overlay">
             <CitiesKnightsDialogs />
           </div>

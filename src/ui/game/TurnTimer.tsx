@@ -196,7 +196,13 @@ function autoFinish(
   // Main: just end the turn — the player had their chance.
   if (initial.phase === 'main') {
     ctx.dispatch({ type: 'endTurn', playerId });
+    return;
   }
+
+  // Any other sub-phase (the Cities & Knights ones: pillage choice, tie
+  // draw, progress discard, Aqueduct, Wedding, Treason, …): the AI answers.
+  const action = chooseAction(initial, playerId);
+  if (action) ctx.dispatch(action);
 }
 
 // Pick up to 2 resources weighted by current shortfall vs player needs,
