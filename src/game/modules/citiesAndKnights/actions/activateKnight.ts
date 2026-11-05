@@ -4,15 +4,12 @@ import { currentPlayerId, getPlayer, updatePlayer } from '../../../helpers';
 import { addResources, canAfford, subtractResources } from '../../../resources';
 import { knightAt } from '../knights/state';
 
-// Stand up an inactive knight. Cost: 1 wheat. The activated knight cannot
-// take a knight action this same turn (rulebook p.9 — "you may not activate
-// a knight and then take an action with it on the same turn"). We record
-// the vertex on `state.activatedKnightsThisTurn` so the action handlers can
-// gate on it; the list resets on endTurn.
-export function handleActivateKnight(
-  state: GameState,
-  action: ActivateKnightAction,
-): GameState {
+// Stand up an inactive knight (p.9). Cost: 1 wheat. You may recruit and then
+// activate, or act with a knight (which lays it down) and then activate it,
+// but a knight activated this turn can't act this turn: it's flagged
+// `activatedThisTurn` (cleared at endTurn) and listed in
+// `activatedKnightsThisTurn` for older readers.
+export function handleActivateKnight(state: GameState, action: ActivateKnightAction): GameState {
   if (state.phase !== 'main') {
     throw new Error(`Cannot activate knight in phase ${state.phase}`);
   }
@@ -35,12 +32,9 @@ export function handleActivateKnight(
     bank: addResources(next.bank, COSTS.activateKnight),
     knights: {
       ...(next.knights ?? {}),
-      [action.vertex]: { ...k, active: true },
+      [action.vertex]: { ...k, active: true, activatedThisTurn: true },
     },
-    activatedKnightsThisTurn: [
-      ...(next.activatedKnightsThisTurn ?? []),
-      action.vertex,
-    ],
+    activatedKnightsThisTurn: [...(next.activatedKnightsThisTurn ?? []), action.vertex],
   };
   return next;
 }

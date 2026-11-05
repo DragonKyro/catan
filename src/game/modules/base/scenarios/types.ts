@@ -32,4 +32,10 @@ export interface BaseScenario {
   // BoardState as `volcanoHex` so the dice handler can fire eruptions and
   // the setup validator can block adjacent settlements.
   volcano?: { q: number; r: number };
+  // Map only offered with this expansion (the Cities & Knights first-game
+  // board). Absent = any rule set.
+  onlyWithExpansion?: string;
+  // Expansions this map can't be played with (its mechanic isn't wired into
+  // that expansion's turn — e.g. gold fields or the volcano under C&K).
+  notWithExpansions?: string[];
 }

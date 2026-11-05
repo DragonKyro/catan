@@ -1,16 +1,15 @@
-import type {
-  ChooseProgressCardPickAction,
-  GameState,
-  ImprovementTrack,
-  ProgressCardKind,
-} from '../../../types';
-import { RESOURCES, COMMODITIES } from '../../../types';
-import { updatePlayer } from '../../../helpers';
-import { VP_PROGRESS_CARDS } from '../progress/catalogue';
+import type { ChooseProgressCardPickAction, GameState } from '../../../types';
+import { receiveProgressCard, takeProgressCardFromHand } from '../progress/hand';
+import { ckHandSize } from '../production';
+import { holdsSelection, selectionSize, transferCards } from '../cards';
+import { resumeFlow } from '../flow';
 
-// Resolver for the two pick sub-phases:
-//   - Espionage: picker takes 1 non-VP progress card from target's hand.
-//   - Guild Dues: picker takes 2 cards (resources / commodities) from target.
+// Resolver for the two "look at a hand and take" cards:
+//   - Espionage (p.15): look at another player's progress cards and MAY take
+//     one (VP cards are face up, never in the hand). Omit `card` to take
+//     nothing.
+//   - Guild Dues (p.14): take any 2 resource / commodity cards from the
+//     target's hand (all of them if they hold fewer).
 export function handleChooseProgressCardPick(
   state: GameState,
   action: ChooseProgressCardPickAction,
@@ -23,118 +22,29 @@ export function handleChooseProgressCardPick(
   if (action.playerId !== ctx.picker) throw new Error('Not your pick');
 
   if (ctx.kind === 'espionage') {
-    if (!action.deck || !action.card) {
-      throw new Error('Espionage pick needs deck + card');
+    let next = state;
+    if (action.card) {
+      if (!action.deck) throw new Error('Espionage pick needs the deck of the card');
+      const target = state.players.find((p) => p.id === ctx.targetId);
+      if (!target?.progressCards?.[action.deck].includes(action.card)) {
+        throw new Error(`Target has no ${action.card} in ${action.deck}`);
+      }
+      next = takeProgressCardFromHand(next, ctx.targetId, action.deck, action.card);
+      next = receiveProgressCard(next, ctx.picker, action.deck, action.card);
     }
-    if (VP_PROGRESS_CARDS.has(action.card)) {
-      throw new Error('Cannot steal a VP card');
-    }
-    const target = state.players.find((p) => p.id === ctx.targetId);
-    if (!target?.progressCards?.[action.deck].includes(action.card)) {
-      throw new Error(`Target has no ${action.card} in ${action.deck}`);
-    }
-    // Move card from target to picker.
-    let next = updatePlayer(state, ctx.targetId, (p) => ({
-      ...p,
-      progressCards: removeCard(p.progressCards, action.deck!, action.card!),
-    }));
-    next = updatePlayer(next, ctx.picker, (p) => ({
-      ...p,
-      progressCards: addCard(p.progressCards, action.deck!, action.card!),
-    }));
-    return {
-      ...next,
-      phase: 'main',
-      progressPickState: undefined,
-    };
+    return resumeFlow({ ...next, progressPickState: undefined });
   }
 
-  // Guild Dues: collect resources/commodities totalling `remaining` cards.
   if (ctx.kind === 'guildDues') {
-    let total = 0;
-    for (const r of RESOURCES) total += action.resources?.[r] ?? 0;
-    for (const c of COMMODITIES) total += action.commodities?.[c] ?? 0;
-    if (total !== ctx.remaining) {
-      throw new Error(`Must take exactly ${ctx.remaining} cards`);
+    const owed = Math.min(ctx.remaining, ckHandSize(state, ctx.targetId));
+    if (selectionSize(action.resources, action.commodities) !== owed) {
+      throw new Error(`Take exactly ${owed} cards`);
     }
-    const target = state.players.find((p) => p.id === ctx.targetId);
-    if (!target) throw new Error('Unknown target');
-    for (const r of RESOURCES) {
-      const want = action.resources?.[r] ?? 0;
-      if (want > target.resources[r]) {
-        throw new Error(`Target doesn't have that many ${r}`);
-      }
+    if (!holdsSelection(state, ctx.targetId, action.resources, action.commodities)) {
+      throw new Error("The target doesn't hold those cards");
     }
-    const tCom = target.commodities ?? { paper: 0, cloth: 0, coin: 0 };
-    for (const c of COMMODITIES) {
-      const want = action.commodities?.[c] ?? 0;
-      if (want > tCom[c]) {
-        throw new Error(`Target doesn't have that many ${c}`);
-      }
-    }
-    // Transfer.
-    let next = updatePlayer(state, ctx.targetId, (p) => ({
-      ...p,
-      resources: {
-        wood: p.resources.wood - (action.resources?.wood ?? 0),
-        brick: p.resources.brick - (action.resources?.brick ?? 0),
-        sheep: p.resources.sheep - (action.resources?.sheep ?? 0),
-        wheat: p.resources.wheat - (action.resources?.wheat ?? 0),
-        ore: p.resources.ore - (action.resources?.ore ?? 0),
-      },
-      commodities: {
-        paper:
-          (p.commodities?.paper ?? 0) - (action.commodities?.paper ?? 0),
-        cloth:
-          (p.commodities?.cloth ?? 0) - (action.commodities?.cloth ?? 0),
-        coin:
-          (p.commodities?.coin ?? 0) - (action.commodities?.coin ?? 0),
-      },
-    }));
-    next = updatePlayer(next, ctx.picker, (p) => ({
-      ...p,
-      resources: {
-        wood: p.resources.wood + (action.resources?.wood ?? 0),
-        brick: p.resources.brick + (action.resources?.brick ?? 0),
-        sheep: p.resources.sheep + (action.resources?.sheep ?? 0),
-        wheat: p.resources.wheat + (action.resources?.wheat ?? 0),
-        ore: p.resources.ore + (action.resources?.ore ?? 0),
-      },
-      commodities: {
-        paper:
-          (p.commodities?.paper ?? 0) + (action.commodities?.paper ?? 0),
-        cloth:
-          (p.commodities?.cloth ?? 0) + (action.commodities?.cloth ?? 0),
-        coin:
-          (p.commodities?.coin ?? 0) + (action.commodities?.coin ?? 0),
-      },
-    }));
-    return {
-      ...next,
-      phase: 'main',
-      progressPickState: undefined,
-    };
+    const next = transferCards(state, ctx.targetId, ctx.picker, action.resources, action.commodities);
+    return resumeFlow({ ...next, progressPickState: undefined });
   }
   throw new Error(`Unknown pick kind: ${(ctx as { kind: string }).kind}`);
-}
-
-function removeCard(
-  hand: { science: ProgressCardKind[]; trade: ProgressCardKind[]; politics: ProgressCardKind[] } | undefined,
-  deck: ImprovementTrack,
-  card: ProgressCardKind,
-) {
-  const cur = hand ?? { science: [], trade: [], politics: [] };
-  const arr = cur[deck].slice();
-  const idx = arr.indexOf(card);
-  if (idx >= 0) arr.splice(idx, 1);
-  return { ...cur, [deck]: arr };
-}
-
-function addCard(
-  hand: { science: ProgressCardKind[]; trade: ProgressCardKind[]; politics: ProgressCardKind[] } | undefined,
-  deck: ImprovementTrack,
-  card: ProgressCardKind,
-) {
-  const cur = hand ?? { science: [], trade: [], politics: [] };
-  return { ...cur, [deck]: [...cur[deck], card] };
 }

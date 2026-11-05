@@ -1,20 +1,74 @@
 import type {
   CommercialHarborOfferAction,
+  CommercialHarborProposeAction,
   GameState,
-  Resource,
+  PlayerId,
 } from '../../../types';
-import { RESOURCES } from '../../../types';
-import { updatePlayer } from '../../../helpers';
+import { COMMODITIES, RESOURCES } from '../../../types';
+import { currentPlayerId } from '../../../helpers';
+import { totalCommodities } from '../../../commodities';
+import { transferCards } from '../cards';
+import { resumeFlow } from '../flow';
 
-// Commercial Harbor follow-up: each queued opponent picks a commodity to
-// hand to the offerer in exchange for one of the offerer's resources. If
-// the opponent has no commodities OR they pick `null`, the offered resource
-// bounces back to the offerer with no exchange.
+const NO_COMMODITIES = { paper: 0, cloth: 0, coin: 0 };
+
+// Commercial Harbor (p.14): "You may offer each other player one of your
+// resource cards. They must give you 1 commodity card of their choice in
+// exchange. If the other player does not have any commodity cards, take
+// back your resource card. You may use this ability at any time during the
+// turn in which you play the card as long as you only make one offer per
+// player."
 //
-// To keep the engine logic deterministic we have the offerer ALWAYS send
-// their first non-empty resource. Players can adjust this later via an
-// expanded payload, but the rulebook permits "any resource of their
-// choice" — for the first cut we just give the first available.
+// Playing the card opens `state.commercialHarbor` for the turn. Each offer
+// is a `commercialHarborPropose`; a target holding a commodity then answers
+// `commercialHarborOffer` (phase commercialHarborOffer).
+
+// Players the active player may still make an offer to.
+export function commercialHarborTargets(state: GameState): PlayerId[] {
+  const ch = state.commercialHarbor;
+  if (!ch) return [];
+  return state.playerOrder.filter((pid) => pid !== ch.offererId && !ch.offeredTo.includes(pid));
+}
+
+export function handleCommercialHarborPropose(
+  state: GameState,
+  action: CommercialHarborProposeAction,
+): GameState {
+  if (state.phase !== 'main') {
+    throw new Error(`Cannot make a Commercial Harbor offer in phase ${state.phase}`);
+  }
+  const ch = state.commercialHarbor;
+  if (!ch || ch.offererId !== action.playerId) {
+    throw new Error('Play a Commercial Harbor card first');
+  }
+  if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
+  if (!commercialHarborTargets(state).includes(action.targetId)) {
+    throw new Error('You already made that player an offer');
+  }
+  if (!RESOURCES.includes(action.resource)) throw new Error('Offer a resource card');
+  const me = state.players.find((p) => p.id === action.playerId)!;
+  if (me.resources[action.resource] <= 0) throw new Error(`You have no ${action.resource}`);
+  const target = state.players.find((p) => p.id === action.targetId);
+  if (!target) throw new Error('Unknown player');
+
+  const next: GameState = {
+    ...state,
+    commercialHarbor: { ...ch, offeredTo: [...ch.offeredTo, action.targetId] },
+  };
+  // No commodity to give back: the resource stays with you.
+  if (totalCommodities(target.commodities ?? NO_COMMODITIES) === 0) return next;
+  return {
+    ...next,
+    phase: 'commercialHarborOffer',
+    pendingCommercialHarbor: {
+      offererId: action.playerId,
+      targetId: action.targetId,
+      resource: action.resource,
+    },
+  };
+}
+
+// The offered player picks which commodity to hand over for the resource.
 export function handleCommercialHarborOffer(
   state: GameState,
   action: CommercialHarborOfferAction,
@@ -22,75 +76,20 @@ export function handleCommercialHarborOffer(
   if (state.phase !== 'commercialHarborOffer') {
     throw new Error(`Cannot answer harbor in phase ${state.phase}`);
   }
-  if (!state.pendingCommercialHarbor) {
-    throw new Error('No pending commercial harbor');
-  }
   const ctx = state.pendingCommercialHarbor;
-  const expected = ctx.remaining[0];
-  if (!expected || expected !== action.playerId) {
-    throw new Error('Not your turn to answer');
-  }
-
-  // Pick which resource the offerer will give. First non-empty resource.
-  const offerer = state.players.find((p) => p.id === ctx.offererId);
-  if (!offerer) throw new Error('Unknown offerer');
-  let resourceOffered: Resource | null = null;
-  for (const r of RESOURCES) {
-    if (offerer.resources[r] > 0) {
-      resourceOffered = r;
-      break;
-    }
-  }
-  // If the offerer has no resources to give, the queue advances without effect.
-  if (!resourceOffered) {
-    return advance(state);
-  }
-
+  if (!ctx) throw new Error('No pending commercial harbor');
+  if (ctx.targetId !== action.playerId) throw new Error('Not your offer to answer');
+  const target = state.players.find((p) => p.id === action.playerId)!;
+  const held = target.commodities ?? NO_COMMODITIES;
   let next = state;
-  if (action.commodity) {
-    // Real exchange.
-    const target = state.players.find((p) => p.id === action.playerId);
-    if (!target) throw new Error('Unknown target');
-    if ((target.commodities?.[action.commodity] ?? 0) <= 0) {
+  if (action.commodity === null) {
+    if (totalCommodities(held) > 0) throw new Error('You must give one of your commodities');
+  } else {
+    if (!COMMODITIES.includes(action.commodity) || held[action.commodity] <= 0) {
       throw new Error(`You don't have ${action.commodity}`);
     }
-    const r = resourceOffered;
-    const c = action.commodity;
-    next = updatePlayer(next, ctx.offererId, (p) => ({
-      ...p,
-      resources: { ...p.resources, [r]: p.resources[r] - 1 },
-      commodities: {
-        ...(p.commodities ?? { paper: 0, cloth: 0, coin: 0 }),
-        [c]: (p.commodities?.[c] ?? 0) + 1,
-      },
-    }));
-    next = updatePlayer(next, action.playerId, (p) => ({
-      ...p,
-      resources: { ...p.resources, [r]: p.resources[r] + 1 },
-      commodities: {
-        ...(p.commodities ?? { paper: 0, cloth: 0, coin: 0 }),
-        [c]: (p.commodities?.[c] ?? 0) - 1,
-      },
-    }));
+    next = transferCards(next, ctx.offererId, ctx.targetId, { [ctx.resource]: 1 }, {});
+    next = transferCards(next, ctx.targetId, ctx.offererId, {}, { [action.commodity]: 1 });
   }
-  return advance(next);
-}
-
-function advance(state: GameState): GameState {
-  if (!state.pendingCommercialHarbor) return state;
-  const remaining = state.pendingCommercialHarbor.remaining.slice(1);
-  if (remaining.length === 0) {
-    return {
-      ...state,
-      phase: 'main',
-      pendingCommercialHarbor: undefined,
-    };
-  }
-  return {
-    ...state,
-    pendingCommercialHarbor: {
-      ...state.pendingCommercialHarbor,
-      remaining,
-    },
-  };
+  return resumeFlow({ ...next, pendingCommercialHarbor: undefined });
 }

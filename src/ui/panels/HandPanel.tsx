@@ -1,14 +1,14 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import { RESOURCES, COMMODITIES } from '@/game/types';
+import { RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
-import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
 import { calculateVictoryPoints, calculateIslandBonusVp } from '@/game/scoring/points';
 import { BarbarianAttackBadges } from '@/ui/game/traders/BarbarianAttackBadges';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { TradersHandStrip } from './TradersHandStrip';
+import { CKHandCards, CKHandFlags } from './citiesAndKnights/CKHand';
 import './HandPanel.css';
 
 export function HandPanel() {
@@ -71,6 +71,7 @@ export function HandPanel() {
     !game.hasPlayedDevCardThisTurn &&
     uiMode.kind === 'idle';
   const vp = calculateVictoryPoints(game, player.id, true);
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
 
   const cardCounts: Record<string, number> = {};
   for (const c of player.devCards.unplayed) {
@@ -106,7 +107,7 @@ export function HandPanel() {
           {player.hasLongestRoad && (
             <span
               className="hand-flag"
-              title={`${game.settings.expansions.includes('seafarers') ? 'Longest Route' : 'Longest Road'} (+2 VP)`}
+              title={`${game.settings.expansions.includes('seafarers') || game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) ? 'Longest Route' : 'Longest Road'} (+2 VP)`}
             >
               🛣️
             </span>
@@ -154,48 +155,7 @@ export function HandPanel() {
               ⚓ {player.heldPorts!.length}
             </span>
           )}
-          {(player.cityWalls ?? 0) > 0 && (
-            <span
-              className="hand-flag"
-              title={`City walls (+${(player.cityWalls ?? 0) * 2} to 7-roll hand limit)`}
-            >
-              🧱 {player.cityWalls}
-            </span>
-          )}
-          {/* C&K improvement levels (only when nonzero) */}
-          {player.improvements?.science ? (
-            <span className="hand-flag" title={`Science level ${player.improvements.science}`}>📚 {player.improvements.science}</span>
-          ) : null}
-          {player.improvements?.trade ? (
-            <span className="hand-flag" title={`Trade level ${player.improvements.trade}`}>⚖️ {player.improvements.trade}</span>
-          ) : null}
-          {player.improvements?.politics ? (
-            <span className="hand-flag" title={`Politics level ${player.improvements.politics}`}>🤝 {player.improvements.politics}</span>
-          ) : null}
-          {(player.defenderTokens ?? 0) > 0 && (
-            <span className="hand-flag" title={`Defender of Catan tokens (+${player.defenderTokens} VP)`}>
-              🥇 {player.defenderTokens}
-            </span>
-          )}
-          {(() => {
-            const mets = game.metropolises;
-            if (!mets) return null;
-            let count = 0;
-            for (const t of ['science', 'trade', 'politics'] as const) {
-              if (mets[t]?.playerId === player.id) count++;
-            }
-            if (count === 0) return null;
-            return (
-              <span className="hand-flag" title={`Metropolises owned (+${count * 2} VP)`}>
-                🏛 {count}
-              </span>
-            );
-          })()}
-          {game.merchant?.ownerId === player.id && (
-            <span className="hand-flag" title="Merchant (+1 VP, 2:1 on hex)">
-              💰
-            </span>
-          )}
+          {hasCK && <CKHandFlags game={game} player={player} />}
           {game.strongestPorts?.holder === player.id && (
             <span className="hand-flag" title="Strongest Ports (+2 VP)">
               ⚓
@@ -222,50 +182,20 @@ export function HandPanel() {
         ))}
       </div>
 
-      {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) &&
-        player.progressCards &&
-        player.progressCards.science.length +
-          player.progressCards.trade.length +
-          player.progressCards.politics.length >
-          0 && (
-          <div className="hand-progress-cards">
-            <span style={{ color: 'var(--text-soft)', fontSize: '0.75em', textTransform: 'uppercase' }}>
-              Progress
-            </span>
-            <span style={{ color: 'var(--text)', fontWeight: 600 }}>
-              {player.progressCards.science.length +
-                player.progressCards.trade.length +
-                player.progressCards.politics.length}{' '}
-              cards
-            </span>
-            <span style={{ fontSize: '0.85em', color: 'var(--text-soft)' }}>
-              (open via Cards button)
-            </span>
-          </div>
-        )}
-
       <TradersHandStrip
         game={game}
         player={player}
         ownTurn={game.playerOrder[game.currentPlayerIndex] === player.id}
       />
 
-      {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) && (
-        <div className="hand-commodities">
-          {COMMODITIES.map((c) => {
-            const n = player.commodities?.[c] ?? 0;
-            return (
-              <CommodityChip
-                key={c}
-                commodity={c}
-                count={n}
-                dimmed={n === 0}
-              />
-            );
-          })}
-        </div>
+      {hasCK && (
+        <CKHandCards
+          player={player}
+          canPlay={!player.isAI && isMyTurn && (game.phase === 'main' || game.phase === 'rollOrPlayKnight')}
+        />
       )}
 
+      {!hasCK && (
       <div className="hand-section">
         <div className="hand-cards">
           {Object.entries(cardCounts).map(([card, count]) => {
@@ -310,6 +240,7 @@ export function HandPanel() {
           {!hasAnyCards && <span className="hand-empty">no dev cards</span>}
         </div>
       </div>
+      )}
     </section>
   );
 }

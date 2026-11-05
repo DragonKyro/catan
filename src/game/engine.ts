@@ -113,7 +113,10 @@ export function robberStealCandidates(
       (p) =>
         p.id !== moverId &&
         (p.settlements.some((v) => corners.has(v)) || p.cities.some((v) => corners.has(v))) &&
-        totalResources(p.resources) > 0 &&
+        // Cities & Knights: commodity cards can be stolen too.
+        totalResources(p.resources) +
+          (p.commodities ? p.commodities.paper + p.commodities.cloth + p.commodities.coin : 0) >
+          0 &&
         mods.every((m) => !m.validators?.robberVictim?.(state, hexId, p.id)),
     )
     .map((p) => p.id);

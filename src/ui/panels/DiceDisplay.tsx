@@ -48,29 +48,46 @@ function Die({ value, color }: { value: number; color: 'red' | 'yellow' }) {
   );
 }
 
-const EVENT_FACE_EMOJI: Record<EventDieFace, string> = {
-  barbarian: '🚢',
-  science: '📚',
-  trade: '⚖️',
-  politics: '🤝',
-};
-
 const EVENT_FACE_LABEL: Record<EventDieFace, string> = {
-  barbarian: 'Barbarian ship advances',
-  science: 'Science (draw if you have a Science improvement on red die value)',
-  trade: 'Trade (draw if you have a Trade improvement on red die value)',
-  politics: 'Politics (draw if you have a Politics improvement on red die value)',
+  barbarian: 'Event die: barbarian ship — it moves one space toward Catan',
+  science: 'Event die: science — players whose science level covers the red die draw a science card',
+  trade: 'Event die: trade — players whose trade level covers the red die draw a trade card',
+  politics: 'Event die: politics — players whose politics level covers the red die draw a politics card',
 };
 
+const EVENT_FACE_COLOR: Record<Exclude<EventDieFace, 'barbarian'>, string> = {
+  science: '#2f7d3a',
+  trade: '#6f9a2a',
+  politics: '#4f6ea8',
+};
+
+// The Cities & Knights event die (p.6): white, with a black barbarian ship on
+// three faces and the science / trade / politics city gate icons on the rest.
 function EventDie({ face }: { face: EventDieFace }) {
   return (
-    <span
+    <svg
+      viewBox="-0.5 -0.5 1 1"
       className={`event-die event-die-${face}`}
-      title={EVENT_FACE_LABEL[face]}
+      width={36}
+      height={36}
+      role="img"
       aria-label={EVENT_FACE_LABEL[face]}
     >
-      <span aria-hidden>{EVENT_FACE_EMOJI[face]}</span>
-    </span>
+      <title>{EVENT_FACE_LABEL[face]}</title>
+      <rect x={-0.46} y={-0.46} width={0.92} height={0.92} rx={0.12} fill="#f4f1ea" stroke="#1a1a1a" strokeWidth={0.04} />
+      {face === 'barbarian' ? (
+        <g fill="#1d1d1d">
+          <path d="M-0.32,0.08 L0.32,0.08 L0.22,0.24 L-0.22,0.24 Z" />
+          <path d="M-0.02,-0.3 L-0.02,0.06 L-0.26,0.06 Z" />
+          <path d="M0.02,-0.26 L0.02,0.06 L0.24,0.06 Z" />
+        </g>
+      ) : (
+        <g fill={EVENT_FACE_COLOR[face]} stroke="#1a1a1a" strokeWidth={0.02}>
+          {/* City gate: two towers with an arch. */}
+          <path d="M-0.28,0.28 L-0.28,-0.2 L-0.32,-0.2 L-0.32,-0.3 L-0.12,-0.3 L-0.12,-0.2 L-0.15,-0.2 L-0.15,0.0 Q0,-0.12 0.15,0.0 L0.15,-0.2 L0.12,-0.2 L0.12,-0.3 L0.32,-0.3 L0.32,-0.2 L0.28,-0.2 L0.28,0.28 L0.12,0.28 L0.12,0.12 Q0,0.02 -0.12,0.12 L-0.12,0.28 Z" />
+        </g>
+      )}
+    </svg>
   );
 }
 

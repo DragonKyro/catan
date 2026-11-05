@@ -62,7 +62,10 @@ export function NewGame({ onBack }: Props = {}) {
   const newGame = useGameStore((s) => s.newGame);
 
   const scenario = activeScenario(expansions);
-  const isFunMap = scenario.kind === 'base' && expansions.baseScenarioId !== 'standard';
+  // Fun Maps and Cities & Knights bring their own seat limits.
+  const isFunMap =
+    scenario.kind === 'base' &&
+    (expansions.baseScenarioId !== 'standard' || expansions.citiesKnights);
   // Custom map (when loaded) overrides the scenario for player-count + VP.
   const minPlayers = customMap
     ? customMap.minPlayers

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Action, BarbarianTreasonMove, EdgeId, HexId, PlayerId, VertexId } from '@/game/types';
+import type { Action, BarbarianTreasonMove, EdgeId, HexId, KnightStrength, PlayerId, VertexId } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
@@ -69,6 +69,19 @@ export type UIMode =
   | { kind: 'removeRoad' }
   // Cities & Knights / Invention — pick two number-token hexes to swap.
   | { kind: 'swapTokens'; firstHex?: HexId }
+  // Cities & Knights — barbarians won: pick which of your cities is pillaged.
+  | { kind: 'choosePillage' }
+  // Cities & Knights / Treason — the target removes a knight; the attacker
+  // places one (strength picked in the dialog first).
+  | { kind: 'treasonRemoveKnight' }
+  | { kind: 'treasonPlaceKnight'; strength?: KnightStrength }
+  // Cities & Knights progress cards played by clicking the board: the card
+  // is only played (with its payload) once the picks are complete.
+  | { kind: 'progressRoadBuilding'; first?: EdgeId }
+  | { kind: 'smithing'; selected: VertexId[] }
+  | { kind: 'intrigue' }
+  | { kind: 'engineering' }
+  | { kind: 'medicine' }
   | { kind: 'placeSetupSettlement' }
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }
@@ -92,23 +105,13 @@ export type DialogName =
   | 'passBoot'
   // Traders & Barbarians coins (spend / buy gold)
   | 'coins'
-  // Cities & Knights dialogs.
+  // Cities & Knights dialogs opened from the ActionBar (sub-phase prompts
+  // follow game.phase instead — see ui/dialogs/citiesAndKnights/CKDialogs).
   | 'cityImprovements'
   | 'progressCards'
   | 'alchemy'
-  | 'smithing'
-  | 'merchantFleet'
-  | 'tradeMonopoly'
-  | 'resourceMonopolyCK'
-  | 'metropolisPlace'
-  | 'progressCardPick'
-  | 'treasonRemove'
-  | 'treasonPlace'
-  | 'commercialHarborOffer'
-  | 'weddingGive'
-  | 'progressCardDiscard'
-  | 'defenderTieDraw'
-  | 'aqueductPick';
+  | 'knights'
+  | 'commercialHarbor';
 
 interface AppStore {
   game: GameState | null;
@@ -160,6 +163,7 @@ const UNDOABLE_ACTION_TYPES = new Set<Action['type']>([
   'buildCity',
   'buyDevCard',
   'bankTrade',
+  'bankTradeCK',
   'buildShip',
   'moveShip',
   // Traders & Barbarians: bridges and coin trades reveal nothing.
@@ -212,6 +216,10 @@ const phaseToMode = (state: GameState): UIMode => {
   if (state.phase === 'displacedKnightMove') return { kind: 'displacedKnightMove' };
   if (state.phase === 'placeMerchant') return { kind: 'placeMerchant' };
   if (state.phase === 'removeRoad') return { kind: 'removeRoad' };
+  if (state.phase === 'placeMetropolis') return { kind: 'placeMetropolis' };
+  if (state.phase === 'choosePillage') return { kind: 'choosePillage' };
+  if (state.phase === 'treasonRemoveKnight') return { kind: 'treasonRemoveKnight' };
+  if (state.phase === 'treasonPlaceKnight') return { kind: 'treasonPlaceKnight' };
   return { kind: 'idle' };
 };
 

@@ -19,21 +19,11 @@ export function calculateMetropolisVp(state: GameState, playerId: PlayerId): num
   return sum;
 }
 
-// 1 VP per Printing or Constitution card in the player's hand (auto-flipped
-// face-up on draw).
-export function calculateProgressCardVp(
-  state: GameState,
-  playerId: PlayerId,
-): number {
+// 1 VP per Victory Point progress card (Printing, Constitution) the player
+// has placed face up (p.10).
+export function calculateProgressCardVp(state: GameState, playerId: PlayerId): number {
   const p = state.players.find((pl) => pl.id === playerId);
-  if (!p?.progressCards) return 0;
-  let sum = 0;
-  if (p.progressCards.science.includes('printing')) sum += 1;
-  if (p.progressCards.politics.includes('constitution')) sum += 1;
-  return sum;
-  // Note: a player can only ever hold one of each VP card; the deck has
-  // exactly one Printing and one Constitution.
-  void state;
+  return p?.progressVpCards?.length ?? 0;
 }
 
 // 1 VP for the player who currently holds the merchant piece.

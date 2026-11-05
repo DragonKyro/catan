@@ -327,3 +327,16 @@
     width: auto;
   }
 }
+
+/* Small reference tables (C&K improvement levels). */
+.rb-table {
+  border-collapse: collapse;
+  font-size: 0.85em;
+  margin: 6px 0;
+}
+.rb-table th,
+.rb-table td {
+  border: 1px solid var(--panel-border);
+  padding: 3px 6px;
+  text-align: left;
+}

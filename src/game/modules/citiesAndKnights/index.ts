@@ -26,14 +26,26 @@ import { handleChooseProgressCardPick } from './actions/chooseProgressCardPick';
 import { handleRemoveRoad } from './actions/removeRoad';
 import { handleDiscardProgressCard } from './actions/discardProgressCard';
 import { handlePlaceMerchant } from './actions/placeMerchant';
+import { handleTreasonRemoveKnight, handleTreasonPlaceKnight } from './actions/treason';
 import {
-  handleTreasonRemoveKnight,
-  handleTreasonPlaceKnight,
-} from './actions/treason';
-import { handleCommercialHarborOffer } from './actions/commercialHarborOffer';
+  handleCommercialHarborOffer,
+  handleCommercialHarborPropose,
+} from './actions/commercialHarborOffer';
 import { handleWeddingGive } from './actions/weddingGive';
 import { handleDefenderTieDraw } from './actions/defenderTieDraw';
-import { handleBuildRoadCK, handleBuildCityCK } from './actions/buildWrappers';
+import { handleChoosePillagedCity } from './actions/choosePillagedCity';
+import {
+  handleBuildRoadCK,
+  handleBuildCityCK,
+  handlePlaceInitialSettlementCK,
+} from './actions/buildWrappers';
+import { handleEndTurnCK } from './actions/endTurn';
+import {
+  handleAcceptTradeCK,
+  handleBankTradeCK,
+  handleCounterTradeCK,
+  handleProposeTradeCK,
+} from './trade';
 
 // Cities & Knights module. Inserted before the base module in
 // `engine.getActiveModules`, so any handler defined here wins.
@@ -41,18 +53,25 @@ export const citiesAndKnightsModule: RuleModule = {
   id: CITIES_AND_KNIGHTS_EXPANSION_ID,
   name: 'Cities & Knights',
   handlers: {
-    // Phase 1 — framework.
+    // Setup: round 2 places a city.
+    placeInitialSettlement: handlePlaceInitialSettlementCK as never,
+    // Turn flow.
     rollDice: handleRollDiceCK as never,
     discard: handleDiscardCK as never,
     discardCK: handleDiscardCK as never,
     moveRobber: handleMoveRobberCK as never,
-    buildCityWall: handleBuildCityWall as never,
+    endTurn: handleEndTurnCK as never,
+    // Development cards are returned to the box (p.3).
     buyDevCard: handleBuyDevCardCK as never,
     playKnight: handlePlayKnightCK as never,
     playRoadBuilding: handlePlayRoadBuildingCK as never,
     playYearOfPlenty: handlePlayYearOfPlentyCK as never,
     playMonopoly: handlePlayMonopolyCK as never,
-    // Phase 2 — knights.
+    // Building.
+    buildCityWall: handleBuildCityWall as never,
+    buildRoad: handleBuildRoadCK as never,
+    buildCity: handleBuildCityCK as never,
+    // Knights.
     recruitKnight: handleRecruitKnight as never,
     activateKnight: handleActivateKnight as never,
     promoteKnight: handlePromoteKnight as never,
@@ -60,11 +79,14 @@ export const citiesAndKnightsModule: RuleModule = {
     displaceKnight: handleDisplaceKnight as never,
     displacedKnightMove: handleDisplacedKnightMove as never,
     chaseRobber: handleChaseRobber as never,
-    // Phase 2 — improvements + metropolises.
+    // City improvements + metropolises.
     buildCityImprovement: handleBuildCityImprovement as never,
     placeMetropolis: handlePlaceMetropolis as never,
     aqueductPick: handleAqueductPick as never,
-    // Phase 2 — progress cards + follow-ups.
+    // Barbarians.
+    defenderTieDraw: handleDefenderTieDraw as never,
+    choosePillagedCity: handleChoosePillagedCity as never,
+    // Progress cards + follow-ups.
     playProgressCard: handlePlayProgressCard as never,
     chooseProgressCardPick: handleChooseProgressCardPick as never,
     removeRoad: handleRemoveRoad as never,
@@ -72,12 +94,13 @@ export const citiesAndKnightsModule: RuleModule = {
     placeMerchant: handlePlaceMerchant as never,
     treasonRemoveKnight: handleTreasonRemoveKnight as never,
     treasonPlaceKnight: handleTreasonPlaceKnight as never,
+    commercialHarborPropose: handleCommercialHarborPropose as never,
     commercialHarborOffer: handleCommercialHarborOffer as never,
     weddingGive: handleWeddingGive as never,
-    defenderTieDraw: handleDefenderTieDraw as never,
-    // Intercept buildRoad/buildCity to honor Diplomacy free-road and
-    // Medicine discount flags.
-    buildRoad: handleBuildRoadCK as never,
-    buildCity: handleBuildCityCK as never,
+    // Trading with commodities.
+    bankTradeCK: handleBankTradeCK as never,
+    proposeTrade: handleProposeTradeCK as never,
+    counterTrade: handleCounterTradeCK as never,
+    acceptTrade: handleAcceptTradeCK as never,
   },
 };

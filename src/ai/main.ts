@@ -175,179 +175,8 @@ export function chooseMainPhaseAction(
   //    Quality threshold + station-skip + contested-endpoint filters
   //    below ensure we only build roads that actually contribute — if
   //    nothing meets the bar, we fall through to dev card / trade.
-  if (
-    canAfford(player.resources, COSTS.road) &&
-    player.roads.length < 15
-  ) {
-    const openSpots = countOpenSettlementSpots(state, playerId);
-    const myRoadLen = calculateRouteLength(state, playerId);
-    const lrHolder = state.longestRoad?.holder ?? null;
-    const lrLength = state.longestRoad?.length ?? 0;
-    let lrClaimTarget = 0;
-    if (state.noLongestRoad) lrClaimTarget = 0;
-    else if (lrHolder === null) lrClaimTarget = LR_CLAIM_LENGTH;
-    else if (lrHolder !== playerId) lrClaimTarget = lrLength + 1;
-    const pursuingLR = lrClaimTarget > 0 && myRoadLen + 2 >= lrClaimTarget;
-    // Station roads (toward an unsettle-able vertex) are only allowed
-    // when LR claim is imminent — within 1 of the target length. At 2+
-    // away, a station road doesn't reliably extend our chain to claim,
-    // so it's likely a useless build. (Earlier rule allowed stations
-    // throughout LR pursuit; that produced the dead-end roads we kept
-    // seeing in screenshots.)
-    const stationAllowed = lrClaimTarget > 0 && myRoadLen + 1 >= lrClaimTarget;
-
-    // Consult the win plan: if it says we need more settlements, we're
-    // willing to accept a lower-quality unlock.
-    const winPlan = chooseWinPlan(state, playerId);
-    const planNeedsSettlements = winPlan.gap.newSettlementsNeeded > 0;
-
-    // Catch-up boost: if we're significantly behind the leader, we can't
-    // afford to be picky. Drop the road threshold an extra notch so we
-    // grab mid-tier expansion opportunities instead of stalling at 3 VP.
-    const myVp = calculateVictoryPoints(state, playerId, false);
-    let leaderVp = 0;
-    for (const op of state.players) {
-      if (op.id === playerId) continue;
-      const v = calculateVictoryPoints(state, op.id, false);
-      if (v > leaderVp) leaderVp = v;
-    }
-    const fallingBehind = leaderVp - myVp >= 3;
-
-    // Hand-burn signal: discard at 8, force-burn threshold at 6 so the
-    // AI spends idle wood+brick on a road instead of fishing for dev
-    // cards / risking a 7. Requires actual road materials (>=1 wood,
-    // >=1 brick) AND a fat hand — otherwise we'd lower the bar even
-    // when we couldn't follow through.
-    let handSize = 0;
-    for (const r of RESOURCES) handSize += player.resources[r];
-    const burnHand = handSize >= 6 && player.resources.wood >= 1 && player.resources.brick >= 1;
-
-    // VP-locked-out catch-all: when cities are maxed AND the dev card
-    // deck is empty AND there's no reachable settle spot in our current
-    // network, the ONLY remaining VP path is to extend roads toward new
-    // settle territory. Without this we'd see AIs sit on wood+brick at
-    // 6 VP for the rest of the game (the original bug: 7-8p games where
-    // the AI maxed cities, drained the dev deck, and stopped building).
-    const vpLockedOut =
-      (state.devCardDeck.length === 0 &&
-        player.cities.length >= 4 &&
-        openSpots === 0 &&
-        player.settlements.length < 5) ||
-      // T&B Barbarian Attack: nothing left to upgrade and no open spot —
-      // road out to new land (the scenario's crowded inner hexes).
-      barbarianAttackNeedsRoads(state, playerId, openSpots);
-
-    // Threshold tiers:
-    //   - LR pursuit: very low (any extension is worth ~2 VP)
-    //   - Plan wants settlements: 3.5 (weed out marginal extensions)
-    //   - Otherwise: original strict 4.5
-    let threshold = ROAD_TARGET_THRESHOLD;
-    if (pursuingLR) threshold = ROAD_TARGET_THRESHOLD_LR;
-    else if (planNeedsSettlements) threshold = 3.5;
-    if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
-    if (burnHand) threshold = Math.max(1.5, threshold - 1.5);
-    if (vpLockedOut) threshold = Math.min(threshold, 1.0);
-
-    let bestEid: EdgeId | null = null;
-    let bestScore = -Infinity;
-
-    for (const eid of state.board.edgeIds) {
-      if (!canConnectRoad(state, playerId, eid)) continue;
-      const edge = state.board.edges[eid]!;
-      // Identify the NEW endpoint — the one not already in our network.
-      // If BOTH endpoints are in our network the road just closes a
-      // loop (no expansion value, ~0 LR value). Skip.
-      let newVid: VertexId | null = null;
-      for (const v of edge.vertices) {
-        if (!isOurVertex(state, playerId, v, eid)) {
-          newVid = v;
-          break;
-        }
-      }
-      if (newVid === null) continue;
-      // If the new endpoint is already settled (by us or anyone), this
-      // road plugs into a dead-end: no settle target, and an opponent's
-      // settle on it also BREAKS any longest-road chain we'd hope to
-      // extend through it. Pure waste.
-      const newVertex = state.board.vertices[newVid]!;
-      const settledHere = state.players.some(
-        (p) => p.settlements.includes(newVid!) || p.cities.includes(newVid!),
-      );
-      if (settledHere) continue;
-      // Settlement-eligibility at the new endpoint. If we can't settle
-      // here (adjacent to someone else's settle), the road is a way-
-      // station — only useful if we're imminently claiming LR. Otherwise
-      // it's the "roads in all directions" failure mode. `stationAllowed`
-      // requires us to be within 1 of LR claim length, NOT just within
-      // 2 (which had been letting station roads through too early).
-      let blockedAdjacent = false;
-      for (const n of newVertex.neighborVertices) {
-        for (const p of state.players) {
-          if (p.settlements.includes(n) || p.cities.includes(n)) {
-            blockedAdjacent = true;
-            break;
-          }
-        }
-        if (blockedAdjacent) break;
-      }
-      if (blockedAdjacent && !stationAllowed && !vpLockedOut) continue;
-
-      // Count enemy roads on this vertex's OTHER edges. Heavy enemy
-      // presence here means (a) opponents are racing for the same
-      // settle spot, and (b) extending further would only deepen the
-      // contested area. Hard skip when 2+ enemy roads (unless we're
-      // pursuing LR — there the road itself, not the future settle,
-      // is the reward).
-      let enemyRoadsAtNew = 0;
-      for (const ne of newVertex.edges) {
-        if (ne === eid) continue;
-        for (const p of state.players) {
-          if (p.id === playerId) continue;
-          if (p.roads.includes(ne)) enemyRoadsAtNew++;
-        }
-      }
-      if (!pursuingLR && enemyRoadsAtNew >= 2) continue;
-
-      // Dead-end check: if every OTHER edge of newVid leads to an
-      // already-settled vertex, then even with another road we can't
-      // unlock anything. That makes this road a true dead-end. (We
-      // still allow it during LR pursuit since chain length itself is
-      // valuable.)
-      if (!pursuingLR) {
-        let hasFutureExit = false;
-        for (const ne of newVertex.edges) {
-          if (ne === eid) continue;
-          const nextEdge = state.board.edges[ne];
-          if (!nextEdge) continue;
-          for (const nv of nextEdge.vertices) {
-            if (nv === newVid) continue;
-            const farSettled = state.players.some(
-              (p) => p.settlements.includes(nv) || p.cities.includes(nv),
-            );
-            if (!farSettled) {
-              hasFutureExit = true;
-              break;
-            }
-          }
-          if (hasFutureExit) break;
-        }
-        if (!hasFutureExit) continue;
-      }
-
-      const base = vertexScore(state, newVid, playerId);
-      const contestedPenalty = pursuingLR ? 0 : 2 * enemyRoadsAtNew;
-      const finalScore = pursuingLR
-        ? Math.max(base - (blockedAdjacent ? 2.5 : 0), ROAD_TARGET_THRESHOLD_LR + 0.5)
-        : base - contestedPenalty;
-      if (finalScore > bestScore) {
-        bestScore = finalScore;
-        bestEid = eid;
-      }
-    }
-    if (bestEid && bestScore >= threshold) {
-      return { type: 'buildRoad', playerId, edge: bestEid };
-    }
-  }
+  const road = tryBuildRoad(state, playerId);
+  if (road) return road;
 
   // 3.5) BUILD WONDER (normal level). Each level is a guaranteed +1 VP
   //      and locks the wonder to us so opponents can't race the prereq.
@@ -409,6 +238,183 @@ export function chooseMainPhaseAction(
   return null;
 }
 
+// Base road step (also used by the Cities & Knights tree): the best road
+// toward a settlement spot / Longest Road, or null when none clears the bar.
+export function tryBuildRoad(state: GameState, playerId: PlayerId): Action | null {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return null;
+  if (!(canAfford(player.resources, COSTS.road) && player.roads.length < 15)) return null;
+  const openSpots = countOpenSettlementSpots(state, playerId);
+  const myRoadLen = calculateRouteLength(state, playerId);
+  const lrHolder = state.longestRoad?.holder ?? null;
+  const lrLength = state.longestRoad?.length ?? 0;
+  let lrClaimTarget = 0;
+  if (state.noLongestRoad) lrClaimTarget = 0;
+  else if (lrHolder === null) lrClaimTarget = LR_CLAIM_LENGTH;
+  else if (lrHolder !== playerId) lrClaimTarget = lrLength + 1;
+  const pursuingLR = lrClaimTarget > 0 && myRoadLen + 2 >= lrClaimTarget;
+  // Station roads (toward an unsettle-able vertex) are only allowed
+  // when LR claim is imminent — within 1 of the target length. At 2+
+  // away, a station road doesn't reliably extend our chain to claim,
+  // so it's likely a useless build. (Earlier rule allowed stations
+  // throughout LR pursuit; that produced the dead-end roads we kept
+  // seeing in screenshots.)
+  const stationAllowed = lrClaimTarget > 0 && myRoadLen + 1 >= lrClaimTarget;
+
+  // Consult the win plan: if it says we need more settlements, we're
+  // willing to accept a lower-quality unlock.
+  const winPlan = chooseWinPlan(state, playerId);
+  const planNeedsSettlements = winPlan.gap.newSettlementsNeeded > 0;
+
+  // Catch-up boost: if we're significantly behind the leader, we can't
+  // afford to be picky. Drop the road threshold an extra notch so we
+  // grab mid-tier expansion opportunities instead of stalling at 3 VP.
+  const myVp = calculateVictoryPoints(state, playerId, false);
+  let leaderVp = 0;
+  for (const op of state.players) {
+    if (op.id === playerId) continue;
+    const v = calculateVictoryPoints(state, op.id, false);
+    if (v > leaderVp) leaderVp = v;
+  }
+  const fallingBehind = leaderVp - myVp >= 3;
+
+  // Hand-burn signal: discard at 8, force-burn threshold at 6 so the
+  // AI spends idle wood+brick on a road instead of fishing for dev
+  // cards / risking a 7. Requires actual road materials (>=1 wood,
+  // >=1 brick) AND a fat hand — otherwise we'd lower the bar even
+  // when we couldn't follow through.
+  let handSize = 0;
+  for (const r of RESOURCES) handSize += player.resources[r];
+  const burnHand = handSize >= 6 && player.resources.wood >= 1 && player.resources.brick >= 1;
+
+  // VP-locked-out catch-all: when cities are maxed AND the dev card
+  // deck is empty AND there's no reachable settle spot in our current
+  // network, the ONLY remaining VP path is to extend roads toward new
+  // settle territory. Without this we'd see AIs sit on wood+brick at
+  // 6 VP for the rest of the game (the original bug: 7-8p games where
+  // the AI maxed cities, drained the dev deck, and stopped building).
+  const vpLockedOut =
+    (state.devCardDeck.length === 0 &&
+      player.cities.length >= 4 &&
+      openSpots === 0 &&
+      player.settlements.length < 5) ||
+    // T&B Barbarian Attack: nothing left to upgrade and no open spot —
+    // road out to new land (the scenario's crowded inner hexes).
+    barbarianAttackNeedsRoads(state, playerId, openSpots);
+
+  // Threshold tiers:
+  //   - LR pursuit: very low (any extension is worth ~2 VP)
+  //   - Plan wants settlements: 3.5 (weed out marginal extensions)
+  //   - Otherwise: original strict 4.5
+  let threshold = ROAD_TARGET_THRESHOLD;
+  if (pursuingLR) threshold = ROAD_TARGET_THRESHOLD_LR;
+  else if (planNeedsSettlements) threshold = 3.5;
+  if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
+  if (burnHand) threshold = Math.max(1.5, threshold - 1.5);
+  if (vpLockedOut) threshold = Math.min(threshold, 1.0);
+
+  let bestEid: EdgeId | null = null;
+  let bestScore = -Infinity;
+
+  for (const eid of state.board.edgeIds) {
+    if (!canConnectRoad(state, playerId, eid)) continue;
+    const edge = state.board.edges[eid]!;
+    // Identify the NEW endpoint — the one not already in our network.
+    // If BOTH endpoints are in our network the road just closes a
+    // loop (no expansion value, ~0 LR value). Skip.
+    let newVid: VertexId | null = null;
+    for (const v of edge.vertices) {
+      if (!isOurVertex(state, playerId, v, eid)) {
+        newVid = v;
+        break;
+      }
+    }
+    if (newVid === null) continue;
+    // If the new endpoint is already settled (by us or anyone), this
+    // road plugs into a dead-end: no settle target, and an opponent's
+    // settle on it also BREAKS any longest-road chain we'd hope to
+    // extend through it. Pure waste.
+    const newVertex = state.board.vertices[newVid]!;
+    const settledHere = state.players.some(
+      (p) => p.settlements.includes(newVid!) || p.cities.includes(newVid!),
+    );
+    if (settledHere) continue;
+    // Settlement-eligibility at the new endpoint. If we can't settle
+    // here (adjacent to someone else's settle), the road is a way-
+    // station — only useful if we're imminently claiming LR. Otherwise
+    // it's the "roads in all directions" failure mode. `stationAllowed`
+    // requires us to be within 1 of LR claim length, NOT just within
+    // 2 (which had been letting station roads through too early).
+    let blockedAdjacent = false;
+    for (const n of newVertex.neighborVertices) {
+      for (const p of state.players) {
+        if (p.settlements.includes(n) || p.cities.includes(n)) {
+          blockedAdjacent = true;
+          break;
+        }
+      }
+      if (blockedAdjacent) break;
+    }
+    if (blockedAdjacent && !stationAllowed && !vpLockedOut) continue;
+
+    // Count enemy roads on this vertex's OTHER edges. Heavy enemy
+    // presence here means (a) opponents are racing for the same
+    // settle spot, and (b) extending further would only deepen the
+    // contested area. Hard skip when 2+ enemy roads (unless we're
+    // pursuing LR — there the road itself, not the future settle,
+    // is the reward).
+    let enemyRoadsAtNew = 0;
+    for (const ne of newVertex.edges) {
+      if (ne === eid) continue;
+      for (const p of state.players) {
+        if (p.id === playerId) continue;
+        if (p.roads.includes(ne)) enemyRoadsAtNew++;
+      }
+    }
+    if (!pursuingLR && enemyRoadsAtNew >= 2) continue;
+
+    // Dead-end check: if every OTHER edge of newVid leads to an
+    // already-settled vertex, then even with another road we can't
+    // unlock anything. That makes this road a true dead-end. (We
+    // still allow it during LR pursuit since chain length itself is
+    // valuable.)
+    if (!pursuingLR) {
+      let hasFutureExit = false;
+      for (const ne of newVertex.edges) {
+        if (ne === eid) continue;
+        const nextEdge = state.board.edges[ne];
+        if (!nextEdge) continue;
+        for (const nv of nextEdge.vertices) {
+          if (nv === newVid) continue;
+          const farSettled = state.players.some(
+            (p) => p.settlements.includes(nv) || p.cities.includes(nv),
+          );
+          if (!farSettled) {
+            hasFutureExit = true;
+            break;
+          }
+        }
+        if (hasFutureExit) break;
+      }
+      if (!hasFutureExit) continue;
+    }
+
+    const base = vertexScore(state, newVid, playerId);
+    const contestedPenalty = pursuingLR ? 0 : 2 * enemyRoadsAtNew;
+    const finalScore = pursuingLR
+      ? Math.max(base - (blockedAdjacent ? 2.5 : 0), ROAD_TARGET_THRESHOLD_LR + 0.5)
+      : base - contestedPenalty;
+    if (finalScore > bestScore) {
+      bestScore = finalScore;
+      bestEid = eid;
+    }
+  }
+  if (bestEid && bestScore >= threshold) {
+    return { type: 'buildRoad', playerId, edge: bestEid };
+  }
+  return null;
+}
+
 // Is `v` already part of `playerId`'s road network? True if they have a
 // settlement / city on it, or one of their roads touches it (other than
 // the candidate edge `excludeEid`, which we're about to consider).
@@ -450,7 +456,7 @@ function countOpenSettlementSpots(state: GameState, playerId: PlayerId): number 
   return count;
 }
 
-function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
+export function tryBankTrade(state: GameState, playerId: PlayerId): Action | null {
   const player = state.players.find((p) => p.id === playerId)!;
   const needs = reportNeeds(state, playerId);
   let handSize = 0;

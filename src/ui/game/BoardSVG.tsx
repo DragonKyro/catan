@@ -190,6 +190,9 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           )}
         </g>
 
+        {/* Cities & Knights walls sit UNDER their cities. */}
+        <CityWallMarker game={game} />
+
         <g className="cities">
           {game.players.flatMap((player) =>
             player.cities.map((vid) => (
@@ -203,8 +206,6 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
             )),
           )}
         </g>
-
-        <CityWallMarker game={game} />
 
         {/* Cities & Knights: knights on intersections + metropolis flags +
             merchant pawn. */}

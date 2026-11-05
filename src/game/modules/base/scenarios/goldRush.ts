@@ -1,4 +1,5 @@
 import type { ScenarioLayout } from '../../../board/scenarioTypes';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../../citiesAndKnights/constants';
 import type { BaseScenario } from './types';
 import { seaPositionsInDisk } from './helpers';
 import {
@@ -83,4 +84,6 @@ export const goldRush: BaseScenario = {
   maxPlayers: 6,
   layout3p: LAYOUT_3_4,
   layout5_6p: LAYOUT_5_6,
+  // The C&K roll has no gold pick / eruption step.
+  notWithExpansions: [CITIES_AND_KNIGHTS_EXPANSION_ID],
 };

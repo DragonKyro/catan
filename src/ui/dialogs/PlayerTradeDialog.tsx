@@ -1,26 +1,35 @@
 import { useEffect, useState } from 'react';
-import type { Resource, ResourceBank } from '@/game/types';
-import { RESOURCES } from '@/game/types';
+import type { Commodity, CommodityBank, Resource, ResourceBank, TradeGood } from '@/game/types';
+import { COMMODITIES, RESOURCES } from '@/game/types';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { getBankTradeRate } from '@/game/actions/trade';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
-import { ResourceChip, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 import { CoinIcon } from '@/ui/game/traders/TradersIcons';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
+import { ckBankTradeRate, isCommodity } from '@/game/modules/citiesAndKnights/trade';
+import { GoodChip, goodLabel } from '@/ui/dialogs/citiesAndKnights/common';
 import './PlayerTradeDialog.css';
+
+type Values = Record<TradeGood, number>;
+const ZERO: Values = {
+  wood: 0,
+  brick: 0,
+  sheep: 0,
+  wheat: 0,
+  ore: 0,
+  paper: 0,
+  cloth: 0,
+  coin: 0,
+};
 
 export function PlayerTradeDialog() {
   const { game, dispatch, closeDialog } = useGameStore();
-  // One signed value per resource: negative = give that many, positive =
+  // One signed value per card type: negative = give that many, positive =
   // receive that many. Combines what used to be two separate ResourcePicker
-  // sections into a single, compact column.
-  const [values, setValues] = useState<Record<Resource, number>>({
-    wood: 0,
-    brick: 0,
-    sheep: 0,
-    wheat: 0,
-    ore: 0,
-  });
+  // sections into a single, compact column. Commodities (Cities & Knights)
+  // trade like resources (p.7).
+  const [values, setValues] = useState<Values>(ZERO);
   // T&B coins (state.coinsInPlay): signed gold, negative = give.
   const [gold, setGold] = useState(0);
 
@@ -33,20 +42,13 @@ export function PlayerTradeDialog() {
   // When countering, seed the inputs with the swap of the original offer.
   useEffect(() => {
     if (!isCounter || !pending) return;
-    const seed: Record<Resource, number> = {
-      wood: 0,
-      brick: 0,
-      sheep: 0,
-      wheat: 0,
-      ore: 0,
-    };
+    const seed: Values = { ...ZERO };
     // Original `give` was offered TO us — we'd be the one receiving it in
     // the original. In a counter, we offer them what they wanted (receive)
     // and ask for what they offered (give).
-    for (const r of RESOURCES) {
-      const ask = pending.give[r] ?? 0; // we ask for what they offered
-      const offer = pending.receive[r] ?? 0; // we offer what they wanted
-      seed[r] = ask - offer;
+    for (const r of RESOURCES) seed[r] = (pending.give[r] ?? 0) - (pending.receive[r] ?? 0);
+    for (const c of COMMODITIES) {
+      seed[c] = (pending.giveCommodities?.[c] ?? 0) - (pending.receiveCommodities?.[c] ?? 0);
     }
     setValues(seed);
     setGold((pending.giveGold ?? 0) - (pending.receiveGold ?? 0));
@@ -54,12 +56,16 @@ export function PlayerTradeDialog() {
 
   if (!game || !acting) return null;
   const player = game.players.find((p) => p.id === acting)!;
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
+  const goods: readonly TradeGood[] = hasCK ? [...RESOURCES, ...COMMODITIES] : RESOURCES;
+  const held = (g: TradeGood) =>
+    isCommodity(g) ? (player.commodities?.[g as Commodity] ?? 0) : player.resources[g as Resource];
 
   let totalGive = 0;
   let totalReceive = 0;
-  for (const r of RESOURCES) {
-    if (values[r] < 0) totalGive += -values[r];
-    if (values[r] > 0) totalReceive += values[r];
+  for (const g of goods) {
+    if (values[g] < 0) totalGive += -values[g];
+    if (values[g] > 0) totalReceive += values[g];
   }
   const coins = !!game.coinsInPlay;
   const giveGold = coins && gold < 0 ? -gold : 0;
@@ -70,33 +76,35 @@ export function PlayerTradeDialog() {
     ...(receiveGold > 0 ? { receiveGold } : {}),
   };
 
-  const change = (r: Resource, delta: number) => {
-    const cur = values[r];
-    const next = cur + delta;
+  const change = (g: TradeGood, delta: number) => {
+    const next = values[g] + delta;
     // Cap negative side by what player has
-    if (next < -player.resources[r]) return;
-    setValues({ ...values, [r]: next });
+    if (next < -held(g)) return;
+    setValues({ ...values, [g]: next });
   };
 
-  // Detect a single-give-resource → single-receive-resource trade that the
-  // bank could complete EXACTLY at the player's current rate. e.g. 4 wheat →
-  // 1 ore at a 4:1 rate, or 6 wheat → 3 ore at a 2:1 port. In that case we
-  // auto-route through the bank so the user never broadcasts a trade no
-  // opponent would ever beat anyway. Multi-resource trades, or lopsided
-  // single-resource trades, fall through to a player proposal as normal.
+  // Detect a single-give → single-receive trade that the bank could
+  // complete EXACTLY at the player's current rate. e.g. 4 wheat → 1 ore at a
+  // 4:1 rate, or 6 wheat → 3 ore at a 2:1 port. In that case we auto-route
+  // through the bank so the user never broadcasts a trade no opponent would
+  // ever beat anyway. Multi-card trades, or lopsided single-card trades,
+  // fall through to a player proposal as normal.
   const bankRoute = (() => {
     if (isCounter || giveGold > 0 || receiveGold > 0) return null;
-    const giveEntries: Array<[Resource, number]> = [];
-    const recvEntries: Array<[Resource, number]> = [];
-    for (const r of RESOURCES) {
-      if (values[r] < 0) giveEntries.push([r, -values[r]]);
-      else if (values[r] > 0) recvEntries.push([r, values[r]]);
+    const giveEntries: Array<[TradeGood, number]> = [];
+    const recvEntries: Array<[TradeGood, number]> = [];
+    for (const g of goods) {
+      if (values[g] < 0) giveEntries.push([g, -values[g]]);
+      else if (values[g] > 0) recvEntries.push([g, values[g]]);
     }
     if (giveEntries.length !== 1 || recvEntries.length !== 1) return null;
     const [gRes, gCount] = giveEntries[0]!;
     const [rRes, rCount] = recvEntries[0]!;
-    const rate = getBankTradeRate(game, acting, gRes);
-    if (gCount === rate * rCount && game.bank[rRes] >= rCount) {
+    const rate = hasCK ? ckBankTradeRate(game, acting, gRes) : getBankTradeRate(game, acting, gRes as Resource);
+    const supply = isCommodity(rRes)
+      ? (game.commodityBank?.[rRes as Commodity] ?? 0)
+      : game.bank[rRes as Resource];
+    if (gCount === rate * rCount && supply >= rCount) {
       return { give: gRes, receive: rRes, count: rCount, rate };
     }
     return null;
@@ -105,22 +113,41 @@ export function PlayerTradeDialog() {
   const submit = () => {
     const give: Partial<ResourceBank> = {};
     const receive: Partial<ResourceBank> = {};
+    const giveCommodities: Partial<CommodityBank> = {};
+    const receiveCommodities: Partial<CommodityBank> = {};
     for (const r of RESOURCES) {
       if (values[r] < 0) give[r] = -values[r];
       else if (values[r] > 0) receive[r] = values[r];
     }
+    for (const c of COMMODITIES) {
+      if (values[c] < 0) giveCommodities[c] = -values[c];
+      else if (values[c] > 0) receiveCommodities[c] = values[c];
+    }
+    const withCommodities = hasCK
+      ? { giveCommodities, receiveCommodities }
+      : {};
     if (isCounter) {
-      dispatch({ type: 'counterTrade', playerId: acting, give, receive, ...goldFields });
+      dispatch({ type: 'counterTrade', playerId: acting, give, receive, ...goldFields, ...withCommodities });
     } else if (bankRoute) {
-      dispatch({
-        type: 'bankTrade',
-        playerId: acting,
-        give: bankRoute.give,
-        receive: bankRoute.receive,
-        count: bankRoute.count,
-      });
+      dispatch(
+        isCommodity(bankRoute.give) || isCommodity(bankRoute.receive)
+          ? {
+              type: 'bankTradeCK',
+              playerId: acting,
+              give: bankRoute.give,
+              receive: bankRoute.receive,
+              count: bankRoute.count,
+            }
+          : {
+              type: 'bankTrade',
+              playerId: acting,
+              give: bankRoute.give as Resource,
+              receive: bankRoute.receive as Resource,
+              count: bankRoute.count,
+            },
+      );
     } else {
-      dispatch({ type: 'proposeTrade', playerId: acting, give, receive, ...goldFields });
+      dispatch({ type: 'proposeTrade', playerId: acting, give, receive, ...goldFields, ...withCommodities });
     }
     closeDialog();
   };
@@ -143,11 +170,11 @@ export function PlayerTradeDialog() {
         <span className="ptrade-pill ptrade-pill-get">+</span> to receive.
       </p>
       <div className="ptrade-list">
-        {RESOURCES.map((r) => {
+        {goods.map((r) => {
           const v = values[r];
           const give = v < 0 ? -v : 0;
           const recv = v > 0 ? v : 0;
-          const canDecrement = -v < player.resources[r];
+          const canDecrement = -v < held(r);
           return (
             <div key={r} className={`ptrade-row ${v < 0 ? 'is-give' : v > 0 ? 'is-get' : ''}`}>
               <button
@@ -156,14 +183,14 @@ export function PlayerTradeDialog() {
                 onClick={() => change(r, -1)}
                 disabled={!canDecrement}
                 aria-label={`Give one ${r}`}
-                title={`Give one more ${RESOURCE_LABEL[r]}`}
+                title={`Give one more ${goodLabel(r)}`}
               >
                 −
               </button>
               <div className="ptrade-mid">
-                <ResourceChip resource={r} size="sm" />
-                <span className="ptrade-name">{RESOURCE_LABEL[r]}</span>
-                <span className="ptrade-have">have {player.resources[r]}</span>
+                <GoodChip good={r} size="sm" />
+                <span className="ptrade-name">{goodLabel(r)}</span>
+                <span className="ptrade-have">have {held(r)}</span>
               </div>
               <div className="ptrade-value">
                 {give > 0 && (
@@ -179,7 +206,7 @@ export function PlayerTradeDialog() {
                 className="ptrade-btn ptrade-btn-get"
                 onClick={() => change(r, +1)}
                 aria-label={`Receive one ${r}`}
-                title={`Receive one more ${RESOURCE_LABEL[r]}`}
+                title={`Receive one more ${goodLabel(r)}`}
               >
                 +
               </button>

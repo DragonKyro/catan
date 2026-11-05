@@ -75,7 +75,9 @@ export function RobberStealDialog() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {candidates.map((pid) => {
           const p = game.players.find((x) => x.id === pid)!;
-          const cards = totalResources(p.resources);
+          const cards =
+            totalResources(p.resources) +
+            (p.commodities ? p.commodities.paper + p.commodities.cloth + p.commodities.coin : 0);
           const swatch = (
             <span
               style={{

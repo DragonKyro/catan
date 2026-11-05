@@ -28,6 +28,9 @@ export const COMMODITIES: readonly Commodity[] = ['paper', 'cloth', 'coin'] as c
 
 export type CommodityBank = Record<Commodity, number>;
 
+// Anything that can change hands with the supply under Cities & Knights.
+export type TradeGood = Resource | Commodity;
+
 // Maps the base-game terrain to the commodity its cities produce. Wheat and
 // brick fields don't produce a commodity — their cities just yield 2 of the
 // base resource (per the rulebook).
@@ -71,6 +74,14 @@ export interface KnightRecord {
   playerId: PlayerId;
   strength: KnightStrength;
   active: boolean;
+  // Set when this knight was stood up this turn (Activate, Encouragement, an
+  // active Treason placement). Rulebook p.9: only knights that were active
+  // at the start of the Action phase may take a knight action. Cleared at
+  // endTurn. Read through `knightCanAct` (knights/legal.ts).
+  activatedThisTurn?: true;
+  // Set when this knight was promoted this turn: a knight may only be
+  // promoted once per turn (p.9, Smithing p.14). Cleared at endTurn.
+  promotedThisTurn?: true;
 }
 
 // Per-player supply of knight tokens by strength. Rulebook ships 2 of each.
@@ -313,10 +324,13 @@ export interface Player {
   // Cities & Knights: improvement track levels (0..5 each). Only populated
   // under C&K.
   improvements?: ImprovementLevels;
-  // Cities & Knights: progress card hand by track. VP cards stay here and
-  // are visible (auto-flipped). Non-VP cards are secret and counted toward
-  // the 4-card hand limit.
+  // Cities & Knights: progress card hand by track. Secret, counted toward
+  // the 4-card hand limit. Victory Point cards never sit here.
   progressCards?: ProgressCardHand;
+  // Cities & Knights: Victory Point progress cards (Printing, Constitution)
+  // placed face up in the player area as soon as they're drawn (p.10). Not
+  // part of the hand: no limit, no Espionage, worth 1 VP each.
+  progressVpCards?: ProgressCardKind[];
   // Cities & Knights: number of "Defender of Catan" VP tokens earned by
   // contributing the most defender strength when the barbarians lost. 1 VP
   // each.
@@ -654,7 +668,13 @@ export type GamePhase =
   | 'treasonPlaceKnight'
   | 'commercialHarborOffer'
   | 'weddingGive'
-  | 'aqueductPick';
+  | 'aqueductPick'
+  // Barbarians driven off with a tie at the top: each tied player draws a
+  // progress card from the deck of their choice (pendingDefenderTieDraw).
+  | 'defenderTieDraw'
+  // Barbarians won: a losing player with 2+ pillageable cities picks which
+  // one is reduced to a settlement (pendingPillage).
+  | 'choosePillage';
 
 export interface SetupState {
   step: 'settlement' | 'road';
@@ -736,6 +756,10 @@ export interface PendingTrade {
   // proposer offers / asks for alongside (or instead of) cards.
   giveGold?: number;
   receiveGold?: number;
+  // Cities & Knights: commodities on either side of the offer (p.7 "you may
+  // trade any combination of resources and commodities").
+  giveCommodities?: Partial<CommodityBank>;
+  receiveCommodities?: Partial<CommodityBank>;
   // Players who have explicitly rejected this offer. Purely informational —
   // a rejection does not cancel the trade; the proposer can still wait for
   // another player to accept or for the timer/end-turn auto-cancel.
@@ -893,11 +917,19 @@ export interface GameState {
   // and a 2:1 trade rate on the hex's resource (not commodity).
   merchant?: { ownerId: PlayerId; hexId: HexId };
   // Per-turn flags reset on endTurn:
+  // Deprecated: promotion is once per KNIGHT per turn
+  // (KnightRecord.promotedThisTurn). Never set any more.
   promotedKnightThisTurn?: boolean;
-  // Vertices of knights activated this turn — they can't take an action
-  // this same turn (rulebook p.9 "you may not activate a knight and then
-  // take an action with it on the same turn").
+  // Vertices of knights activated this turn (they can't take an action this
+  // same turn, p.9). Kept for readers; the source of truth is
+  // KnightRecord.activatedThisTurn (see knightCanAct).
   activatedKnightsThisTurn?: VertexId[];
+  // Commercial Harbor played this turn: the active player may offer each
+  // other player one resource (once each) for a commodity of their choice.
+  commercialHarbor?: { offererId: PlayerId; offeredTo: PlayerId[] };
+  // Set when endTurn found the active player over the 4-card progress limit:
+  // once they've discarded down, the turn ends by itself.
+  endTurnAfterProgressDiscard?: boolean;
   hasPlayedProgressCardThisTurn?: boolean;
   // Merchant Fleet card flag (this turn only): 2:1 on this resource/commodity.
   merchantFleetActive?: {
@@ -940,9 +972,20 @@ export interface GameState {
     attackerId: PlayerId;
     targetId: PlayerId;
     removedStrength?: KnightStrength;
+    // Status of the removed knight: the attacker's replacement takes it.
+    removedActive?: boolean;
   };
   pendingWedding?: { collector: PlayerId; remaining: PlayerId[] };
-  pendingCommercialHarbor?: { offererId: PlayerId; remaining: PlayerId[] };
+  // One Commercial Harbor offer in flight: `targetId` must answer with one of
+  // their commodities in exchange for `resource`.
+  pendingCommercialHarbor?: {
+    offererId: PlayerId;
+    targetId: PlayerId;
+    resource: Resource;
+  };
+  // Barbarians won: players (in turn order from the active player) who must
+  // pick which of their cities is pillaged.
+  pendingPillage?: PlayerId[];
   // Progress card discard required after a draw pushed someone over the
   // 4-card cap. Same shape as `discardState.required` but for progress
   // cards.
@@ -954,6 +997,23 @@ export interface GameState {
   // contribution is tied across multiple players, each tied player draws
   // a progress card of their choice. Queued here in turn order.
   pendingDefenderTieDraw?: PlayerId[];
+  // Production dice total held back while a barbarian attack still needs
+  // answers (tie draws, pillage choices): cities pillaged by the attack
+  // produce as settlements on the same roll (p.6: the event die resolves
+  // before production). Set and consumed by the C&K roll flow.
+  pendingProduction?: number;
+  // Outcome of the most recent barbarian attack, for the tracker and log.
+  lastBarbarianAttack?: {
+    barbarianStrength: number;
+    defenderStrength: number;
+    outcome: 'defended' | 'pillaged';
+    // Defended: the unique top contributor (VP token), or the tied players
+    // who each draw a progress card.
+    defender?: PlayerId;
+    tied?: PlayerId[];
+    // Pillaged: players who lose a city (filled in as choices resolve).
+    losers?: PlayerId[];
+  };
   // ----- Traders & Barbarians extension -----
   // Edges flagged as "river edges" by the active T&B scenario. Roads are
   // forbidden on these edges; bridges are the only structure that can
@@ -1248,6 +1308,9 @@ export interface ProposeTradeAction extends ActionBase {
   // T&B coins: gold offered / asked (see PendingTrade).
   giveGold?: number;
   receiveGold?: number;
+  // Cities & Knights: commodities in the offer.
+  giveCommodities?: Partial<CommodityBank>;
+  receiveCommodities?: Partial<CommodityBank>;
 }
 
 export interface AcceptTradeAction extends ActionBase {
@@ -1269,6 +1332,9 @@ export interface CounterTradeAction extends ActionBase {
   // T&B coins: gold offered / asked (see PendingTrade).
   giveGold?: number;
   receiveGold?: number;
+  // Cities & Knights: commodities in the counter-offer.
+  giveCommodities?: Partial<CommodityBank>;
+  receiveCommodities?: Partial<CommodityBank>;
 }
 
 export interface EndTurnAction extends ActionBase {
@@ -1557,9 +1623,9 @@ export interface PlayProgressCardAction extends ActionBase {
   dice?: [number, number]; // alchemy
   fromHex?: HexId; // invention
   toHex?: HexId; // invention
-  vertex?: VertexId; // medicine, intrigue source, treason placement
+  vertex?: VertexId; // medicine / engineering target, intrigue victim
   toVertex?: VertexId; // intrigue dest
-  edges?: [EdgeId] | [EdgeId, EdgeId]; // progressRoadBuilding
+  edges?: EdgeId[]; // progressRoadBuilding (0-2 roads)
   resource?: Resource; // resourceMonopoly, merchantFleet (if resource), guildDues target
   commodity?: Commodity; // tradeMonopoly, merchantFleet (if commodity)
   targetId?: PlayerId; // espionage, guildDues, treason, intrigue, taxation
@@ -1567,6 +1633,7 @@ export interface PlayProgressCardAction extends ActionBase {
 }
 
 // Generic "pick a card from this hand" follow-up used by Espionage + Guild Dues.
+// Espionage: omit `card` to take nothing ("you MAY choose to take 1 card").
 export interface ChooseProgressCardPickAction extends ActionBase {
   type: 'chooseProgressCardPick';
   // For Espionage: which deck the picked card came from.
@@ -1602,18 +1669,44 @@ export interface TreasonRemoveKnightAction extends ActionBase {
   vertex: VertexId;
 }
 
+// Omit vertex + strength to decline the placement ("you MAY then place").
 export interface TreasonPlaceKnightAction extends ActionBase {
   type: 'treasonPlaceKnight';
-  vertex: VertexId;
-  strength: KnightStrength;
+  vertex?: VertexId;
+  strength?: KnightStrength;
 }
 
-// Commercial Harbor (C&K card) opponent reply: pick the commodity you'll
-// give back in exchange for the resource offered.
+// Commercial Harbor (C&K card): the active player offers one opponent one
+// of their resources (once per opponent per card).
+export interface CommercialHarborProposeAction extends ActionBase {
+  type: 'commercialHarborPropose';
+  targetId: PlayerId;
+  resource: Resource;
+}
+
+// Commercial Harbor reply: the offered player hands over a commodity of
+// their choice and takes the resource. `null` is only accepted when they
+// hold no commodity at all (the resource then goes back).
 export interface CommercialHarborOfferAction extends ActionBase {
   type: 'commercialHarborOffer';
-  // null means "I have no commodity" — the resource bounces back.
   commodity: Commodity | null;
+}
+
+// Cities & Knights bank trade with a commodity on either side (p.7):
+// 4:1, 3:1 at a generic harbor, 2:1 with the Merchant Guild (trade level 3)
+// or a Merchant Fleet naming the given good; resource 2:1 harbors only
+// apply to their resource. Resource-for-resource trades stay `bankTrade`.
+export interface BankTradeCKAction extends ActionBase {
+  type: 'bankTradeCK';
+  give: TradeGood;
+  receive: TradeGood;
+  count?: number;
+}
+
+// Barbarians won: pick which of your (non-metropolis) cities is pillaged.
+export interface ChoosePillagedCityAction extends ActionBase {
+  type: 'choosePillagedCity';
+  vertex: VertexId;
 }
 
 // Wedding opponent give-back.
@@ -1693,7 +1786,10 @@ export type Action =
   | PlaceMerchantAction
   | TreasonRemoveKnightAction
   | TreasonPlaceKnightAction
+  | CommercialHarborProposeAction
   | CommercialHarborOfferAction
+  | BankTradeCKAction
+  | ChoosePillagedCityAction
   | WeddingGiveAction
   | DefenderTieDrawAction;
 

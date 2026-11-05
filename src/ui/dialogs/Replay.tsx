@@ -52,6 +52,24 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   // spends (free roads, the robber leaving the board).
   'buildBridge',
   'spendFish',
+  // Cities & Knights pieces on the board (knights, walls, metropolises,
+  // merchant, roads removed / built by progress cards, pillaged cities).
+  'buildCityWall',
+  'recruitKnight',
+  'activateKnight',
+  'promoteKnight',
+  'moveKnight',
+  'displaceKnight',
+  'displacedKnightMove',
+  'chaseRobber',
+  'buildCityImprovement',
+  'placeMetropolis',
+  'choosePillagedCity',
+  'playProgressCard',
+  'removeRoad',
+  'placeMerchant',
+  'treasonRemoveKnight',
+  'treasonPlaceKnight',
 ]);
 
 // Step + slider + auto-play replay. The slider/buttons step through a

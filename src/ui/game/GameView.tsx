@@ -29,8 +29,8 @@ import { WagonVoteDialog } from '@/ui/dialogs/WagonVoteDialog';
 import { EventChoiceDialog } from '@/ui/dialogs/EventChoiceDialog';
 import { GoldResourceDialog } from '@/ui/dialogs/GoldResourceDialog';
 import { RobberOrPirateDialog } from '@/ui/dialogs/RobberOrPirateDialog';
-import { ImprovementsDialog } from '@/ui/dialogs/ImprovementsDialog';
-import { ProgressCardsDialog } from '@/ui/dialogs/ProgressCardsDialog';
+import { CitiesKnightsDialogs } from '@/ui/dialogs/citiesAndKnights/CKDialogs';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { AlchemyDialog } from '@/ui/dialogs/AlchemyDialog';
 import { GameOverDialog } from '@/ui/dialogs/GameOverDialog';
 import { PassDeviceScreen } from '@/ui/handoff/PassDeviceScreen';
@@ -38,6 +38,7 @@ import { Rulebook } from '@/rulebook/Rulebook';
 import { Button } from '@/ui/shared/Button';
 import { CostCheatsheet } from '@/ui/panels/CostCheatsheet';
 import { DevCardCheatsheet } from '@/ui/panels/DevCardCheatsheet';
+import { CKCardCheatsheet } from '@/ui/panels/citiesAndKnights/CKCardCheatsheet';
 import './GameView.css';
 
 export function GameView() {
@@ -59,6 +60,7 @@ export function GameView() {
   const [sideOpen, setSideOpen] = useState(false);
 
   const isGameOver = game.phase === 'gameOver';
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
 
   const quitToMenu = () => {
     if (isOnline) leaveRoom();
@@ -102,10 +104,6 @@ export function GameView() {
     (pendingRobberHex || pendingPirateHex || game.phase === 'stealResource') && !handoffPending ? (
       <RobberStealDialog />
     ) : null;
-  const improvementsDialog =
-    dialog === 'cityImprovements' ? <ImprovementsDialog /> : null;
-  const progressCardsDialog =
-    dialog === 'progressCards' ? <ProgressCardsDialog /> : null;
   const alchemyDialog = dialog === 'alchemy' ? <AlchemyDialog /> : null;
 
   return (
@@ -163,15 +161,18 @@ export function GameView() {
                 setShowDevCards((s) => !s);
                 setShowCosts(false);
               }}
-              aria-label="Show dev cards"
+              aria-label={hasCK ? 'Show progress cards' : 'Show dev cards'}
               aria-expanded={showDevCards}
-              title="Dev cards: effects & deck counts"
+              title={hasCK ? 'Progress cards: effects & deck counts' : 'Dev cards: effects & deck counts'}
             >
               🃏
             </button>
-            {showDevCards && (
-              <DevCardCheatsheet game={game} onClose={() => setShowDevCards(false)} />
-            )}
+            {showDevCards &&
+              (hasCK ? (
+                <CKCardCheatsheet game={game} onClose={() => setShowDevCards(false)} />
+              ) : (
+                <DevCardCheatsheet game={game} onClose={() => setShowDevCards(false)} />
+              ))}
           </div>
         </div>
         {/* Compact screens: the side panel (players, scores, log, chat) is a
@@ -195,7 +196,7 @@ export function GameView() {
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
             bottom-center of the board, above the hand strip. */}
-        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || tradersDialog || wagonVoteDialog || eventDialog || improvementsDialog || progressCardsDialog || alchemyDialog) && (
+        {(yearOfPlentyDialog || monopolyDialog || discardDialog || robberDialog || goldDialog || robberOrPirateDialog || wondersDialog || spendFishDialog || passBootDialog || tradersDialog || wagonVoteDialog || eventDialog || alchemyDialog) && (
           <div className="gameview-dialog-overlay">
             {yearOfPlentyDialog}
             {monopolyDialog}
@@ -209,9 +210,13 @@ export function GameView() {
             {robberDialog}
             {goldDialog}
             {robberOrPirateDialog}
-            {improvementsDialog}
-            {progressCardsDialog}
             {alchemyDialog}
+          </div>
+        )}
+        {/* Cities & Knights prompts (sub-phases, cards, knights, tracks). */}
+        {hasCK && (
+          <div className="gameview-dialog-overlay">
+            <CitiesKnightsDialogs />
           </div>
         )}
       </main>

@@ -1,3 +1,4 @@
+import { PROGRESS_CARD_LABEL } from '@/game/modules/citiesAndKnights/progress/catalogue';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useLogStore, type LogEntry } from '@/store/logStore';
@@ -278,6 +279,10 @@ function entryMatches(
       parts.push(entry.text);
       if (entry.gained) pushBank(entry.gained);
       break;
+    case 'ck':
+      if (entry.player) pushName(entry.player);
+      parts.push(entry.text);
+      break;
     case 'turnBegins':
       parts.push('turn', `turn ${entry.turnNumber}`);
       break;
@@ -481,7 +486,7 @@ function LogLine({
     case 'progressCardPlayed':
       return (
         <div className="log-line">
-          🃏 {pname(entry.player)} played {entry.card}
+          🃏 {pname(entry.player)} played {(PROGRESS_CARD_LABEL as Record<string, string>)[entry.card] ?? entry.card}
         </div>
       );
     case 'barbarianAdvance':
@@ -529,6 +534,13 @@ function LogLine({
               <Bank bank={entry.gained} />
             </>
           )}
+        </div>
+      );
+    case 'ck':
+      return (
+        <div className={`log-line${entry.player ? '' : ' log-soft'}`}>
+          {entry.player && <>{pname(entry.player)} </>}
+          {entry.text}
         </div>
       );
     case 'turnBegins':

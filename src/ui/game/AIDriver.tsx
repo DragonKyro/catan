@@ -142,8 +142,9 @@ export function AIDriver() {
   // receive) so a rejection mutating `rejectedBy` doesn't tear down and
   // recreate the timers — that was making rejections look sequential, each
   // paying the initial-wait again.
+  // (Cities & Knights offers can differ only in their commodity columns.)
   const tradeKey = game?.pendingTrade
-    ? `${game.pendingTrade.proposerId}|${JSON.stringify(game.pendingTrade.give)}|${JSON.stringify(game.pendingTrade.receive)}`
+    ? `${game.pendingTrade.proposerId}|${JSON.stringify(game.pendingTrade.give)}|${JSON.stringify(game.pendingTrade.receive)}|${JSON.stringify(game.pendingTrade.giveCommodities ?? {})}|${JSON.stringify(game.pendingTrade.receiveCommodities ?? {})}`
     : null;
   useEffect(() => {
     if (!canDriveAI) return;

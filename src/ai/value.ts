@@ -15,6 +15,8 @@ import { hasShipGoal } from './seafarers/ships';
 import { barbarianVertexPenalty } from './traders/barbarianAttack';
 import { hexPips } from '@/game/board/hexNumbers';
 import { tradersVertexBonus } from './traders/value';
+import { ckReportNeeds, ckVertexBonus } from './citiesAndKnights/value';
+import { isCitiesAndKnights } from './citiesAndKnights/common';
 
 // Resource weights tuned for typical Catan economy. Ore/wheat slightly
 // scarce; sheep slightly abundant.
@@ -253,8 +255,13 @@ export function vertexScore(
   // conquered.
   const barbarianPenalty = barbarianVertexPenalty(state, vertexId);
 
+  // Cities & Knights: commodity hexes (forest / pasture / mountains) pay
+  // paper / cloth / coin to cities; the round-2 setup city wants them.
+  const ckBonus = ckVertexBonus(state, vertexId, playerId);
+
   return (
     totalPips +
+    ckBonus +
     diversityBonus +
     portBonus +
     missingBonus +
@@ -276,10 +283,14 @@ export interface NeedReport {
   byResource: Record<Resource, number>;
   // Suggested goal. 'ship' = Seafarers, when a worthwhile ship is the way
   // forward (no settlement spot open on land).
-  goal: 'city' | 'settlement' | 'ship' | 'road' | 'devCard' | 'none';
+  // 'knight' = Cities & Knights (recruit / activate), which has no dev cards.
+  goal: 'city' | 'settlement' | 'ship' | 'road' | 'devCard' | 'knight' | 'none';
 }
 
 export function reportNeeds(state: GameState, playerId: PlayerId): NeedReport {
+  // Cities & Knights has its own build menu (no dev cards; knights, city
+  // improvements) — its needs drive the shared trade / discard logic.
+  if (isCitiesAndKnights(state)) return ckReportNeeds(state, playerId);
   const player = state.players.find((p) => p.id === playerId)!;
   const r = player.resources;
   const byResource: Record<Resource, number> = {

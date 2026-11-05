@@ -11,6 +11,7 @@ import { canAfford } from '@/game/resources';
 import { handValue, partialValue, reportNeeds, pipsByResource } from './value';
 import { assessThreats, isRival } from './threats';
 import { goldValue } from './traders/gold';
+import { ckShouldAcceptTrade, tradeHasCommodities } from './citiesAndKnights/trade';
 
 // Threshold for accepting a trade as-is. Lower than before so AI doesn't
 // stonewall reasonable swaps — colonist.io's AI accepts pretty liberally.
@@ -176,6 +177,9 @@ export function shouldAcceptTrade(state: GameState, playerId: PlayerId): boolean
   const trade = state.pendingTrade;
   if (!trade) return false;
   if (trade.proposerId === playerId) return false;
+  // Cities & Knights offers may include commodities: judged by the C&K
+  // card values instead.
+  if (tradeHasCommodities(trade)) return ckShouldAcceptTrade(state, playerId);
   // From acceptor's perspective: we'd GIVE trade.receive, RECEIVE trade.give.
   // Refuse if accepting would reverse our own earlier trades this turn.
   if (tradeWouldReverse(state, playerId, trade.receive, trade.give)) return false;
@@ -207,8 +211,10 @@ export function tryExtractCounter(
   const trade = state.pendingTrade;
   if (!trade) return null;
   if (trade.proposerId === playerId) return null;
-  // The counter search only edits cards; leave offers with coins alone.
+  // The counter search only edits resource cards; leave offers with coins
+  // or commodities alone.
   if (trade.giveGold || trade.receiveGold) return null;
+  if (tradeHasCommodities(trade)) return null;
   // Only fires when we'd already accept the original — this is value
   // extraction, not a way to refuse trades.
   if (!shouldAcceptTrade(state, playerId)) return null;
@@ -297,7 +303,10 @@ export function tryCounterTrade(
   const trade = state.pendingTrade;
   if (!trade) return null;
   if (trade.proposerId === playerId) return null;
+  // The counter search only edits resource cards; leave offers with coins
+  // or commodities alone.
   if (trade.giveGold || trade.receiveGold) return null;
+  if (tradeHasCommodities(trade)) return null;
   // If we'd already accept, no counter needed.
   if (shouldAcceptTrade(state, playerId)) return null;
   const proposer = state.players.find((p) => p.id === trade.proposerId);

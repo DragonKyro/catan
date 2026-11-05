@@ -50,6 +50,32 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   // spends (free roads, the robber leaving the board).
   'buildBridge',
   'spendFish',
+  // Cities & Knights.
+  'discardCK',
+  'buildCityWall',
+  'recruitKnight',
+  'activateKnight',
+  'promoteKnight',
+  'moveKnight',
+  'displaceKnight',
+  'displacedKnightMove',
+  'chaseRobber',
+  'buildCityImprovement',
+  'placeMetropolis',
+  'aqueductPick',
+  'defenderTieDraw',
+  'choosePillagedCity',
+  'playProgressCard',
+  'chooseProgressCardPick',
+  'discardProgressCard',
+  'removeRoad',
+  'placeMerchant',
+  'treasonRemoveKnight',
+  'treasonPlaceKnight',
+  'commercialHarborPropose',
+  'commercialHarborOffer',
+  'weddingGive',
+  'bankTradeCK',
 ]);
 
 const SPEED_PRESETS: Array<{ label: string; ms: number }> = [
