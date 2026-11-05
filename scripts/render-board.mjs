@@ -11,10 +11,9 @@
 // Writes <out>/<kind>-<id>-<players>p-s<seed>[-m<steps>][-game].png. `--view game`
 // shows the whole game screen (seat 1 human) instead of the bare board.
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { openBrowser } from './lib/chrome.mjs';
 
 const args = process.argv.slice(2);
 const specs = [];
@@ -48,45 +47,35 @@ if (specs.length === 0) {
 }
 
 const base = process.env.BOARD_URL ?? 'http://localhost:5173/catan/';
-const browsers = [
-  process.env.CHROME,
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-].filter(Boolean);
-const browser = browsers.find((b) => existsSync(b));
-if (!browser) {
-  console.error('No Chrome / Edge found; set CHROME=/path/to/browser');
-  process.exit(1);
-}
+const [width, height] = size.split(',').map(Number);
 
 mkdirSync(out, { recursive: true });
-for (const spec of specs) {
-  const url = `${base}?preview=${encodeURIComponent(spec)}&players=${players}&seed=${seed}${coords ? '&coords=1' : ''}${steps ? `&steps=${steps}` : ''}${view === 'game' ? '&view=game' : ''}${variants ? `&variants=${variants}` : ''}${dialog ? `&dialog=${dialog}` : ''}${mode ? `&mode=${mode}` : ''}`;
-  const file = resolve(join(out, `${spec.replace(':', '-')}-${players}p-s${seed}${steps ? `-m${steps}` : ''}${view === 'game' ? '-game' : ''}${variants ? `-${variants.replace(/,/g, '+')}` : ''}${dialog ? `-${dialog}` : ''}${mode ? `-${mode}` : ''}.png`));
-  // A fresh profile per shot: a second Chrome on a shared profile can hand
-  // the URL to the first instance and exit without rendering.
-  const profile = mkdtempSync(join(tmpdir(), 'catan-render-'));
-  execFileSync(
-    browser,
-    [
-      '--headless=new',
-      '--disable-gpu',
-      '--hide-scrollbars',
-      `--window-size=${size}`,
-      `--virtual-time-budget=${process.env.RENDER_BUDGET_MS ?? 20000}`,
-      `--user-data-dir=${profile}`,
-      // Without these the game screen (timers, animations) can screenshot blank.
-      '--run-all-compositor-stages-before-draw',
-      '--disable-features=PaintHolding',
-      '--no-first-run',
-      `--screenshot=${file}`,
-      url,
-    ],
-    { stdio: 'ignore' },
-  );
-  rmSync(profile, { recursive: true, force: true });
-  console.log(file);
+const chrome = await openBrowser();
+let failed = false;
+try {
+  await chrome.emulate(width, height);
+  // Warm-up: the dev server's first page load can stall while Vite
+  // optimises dependencies, so load the app once before the real shots.
+  await chrome.navigate(base);
+  await chrome.waitFor('#root > *', 60000);
+  for (const spec of specs) {
+    const url = `${base}?preview=${encodeURIComponent(spec)}&players=${players}&seed=${seed}${coords ? '&coords=1' : ''}${steps ? `&steps=${steps}` : ''}${view === 'game' ? '&view=game' : ''}${variants ? `&variants=${variants}` : ''}${dialog ? `&dialog=${dialog}` : ''}${mode ? `&mode=${mode}` : ''}`;
+    const file = resolve(join(out, `${spec.replace(':', '-')}-${players}p-s${seed}${steps ? `-m${steps}` : ''}${view === 'game' ? '-game' : ''}${variants ? `-${variants.replace(/,/g, '+')}` : ''}${dialog ? `-${dialog}` : ''}${mode ? `-${mode}` : ''}.png`));
+    await chrome.navigate(url);
+    // The fast-forward runs while the page loads; wait for the screen it
+    // renders (or the preview's error message) before the shot.
+    const selector = view === 'game' ? '.gameview' : '.scenario-preview-board, .scenario-preview-error';
+    const timeout = Number(process.env.RENDER_TIMEOUT_MS ?? 60000);
+    let ready = await chrome.waitFor(selector, timeout);
+    if (!ready) {
+      await chrome.reload();
+      ready = await chrome.waitFor(selector, timeout);
+    }
+    if (!ready) failed = true;
+    writeFileSync(file, await chrome.screenshot());
+    console.log(`${ready ? '' : 'TIMED OUT (shot anyway): '}${file}`);
+  }
+} finally {
+  await chrome.close();
 }
+process.exit(failed ? 1 : 0);
