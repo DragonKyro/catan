@@ -52,8 +52,10 @@ const NUMBER_TOKENS_5_6 = [
 ];
 
 const PORT_TYPES_5_6: PortType[] = [
+  // The 9 CATAN harbors + the 5-6 extension's "5-5" 3:1 and "3-3" 2:1 wool
+  // harbors (CATAN 5-6 rulebook).
   'generic', 'generic', 'generic', 'generic', 'generic',
-  'wood', 'brick', 'sheep', 'wheat', 'ore', 'wheat',
+  'wood', 'brick', 'sheep', 'sheep', 'wheat', 'ore',
 ];
 
 const NUM_PORTS_5_6 = 11;

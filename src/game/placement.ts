@@ -31,6 +31,15 @@ export function hasSettleableLand(state: GameState, vertexId: VertexId): boolean
   });
 }
 
+// An unowned settlement (`inactiveSettlements`) on this vertex or next to
+// it: the distance rule applies to it like any building.
+function nearInactiveSettlement(state: GameState, vertexId: VertexId): boolean {
+  const inactive = state.inactiveSettlements;
+  if (!inactive || inactive.length === 0) return false;
+  if (inactive.includes(vertexId)) return true;
+  return state.board.vertices[vertexId]!.neighborVertices.some((n) => inactive.includes(n));
+}
+
 // Is any road, ship or bridge already on this edge?
 function edgeTaken(state: GameState, edgeId: EdgeId): boolean {
   for (const p of state.players) {
@@ -67,6 +76,7 @@ export function canPlaceSettlement(
       if (p.settlements.includes(n) || p.cities.includes(n)) return false;
     }
   }
+  if (nearInactiveSettlement(state, vertexId)) return false;
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
   // Seafarers / Pirate Islands: on the pirate islands only at your own
@@ -136,6 +146,7 @@ export function canConnectRoad(
     // settlement/city does (rulebook p.9).
     const knight = state.knights?.[v];
     if (knight && knight.playerId !== playerId) blocked = true;
+    if (state.inactiveSettlements?.includes(v)) blocked = true;
     if (player.settlements.includes(v) || player.cities.includes(v)) return true;
     if (blocked) continue;
     for (const eid of state.board.vertices[v]!.edges) {
@@ -208,6 +219,7 @@ export function canPlaceInitialSettlement(
       if (p.settlements.includes(n) || p.cities.includes(n)) return false;
     }
   }
+  if (nearInactiveSettlement(state, vertexId)) return false;
   if (!canStartOnIsland(state, vertexId)) return false;
   // Explorers & Pirates: the harbor settlement on a marked intersection,
   // then a settlement on the starting island.

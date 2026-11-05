@@ -1,4 +1,5 @@
 import { standard } from './standard';
+import { beginner } from './beginner';
 import { goldRush } from './goldRush';
 import { volcano } from './volcano';
 import { blackForest } from './blackForest';
@@ -20,6 +21,8 @@ import type { BaseScenario } from './types';
 
 const BASE_SCENARIO_LIST: BaseScenario[] = [
   standard,
+  // The rulebooks' fixed board with printed starting pieces.
+  beginner,
   goldRush,
   volcano,
   blackForest,

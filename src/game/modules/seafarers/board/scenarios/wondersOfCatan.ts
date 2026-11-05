@@ -4,7 +4,8 @@ import { fixedPositions, seaHexes, type FixedHex } from './helpers';
 
 // The Wonders of Catan — Seafarers rulebook p.18-19 (3-4 players) and
 // Seafarers 5-6 p.11. Fixed setup transcribed from the rulebook maps
-// (terrain and number counts match the component tables exactly).
+// (terrain and number counts match the component tables exactly; 5-6 map
+// in docs/map-specs/SEAFARERS56-SPEC-B.md, pinned by fiveSix.b.test.ts).
 //
 // A large island with a desert to the east (the Great Wall markers run
 // along it), a strait in the south crossed by the Great Bridge markers
@@ -106,7 +107,9 @@ const HEXES_5_6P: FixedHex[] = [
     [-1, -3], [1, -3], [3, -3], [4, -3], [5, -3],
     [-3, -2], [-2, -2], [0, -2], [2, -2], [3, -2],
     [-4, -1], [5, -1],
-    [-4, 0],
+    // (-5, 0) and (5, 0) are the frame's west / east points: sea hexes on
+    // the map, not in the component table's sea count.
+    [-5, 0], [-4, 0], [5, 0],
     [-5, 1], [-4, 1], [-1, 1], [3, 1], [4, 1],
     [-4, 2], [-1, 2], [2, 2],
     [-5, 3], [-2, 3], [1, 3],
@@ -138,6 +141,8 @@ const SITES_5_6P: ScenarioWonderSitesDef = {
     { q: 0, r: -3, corner: 2 },
     { q: 1, r: -2, corner: 5 },
     { q: 1, r: -2, corner: 3 },
+    // (The lighthouse markers themselves are blocked for starting
+    // settlements by the generator, like the wall and bridge markers.)
   ],
 };
 

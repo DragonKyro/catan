@@ -1,4 +1,48 @@
 import type { ScenarioLayout } from '../../../board/scenarioTypes';
+import type { PlayerColor } from '../../../types';
+
+// A hex corner, counted clockwise from the north-east one (0 NE, 1 SE, 2 S,
+// 3 SW, 4 NW, 5 N), and a hex side: the edge between corners d and d + 1
+// (0 E, 1 SE, 2 SW, 3 W, 4 NW, 5 NE). Same convention as the port anchors.
+export interface HexCornerRef {
+  q: number;
+  r: number;
+  corner: 0 | 1 | 2 | 3 | 4 | 5;
+}
+export interface HexSideRef {
+  q: number;
+  r: number;
+  direction: 0 | 1 | 2 | 3 | 4 | 5;
+}
+
+// One color's printed starting pieces on a beginner board.
+export interface StartingSlot {
+  // The rulebook's name for the color ("Red", "Blue", …).
+  label: string;
+  // The palette color closest to it: a player who picked this color is
+  // seated on this slot.
+  color: PlayerColor;
+  // The two settlements, each with the road printed next to it.
+  pieces: [
+    { settlement: HexCornerRef; road: HexSideRef },
+    { settlement: HexCornerRef; road: HexSideRef },
+  ];
+  // The settlement marked with the white star: its hexes pay the starting
+  // resources.
+  star: 0 | 1;
+}
+
+// The rulebooks' "starting set-up for beginners": every color's pieces are
+// printed on the map, so the placement rounds are skipped.
+export interface StartingSetup {
+  // 3-4 players.
+  slots3_4?: StartingSlot[];
+  // 3 players: this slot (by label) sits out ("remove the red pieces").
+  dropAt3?: string;
+  // 5-6 players. At 5, one slot drawn at random is inactive: its settlements
+  // stay on the board as inactive settlements, its roads come off.
+  slots5_6?: StartingSlot[];
+}
 
 // Modular schema for base-game "Fun Maps" — colonist.io-style variants
 // (Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl) that
@@ -38,4 +82,7 @@ export interface BaseScenario {
   // Expansions this map can't be played with (its mechanic isn't wired into
   // that expansion's turn — e.g. gold fields or the volcano under C&K).
   notWithExpansions?: string[];
+  // Fixed starting pieces (the beginner boards). createGame places them,
+  // pays the starting resources and starts the game at the first roll.
+  startingSetup?: StartingSetup;
 }

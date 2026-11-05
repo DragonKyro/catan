@@ -11,6 +11,7 @@ import { Ship } from './seafarers/Ship';
 import { PirateMarker } from './seafarers/PirateMarker';
 import { ScenarioMarkers } from './seafarers/ScenarioMarkers';
 import { VolcanoMarker } from './base/VolcanoMarker';
+import { InactiveSettlements } from './base/InactiveSettlements';
 import { CityWallMarker } from './citiesAndKnights/CityWallMarker';
 import { KnightPiece } from './citiesAndKnights/KnightPiece';
 import { MetropolisMarker } from './citiesAndKnights/MetropolisMarker';
@@ -184,6 +185,8 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
           )}
         </g>
 
+        {/* Beginner set-up, 5 players: the unused color's settlements. */}
+        <InactiveSettlements game={game} />
         <g className="settlements">
           {game.players.flatMap((player) =>
             // Explorers & Pirates harbor settlements are drawn as their own

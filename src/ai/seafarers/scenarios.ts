@@ -63,13 +63,28 @@ export function scenarioTargetValue(state: GameState, playerId: PlayerId, v: Ver
     if (village.vertex !== v || village.partners.includes(playerId) || village.supply <= 0) continue;
     best = Math.max(best, 7 + probabilityDots(village.number) * 0.4);
   }
+  // Forgotten Tribe: a VP token is a whole VP for a few ships. On the 5-6
+  // map every token sits on the far (frame) side of its islet, 3-4 ships out
+  // from the coast, so lower values left them out of reach of the ship
+  // look-ahead and full-board games stalled one VP short.
   for (const t of state.tribeTokens ?? []) {
     if (t.claimedBy !== null) continue;
     if (!state.board.edges[t.edge]?.vertices.includes(v)) continue;
-    best = Math.max(best, t.type === 'victoryPoint' ? 6 : t.type === 'devCard' ? 4 : 3.5);
+    best = Math.max(best, t.type === 'victoryPoint' ? 9 : t.type === 'devCard' ? 6 : 5);
+  }
+  // Fog Islands: a ship or road ending next to unexplored fog turns it over
+  // (a resource for each land hex, and new land to settle). Without a value
+  // here the look-ahead only saw known settlement spots, so AI ships never
+  // sailed into the fog. Worth reaching from a couple of sea steps away.
+  if (state.unrevealedFogHexes && state.unrevealedFogHexes.length > 0) {
+    const fog = new Set(state.unrevealedFogHexes);
+    const n = (state.board.vertices[v]?.hexes ?? []).filter((h) => fog.has(h)).length;
+    if (n > 0) best = Math.max(best, FOG_TARGET_VALUE + 0.5 * Math.min(n, 2));
   }
   return best;
 }
+
+const FOG_TARGET_VALUE = 6;
 
 // Forgotten Tribe: where to put a port taken from the tribe. A 2:1 port
 // goes next to the building that produces most of its resource; a 3:1 port

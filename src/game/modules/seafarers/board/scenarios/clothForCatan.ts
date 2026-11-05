@@ -5,7 +5,8 @@ import { fixedPositions, seaHexes, type FixedHex } from './helpers';
 // Cloth for Catan — Seafarers rulebook p.14-15 (3-4 players) and Seafarers
 // 5-6 p.9. Fixed setup transcribed from the rulebook maps (terrain and
 // number counts — large-island hexes plus villages — match the component
-// tables exactly).
+// tables exactly; 5-6 map in docs/map-specs/SEAFARERS56-SPEC-B.md, pinned by
+// fiveSix.b.test.ts).
 //
 // Two large islands (north and south) frame a channel of single-hex small
 // islands. The number discs on the small islands' corners are villages that
@@ -97,7 +98,10 @@ const HEXES_5_6P: FixedHex[] = [
   ...seaHexes([
     [-1, -2], [0, -2], [1, -2], [2, -2],
     [-3, -1], [-2, -1], [0, -1], [2, -1], [3, -1],
-    [-4, 0], [-2, 0], [-1, 0], [0, 0], [1, 0], [3, 0], [4, 0],
+    // (-5, 0) and (4, 0) are the frame's west / east points: sea hexes on
+    // the map, not in the component table's sea count. The pirate starts on
+    // the east one.
+    [-5, 0], [-4, 0], [-2, 0], [-1, 0], [0, 0], [1, 0], [3, 0], [4, 0],
     [-4, 1], [-3, 1], [-1, 1], [1, 1], [2, 1],
     [-3, 2], [-2, 2], [-1, 2], [0, 2],
   ]),

@@ -39,6 +39,9 @@ export interface SeafarersBoardResult {
   rngState: number;
   islandChips: IslandChip[];
   unrevealedFogHexes: HexId[];
+  // The robber starts beside the board (createGame sets `robberActive:
+  // false`; `board.robberHex` is only a parking spot until then).
+  robberOffBoard?: boolean;
   startingIslands?: string[];
   settlementBlockedHexes?: HexId[];
   robberBlockedHexes?: HexId[];
@@ -87,7 +90,14 @@ export function generateSeafarersBoard(
   const scenario = getScenario(scenarioId);
   const useLarge = numPlayers >= 5;
 
-  let layout = pickLayout(scenario, numPlayers);
+  // New World deals a fresh board each game; every other scenario reads its
+  // layout for the player count (and draws no randomness here).
+  let layout: ScenarioLayout | null;
+  if (scenario.randomLayout) {
+    [layout, rngState] = scenario.randomLayout(numPlayers, rngState);
+  } else {
+    layout = pickLayout(scenario, numPlayers);
+  }
   // Fog cells draw their terrain + token from a SEPARATE face-down pool.
   const fogHexCoords = useLarge && scenario.fogHexes5_6
     ? scenario.fogHexes5_6
@@ -116,9 +126,11 @@ export function generateSeafarersBoard(
       board.hexIds.find((id) => board.hexes[id]!.terrain === 'sea') ?? board.hexIds[0]!;
   }
 
-  const islands = identifyIslands(board, {
-    desertIsBoundary: scenario.desertIsBoundary === true,
-  });
+  const extras: ScenarioExtras = (useLarge ? scenario.extras5_6 : scenario.extras3_4) ?? {};
+  const islands = mergeIslandGroups(
+    identifyIslands(board, { desertIsBoundary: scenario.desertIsBoundary === true }),
+    extras.islandGroups ?? [],
+  );
   board.islandOfHex = islands.hexToIsland;
 
   const bonus = scenario.defaultIslandBonusVp;
@@ -135,13 +147,13 @@ export function generateSeafarersBoard(
         }))
       : [];
 
-  const extras: ScenarioExtras = (useLarge ? scenario.extras5_6 : scenario.extras3_4) ?? {};
   const result: SeafarersBoardResult = {
     board,
     rngState,
     islandChips,
     unrevealedFogHexes: [],
   };
+  if (scenario.robberStartsOffBoard) result.robberOffBoard = true;
 
   // Starting settlements.
   if (scenario.startingPlacementZone === 'mainIslandOnly') {
@@ -199,10 +211,13 @@ export function generateSeafarersBoard(
     };
     // "They may not be placed on an intersection with a Great Bridge or
     // Great Wall marker or on intersections with 'X' markers next to the
-    // Great Bridge markers."
+    // Great Bridge markers." The 5-6 Lighthouse markers are blocked the same
+    // way: the Lighthouse needs a building on one, and the X's beside them
+    // would mean nothing otherwise (SEAFARERS56-SPEC-B).
     result.setupBlockedVertices = [
       ...result.wonderSites.greatWall!,
       ...result.wonderSites.greatBridge!,
+      ...(result.wonderSites.lighthouse ?? []),
       ...w.xMarkers.map((v) => resolveVertexRef(board, v)),
     ];
   }
@@ -262,4 +277,29 @@ function pickLayout(scenario: Scenario, numPlayers: number): ScenarioLayout | nu
   if (numPlayers >= 5) return scenario.layout5_6p ?? null;
   if (numPlayers === 4) return scenario.layout4p ?? scenario.layout3p ?? null;
   return scenario.layout3p ?? null;
+}
+
+// Relabel each outlined group's islands to one island (the first hex's).
+function mergeIslandGroups(
+  islands: ReturnType<typeof identifyIslands>,
+  groups: HexRef[][],
+): ReturnType<typeof identifyIslands> {
+  if (groups.length === 0) return islands;
+  const hexToIsland = { ...islands.hexToIsland };
+  const merged = new Set<string>();
+  for (const group of groups) {
+    const ids = group.map((h) => hexToIsland[`${h.q},${h.r}`]).filter((id): id is string => !!id);
+    const [target, ...rest] = ids;
+    if (!target) continue;
+    for (const id of rest) {
+      if (id === target) continue;
+      for (const [hex, isl] of Object.entries(hexToIsland)) if (isl === id) hexToIsland[hex] = target;
+      merged.add(id);
+    }
+  }
+  return {
+    hexToIsland,
+    mainIslandId: islands.mainIslandId,
+    outerIslandIds: islands.outerIslandIds.filter((id) => !merged.has(id)),
+  };
 }

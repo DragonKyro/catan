@@ -9,6 +9,13 @@ name (TB-MAP-SPEC, TB56-MAP-SPEC, TBS-SPEC).
 - `TB56-MAP-SPEC.md` — the same four scenarios on the T&B 5–6 boards.
 - `TBS-SPEC.md` — the Traders & Barbarians scenario (commodity hexes,
   interior paths, wagon board).
+- `SEAFARERS56-SPEC-A.md` / `SEAFARERS56-SPEC-B.md` — the Seafarers 5–6
+  maps (A: Heading for New Shores, Six Islands, Fog Islands, Through the
+  Desert; B: Forgotten Tribe, Cloth for Catan, Pirate Islands, Wonders of
+  Catan), from `docs/catan seafarers 5-6 rules.pdf`.
+- `NEWWORLD-SPEC.md` — New World's random board: the rulebook procedure,
+  the frames and the generator's steps.
+- `BEGINNER-SPEC.md` — the base game's beginner boards (3–4 and 5–6).
 
 They were derived from high-DPI crops of `docs/catan traders and barbarians
 rules.pdf` and `docs/catan traders and barbarians 5-6 rules.pdf`; image file

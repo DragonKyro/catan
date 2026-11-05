@@ -5,7 +5,8 @@ import { fixedPositions, seaHexes, type FixedHex } from './helpers';
 // The Pirate Islands — Seafarers rulebook p.16-17 (3-4 players) and
 // Seafarers 5-6 p.10. Fixed setup ("We do not recommend variations for this
 // scenario"), transcribed hex by hex from the rulebook maps; terrain and
-// number counts match the component tables exactly.
+// number counts match the component tables exactly (5-6 map in
+// docs/map-specs/SEAFARERS56-SPEC-B.md, pinned by fiveSix.b.test.ts).
 //
 // The main island is in the east. The pirate fleet sails a clockwise loop
 // around the desert islets in the middle; each player sails one line of
@@ -120,7 +121,9 @@ const HEXES_5_6P: FixedHex[] = [
     [-1, -3], [1, -3], [2, -3],
     [-3, -2], [-2, -2], [-1, -2], [0, -2], [2, -2],
     [-1, -1], [0, -1], [1, -1],
-    [-4, 0], [-3, 0], [-2, 0], [0, 0],
+    // (-5, 0) "WEST" and (5, 0) "EAST" are the frame's points: sea hexes on
+    // the map, not in the component table's sea count.
+    [-5, 0], [-4, 0], [-3, 0], [-2, 0], [0, 0], [5, 0],
     [-2, 1], [-1, 1], [0, 1],
     [-5, 2], [-4, 2], [-3, 2], [-2, 2], [0, 2],
     [-4, 3], [-2, 3], [-1, 3],

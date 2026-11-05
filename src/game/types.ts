@@ -1125,6 +1125,11 @@ export interface GameState {
   // Seafarers: vertices where starting settlements may not go (Wonders of
   // Catan: Great Wall / Great Bridge / "X" markers).
   setupBlockedVertices?: VertexId[];
+  // Settlements nobody owns (the 5-player beginner set-up leaves the unused
+  // color's settlements on the board). They count like an opponent's
+  // building for the distance rule and stop roads and Longest Road passing
+  // through, but produce nothing and score nothing.
+  inactiveSettlements?: VertexId[];
   // Seafarers: the Longest Route / Largest Army tiles are returned to the box
   // in some scenarios (Cloth for Catan, Pirate Islands).
   noLongestRoad?: boolean;

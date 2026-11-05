@@ -430,17 +430,23 @@ export const useLogStore = create<LogStore>((set, get) => ({
       }
     }
     const now = startTime ?? Date.now();
+    // A game created at its first roll (the beginner boards print everyone's
+    // starting pieces, so there are no setup rounds whose end opens turn 1).
+    const startsInPlay = initial?.phase === 'rollOrPlayKnight' && initial.lastRoll === null;
+    const turnOne: LogEntry[] = startsInPlay
+      ? [{ id: 1, kind: 'turnBegins', player: initial.playerOrder[0]!, turnNumber: 1 }]
+      : [];
     set({
-      entries: [],
+      entries: turnOne,
       timeline: [],
       gainedTotals: gained,
       gainedByResourceTotals: gainedByResource,
       stats: emptyStats(),
       startTime: now,
-      nextId: 1,
+      nextId: turnOne.length + 1,
       initialState: initial ?? null,
       actions: [],
-      turnNumber: 0,
+      turnNumber: turnOne.length,
       tradeStatsTotals: tradeStats,
       discardTotals: discards,
       stealBalanceTotals: steals,

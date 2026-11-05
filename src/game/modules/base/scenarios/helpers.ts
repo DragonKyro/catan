@@ -39,3 +39,24 @@ export function landPositions(
 ): ScenarioPosition[] {
   return coords.map((c) => ({ q: c.q, r: c.r, kind: 'land' as const }));
 }
+
+// The ring of sea hexes hugging the land: every neighbour of a position in
+// `positions` that isn't one of them. A frame that follows the coastline
+// instead of filling a whole disk — for long shapes (the 5-6 Diamond and
+// Twirl reach radius 4) that a disk would leave adrift in open sea.
+export function seaPositionsAround(positions: ScenarioPosition[]): ScenarioPosition[] {
+  const seen = new Set(positions.map((p) => `${p.q},${p.r}`));
+  const out: ScenarioPosition[] = [];
+  const steps: Array<[number, number]> = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+  for (const p of positions) {
+    for (const [dq, dr] of steps) {
+      const q = p.q + dq;
+      const r = p.r + dr;
+      const k = `${q},${r}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ q, r, kind: 'sea' });
+    }
+  }
+  return out;
+}

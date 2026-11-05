@@ -19,7 +19,7 @@ follow-up after visual verification against [docs/.scenario-renders/].
 | Cloth for Catan | ✅ (approximate) | ✅ | ✅ (= 3p) | ✅ |
 | Pirate Islands | ✅ (approximate) | ✅ | ✅ (= 3p) | ✅ |
 | Wonders of Catan | ✅ (approximate) | ✅ | ✅ (= 3p) | ✅ |
-| New World | ✅ (approximate) | ✅ | ✅ (= 3p) | ✅ |
+| New World | random every game (`../newWorldBoard.ts`) | ✅ | ✅ (= 3p) | ✅ |
 
 All 9 scenarios now support 3-6 players. Per the 5-6p rulebook, Four Islands
 at 5-6p is actually the distinct scenario "The Six Islands" (6 clusters
@@ -95,7 +95,8 @@ These need to be encoded as pools when migrating. Counts are `Sea | Gold | Hills
 
 ### New World
 - 3-4p: 19 / 0 / 4 / 5 / 5 / 5 / 4 / 0 / **42**. Tokens: 1,3,3,3,2,2,3,3,2,1 (=23). Ports: 5×2:1 + 5×3:1 = 10.
-- Mechanic: player-built (rulebook explicitly invites custom shaping). For our purposes pick a representative shape.
+- 5-6p: 21 / 4 / 7 / 7 / 7 / 7 / 7 / 3 / **63**. Tokens: 2,3,4,5,5,5,5,4,4,2 (=39). Ports: 6×2:1 (extra wool) + 5×3:1 = 11.
+- No fixed map: `Scenario.randomLayout` deals the land shape, terrain, discs and harbors from the seeded RNG each game (`../newWorldBoard.ts`, `docs/map-specs/NEWWORLD-SPEC.md`).
 
 ## Steps to migrate a scenario
 

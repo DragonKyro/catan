@@ -12,6 +12,8 @@ The popular online version (colonist.io) paywalls the expansions; this is a free
 
 **Base game** — 3–8 players. 3–6 official; 7–8 is an unofficial extension modeled on colonist.io's: 37-hex board, scaled bank (24 per resource) and dev deck (35 cards), 2022 paired-player turn rule across all 5+ player counts.
 
+**Beginner set-up** — the rulebooks' "starting set-up for new players" (3–4 and 5–6): fixed board, harbors and starting settlements / roads, straight to the first roll. Pick **Beginner set-up (rulebook)** on the Base map dropdown.
+
 **Fun Maps** — eight colonist.io-style base-game variants, selectable from a **Base map** dropdown on the new-game screen:
 
 - **Gold Rush** — two or three gold fields mixed into the terrain pool; settlements next to one pick any resource on every production roll
@@ -23,7 +25,7 @@ The popular online version (colonist.io) paywalls the expansions; this is a free
 - **Pond** — single sea hex dead-center
 - **Twirl** — 21-hex spiral; standard hexagon with a two-hex tail twisting off one corner
 
-Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 3–4 player only for now.
+All eight also play at 5–6 players: Gold Rush, Pond, Black Forest and Lakes (four lake hexes) on the 5–6 board; Diamond as a 25-hex rhombus, Gear with nine teeth around a 19-hex core, Twirl as a two-tailed spiral, Volcano on a 31-hex round island.
 
 **Seafarers expansion** — 9 official scenarios, following the 2025 rulebook (setup, extra rules, win condition and VP target):
 
@@ -35,7 +37,7 @@ Gold Rush and Pond ship 5–6 player layouts in addition to 3–4; the rest are 
 - **Cloth for Catan** (14 VP) — three starting settlements; ship routes to villages trade cloth (2 cloth = 1 VP); the game also ends when 5 villages run dry
 - **The Pirate Islands** (fortress + 10 VP) — a pirate fleet circles the board attacking buildings; build warships and one line of ships west to recapture your pirate fortress
 - **The Wonders of Catan** — claim one of the rulebook's wonders and build its 4 levels; finish it, or reach 10 VP with the highest level, to win
-- **New World** (12 VP) — open map; +1 VP per island you didn't start on
+- **New World** (12 VP) — a new random archipelago every game; +1 VP per island you didn't start on
 
 **Cities & Knights expansion** — 3–6 players, following the 2025 rulebook (13 VP): a city as your second starting piece, commodities (paper / cloth / coin) from cities, the event die (barbarian ship or a progress-card draw on the red die), the barbarian track and attacks (defended by active knights, pillaging the weakest defenders' cities), knights (recruit, activate, promote, move, displace, chase the robber), city walls, the three city improvement tracks with their level-3 abilities and metropolises, the merchant, and all 54 progress cards. The robber waits beside the track until the first attack. Play it on a random board, a shape Fun Map, or the rulebook's fixed **first-game board**. 5–6 players use the 5–6 board and paired turns.
 
@@ -124,18 +126,17 @@ One checklist, in build order: the app itself, then each game with its player ex
 - [x] 3–4 players
 - [x] 5–6 player extension (CATAN 5–6 board and number tokens, paired-player turns)
 - [x] 7–8 players (unofficial: 37-hex board, scaled bank and dev deck, VP target stays 10)
-- [ ] The rulebooks' beginner boards (fixed "starting set-up for new players" maps for 3–4 and 5–6)
+- [x] The rulebooks' beginner boards: "Beginner set-up (rulebook)" on the Base map list — the fixed board, harbors and starting pieces of the base (3–4) and 5–6 rulebooks; the game starts at the first roll (3 players drop Red; at 5 one color's settlements stay as inactive pieces)
 - [x] Fun Maps (colonist.io-style) at 3–4 players: Gold Rush, Volcano, Black Forest, Diamond, Gear, Lakes, Pond, Twirl
-- [x] Fun Maps at 5–6 players: Gold Rush, Pond
-- [ ] Fun Maps at 5–6 players: Black Forest, Diamond, Gear, Lakes, Twirl, Volcano
+- [x] Fun Maps at 5–6 players: all eight (Gold Rush, Pond, Black Forest, Lakes on the 5–6 board; a 25-hex Diamond, a 28-hex nine-tooth Gear, a 34-hex two-tailed Twirl and a 31-hex round Volcano island)
 - [ ] Tighten the Diamond / Gear / Twirl hex positions (shapes are close, not exact)
 
 ### 3. Seafarers
 
 - [x] 3–4 players: all 9 scenarios (2025 rulebook), plus alternate "… 2" maps of the first four
 - [x] 5–6 player extension: all 9 scenarios (The Six Islands is The Four Islands' 5–6 map)
-- [ ] Check the 5–6 maps hex by hex against the 5–6 rulebook (component counts match; positions are approximate)
-- [ ] New World: random land each game, as in the rulebook (today: fixed maps)
+- [x] The 5–6 maps checked hex by hex against the 5–6 rulebook (Heading for New Shores, Six Islands, Fog Islands and Through the Desert re-transcribed; the other five matched apart from the frame's two sea points)
+- [x] New World: a new random board every game (rulebook frame and components, separate islands, red-number swap, random harbors), 3–6 players
 - [ ] 7–8 players — no official version; would need new boards per scenario (`createGame` refuses Seafarers above 6)
 
 ### 4. Cities & Knights

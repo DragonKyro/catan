@@ -9,6 +9,7 @@ import { pirateIslandsDevDeck, PIRATE_LAIRS } from './modules/seafarers/pirateIs
 import { CLOTH_GENERAL_SUPPLY } from './modules/seafarers/cloth';
 import { getPortAtVertex } from './board/adjacency';
 import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
+import { placeStartingPieces } from './modules/base/scenarios/startingSetup';
 import { generateTradersBoard } from './modules/traders/board/generator';
 import { resolveAllWagonStarts } from './modules/traders/merchantTrains/trains';
 import { hasTradersVariant } from './modules/traders/variants';
@@ -280,11 +281,19 @@ export function createGame(opts: CreateGameOptions): GameState {
   const tradersVariants = opts.settings?.tradersVariants;
   // Base-game maps tied to (or ruled out by) an expansion: the C&K first-game
   // board needs C&K; Gold Rush / Volcano can't be played with it.
-  if (!customMap && !hasTraders && !hasExplorers && !expansions.includes(SEAFARERS_EXPANSION_ID)) {
-    const map = getBaseScenario(baseScenarioId);
-    if (!baseScenarioAllowed(map, expansions)) {
-      throw new Error(`The "${map.name}" map can't be played with these expansions.`);
-    }
+  const baseMap =
+    !customMap && !hasTraders && !hasExplorers && !expansions.includes(SEAFARERS_EXPANSION_ID)
+      ? getBaseScenario(baseScenarioId)
+      : undefined;
+  if (baseMap && !baseScenarioAllowed(baseMap, expansions)) {
+    throw new Error(`The "${baseMap.name}" map can't be played with these expansions.`);
+  }
+  // Beginner boards print every color's starting pieces (3-6 players).
+  const startingSetup = baseMap?.startingSetup;
+  if (startingSetup && (numPlayers < baseMap.minPlayers || numPlayers > baseMap.maxPlayers)) {
+    throw new Error(
+      `The "${baseMap.name}" map supports ${baseMap.minPlayers}-${baseMap.maxPlayers} players (got ${numPlayers}).`,
+    );
   }
   const scenarioVp = ((): number | undefined => {
     if (customMap) return customMap.defaultVpToWin;
@@ -506,6 +515,19 @@ export function createGame(opts: CreateGameOptions): GameState {
     playerOrder = shuffled;
   }
 
+  // Beginner boards: seat everyone on a printed color, place its two
+  // settlements and roads, pay the starred settlement's resources, and
+  // skip the placement rounds. At 5 players one color is left inactive.
+  let bank = bankFull(bankSizeFor(numPlayers));
+  let inactiveSettlements: VertexId[] | undefined;
+  if (startingSetup) {
+    const placed = placeStartingPieces(startingSetup, board, players, playerOrder, bank, rng);
+    placed.players.forEach((p, i) => (players[i] = p));
+    bank = placed.bank;
+    rng = placed.rngState;
+    if (placed.inactiveSettlements.length > 0) inactiveSettlements = placed.inactiveSettlements;
+  }
+
   // Seafarers / Pirate Islands: each player starts with a settlement and a
   // ship on the main island's coast, and a pirate fortress (3 lair tokens)
   // in their color on the western islands. Slots follow turn order.
@@ -665,6 +687,8 @@ export function createGame(opts: CreateGameOptions): GameState {
 
   // Pirate Islands has no robber at all.
   if (pirateIslands) robberActive = false;
+  // Seafarers New World: the robber waits beside the frame.
+  if (seafarers?.robberOffBoard) robberActive = false;
 
   // Explorers & Pirates: no robber, coins in play, 3:1 supply trades, no
   // Longest Road / Largest Army (the bonus tiles stay in the CATAN box).
@@ -680,9 +704,16 @@ export function createGame(opts: CreateGameOptions): GameState {
     players,
     playerOrder,
     currentPlayerIndex: 0,
-    phase: 'setupRound1',
-    setupState: { step: 'settlement', lastPlacedSettlement: null },
-    bank: bankFull(bankSizeFor(numPlayers)),
+    // Beginner boards start at the first roll; everything else places its
+    // starting pieces in the setup rounds.
+    ...(startingSetup
+      ? { phase: 'rollOrPlayKnight' as const }
+      : {
+          phase: 'setupRound1' as const,
+          setupState: { step: 'settlement' as const, lastPlacedSettlement: null },
+        }),
+    ...(inactiveSettlements ? { inactiveSettlements } : {}),
+    bank,
     devCardDeck,
     hasRolledThisTurn: false,
     hasPlayedDevCardThisTurn: false,

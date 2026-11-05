@@ -4,7 +4,8 @@ import { fixedPositions, seaHexes, type FixedHex } from './helpers';
 
 // The Forgotten Tribe — Seafarers rulebook p.12-13 (3-4 players) and
 // Seafarers 5-6 p.8. Fixed setup transcribed from the rulebook maps
-// (terrain and number counts match the component tables exactly).
+// (terrain and number counts match the component tables exactly; 5-6 map
+// in docs/map-specs/SEAFARERS56-SPEC-B.md, pinned by fiveSix.b.test.ts).
 //
 // A large numbered island in the middle; the tribe's unnumbered islands
 // above and below it. The tribe has put VP tokens, face-down development
@@ -102,6 +103,9 @@ const HEXES_5_6P: FixedHex[] = [
   ...seaHexes([
     [0, -3], [3, -3],
     [-3, -2], [-2, -2], [-1, -2], [0, -2], [1, -2], [2, -2], [3, -2], [4, -2], [5, -2],
+    // The frame's west / east points (not in the component table's sea
+    // count, but sea hexes on the map).
+    [-5, 0], [5, 0],
     [-5, 2], [-4, 2], [-3, 2], [-2, 2], [-1, 2], [0, 2], [1, 2], [2, 2], [3, 2],
     [-3, 3], [0, 3],
   ]),

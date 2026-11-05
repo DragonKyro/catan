@@ -358,9 +358,7 @@ export function tryBuildRoad(state: GameState, playerId: PlayerId): Action | nul
     // settle on it also BREAKS any longest-road chain we'd hope to
     // extend through it. Pure waste.
     const newVertex = state.board.vertices[newVid]!;
-    const settledHere = state.players.some(
-      (p) => p.settlements.includes(newVid!) || p.cities.includes(newVid!),
-    );
+    const settledHere = vertexBuilt(state, newVid);
     if (settledHere) continue;
     // Settlement-eligibility at the new endpoint. If we can't settle
     // here (adjacent to someone else's settle), the road is a way-
@@ -370,13 +368,10 @@ export function tryBuildRoad(state: GameState, playerId: PlayerId): Action | nul
     // 2 (which had been letting station roads through too early).
     let blockedAdjacent = false;
     for (const n of newVertex.neighborVertices) {
-      for (const p of state.players) {
-        if (p.settlements.includes(n) || p.cities.includes(n)) {
-          blockedAdjacent = true;
-          break;
-        }
+      if (vertexBuilt(state, n)) {
+        blockedAdjacent = true;
+        break;
       }
-      if (blockedAdjacent) break;
     }
     if (blockedAdjacent && !stationAllowed && !vpLockedOut) continue;
 
@@ -409,9 +404,7 @@ export function tryBuildRoad(state: GameState, playerId: PlayerId): Action | nul
         if (!nextEdge) continue;
         for (const nv of nextEdge.vertices) {
           if (nv === newVid) continue;
-          const farSettled = state.players.some(
-            (p) => p.settlements.includes(nv) || p.cities.includes(nv),
-          );
+          const farSettled = vertexBuilt(state, nv);
           if (!farSettled) {
             hasFutureExit = true;
             break;
@@ -570,4 +563,11 @@ export function tryBankTrade(state: GameState, playerId: PlayerId): Action | nul
     if (delta + (needs.byResource[wantRes] ?? 0) * 0.7 < -1.5) return null;
   }
   return { type: 'bankTrade', playerId, give: bestGive, receive: wantRes };
+}
+
+// A building stands on the vertex: anyone's settlement or city, or an
+// unowned one (`inactiveSettlements`, the 5-player beginner set-up).
+function vertexBuilt(state: GameState, v: VertexId): boolean {
+  if (state.inactiveSettlements?.includes(v)) return true;
+  return state.players.some((p) => p.settlements.includes(v) || p.cities.includes(v));
 }

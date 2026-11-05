@@ -89,6 +89,11 @@ export interface ScenarioExtras {
   // Island ids are assigned at generation; these hexes name the islands
   // starting settlements may use (Cloth for Catan: the two large islands).
   startingIslandHexes?: HexRef[];
+  // Land groups the map outlines as ONE island although sea separates them
+  // (Heading for New Shores 5-6: the dark-blue outlines wrap each pair of
+  // eastern islets with the sea between). One hex per island to merge; the
+  // group counts as one island for the bonus and home islands.
+  islandGroups?: HexRef[][];
 }
 
 
@@ -168,6 +173,18 @@ export interface Scenario {
   layout3p?: import('../../../board/scenarioTypes').ScenarioLayout;
   layout4p?: import('../../../board/scenarioTypes').ScenarioLayout;
   layout5_6p?: import('../../../board/scenarioTypes').ScenarioLayout;
+  // New World: the board is dealt at random every game (land / sea shape,
+  // terrain, number discs, harbors — see ./newWorldBoard.ts). When set, the
+  // generator calls it with the seeded RNG instead of reading the layouts
+  // above; it returns a fully pinned layout and the advanced RNG.
+  randomLayout?: (
+    numPlayers: number,
+    rngState: number,
+  ) => [import('../../../board/scenarioTypes').ScenarioLayout, number];
+  // The robber starts beside the board (`state.robberActive = false`) and
+  // enters on the first 7 / Knight (New World: "Place the robber and pirate
+  // on the indicated locations" — both on the frame).
+  robberStartsOffBoard?: boolean;
 }
 
 // Re-export `Terrain` / `PortType` here too so callers that import them
