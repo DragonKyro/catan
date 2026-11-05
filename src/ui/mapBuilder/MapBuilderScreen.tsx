@@ -10,6 +10,7 @@ import { Toolbar } from './Toolbar';
 import { MetaPanel } from './MetaPanel';
 import { PoolTunerPanel } from './PoolTunerPanel';
 import { FogPoolTunerPanel } from './FogPoolTunerPanel';
+import { ScenarioPreviewScreen } from './ScenarioPreview';
 import './MapBuilder.css';
 
 interface Props {
@@ -20,6 +21,7 @@ export function MapBuilderScreen({ onBack }: Props) {
   const builder = useBuilderState();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const onPaintHex = useCallback(
     (q: number, r: number) => {
@@ -102,6 +104,10 @@ export function MapBuilderScreen({ onBack }: Props) {
     builder.updatePools(() => autofillPools(builder.map.layout, builder.derived));
   };
 
+  if (previewing) {
+    return <ScenarioPreviewScreen onBack={() => setPreviewing(false)} />;
+  }
+
   return (
     <div className="map-builder">
       <header className="map-builder-header">
@@ -119,6 +125,9 @@ export function MapBuilderScreen({ onBack }: Props) {
           />
           <Button size="sm" variant="primary" onClick={onExport}>
             💾 Export
+          </Button>
+          <Button size="sm" onClick={() => setPreviewing(true)}>
+            🔍 Preview scenarios
           </Button>
           {onBack && (
             <Button size="sm" variant="ghost" onClick={onBack}>

@@ -1,10 +1,10 @@
 import type { DiscardProgressCardAction, GameState, PlayerId } from '../../../types';
-import { updatePlayer } from '../../../helpers';
-import { VP_PROGRESS_CARDS } from '../progress/catalogue';
+import { returnToDeckBottom, takeProgressCardFromHand } from '../progress/hand';
+import { resumeFlow } from '../flow';
 
-// Discard a single progress card during the 4-card-limit cleanup sub-phase.
-// Each affected player must dispatch this until their `required` count
-// drops to zero. VP cards can't be discarded (they're face-up).
+// Discard one progress card while over the 4-card hand limit (p.10). Each
+// player listed in `progressCardDiscardRequired` sends one of these per card
+// owed, in any order. The card goes face down under its deck.
 export function handleDiscardProgressCard(
   state: GameState,
   action: DiscardProgressCardAction,
@@ -12,57 +12,22 @@ export function handleDiscardProgressCard(
   if (state.phase !== 'progressCardDiscard') {
     throw new Error(`Cannot discard progress card in phase ${state.phase}`);
   }
-  const required = state.progressCardDiscardRequired?.[action.playerId];
-  if (!required || required <= 0) {
-    throw new Error('You do not need to discard progress cards');
-  }
-  if (VP_PROGRESS_CARDS.has(action.card)) {
-    throw new Error('Cannot discard VP cards');
-  }
+  const required = state.progressCardDiscardRequired?.[action.playerId] ?? 0;
+  if (required <= 0) throw new Error('You do not need to discard progress cards');
   const player = state.players.find((p) => p.id === action.playerId);
   if (!player) throw new Error('Unknown player');
-  const hand = (player.progressCards?.[action.deck] ?? []).slice();
-  const idx = hand.indexOf(action.card);
-  if (idx === -1) throw new Error(`No ${action.card} in your ${action.deck} hand`);
-  hand.splice(idx, 1);
+  if (!(player.progressCards?.[action.deck] ?? []).includes(action.card)) {
+    throw new Error(`No ${action.card} in your ${action.deck} hand`);
+  }
 
-  let next = updatePlayer(state, action.playerId, (p) => ({
-    ...p,
-    progressCards: {
-      ...(p.progressCards ?? { science: [], trade: [], politics: [] }),
-      [action.deck]: hand,
-    },
-  }));
+  let next = takeProgressCardFromHand(state, action.playerId, action.deck, action.card);
+  next = returnToDeckBottom(next, action.deck, action.card);
 
-  const remaining = (state.progressCardDiscardRequired ?? {}) as Record<
-    PlayerId,
-    number
-  >;
-  const updated: Record<PlayerId, number> = { ...remaining };
+  const updated: Record<PlayerId, number> = { ...(state.progressCardDiscardRequired ?? {}) };
   if (required - 1 <= 0) delete updated[action.playerId];
   else updated[action.playerId] = required - 1;
-
-  // Place the discarded card on the bottom of the deck (rulebook p.10).
-  next = {
+  return resumeFlow({
     ...next,
-    progressDecks: {
-      ...(next.progressDecks ?? { science: [], trade: [], politics: [] }),
-      [action.deck]: [
-        ...(next.progressDecks?.[action.deck] ?? []),
-        action.card,
-      ],
-    },
-  };
-
-  if (Object.keys(updated).length === 0) {
-    return {
-      ...next,
-      phase: 'main',
-      progressCardDiscardRequired: undefined,
-    };
-  }
-  return {
-    ...next,
-    progressCardDiscardRequired: updated,
-  };
+    progressCardDiscardRequired: Object.keys(updated).length > 0 ? updated : undefined,
+  });
 }

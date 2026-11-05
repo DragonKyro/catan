@@ -29,6 +29,21 @@ export const TRACK_EMOJI: Record<ImprovementTrack, string> = {
   politics: '🤝',
 };
 
+// City improvement names by level (0 = the basic city), from the 2025
+// city improvement boards (p.3). Level 3 grants the track's ability.
+export const IMPROVEMENT_NAMES: Record<ImprovementTrack, readonly string[]> = {
+  science: ['Basic City', 'School', 'Library', 'Aqueduct', 'Theater', 'University'],
+  trade: ['Basic City', 'Market', 'Trading House', 'Merchant Guild', 'Bank', 'Great Exchange'],
+  politics: ['Basic City', 'Town Hall', 'Embassy', 'Fortress', 'Courthouse', 'High Assembly'],
+};
+
+// The level-3 abilities (p.8).
+export const LEVEL3_ABILITY_TEXT: Record<ImprovementTrack, string> = {
+  science: 'Aqueduct: if you receive no cards in the Production phase, take 1 resource of your choice (not on a 7).',
+  trade: 'Merchant Guild: trade commodities 2:1 for resources or other commodities.',
+  politics: 'Fortress: you may promote strong knights to mighty knights.',
+};
+
 export const KNIGHT_LABEL: Record<KnightStrength, string> = {
   1: 'Basic Knight',
   2: 'Strong Knight',
@@ -50,8 +65,14 @@ export const CITY_WALL_HAND_BONUS = 2;
 // settings.victoryPointsToWin when needed.
 export const CITIES_AND_KNIGHTS_DEFAULT_VP = 13;
 
-// Commodity bank size per commodity. Rulebook ships 12 cards each.
+// Seats supported under Cities & Knights: the 3-4 player game plus the
+// Cities & Knights 5-6 Player Expansion (5-6 board, paired turns).
+export const CITIES_AND_KNIGHTS_MAX_PLAYERS = 6;
+
+// Commodity bank size per commodity. Rulebook ships 12 cards each; the 5-6
+// player expansion adds 6 of each (ck56 p.2-3).
 export const COMMODITY_BANK_SIZE = 12;
+export const COMMODITY_BANK_SIZE_5_6 = 18;
 
 // Display emoji for each commodity (used by HandPanel, OpponentPanel,
 // BankPanel, CostCheatsheet). Kept on the engine side so the same icon is

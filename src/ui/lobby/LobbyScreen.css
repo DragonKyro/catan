@@ -208,3 +208,92 @@
     grid-template-rows: auto 1fr;
   }
 }
+
+.lobby-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.lobby-settings h3 {
+  margin: 0;
+  font-size: 0.78em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.lobby-vp-hint {
+  font-size: 0.85em;
+  color: var(--text-soft);
+}
+
+.lobby-vp-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lobby-summary {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.lobby-problem {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--accent);
+  text-align: center;
+}
+
+.lobby-share {
+  display: flex;
+  justify-content: center;
+}
+
+.lobby-seat-swatch-wrap {
+  position: relative;
+  display: flex;
+}
+
+.lobby-seat-swatch-btn {
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.lobby-seat-swatch-btn:hover,
+.lobby-seat-swatch-btn:focus-visible {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Traders & Barbarians variants (any rules; Event Cards not with C&K). */
+.lobby-variants {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 0.9em;
+  color: var(--text-soft);
+}
+
+.lobby-variants-label {
+  flex-basis: 100%;
+}
+
+.lobby-variant {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.lobby-variant input:disabled + span {
+  color: var(--text-soft);
+  cursor: not-allowed;
+}

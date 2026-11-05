@@ -1,0 +1,86 @@
+/* Cities & Knights progress cards as mini playing cards. Deck colours follow
+   the 2025 card backs: science dark green, trade light green, politics
+   blue-grey. */
+.pcard {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  width: 58px;
+  min-height: 74px;
+  padding: 5px 3px 4px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.35);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  color: #fff;
+  cursor: default;
+  user-select: none;
+}
+.pcard-sm {
+  width: 54px;
+  min-height: 56px;
+  font-size: 0.52rem;
+}
+.pcard-science { background: linear-gradient(160deg, #3f8f4a, #245b2c); }
+.pcard-trade { background: linear-gradient(160deg, #a9d661, #6d9a2f); color: #17280a; }
+.pcard-politics { background: linear-gradient(160deg, #a9bde0, #6c84b3); color: #101a33; }
+
+.pcard-emblem {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+}
+.pcard-name {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.pcard-back .pcard-emblem {
+  margin-top: 6px;
+  width: 28px;
+  height: 28px;
+}
+.pcard-count {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.pcard-vpbadge {
+  margin-top: auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: #f4d35e;
+  color: #3a2c00;
+  font-size: 0.62rem;
+}
+.pcard-clickable {
+  cursor: pointer;
+  transition: transform 80ms, box-shadow 80ms;
+}
+.pcard-clickable:hover,
+.pcard-clickable:focus-visible {
+  transform: translateY(-3px);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35), 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+.pcard-disabled {
+  opacity: 0.55;
+}
+.pcard:disabled {
+  /* A card that's just shown (no onClick) keeps full colour. */
+  opacity: 1;
+}
+.pcard-disabled:disabled {
+  opacity: 0.55;
+}

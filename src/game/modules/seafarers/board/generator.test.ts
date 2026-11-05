@@ -35,7 +35,8 @@ describe('seafarers board generator', () => {
     expect(islandChips.length).toBeGreaterThan(0);
     for (const chip of islandChips) {
       expect(chip.vp).toBe(2);
-      expect(chip.firstSettler).toBeNull();
+      expect(chip.claimedBy).toEqual([]);
+      expect(chip.homeOf).toEqual([]);
       expect(islands.outerIslandIds).toContain(chip.islandId);
     }
   });

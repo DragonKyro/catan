@@ -13,16 +13,14 @@ import type {
 import { RESOURCES } from '../types';
 import { currentPlayerId, updatePlayer, getPlayer, isPairedPlayer2 } from '../helpers';
 import { addResources, subtractResources } from '../resources';
+import { addGold } from '../modules/traders/coins/gold';
 
 export function getBankTradeRate(state: GameState, playerId: string, give: Resource): number {
   const player = getPlayer(state, playerId);
-  let rate = 4;
+  // Explorers & Pirates trades 3:1 with the supply (state.supplyTradeRate).
+  let rate = state.supplyTradeRate ?? 4;
   if (player.ports.includes(give)) rate = 2;
-  else if (player.ports.includes('generic')) rate = 3;
-  // Forgotten Tribe: commercial harbor tokens unconditionally cap the rate
-  // at 2:1 for any resource — better than a generic port, equal to a
-  // matching 2:1 port.
-  if ((player.commercialHarbors ?? 0) > 0) rate = Math.min(rate, 2);
+  else if (player.ports.includes('generic')) rate = Math.min(rate, 3);
   // C&K Merchant token: 2:1 on the resource the merchant's hex produces.
   if (state.merchant?.ownerId === playerId) {
     const hex = state.board.hexes[state.merchant.hexId];
@@ -114,6 +112,33 @@ function hasAll(bank: ResourceBank, demand: Partial<ResourceBank>): boolean {
   return true;
 }
 
+// Traders & Barbarians: "You may use coins in trades with other players."
+// Gold amounts on an offer, validated against `state.coinsInPlay`; zero
+// (and absent from the pending trade) everywhere else.
+function offerGold(
+  state: GameState,
+  offer: { giveGold?: number; receiveGold?: number },
+): { giveGold: number; receiveGold: number } {
+  const giveGold = offer.giveGold ?? 0;
+  const receiveGold = offer.receiveGold ?? 0;
+  if (giveGold === 0 && receiveGold === 0) return { giveGold, receiveGold };
+  if (!state.coinsInPlay) throw new Error('Coins are not used in this game');
+  for (const g of [giveGold, receiveGold]) {
+    if (!Number.isInteger(g) || g < 0) throw new Error('Invalid gold amount');
+  }
+  return { giveGold, receiveGold };
+}
+
+function goldFields(g: { giveGold: number; receiveGold: number }): {
+  giveGold?: number;
+  receiveGold?: number;
+} {
+  return {
+    ...(g.giveGold > 0 ? { giveGold: g.giveGold } : {}),
+    ...(g.receiveGold > 0 ? { receiveGold: g.receiveGold } : {}),
+  };
+}
+
 export function handleProposeTrade(
   state: GameState,
   action: ProposeTradeAction,
@@ -131,12 +156,19 @@ export function handleProposeTrade(
   if (state.pendingTrade) {
     throw new Error('A trade is already pending — cancel it first');
   }
-  if (totalOf(action.give) === 0 || totalOf(action.receive) === 0) {
+  const gold = offerGold(state, action);
+  if (
+    totalOf(action.give) + gold.giveGold === 0 ||
+    totalOf(action.receive) + gold.receiveGold === 0
+  ) {
     throw new Error('Trade must have something on both sides');
   }
   const player = getPlayer(state, action.playerId);
   if (!hasAll(player.resources, action.give)) {
     throw new Error("You don't have the resources you're offering");
+  }
+  if ((player.gold ?? 0) < gold.giveGold) {
+    throw new Error("You don't have the gold you're offering");
   }
   // Record the trade shape in proposedTradesThisTurn so the AI doesn't
   // re-propose the same {give, receive} after a rejection — opponents'
@@ -156,6 +188,7 @@ export function handleProposeTrade(
       proposerId: action.playerId,
       give: { ...action.give },
       receive: { ...action.receive },
+      ...goldFields(gold),
       rejectedBy: [],
     },
     tradesProposedThisTurn: state.tradesProposedThisTurn + 1,
@@ -186,6 +219,14 @@ export function handleAcceptTrade(
   if (!hasAll(proposer.resources, state.pendingTrade.give)) {
     throw new Error('The proposer no longer has the offered resources');
   }
+  const giveGold = state.pendingTrade.giveGold ?? 0;
+  const receiveGold = state.pendingTrade.receiveGold ?? 0;
+  if ((acceptor.gold ?? 0) < receiveGold) {
+    throw new Error("You don't have the gold the proposer wants");
+  }
+  if ((proposer.gold ?? 0) < giveGold) {
+    throw new Error('The proposer no longer has the offered gold');
+  }
   let next: GameState = updatePlayer(state, proposer.id, (p) => ({
     ...p,
     resources: addResources(
@@ -211,6 +252,11 @@ export function handleAcceptTrade(
   );
   next = recordTradeResources(next, proposer.id, proposerGave, proposerGot);
   next = recordTradeResources(next, acceptor.id, proposerGot, proposerGave);
+  // Coins change hands too (and the wealth tiles follow).
+  if (giveGold !== receiveGold) {
+    next = addGold(next, proposer.id, receiveGold - giveGold);
+    next = addGold(next, acceptor.id, giveGold - receiveGold);
+  }
   return { ...next, pendingTrade: undefined };
 }
 
@@ -272,12 +318,19 @@ export function handleCounterTrade(
   if (isPairedPlayer2(state) && action.playerId === currentPlayerId(state)) {
     throw new Error('Player 2 may only trade with the supply, not other players');
   }
-  if (totalOf(action.give) === 0 || totalOf(action.receive) === 0) {
+  const gold = offerGold(state, action);
+  if (
+    totalOf(action.give) + gold.giveGold === 0 ||
+    totalOf(action.receive) + gold.receiveGold === 0
+  ) {
     throw new Error('Counter must have something on both sides');
   }
   const counterer = getPlayer(state, action.playerId);
   if (!hasAll(counterer.resources, action.give)) {
     throw new Error("You don't have the resources you're offering");
+  }
+  if ((counterer.gold ?? 0) < gold.giveGold) {
+    throw new Error("You don't have the gold you're offering");
   }
   // Replace the pending trade. The counterer becomes the new proposer; the
   // original proposer is implicit (still the current player) and can accept.
@@ -287,6 +340,7 @@ export function handleCounterTrade(
       proposerId: action.playerId,
       give: { ...action.give },
       receive: { ...action.receive },
+      ...goldFields(gold),
       rejectedBy: [],
     },
   };

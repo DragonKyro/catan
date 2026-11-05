@@ -1,61 +1,28 @@
-import type {
-  DefenderTieDrawAction,
-  GameState,
-  ProgressCardKind,
-} from '../../../types';
-import { updatePlayer } from '../../../helpers';
+import type { DefenderTieDrawAction, GameState } from '../../../types';
+import { drawTopCard } from '../progress/draw';
+import { requireProgressDiscards } from '../progress/hand';
+import { resumeFlow } from '../flow';
 
-// Defender-of-Catan tie: the top-strength contributors are tied so no one
-// gets the VP token. Instead each tied player draws 1 progress card from
-// the deck of their choice. Iterates in turn order.
-export function handleDefenderTieDraw(
-  state: GameState,
-  action: DefenderTieDrawAction,
-): GameState {
-  if (!state.pendingDefenderTieDraw || state.pendingDefenderTieDraw.length === 0) {
-    throw new Error('No pending defender-tie draws');
+// Defenders tied for the top contribution (p.11): nobody takes the VP token;
+// instead each tied player, starting with the active player, draws the top
+// card of the progress deck of their choice. A non-active player who goes
+// over 4 progress cards discards right away.
+export function handleDefenderTieDraw(state: GameState, action: DefenderTieDrawAction): GameState {
+  if (state.phase !== 'defenderTieDraw') {
+    throw new Error(`Cannot draw for a defender tie in phase ${state.phase}`);
   }
-  const expected = state.pendingDefenderTieDraw[0]!;
-  if (action.playerId !== expected) {
-    throw new Error(`It's ${expected}'s draw`);
+  const queue = state.pendingDefenderTieDraw ?? [];
+  if (queue.length === 0) throw new Error('No pending defender-tie draws');
+  if (action.playerId !== queue[0]) throw new Error(`It's ${queue[0]}'s draw`);
+  if (!['science', 'trade', 'politics'].includes(action.deck)) {
+    throw new Error('Unknown progress deck');
   }
-  const deck = state.progressDecks?.[action.deck] ?? [];
-  if (deck.length === 0) {
-    // Skip — deck empty means no draw possible.
-    return advance(state);
+  const decks = state.progressDecks ?? { science: [], trade: [], politics: [] };
+  const anyCards = decks.science.length + decks.trade.length + decks.politics.length > 0;
+  if (anyCards && decks[action.deck].length === 0) {
+    throw new Error(`The ${action.deck} deck is empty — pick another`);
   }
-  const drawn = deck[0]! as ProgressCardKind;
-  const rest = deck.slice(1);
-  let next = updatePlayer(state, action.playerId, (p) => ({
-    ...p,
-    progressCards: {
-      ...(p.progressCards ?? { science: [], trade: [], politics: [] }),
-      [action.deck]: [
-        ...(p.progressCards?.[action.deck] ?? []),
-        drawn,
-      ],
-    },
-  }));
-  next = {
-    ...next,
-    progressDecks: {
-      ...(next.progressDecks ?? { science: [], trade: [], politics: [] }),
-      [action.deck]: rest,
-    },
-  };
-  return advance(next);
-}
-
-function advance(state: GameState): GameState {
-  if (!state.pendingDefenderTieDraw) return state;
-  const remaining = state.pendingDefenderTieDraw.slice(1);
-  if (remaining.length === 0) {
-    // Hand back to the post-attack phase (which is always 'main' under C&K
-    // — barbarian resolution runs inside rollDice, so 'main' is correct).
-    return {
-      ...state,
-      pendingDefenderTieDraw: undefined,
-    };
-  }
-  return { ...state, pendingDefenderTieDraw: remaining };
+  let next = drawTopCard(state, action.playerId, action.deck);
+  next = requireProgressDiscards(next);
+  return resumeFlow({ ...next, pendingDefenderTieDraw: queue.slice(1) });
 }

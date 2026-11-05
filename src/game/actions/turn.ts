@@ -1,4 +1,4 @@
-import type { GameState, EndTurnAction } from '../types';
+import type { GameState, EndTurnAction, Player } from '../types';
 import { currentPlayerId, updatePlayer, usesPairedRules, isPairedPlayer2, pairedPlayer2Index } from '../helpers';
 
 // 5+ player paired-player rule (2022 revision of the CATAN 5-6 Player
@@ -64,12 +64,19 @@ export function handleEndTurn(state: GameState, action: EndTurnAction): GameStat
   return advanceToNextRealTurn(next);
 }
 
+// Seafarers per-turn ship limits: one move per turn, and ships built this
+// turn can't move.
+function clearSeafarersTurnFlags(p: Player): Player {
+  if (!p.movedShipThisTurn && !p.builtShipsThisTurn) return p;
+  return { ...p, movedShipThisTurn: false, builtShipsThisTurn: undefined };
+}
+
 function advanceToNextPairedTurn(state: GameState): GameState {
   const currentP1 = state.turnHolderIndex ?? state.currentPlayerIndex;
   const nextP1 = (currentP1 + 1) % state.players.length;
   return {
     ...state,
-    players: state.players.map((p) => ({ ...p, movedShipThisTurn: false })),
+    players: state.players.map(clearSeafarersTurnFlags),
     currentPlayerIndex: nextP1,
     turnHolderIndex: nextP1,
     phase: 'rollOrPlayKnight',
@@ -80,7 +87,6 @@ function advanceToNextPairedTurn(state: GameState): GameState {
     pendingTrade: undefined,
     tradeResourcesThisTurn: undefined,
     proposedTradesThisTurn: undefined,
-    attackedPirateThisTurn: undefined,
     // Cities & Knights per-turn flags.
     promotedKnightThisTurn: false,
     activatedKnightsThisTurn: [],
@@ -99,8 +105,7 @@ function advanceToNextRealTurn(state: GameState): GameState {
   const nextIdx = (currentTurnHolder + 1) % state.players.length;
   return {
     ...state,
-    // Seafarers: clear per-turn movedShipThisTurn flag on all players.
-    players: state.players.map((p) => ({ ...p, movedShipThisTurn: false })),
+    players: state.players.map(clearSeafarersTurnFlags),
     currentPlayerIndex: nextIdx,
     turnHolderIndex: nextIdx,
     phase: 'rollOrPlayKnight',
@@ -111,7 +116,6 @@ function advanceToNextRealTurn(state: GameState): GameState {
     pendingTrade: undefined,
     tradeResourcesThisTurn: undefined,
     proposedTradesThisTurn: undefined,
-    attackedPirateThisTurn: undefined,
     // Cities & Knights per-turn flags.
     promotedKnightThisTurn: false,
     activatedKnightsThisTurn: [],

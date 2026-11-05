@@ -44,7 +44,8 @@ export function supportsNeuralAi(
     && (settings.baseScenarioId ?? 'standard') === 'standard'
     && !settings.customMap
     && !settings.tradersVariants?.friendlyRobber
-    && !settings.tradersVariants?.strongestPorts;
+    && !settings.tradersVariants?.strongestPorts
+    && !settings.tradersVariants?.eventCards;
 }
 
 export type DevCounts = Record<DevCardType, number>;

@@ -1,4 +1,4 @@
-import type { Terrain, PortType, TribeTokenType } from '../../../types';
+import type { Terrain, PortType } from '../../../types';
 
 // Shared modular layout schema lives in the board layer (used by both the
 // Seafarers scenario set and the base-game Fun Maps set). Re-exported here
@@ -14,13 +14,88 @@ export type {
   ScenarioLayout,
 } from '../../../board/scenarioTypes';
 
-// Forgotten Tribe token placement. Each token sits on a single hex; the
-// first player to settle on any vertex of that hex claims it.
-export interface ScenarioTribeTokenDef {
+// Board references declared on axial coordinates, resolved to ids once the
+// board graph exists. Corners run clockwise from north-east (0 NE, 1 SE,
+// 2 S, 3 SW, 4 NW, 5 N); an edge `direction` d is the side between corners
+// d and d+1 (0 E, 1 SE, 2 SW, 3 W, 4 NW, 5 NE).
+export interface HexRef {
   q: number;
   r: number;
-  type: TribeTokenType;
 }
+export interface VertexRef {
+  q: number;
+  r: number;
+  corner: 0 | 1 | 2 | 3 | 4 | 5;
+}
+export interface EdgeRef {
+  q: number;
+  r: number;
+  direction: 0 | 1 | 2 | 3 | 4 | 5;
+}
+
+// Forgotten Tribe: what the tribe has placed on which edges.
+export interface ScenarioTribeDef {
+  victoryPoints: EdgeRef[];
+  devCards: EdgeRef[];
+  ports: EdgeRef[];
+  // Port tokens for `ports`: shuffled ("randomly place ports face up"),
+  // unless `fixedPortTypes` (the map prints them face up).
+  portTypes: PortType[];
+  fixedPortTypes?: boolean;
+}
+
+// Cloth for Catan village: a number disc on a small-island intersection.
+export interface ScenarioVillageDef extends VertexRef {
+  number: number;
+}
+
+// Wonders of Catan marker intersections.
+export interface ScenarioWonderSitesDef {
+  greatWall: VertexRef[];
+  greatBridge: VertexRef[];
+  lighthouse?: VertexRef[];
+  // "X" markers next to the Great Bridge markers (no starting settlements).
+  xMarkers: VertexRef[];
+}
+
+// Pirate Islands: one player's slot (rulebook colors, in seat order).
+export interface ScenarioPirateSlotDef {
+  color: string;
+  // Settlement + ship placed for this player before setup.
+  settlement: VertexRef;
+  ship: EdgeRef;
+  fortress: VertexRef;
+  beachhead: VertexRef;
+}
+
+export interface ScenarioPirateIslandsDef {
+  // Fleet loop in travel order.
+  path: HexRef[];
+  // Index into `path` where the fleet starts.
+  start: number;
+  // Seafarers 5-6: while the fleet is on this hex, it doesn't attack.
+  noAttackHex?: HexRef;
+  slots: ScenarioPirateSlotDef[];
+  // Slot indices by player count (e.g. 3p skips the white slot).
+  slotsByPlayers: Record<number, number[]>;
+}
+
+// Map-specific mechanic data for one board size.
+export interface ScenarioExtras {
+  tribe?: ScenarioTribeDef;
+  villages?: ScenarioVillageDef[];
+  wonderSites?: ScenarioWonderSitesDef;
+  pirateIslands?: ScenarioPirateIslandsDef;
+  // Island ids are assigned at generation; these hexes name the islands
+  // starting settlements may use (Cloth for Catan: the two large islands).
+  startingIslandHexes?: HexRef[];
+  // Land groups the map outlines as ONE island although sea separates them
+  // (Heading for New Shores 5-6: the dark-blue outlines wrap each pair of
+  // eastern islets with the sea between). One hex per island to merge; the
+  // group counts as one island for the bonus and home islands.
+  islandGroups?: HexRef[][];
+}
+
 
 export interface Scenario {
   id: string;
@@ -53,21 +128,32 @@ export interface Scenario {
   // effectively capped at 4.
   minPlayers: number;
   maxPlayers: number;
-  // Where players may put their two starting settlements. Most scenarios
+  // Where players may put their starting settlements. Most scenarios
   // restrict setup to the main island and reward expansion onto outer
-  // islands during the game; a few (e.g. Four Islands) explicitly allow
-  // starting on any land hex.
-  startingPlacementZone: 'mainIslandOnly' | 'anyIsland';
+  // islands during the game; a few (Four Islands, Fog Islands, New World)
+  // allow starting on any island — those become the player's home islands.
+  // 'listedIslands' = the islands named by `extras.startingIslandHexes`.
+  startingPlacementZone: 'mainIslandOnly' | 'anyIsland' | 'listedIslands';
+  // When true, every island (including the largest) pays its bonus to
+  // players who don't start there. Used with 'anyIsland' setups.
+  bonusOnEveryIsland?: boolean;
+  // No pirate in this scenario (Wonders of Catan).
+  noPirate?: boolean;
+  // Longest Route / Largest Army tiles returned to the box.
+  noLongestRoad?: boolean;
+  noLargestArmy?: boolean;
+  // Cloth for Catan: three starting settlements.
+  setupRounds?: 3;
+  // Forgotten Tribe: settlements and the robber only on numbered hexes.
+  numberedHexesOnly?: boolean;
+  // Map-specific mechanic data by board size.
+  extras3_4?: ScenarioExtras;
+  extras5_6?: ScenarioExtras;
   // When true, desert hexes act as island boundaries (like sea) during
   // connected-component analysis. The "far side" of the desert then counts
   // as a separate logical island and earns an outer-island chip even though
   // it's land-connected through the desert. Used by Through the Desert.
   desertIsBoundary?: boolean;
-  // Forgotten Tribe: tribe-token placements per board layout. The 3-4p set
-  // applies to the base layout; the 5-6p set replaces it when the larger
-  // board is generated.
-  tribeTokens?: ScenarioTribeTokenDef[];
-  tribeTokens5_6?: ScenarioTribeTokenDef[];
   // Fog Island: coordinates of hexes that start under fog. Revealed (and
   // removed from `state.unrevealedFogHexes`) when a settlement / road /
   // ship is built adjacent to them.
@@ -78,17 +164,6 @@ export interface Scenario {
   // from here instead (matching the "facedown chits" rulebook semantics).
   fogPools?: import('../../../board/fogPoolInjection').FogPoolDef;
   fogPools5_6?: import('../../../board/fogPoolInjection').FogPoolDef;
-  // Pirate Islands: starting fleet anchor + strength. The fleet sits on
-  // this sea hex; players attack it via the `attackPirateFleet` action
-  // and the +2 VP defeat bonus goes to whoever lands the killing blow.
-  pirateFleet?: { q: number; r: number; strength: number };
-  pirateFleet5_6?: { q: number; r: number; strength: number };
-  // Cloth for Catan: hexes that produce cloth tokens instead of their
-  // regular resource on roll. Overlaid on whatever the underlying terrain
-  // is — the scenario chooses which hexes (typically the small outer
-  // islands).
-  clothHexes?: { q: number; r: number }[];
-  clothHexes5_6?: { q: number; r: number }[];
   // Modular layouts (Phase 7+). When set, the generator uses these in
   // preference to the legacy fixed `hexes` field. Per-player-count buckets
   // so scenarios like Heading for New Shores can declare distinct 3p vs 4p
@@ -98,6 +173,18 @@ export interface Scenario {
   layout3p?: import('../../../board/scenarioTypes').ScenarioLayout;
   layout4p?: import('../../../board/scenarioTypes').ScenarioLayout;
   layout5_6p?: import('../../../board/scenarioTypes').ScenarioLayout;
+  // New World: the board is dealt at random every game (land / sea shape,
+  // terrain, number discs, harbors — see ./newWorldBoard.ts). When set, the
+  // generator calls it with the seeded RNG instead of reading the layouts
+  // above; it returns a fully pinned layout and the advanced RNG.
+  randomLayout?: (
+    numPlayers: number,
+    rngState: number,
+  ) => [import('../../../board/scenarioTypes').ScenarioLayout, number];
+  // The robber starts beside the board (`state.robberActive = false`) and
+  // enters on the first 7 / Knight (New World: "Place the robber and pirate
+  // on the indicated locations" — both on the frame).
+  robberStartsOffBoard?: boolean;
 }
 
 // Re-export `Terrain` / `PortType` here too so callers that import them

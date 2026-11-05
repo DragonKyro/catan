@@ -96,7 +96,7 @@ describe('C&K Phase 2 — knights', () => {
     s = applyAction(s, { type: 'recruitKnight', playerId: 'p0', vertex: vid });
     s = applyAction(s, { type: 'promoteKnight', playerId: 'p0', vertex: vid });
     expect(s.knights?.[vid]?.strength).toBe(2);
-    expect(s.promotedKnightThisTurn).toBe(true);
+    expect(s.knights?.[vid]?.promotedThisTurn).toBe(true);
     expect(() =>
       applyAction(s, { type: 'promoteKnight', playerId: 'p0', vertex: vid }),
     ).toThrow(/already promoted/i);

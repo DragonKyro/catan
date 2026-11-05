@@ -42,3 +42,30 @@
 @keyframes conn-spin {
   to { transform: rotate(360deg); }
 }
+
+.conn-banner {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  font-size: 0.9em;
+  pointer-events: none;
+}
+
+.conn-banner-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--panel-border);
+  border-top-color: var(--accent);
+  animation: conn-spin 1s linear infinite;
+}

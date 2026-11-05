@@ -10,9 +10,9 @@ import { canAfford, subtractResources, addResources } from '../resources';
 import { getPortAtVertex } from '../board/adjacency';
 import { canConnectRoad, canPlaceSettlement } from '../placement';
 
-const MAX_SETTLEMENTS = 5;
-const MAX_CITIES = 4;
-const MAX_ROADS = 15;
+export const MAX_SETTLEMENTS = 5;
+export const MAX_CITIES = 4;
+export const MAX_ROADS = 15;
 
 export function handleBuildRoad(state: GameState, action: BuildRoadAction): GameState {
   if (state.phase !== 'main') {

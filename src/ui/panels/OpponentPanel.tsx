@@ -1,14 +1,20 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
-import { calculateBarbarianDefenderVp } from '@/game/modules/traders/scoring/barbarianAttack';
-import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { calculateVictoryPoints, calculateIslandBonusVp } from '@/game/scoring/points';
+import { BarbarianAttackBadges } from '@/ui/game/traders/BarbarianAttackBadges';
+import { TradersBarbariansBadges } from '@/ui/game/traders/TradersBarbariansHand';
+import { tbHiddenCardCount } from '@/game/modules/traders/tradersBarbarians/state';
+import { CoinIcon, FishTokenIcon, MoneyBagIcon, OldBootIcon } from '@/ui/game/traders/TradersIcons';
+import { calculateRouteLength } from '@/game/engine';
+import { isSetupPhase } from '@/game/actions/setup';
+import { MAX_SHIPS } from '@/game/modules/seafarers/constants';
 import { totalResources } from '@/game/resources';
-import { totalCommodities } from '@/game/commodities';
 import { pairedPlayer2Index, usesPairedRules } from '@/game/helpers';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
+import { CKOpponentStats } from './citiesAndKnights/CKOpponent';
+import { EpOpponentPieces, EpOpponentStats } from '@/ui/game/explorersPirates/ExplorersPiratesHand';
 import './OpponentPanel.css';
 
 // Base game piece limits per player. Engine already enforces these via the
@@ -17,15 +23,6 @@ import './OpponentPanel.css';
 const MAX_SETTLEMENTS = 5;
 const MAX_CITIES = 4;
 const MAX_ROADS = 15;
-const MAX_SHIPS = 15;
-
-function sumDefenderVp(
-  game: ReturnType<typeof useGameStore.getState>['game'],
-  playerId: string,
-): number {
-  if (!game) return 0;
-  return calculateBarbarianDefenderVp(game, playerId);
-}
 
 export function OpponentPanel() {
   const game = useGameStore((s) => s.game!);
@@ -44,12 +41,14 @@ export function OpponentPanel() {
   const actingId = getActingPlayerId(game);
   const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
+  // Explorers & Pirates: no development cards, its own pieces.
+  const hasEP = !!game.explorersPirates;
 
   // 5+ player paired-player rule: identify Player 1 (the dice-roller) and
   // Player 2 (third seat to P1's left) for the current paired turn so we
   // can mark them in the panel. Returns null in 3-4p games and during
   // initial setup (paired turns only kick in after both setup rounds).
-  const inSetup = game.phase === 'setupRound1' || game.phase === 'setupRound2';
+  const inSetup = isSetupPhase(game.phase);
   const paired = !inSetup && usesPairedRules(game)
     ? {
         p1: game.playerOrder[game.turnHolderIndex ?? game.currentPlayerIndex]!,
@@ -77,7 +76,8 @@ export function OpponentPanel() {
     <section className="opps">
       {opponents.map((p) => {
         const visibleVp = calculateVictoryPoints(game, p.id, false);
-        const cards = p.devCards.unplayed.length + p.devCards.boughtThisTurn.length;
+        const cards =
+          p.devCards.unplayed.length + p.devCards.boughtThisTurn.length + tbHiddenCardCount(game, p.id);
         const isActing = p.id === actingId;
         const isPartner = !!partnerId && p.id === partnerId;
         const uuid = uuidForPlayer(p.id);
@@ -125,69 +125,93 @@ export function OpponentPanel() {
             </div>
             <div className="opp-stats">
               <span title="Resource cards">🂠 {totalResources(p.resources)}</span>
-              <span title="Dev cards (face down)">🂡 {cards}</span>
-              <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
-              <span title="Longest contiguous road">
-                📏 {calculateLongestRoad(game, p.id)}
-              </span>
-              {p.hasLongestRoad && <span title="Longest Road bonus">★ Road</span>}
+              {!hasCK && !hasEP && <span title="Dev cards (face down)">🂡 {cards}</span>}
+              {!game.noLargestArmy && !hasCK && (
+                <span title="Knights played">⚔️ {p.devCards.playedKnights}</span>
+              )}
+              {!game.noLongestRoad && (
+                <span
+                  title={
+                    hasSeafarers
+                      ? 'Longest route — roads and ships, joined at your own buildings'
+                      : 'Longest contiguous road'
+                  }
+                >
+                  📏 {calculateRouteLength(game, p.id)}
+                </span>
+              )}
+              {p.hasLongestRoad && (
+                <span title={hasSeafarers || hasCK ? 'Longest Route bonus' : 'Longest Road bonus'}>
+                  ★ {hasSeafarers || hasCK ? 'Route' : 'Road'}
+                </span>
+              )}
               {p.hasLargestArmy && <span title="Largest Army bonus">★ Army</span>}
               {(() => {
-                const chipVp = calculateIslandChipVp(game, p.id);
+                const chipVp = calculateIslandBonusVp(game, p.id);
                 return chipVp > 0 ? (
-                  <span title={`Outer-island settlement bonuses (+${chipVp} VP)`}>
+                  <span title={`Island settlement bonuses (+${chipVp} VP)`}>
                     🏝 +{chipVp}
                   </span>
                 ) : null;
               })()}
-              {p.cloth && p.cloth > 0 && (
-                <span title={`Cloth tokens — ${p.cloth} cloth = ${Math.floor(p.cloth / 2)} VP`}>
+              {(p.cloth ?? 0) > 0 && (
+                <span title={`Cloth tokens — ${p.cloth} cloth = ${Math.floor((p.cloth ?? 0) / 2)} VP`}>
                   🧵 {p.cloth}
                 </span>
               )}
-              {hasCK && p.commodities && totalCommodities(p.commodities) > 0 && (
-                <span title="Commodity cards (paper / cloth / coin)">
-                  📜 {totalCommodities(p.commodities)}
-                </span>
+              {(p.tribeVp ?? 0) > 0 && (
+                <span title={`Tribe VP tokens (+${p.tribeVp} VP)`}>★ {p.tribeVp}</span>
               )}
-              {hasCK && (p.cityWalls ?? 0) > 0 && (
-                <span title={`City walls (+${(p.cityWalls ?? 0) * 2} 7-roll hand limit)`}>
-                  🧱 {p.cityWalls}
-                </span>
+              {(p.warships?.length ?? 0) > 0 && (
+                <span title="Warships (strength against the pirates)">⚔⛵ {p.warships!.length}</span>
               )}
-              {(p.gold ?? 0) > 0 && (
-                <span title={`Gold — ${p.gold} coins`}>🪙 {p.gold}</span>
+              {game.pirateIslands && (() => {
+                const f = game.pirateIslands.fortresses.find((x) => x.playerId === p.id);
+                return f ? (
+                  <span title={f.lairs > 0 ? `Pirate fortress: ${f.lairs} lair token(s) left` : 'Fortress recaptured'}>
+                    🏴‍☠️ {f.lairs > 0 ? f.lairs : '✓'}
+                  </span>
+                ) : null;
+              })()}
+              {(game.coinsInPlay || (p.gold ?? 0) > 0) && (
+                <span className="opp-icon" title={`Gold: ${p.gold ?? 0} (coins are public)`}>
+                  <CoinIcon size={14} /> {p.gold ?? 0}
+                </span>
               )}
               {game.wealthTiles?.wealthiest === p.id && (
-                <span title="Wealthiest Catanian (+1 VP)">👑</span>
+                <span className="opp-icon" title="Wealthiest Catanian: the most gold (+1 VP)">
+                  <MoneyBagIcon size={15} /> +1
+                </span>
               )}
               {game.wealthTiles?.poor.includes(p.id) && (
-                <span title="Poor Catanian (-2 VP)">👜</span>
+                <span className="opp-icon" title="Poor Catanian: tied for the least gold (-2 VP)">
+                  <MoneyBagIcon size={15} poor /> −2
+                </span>
               )}
               {game.strongestPorts?.holder === p.id && (
                 <span title="Strongest Ports (+2 VP)">⚓</span>
               )}
               {(p.fishTokens?.length ?? 0) > 0 && (
                 <span
-                  title={`Fish tokens — ${p.fishTokens!.length} held`}
+                  className="opp-icon"
+                  title={`Fish tokens: ${p.fishTokens!.length} held (values are secret)`}
                 >
-                  🐟 {p.fishTokens!.length}
+                  <FishTokenIcon size={14} fish={1} /> {p.fishTokens!.length}
                 </span>
               )}
               {game.oldBootHolder === p.id && (
-                <span title="Old boot — needs +1 VP to win">👢</span>
-              )}
-              {(p.defenderKnights?.length ?? 0) > 0 && (
-                <span title={`Defender knights — ${p.defenderKnights!.length}`}>
-                  🛡 {p.defenderKnights!.length}
+                <span className="opp-icon" title="Old boot: needs 1 more VP to win">
+                  <OldBootIcon size={14} />
                 </span>
               )}
-              {(game.castles?.length ?? 0) > 0 && sumDefenderVp(game, p.id) > 0 && (
-                <span title={`Castle-defense VP earned — +${sumDefenderVp(game, p.id)}`}>
-                  🪖 +{sumDefenderVp(game, p.id)}
-                </span>
-              )}
+              <BarbarianAttackBadges game={game} playerId={p.id} />
+              <TradersBarbariansBadges game={game} playerId={p.id} />
+              <EpOpponentStats game={game} player={p} />
             </div>
+            {hasCK && <CKOpponentStats game={game} player={p} />}
+            {hasEP ? (
+              <EpOpponentPieces game={game} player={p} />
+            ) : (
             <div className="opp-pieces" title="Pieces remaining (built / cap)">
               <span title={`Settlements: ${p.settlements.length}/${MAX_SETTLEMENTS}`}>
                 🏠 {MAX_SETTLEMENTS - p.settlements.length}
@@ -204,6 +228,7 @@ export function OpponentPanel() {
                 </span>
               )}
             </div>
+            )}
           </div>
         );
       })}

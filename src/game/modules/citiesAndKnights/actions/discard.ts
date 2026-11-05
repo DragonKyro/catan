@@ -2,20 +2,15 @@ import type { GameState, Action, DiscardAction, DiscardCKAction } from '../../..
 import { RESOURCES, COMMODITIES } from '../../../types';
 import { updatePlayer } from '../../../helpers';
 import { addResources, subtractResources } from '../../../resources';
-import {
-  addCommodities,
-  subtractCommodities,
-} from '../../../commodities';
-import { robberOrPirateChoicePhase } from '../../seafarers/routing';
+import { addCommodities, subtractCommodities } from '../../../commodities';
+import { resumeFlow } from '../flow';
 
-// Cities & Knights discard. Two action shapes accepted:
-//   - `discard` (base): legacy 5-resource payload. Allowed when the player
-//     has no commodities to give up.
-//   - `discardCK`: combined resources + commodities payload. The C&K UI
-//     dispatches this when commodities are involved.
-//
-// The threshold is `7 + 2 * cityWalls` (max 13 with 3 walls). Hand size
-// counts resources AND commodities.
+// Cities & Knights discard: a 7 (p.7) or Sabotage (p.16). Two action shapes:
+//   - `discard` (base): resources only — fine when no commodity goes.
+//   - `discardCK`: resources + commodities.
+// The amount owed was fixed when the discard started (half the hand,
+// resources + commodities, rounded down; a 7 only hits hands over
+// 7 + 2 per city wall). Discards go back to the supply.
 export function handleDiscardCK(state: GameState, action: Action): GameState {
   if (state.phase !== 'discard') {
     throw new Error(`Cannot discard in phase ${state.phase}`);
@@ -23,7 +18,7 @@ export function handleDiscardCK(state: GameState, action: Action): GameState {
   if (!state.discardState) throw new Error('No discard in progress');
 
   let resources: DiscardAction['resources'];
-  let commodities: Partial<Record<'paper' | 'cloth' | 'coin', number>>;
+  let commodities: DiscardCKAction['commodities'];
   if (action.type === 'discard') {
     resources = (action as DiscardAction).resources;
     commodities = {};
@@ -38,8 +33,16 @@ export function handleDiscardCK(state: GameState, action: Action): GameState {
   if (required === undefined) throw new Error('You do not need to discard');
 
   let total = 0;
-  for (const r of RESOURCES) total += resources[r] ?? 0;
-  for (const c of COMMODITIES) total += commodities[c] ?? 0;
+  for (const r of RESOURCES) {
+    const n = resources[r] ?? 0;
+    if (!Number.isInteger(n) || n < 0) throw new Error('Invalid discard amount');
+    total += n;
+  }
+  for (const c of COMMODITIES) {
+    const n = commodities[c] ?? 0;
+    if (!Number.isInteger(n) || n < 0) throw new Error('Invalid discard amount');
+    total += n;
+  }
   if (total !== required) {
     throw new Error(`Must discard exactly ${required}, got ${total}`);
   }
@@ -62,10 +65,7 @@ export function handleDiscardCK(state: GameState, action: Action): GameState {
   let next = updatePlayer(state, action.playerId, (p) => ({
     ...p,
     resources: subtractResources(p.resources, resources),
-    commodities: subtractCommodities(
-      p.commodities ?? { paper: 0, cloth: 0, coin: 0 },
-      commodities,
-    ),
+    commodities: subtractCommodities(p.commodities ?? { paper: 0, cloth: 0, coin: 0 }, commodities),
   }));
   next = {
     ...next,
@@ -78,22 +78,8 @@ export function handleDiscardCK(state: GameState, action: Action): GameState {
 
   const newRequired = { ...state.discardState.required };
   delete newRequired[action.playerId];
-
-  if (Object.keys(newRequired).length === 0) {
-    // All discards in; either advance to robber (if active + a seven was
-    // rolled — pendingRobberMove will already be set), or back to main.
-    if (state.pendingRobberMove) {
-      return {
-        ...next,
-        phase: robberOrPirateChoicePhase(next),
-        discardState: undefined,
-      };
-    }
-    return {
-      ...next,
-      phase: 'main',
-      discardState: undefined,
-    };
+  if (Object.keys(newRequired).length > 0) {
+    return { ...next, discardState: { required: newRequired } };
   }
-  return { ...next, discardState: { required: newRequired } };
+  return resumeFlow({ ...next, discardState: undefined });
 }

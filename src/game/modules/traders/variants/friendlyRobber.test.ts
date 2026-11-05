@@ -1,88 +1,150 @@
 import { describe, it, expect } from 'vitest';
 import { createGame } from '../../../createGame';
 import { runSetupPhase, giveResources } from '../../../__testHelpers';
-import { applyAction } from '../../../engine';
-import type { GameState } from '../../../types';
+import { applyAction, robberHexAllowed, robberStealCandidates } from '../../../engine';
+import { calculateVictoryPoints } from '../../../scoring/points';
+import { chooseRobberMove } from '@/ai/robber';
+import type { GameState, HexId, PlayerId } from '../../../types';
+import { friendlyRobberTargets } from './friendlyRobber';
 
-function startWithFriendlyRobber(): GameState {
-  return runSetupPhase(
+// A base game (no T&B expansion: the variant works with any rule set) in
+// the robber step, p0 to move.
+function robberStep(): GameState {
+  const s = runSetupPhase(
     createGame({
       playerNames: ['A', 'B', 'C'],
       seed: 7,
-      settings: {
-        expansions: ['traders'],
-        tradersScenarioId: 'riversOfCatan',
-        tradersVariants: { friendlyRobber: true },
-      },
+      settings: { tradersVariants: { friendlyRobber: true } },
       randomizeTurnOrder: false,
     }),
   );
+  return {
+    ...applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 5] }),
+    phase: 'moveRobber',
+    pendingRobberMove: { reason: 'sevenRoll', returnTo: 'main' },
+  };
+}
+
+function owners(s: GameState, hex: HexId): PlayerId[] {
+  const corners = new Set(s.board.hexes[hex]!.corners);
+  return s.players
+    .filter((p) => [...p.settlements, ...p.cities].some((v) => corners.has(v)))
+    .map((p) => p.id);
+}
+
+// Upgrade p1's first settlement to a city: 3 VP, no longer protected.
+function p1AtThreeVp(s: GameState): GameState {
+  const v = s.players[1]!.settlements[0]!;
+  return {
+    ...s,
+    players: s.players.map((p) =>
+      p.id === 'p1'
+        ? { ...p, settlements: p.settlements.filter((x) => x !== v), cities: [v] }
+        : p,
+    ),
+  };
 }
 
 describe('Friendly Robber variant', () => {
-  it('blocks targeting a hex whose only neighbours are at 2 VP', () => {
-    let s = startWithFriendlyRobber();
-    // Force a 7 to enter robber phase. p0 rolls; nobody has > 7 cards yet.
-    s = applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 4] });
-    s = giveResources(s, 'p0', { sheep: 1, wheat: 1, ore: 1 });
-    // Roll a 7 by injecting through a state mutation isn't supported; the
-    // variant only fires in 'moveRobber' phase. Skip the real flow and
-    // exercise the validator path by hand: install a moveRobber phase.
-    const next: GameState = {
-      ...s,
-      phase: 'moveRobber',
-      pendingRobberMove: { reason: 'sevenRoll', returnTo: 'main' },
-    };
-    // Pick a hex adjacent to p1's first settlement (so the only owner has
-    // 2 starting VPs).
-    const p1settle = s.players[1]!.settlements[0]!;
-    const adjacentHex = s.board.vertices[p1settle]!.hexes.find(
-      (h) => s.board.hexes[h]!.terrain !== 'desert',
-    );
-    if (!adjacentHex) return;
-    expect(() =>
-      applyAction(next, {
-        type: 'moveRobber',
-        playerId: 'p0',
-        hex: adjacentHex,
-        stealFrom: null,
-      }),
-    ).toThrow(/Friendly Robber/);
+  it('is kept on a base game and needs no T&B expansion', () => {
+    const s = robberStep();
+    expect(s.settings.expansions).toEqual([]);
+    expect(s.settings.tradersVariants?.friendlyRobber).toBe(true);
   });
 
-  it('allows targeting a desert even at low VPs', () => {
-    let s = startWithFriendlyRobber();
-    s = applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 4] });
-    const next: GameState = {
-      ...s,
-      phase: 'moveRobber',
-      pendingRobberMove: { reason: 'sevenRoll', returnTo: 'main' },
-    };
-    // Rivers of Catan has no desert; just confirm validator returns null
-    // for a hex with no adjacent buildings (an empty-coastal hex).
-    const empty = Object.values(s.board.hexes).find(
+  it('forbids every hex with a building of a player who has only 2 VPs', () => {
+    const s = robberStep();
+    for (const h of s.board.hexIds) {
+      if (owners(s, h).length === 0) continue;
+      expect(robberHexAllowed(s, h, 'p0')).toBe(false);
+      expect(() =>
+        applyAction(s, { type: 'moveRobber', playerId: 'p0', hex: h, stealFrom: null }),
+      ).toThrow(/Friendly Robber|may not move/);
+    }
+    // Empty land hexes are fine.
+    const empty = s.board.hexIds.find(
       (h) =>
-        h.terrain !== 'sea' &&
-        h.terrain !== 'swamp' &&
-        h.id !== s.board.robberHex &&
-        s.board.vertexIds.every((vid) => {
-          const v = s.board.vertices[vid]!;
-          if (!v.hexes.includes(h.id)) return true;
-          return !s.players.some(
-            (p) => p.settlements.includes(vid) || p.cities.includes(vid),
-          );
-        }),
-    );
-    if (!empty) return;
-    // Should not throw (no adjacent buildings, nothing for Friendly Robber
-    // to forbid).
+        s.board.hexes[h]!.terrain !== 'sea' &&
+        h !== s.board.robberHex &&
+        owners(s, h).length === 0,
+    )!;
+    expect(robberHexAllowed(s, empty, 'p0')).toBe(true);
+  });
+
+  it('a 2-VP building forbids the hex even when a 3-VP player is there too', () => {
+    const s = p1AtThreeVp(robberStep());
+    expect(calculateVictoryPoints(s, 'p1', false)).toBe(3);
+    const mixed = s.board.hexIds.find((h) => {
+      const o = owners(s, h);
+      return o.includes('p1') && o.some((id) => id !== 'p1');
+    });
+    if (mixed) expect(robberHexAllowed(s, mixed, 'p0')).toBe(false);
+    const onlyP1 = s.board.hexIds.find((h) => {
+      const o = owners(s, h);
+      return o.length === 1 && o[0] === 'p1' && h !== s.board.robberHex;
+    })!;
+    expect(robberHexAllowed(s, onlyP1, 'p0')).toBe(true);
+    const t = giveResources(s, 'p1', { wood: 1 });
+    expect(robberStealCandidates(t, 'p0', onlyP1)).toEqual(['p1']);
+  });
+
+  it('with no valid hex the robber goes to the desert and robs only a 3+ VP neighbour', () => {
+    let s = p1AtThreeVp(robberStep());
+    const desert = s.board.hexIds.find((h) => s.board.hexes[h]!.terrain === 'desert')!;
+    const [c0, , , c3] = s.board.hexes[desert]!.corners;
+    // p1 keeps its city (3 VP with a settlement on the desert); p2 has just
+    // one settlement, on the desert (1 VP).
+    s = {
+      ...s,
+      players: s.players.map((p) =>
+        p.id === 'p1'
+          ? { ...p, settlements: [c0!] }
+          : p.id === 'p2'
+            ? { ...p, settlements: [c3!], cities: [] }
+            : p,
+      ),
+    };
+    s = {
+      ...s,
+      players: s.players.map((p) => ({
+        ...p,
+        resources: { wood: p.id === 'p1' ? 1 : 0, brick: 0, sheep: 0, wheat: 0, ore: p.id === 'p2' ? 1 : 0 },
+      })),
+    };
+    // Every other land hex is off the table; the robber stands elsewhere.
+    const other = s.board.hexIds.find((h) => h !== desert && s.board.hexes[h]!.terrain !== 'sea')!;
+    s = {
+      ...s,
+      board: { ...s.board, robberHex: other },
+      robberBlockedHexes: s.board.hexIds.filter((h) => h !== desert),
+    };
+    expect(calculateVictoryPoints(s, 'p2', false)).toBeLessThanOrEqual(2);
+    expect(friendlyRobberTargets(s)).toEqual([desert]);
+    expect(robberStealCandidates(s, 'p0', desert)).toEqual(['p1']);
     expect(() =>
-      applyAction(next, {
-        type: 'moveRobber',
-        playerId: 'p0',
-        hex: empty.id,
-        stealFrom: null,
-      }),
-    ).not.toThrow();
+      applyAction(s, { type: 'moveRobber', playerId: 'p0', hex: desert, stealFrom: 'p2' }),
+    ).toThrow(/steal/);
+    const after = applyAction(s, { type: 'moveRobber', playerId: 'p0', hex: desert, stealFrom: 'p1' });
+    expect(after.board.robberHex).toBe(desert);
+    expect(after.players[1]!.resources.wood).toBe(0);
+  });
+
+  it('the AI only picks legal hexes and victims', () => {
+    for (const st of [robberStep(), p1AtThreeVp(robberStep())]) {
+      const s = giveResources(st, 'p1', { wood: 2 });
+      const choice = chooseRobberMove(s, 'p0');
+      expect(friendlyRobberTargets(s)).toContain(choice.hex);
+      if (choice.stealFrom) {
+        expect(calculateVictoryPoints(s, choice.stealFrom, false)).toBeGreaterThan(2);
+      }
+      expect(() =>
+        applyAction(s, {
+          type: 'moveRobber',
+          playerId: 'p0',
+          hex: choice.hex,
+          stealFrom: choice.stealFrom,
+        }),
+      ).not.toThrow();
+    }
   });
 });

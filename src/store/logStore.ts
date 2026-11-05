@@ -8,7 +8,14 @@ import type {
 } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
-import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { calculateRouteLength } from '@/game/engine';
+import { seafarersLogLines } from './seafarersLog';
+import { barbarianAttackLogLines } from './barbarianAttackLog';
+import { tradersLogLines } from './tradersLog';
+import { tradersBarbariansLogLines } from './tradersBarbariansLog';
+import { explorersPiratesLogLines } from './explorersPiratesLog';
+import { hexRollsOn } from '@/game/board/hexNumbers';
+import { citiesKnightsLogLines } from './citiesKnightsLog';
 import { pipsByResource } from '@/ai/value';
 
 // =======================================================================
@@ -104,24 +111,6 @@ export type LogEntry =
       // that dropped to a settlement.
       effect: 'destroyed' | 'downgraded';
     }
-  // Traders & Barbarians / Barbarian Attack events. Kind names are
-  // prefixed `castle*` to avoid collision with the C&K barbarian-ship
-  // log kinds (which use `barbarianAdvance` for a different shape).
-  | { id: number; kind: 'castleAdvance'; castleIndex: number; from: number; to: number }
-  | {
-      id: number;
-      kind: 'castleDefended';
-      castleIndex: number;
-      winners: PlayerId[];
-    }
-  | {
-      id: number;
-      kind: 'castleOverrun';
-      castleIndex: number;
-      // Null when there's no defender and no building adjacent — rare edge.
-      victim: PlayerId | null;
-      effect: 'destroyed' | 'downgraded' | null;
-    }
   // Cities & Knights events.
   | { id: number; kind: 'cityWallBuilt'; player: PlayerId }
   | { id: number; kind: 'recruitKnight'; player: PlayerId }
@@ -172,6 +161,17 @@ export type LogEntry =
       pillaged: PlayerId[];
     }
   | { id: number; kind: 'robberActivated' }
+  // Seafarers events (ships, pirate, gold picks, scenario mechanics). See
+  // seafarersLog.ts.
+  | {
+      id: number;
+      kind: 'seafarers';
+      player: PlayerId | null;
+      text: string;
+      gained?: Partial<ResourceBank>;
+    }
+  // Cities & Knights lines (src/store/citiesKnightsLog.ts).
+  | { id: number; kind: 'ck'; player: PlayerId | null; text: string }
   | {
       id: number;
       kind: 'turnBegins';
@@ -330,8 +330,10 @@ interface LogStore {
   // action's gap). Initialised to startTime on reset.
   lastActionT: number;
 
-  reset: (initial?: GameState) => void;
-  record: (before: GameState, action: Action, after: GameState) => void;
+  /** `startTime`: when the game began (default now; an online rejoin passes the room's start time). */
+  reset: (initial?: GameState, startTime?: number) => void;
+  /** `at`: when the action was made (default now; online, the time it was made on its device, so replays keep real timings). */
+  record: (before: GameState, action: Action, after: GameState, at?: number) => void;
   // Capture the current data fields (excluding methods + startTime) so the
   // gameStore can pair this with a GameState snapshot for undo.
   snapshot: () => LogStoreSnapshot;
@@ -406,7 +408,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
   playerTimeTotals: {},
   lastActionT: Date.now(),
 
-  reset: (initial) => {
+  reset: (initial, startTime) => {
     const gained: Record<PlayerId, number> = {};
     const gainedByResource: Record<PlayerId, Record<Resource, number>> = {};
     const tradeStats: LogStore['tradeStatsTotals'] = {};
@@ -427,18 +429,24 @@ export const useLogStore = create<LogStore>((set, get) => ({
         playerTime[p.id] = 0;
       }
     }
-    const now = Date.now();
+    const now = startTime ?? Date.now();
+    // A game created at its first roll (the beginner boards print everyone's
+    // starting pieces, so there are no setup rounds whose end opens turn 1).
+    const startsInPlay = initial?.phase === 'rollOrPlayKnight' && initial.lastRoll === null;
+    const turnOne: LogEntry[] = startsInPlay
+      ? [{ id: 1, kind: 'turnBegins', player: initial.playerOrder[0]!, turnNumber: 1 }]
+      : [];
     set({
-      entries: [],
+      entries: turnOne,
       timeline: [],
       gainedTotals: gained,
       gainedByResourceTotals: gainedByResource,
       stats: emptyStats(),
       startTime: now,
-      nextId: 1,
+      nextId: turnOne.length + 1,
       initialState: initial ?? null,
       actions: [],
-      turnNumber: 0,
+      turnNumber: turnOne.length,
       tradeStatsTotals: tradeStats,
       discardTotals: discards,
       stealBalanceTotals: steals,
@@ -490,7 +498,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     });
   },
 
-  record: (before, action, after) => {
+  record: (before, action, after, at) => {
     const append: LogEntry[] = [];
     const stamp = (): number => {
       const id = get().nextId + append.length;
@@ -500,13 +508,17 @@ export const useLogStore = create<LogStore>((set, get) => ({
     switch (action.type) {
       case 'rollDice': {
         // Log the roll itself only — per-player resource gains are derivable
-        // from the board, so the log stays uncluttered.
-        append.push({
-          id: stamp(),
-          kind: 'roll',
-          player: action.playerId,
-          dice: action.dice,
-        });
+        // from the board, so the log stays uncluttered. (With Catan Event
+        // Cards there are no dice: tradersLog names the flipped card.)
+        if (!after.eventCards) {
+          append.push({
+            id: stamp(),
+            kind: 'roll',
+            player: action.playerId,
+            // Alchemy (C&K) replaces the payload's dice with the chosen ones.
+            dice: after.lastRoll?.dice ?? action.dice,
+          });
+        }
         // Volcano scenario: detect eruption by comparing settlement / city
         // counts before/after. Eruption fires inline inside the dice handler,
         // so any settlement/city that vanished from a volcano-adjacent vertex
@@ -551,44 +563,6 @@ export const useLogStore = create<LogStore>((set, get) => ({
           }
         }
 
-        // Cities & Knights: derive barbarian-ship advance and any attack
-        // resolution from before/after barbarian state. Attack-counter
-        // changes are unambiguous; ship-position changes only matter when
-        // there wasn't a wrap-to-0 (which means an attack — handled in the
-        // attack branch below).
-        if (before.barbarian && after.barbarian) {
-          const attacksDelta =
-            after.barbarian.attacksResolved - before.barbarian.attacksResolved;
-          if (attacksDelta > 0) {
-            // An attack just resolved. Detect pillaged cities by diffing each
-            // player's city count.
-            const pillaged: PlayerId[] = [];
-            for (const beforeP of before.players) {
-              const afterP = after.players.find((p) => p.id === beforeP.id);
-              if (!afterP) continue;
-              if (afterP.cities.length < beforeP.cities.length) {
-                pillaged.push(beforeP.id);
-              }
-            }
-            append.push({
-              id: stamp(),
-              kind: 'barbarianAttack',
-              outcome: pillaged.length > 0 ? 'lost' : 'won',
-              pillaged,
-            });
-            if (before.robberActive === false && after.robberActive === true) {
-              append.push({ id: stamp(), kind: 'robberActivated' });
-            }
-          } else if (after.barbarian.position > before.barbarian.position) {
-            // Pure advance — no attack this roll.
-            append.push({
-              id: stamp(),
-              kind: 'barbarianAdvance',
-              position: after.barbarian.position,
-              total: 7,
-            });
-          }
-        }
         break;
       }
       case 'buildCityWall': {
@@ -607,10 +581,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
         append.push({ id: stamp(), kind: 'activateKnight', player: action.playerId });
         break;
       }
-      case 'promoteKnight': {
-        append.push({ id: stamp(), kind: 'promoteKnight', player: action.playerId });
+      case 'promoteKnight':
+        // Logged with the new strength by citiesKnightsLogLines.
         break;
-      }
       case 'moveKnight': {
         append.push({ id: stamp(), kind: 'moveKnight', player: action.playerId });
         break;
@@ -768,80 +741,6 @@ export const useLogStore = create<LogStore>((set, get) => ({
         break;
       case 'endTurn':
         // Turn boundaries aren't logged — too noisy.
-        // Barbarian Attack: castle state changes ARE logged from here.
-        if (before.castles && after.castles) {
-          for (let i = 0; i < before.castles.length; i++) {
-            const b = before.castles[i]!;
-            const a = after.castles[i]!;
-            // Combat resolved this turn (barbarian reset from arrival).
-            if (
-              b.barbarianPosition === b.barbarianPath.length - 1 &&
-              a.barbarianPosition === 0
-            ) {
-              // Win path: defenderVp grew for at least one player.
-              const winners: PlayerId[] = [];
-              for (const pid of Object.keys(a.defenderVp)) {
-                const beforeVp = b.defenderVp[pid] ?? 0;
-                const afterVp = a.defenderVp[pid] ?? 0;
-                if (afterVp > beforeVp) winners.push(pid);
-              }
-              if (winners.length > 0) {
-                append.push({
-                  id: stamp(),
-                  kind: 'castleDefended',
-                  castleIndex: i,
-                  winners,
-                });
-              } else {
-                // Loss path — find the victim by diffing buildings on castle corners.
-                const hex = after.board.hexes[a.hexId];
-                const corners = new Set(hex?.corners ?? []);
-                let victim: PlayerId | null = null;
-                let effect: 'destroyed' | 'downgraded' | null = null;
-                for (const bp of before.players) {
-                  const ap = after.players.find((p) => p.id === bp.id);
-                  if (!ap) continue;
-                  for (const v of bp.settlements) {
-                    if (!corners.has(v)) continue;
-                    if (
-                      !ap.settlements.includes(v) &&
-                      !ap.cities.includes(v)
-                    ) {
-                      victim = bp.id;
-                      effect = 'destroyed';
-                    }
-                  }
-                  for (const v of bp.cities) {
-                    if (!corners.has(v)) continue;
-                    if (
-                      !ap.cities.includes(v) &&
-                      ap.settlements.includes(v)
-                    ) {
-                      victim = bp.id;
-                      effect = 'downgraded';
-                    }
-                  }
-                }
-                append.push({
-                  id: stamp(),
-                  kind: 'castleOverrun',
-                  castleIndex: i,
-                  victim,
-                  effect,
-                });
-              }
-            } else if (a.barbarianPosition > b.barbarianPosition) {
-              // Plain advance.
-              append.push({
-                id: stamp(),
-                kind: 'castleAdvance',
-                castleIndex: i,
-                from: b.barbarianPosition,
-                to: a.barbarianPosition,
-              });
-            }
-          }
-        }
         break;
       case 'rejectTrade':
         // Rejections aren't logged.
@@ -852,6 +751,35 @@ export const useLogStore = create<LogStore>((set, get) => ({
       default:
         // Setup placements etc. — no log entry.
         break;
+    }
+
+    for (const line of seafarersLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    // T&B Barbarian Attack lines use the same plain "player + text" entry.
+    for (const line of barbarianAttackLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    // T&B scenario: wagons, barbarians on edges, re-rolls.
+    for (const line of tradersBarbariansLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    // Explorers & Pirates: exploration, ships, missions, the pirate ship.
+    for (const line of explorersPiratesLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    // T&B Merchant Trains voting round + Catan Event Cards (same plain-text
+    // entry shape as the Seafarers lines).
+    for (const line of tradersLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'seafarers', ...line });
+    }
+    // The production number this action ran, if any: a dice roll, or with
+    // Catan Event Cards the flipped card's number (possibly after the
+    // event's choices, on a later action).
+    const rolled =
+      after.lastRoll && after.lastRoll !== before.lastRoll ? after.lastRoll.total : null;
+    for (const line of citiesKnightsLogLines(before, action, after)) {
+      append.push({ id: stamp(), kind: 'ck', ...line });
     }
 
     // Turn detection: one "turn" = one full revolution of the table.
@@ -868,7 +796,15 @@ export const useLogStore = create<LogStore>((set, get) => ({
     ) {
       const turnHolderIdx = after.turnHolderIndex ?? after.currentPlayerIndex;
       const isRevolutionStart =
-        turnHolderIdx === 0 && (get().turnNumber === 0 || before.phase === 'main' || before.phase === 'setupRound2');
+        turnHolderIdx === 0 && (get().turnNumber === 0 ||
+          before.phase === 'main' ||
+          // Turns that end in their own phase: Explorers & Pirates'
+          // Movement phase, the T&B wagon / knight moves.
+          before.phase === 'epMovement' ||
+          before.phase === 'wagonMoves' ||
+          before.phase === 'barbarianKnightMoves' ||
+          before.phase === 'setupRound2' ||
+          before.phase === 'setupRound3');
       if (isRevolutionStart) {
         newTurnNumber = get().turnNumber + 1;
         append.push({
@@ -893,8 +829,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       rollCounts: { ...get().stats.rollCounts },
       resourcesInCirculation: { ...get().stats.resourcesInCirculation },
     };
-    if (action.type === 'rollDice') {
-      const total = action.dice[0] + action.dice[1];
+    if (rolled !== null) {
+      const total = rolled;
       newStats.rollCounts[total] = (newStats.rollCounts[total] ?? 0) + 1;
     }
     for (const r of RESOURCES) {
@@ -960,7 +896,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     // Credit the gap since the previous action to the actor of THIS one.
     // First action's gap is measured from game-start, so it'll be small
     // unless a human took a while to place the very first settlement.
-    const now = Date.now();
+    const now = at ?? Date.now();
     const gap = Math.max(0, now - get().lastActionT);
     // Identify the actor — every action variant has a `playerId`. Cap the
     // gap at 5 minutes to keep an idle-window from skewing totals.
@@ -983,8 +919,8 @@ export const useLogStore = create<LogStore>((set, get) => ({
       newSteals[action.playerId] = (newSteals[action.playerId] ?? 0) + 1;
       newSteals[action.stealFrom] = (newSteals[action.stealFrom] ?? 0) - 1;
     }
-    if (action.type === 'rollDice') {
-      const total = action.dice[0] + action.dice[1];
+    if (rolled !== null) {
+      const total = rolled;
       if (total !== 7) {
         // For each producing hex matching the rolled token whose robber
         // is currently sitting on it, tally one "blocked" event per
@@ -993,7 +929,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         const robberHex = before.board.robberHex;
         for (const hexId of before.board.hexIds) {
           const hex = before.board.hexes[hexId]!;
-          if (hex.numberToken !== total) continue;
+          if (!hexRollsOn(hex, total)) continue;
           if (hexId !== robberHex) continue;
           // Identify each player with a settle/city on this hex.
           const blockedHere = new Set<PlayerId>();
@@ -1058,7 +994,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         gainedTotal: newGained[p.id] ?? 0,
         gainedByResource: { ...(newGainedByResource[p.id] ?? emptyResourceBank()) },
         knightsPlayed: p.devCards.playedKnights,
-        longestRoadLength: calculateLongestRoad(after, p.id),
+        longestRoadLength: calculateRouteLength(after, p.id),
         tradesCount: ts.tradesCount,
         tradesGiven: ts.tradesGiven,
         tradesReceived: ts.tradesReceived,
@@ -1074,7 +1010,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
     const newStep = get().entries.length + append.length;
     const snapshot: TimelineSnapshot = {
       step: newStep,
-      t: Date.now() - get().startTime,
+      t: now - get().startTime,
       turnNumber: newTurnNumber ?? get().turnNumber,
       perPlayer,
     };

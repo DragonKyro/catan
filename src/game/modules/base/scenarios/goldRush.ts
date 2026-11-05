@@ -1,4 +1,5 @@
 import type { ScenarioLayout } from '../../../board/scenarioTypes';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../../citiesAndKnights/constants';
 import type { BaseScenario } from './types';
 import { seaPositionsInDisk } from './helpers';
 import {
@@ -63,13 +64,15 @@ const LAYOUT_5_6: ScenarioLayout = {
       ore: 5,
       desert: 2,
     },
+    // The CATAN 5-6 number discs: two 2s, two 12s, three of the rest.
     tokens: [
-      2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6,
-      8, 8, 8, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12,
+      2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6,
+      8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
     ],
     portTypes: [
+      // The 5-6 harbor set: 5 × 3:1, wool 2:1 twice, one of each other.
       'generic', 'generic', 'generic', 'generic', 'generic',
-      'wood', 'brick', 'sheep', 'wheat', 'ore', 'wheat',
+      'wood', 'brick', 'sheep', 'sheep', 'wheat', 'ore',
     ],
   },
 };
@@ -83,4 +86,6 @@ export const goldRush: BaseScenario = {
   maxPlayers: 6,
   layout3p: LAYOUT_3_4,
   layout5_6p: LAYOUT_5_6,
+  // The C&K roll has no gold pick / eruption step.
+  notWithExpansions: [CITIES_AND_KNIGHTS_EXPANSION_ID],
 };

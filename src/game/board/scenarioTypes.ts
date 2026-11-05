@@ -20,12 +20,16 @@ export interface ScenarioHexDef {
   r: number;
   terrain: Terrain;
   token: number | null;
+  // Further numbers the hex produces on (see `Hex.extraNumbers`). Only set
+  // by layouts using `pools.printedNumbers` / `pools.stackedTokens`.
+  extraTokens?: number[];
 }
 
-// Port placement: anchored by a (q, r) land/island hex and a direction 0..5
-// (clockwise from the upper-right edge, pointy-top orientation). The edge
-// chosen is the shared edge between this hex and the neighbour in that
-// direction. The neighbour is expected to be a sea hex.
+// Port placement: anchored by a (q, r) land/island hex and a direction 0..5,
+// the edge between corners `direction` and `direction + 1`. Corners run
+// clockwise from the north-east corner of the pointy-top hex (0 NE, 1 SE,
+// 2 S, 3 SW, 4 NW, 5 N), so directions are 0 E, 1 SE, 2 SW, 3 W, 4 NW,
+// 5 NE. The neighbour across that edge is expected to be sea or frame.
 export interface ScenarioPortDef {
   q: number;
   r: number;
@@ -56,13 +60,30 @@ export interface ScenarioPosition {
   // of `fixedToken` positions on the layout. The 6/8 adjacency check still
   // includes fixed-token hexes.
   fixedToken?: number;
+  // When true, this land position never gets a number disc (it produces
+  // nothing). Seafarers scenarios use it for the tribe / village islands and
+  // Pirate Islands' bare hexes.
+  noToken?: boolean;
+  // Terrain zone. Positions sharing a zone name form an area that the
+  // terrains in `pools.zoneTerrains[zone]` must land in (each at a random
+  // position of the zone); the zone's other positions are filled from the
+  // general pool like any land. Fishing on Catan's inner area (the lake
+  // plus six random hexes) uses it.
+  zone?: string;
+  // This position's tile carries its own printed numbers (overrides
+  // `pools.printedNumbers` for its terrain). Fishing on Catan 5-6 has two
+  // lakes with different numbers (2/3/11/12 and 4/10).
+  printedNumbers?: number[];
 }
 
-// Port anchor without a type — the type is drawn from `ScenarioPools.portTypes`.
+// Port anchor. The type is drawn from `ScenarioPools.portTypes` unless the
+// anchor pins one with `fixedType` (a harbor printed on the frame, e.g. the
+// Traders & Barbarians maps); the pool then covers only the unpinned anchors.
 export interface ScenarioPortAnchor {
   q: number;
   r: number;
   direction: 0 | 1 | 2 | 3 | 4 | 5;
+  fixedType?: PortType;
 }
 
 export interface ScenarioPools {
@@ -76,6 +97,17 @@ export interface ScenarioPools {
   tokens: number[];
   // Port type pool. Length must equal `portAnchors.length`.
   portTypes: PortType[];
+  // Terrains that must land inside a zone (see `ScenarioPosition.zone`),
+  // in addition to `terrainCounts` (which then covers only the rest).
+  zoneTerrains?: Record<string, Partial<Record<Terrain, number>>>;
+  // Terrains whose tile carries its own printed numbers instead of a disc
+  // (Fishing on Catan's lake: 2, 3, 11, 12). A hex of that terrain takes no
+  // pool token; it produces on every listed number.
+  printedNumbers?: Partial<Record<Terrain, number[]>>;
+  // Discs set aside and then stacked on the hex that drew another number,
+  // after the pool is placed (Rivers of Catan: the 2 goes on the 12's hex,
+  // which then produces on both). `tokens` must not include them.
+  stackedTokens?: Array<{ token: number; onto: number }>;
 }
 
 export interface ScenarioTokenConstraints {

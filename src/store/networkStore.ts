@@ -1,61 +1,69 @@
 import { create } from 'zustand';
-import type { Action, AiLevel, GameState, PlayerColor, PlayerId } from '@/game/types';
-import { createGame } from '@/game/createGame';
+import type { AiLevel, GameState, PlayerColor, PlayerId } from '@/game/types';
+import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { DEFAULT_AI_LEVEL } from '@/ai/nn/levels';
 import {
-  bindRoom,
-  relayStatus,
-  type RelayStatus,
-  type RoomBindings,
-  type LobbyState,
-  type LobbySeat,
   type ChatMessage,
   type ConnectionState,
+  type LobbyGame,
+  type LobbySeat,
+  type LobbyState,
   type LocalRole,
+  type Presence,
+  type RoomConnection,
+  type RoomEvents,
+  type RoomTransport,
+  type StartRecord,
+  ServerUnreachableError,
   generateRoomCode,
   getOrCreateUuid,
   getSavedDisplayName,
+  normalizeRoomCode,
   saveDisplayName,
+  setRoomCodeInUrl,
 } from '@/net';
 import {
   registerBroadcastHandler,
+  registerDispatchGuard,
   registerOnlinePredicate,
   useGameStore,
+  type GameSnapshot,
 } from './gameStore';
+import { ActionSync } from './actionSync';
+import {
+  MAX_SEATS,
+  defaultLobbyGame,
+  lobbySettings,
+  lobbyStartProblem,
+  normalizeLobbyGame,
+} from './lobbyGame';
 
 const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink', 'teal', 'gold'];
-const DEFAULT_VP = 10;
-const MAX_SEATS = 8;
-const MIN_SEATS = 3;
 const SYSTEM_NAME = 'System';
-// How long a guest looks for the host before reporting the room as not
-// found. Discovery via the Nostr relays usually takes a few seconds; the rest
-// is headroom for a host whose phone is just coming back from the background.
-export const JOIN_TIMEOUT_MS = 25000;
+/** The build this page runs (rooms record the build that made them). */
+export const APP_BUILD = typeof __APP_BUILD__ === 'string' ? __APP_BUILD__ : 'dev';
 
-/** Why a guest's join gave up, for the error screen (and debugging). */
+/** Why a join gave up, for the error screen. */
 export interface JoinFailure {
   code: string;
-  /** noRelays: this device reached no relay, so it couldn't look at all.
-   *  noHost:   other devices answered on this code, but none is hosting.
-   *  notFound: relays reached, nobody answered. */
-  reason: 'noRelays' | 'noHost' | 'notFound';
-  relays: RelayStatus;
-  peersSeen: number;
-  waitedMs: number;
+  /** notFound: the server has no room with this code. unreachable: this device couldn't reach the server. */
+  reason: 'notFound' | 'unreachable';
+  detail?: string;
 }
 
-const JOIN_FAILURE_TEXT: Record<JoinFailure['reason'], (code: string) => string> = {
-  notFound: (code) =>
-    `No room with code ${code} was found. Check the code, and make sure the host still has the room open `
-    + 'with the screen on (phones pause web pages in the background).',
-  noHost: (code) =>
-    `Found other devices using code ${code}, but none of them is hosting a room. `
-    + 'The host may have left, or the code is wrong.',
-  noRelays: () =>
-    "This device couldn't reach any of the matchmaking relays, so it couldn't look for the room. "
-    + 'Check its internet connection; some Wi-Fi and work networks block them (try mobile data).',
-};
+/** FNV-1a over the state's JSON: devices compare it to know they built the same starting game. */
+export function gameChecksum(state: GameState): string {
+  const json = JSON.stringify(state);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < json.length; i++) {
+    h ^= json.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+const UNREACHABLE_TEXT =
+  "Couldn't reach the game server. Check this device's internet connection, then try again.";
 
 interface NetStore {
   connection: ConnectionState;
@@ -65,53 +73,69 @@ interface NetStore {
   myDisplayName: string;
   roomCode: string | null;
   hostUuid: string | null;
-  /** Set while a guest is looking for a room. */
-  joinStartedAt: number | null;
   joinFailure: JoinFailure | null;
+  /** This device's link to the server; false while it reconnects (moves wait, then go through). */
+  serverConnected: boolean;
   lobby: LobbyState;
-  uuidByPeerId: Record<string, string>;
   onlineUuids: Set<string>;
   chat: ChatMessage[];
 
   setDisplayName: (name: string) => void;
-  createRoom: (name: string) => void;
-  joinRoom: (code: string, name: string) => void;
-  /** Look for the room of the last failed join again. */
+  createRoom: (name: string) => Promise<void>;
+  joinRoom: (code: string, name: string) => Promise<void>;
+  /** Join the room of the last failed join again. */
   retryJoin: () => void;
   leaveRoom: () => void;
-  /** This page's relay connections right now (not reactive; poll it). */
-  relayStatus: () => RelayStatus;
   clearError: () => void;
 
   hostAddAISeat: () => void;
   hostRemoveSeat: (slot: number) => void;
-  hostSetVP: (vp: number) => void;
+  /** null = the scenario's recommended target. */
+  hostSetVP: (vp: number | null) => void;
   hostSetAiLevel: (level: AiLevel) => void;
-  hostStartGame: () => void;
+  hostSetGame: (game: LobbyGame) => void;
+  hostStartGame: () => Promise<void>;
+  /** Recolor a seat: your own, or (host) an AI seat. A seat already wearing the color swaps to the old one. */
+  setSeatColor: (slot: number, color: PlayerColor) => void;
 
   sendChat: (text: string) => void;
   uuidForPlayer: (playerId: PlayerId) => string | null;
   isOnlinePlayer: (playerId: PlayerId) => boolean;
 }
 
-// Internal (non-reactive) — the live Trystero room bindings + a map from
-// player slot index → UUID derived from lobby. Stored outside React state to
-// avoid serializing Trystero callbacks etc.
-let bindings: RoomBindings | null = null;
-let seatToUuid: (string | null)[] = []; // index = playerId 'pN' slot
-let joinTimeoutId: ReturnType<typeof setTimeout> | null = null;
-// Peers that connected while this guest was still looking for the host.
-let peersSeenWhileJoining = 0;
-
-function clearJoinTimeout(): void {
-  if (joinTimeoutId !== null) {
-    clearTimeout(joinTimeoutId);
-    joinTimeoutId = null;
-  }
+// Loaded on first use so the Firebase SDK isn't in the main bundle.
+// (Tests swap the module for src/net/fakeTransport.ts.)
+type LoadedTransport = RoomTransport & { warmUp: () => void };
+let transportPromise: Promise<LoadedTransport> | null = null;
+function loadTransport(): Promise<LoadedTransport> {
+  transportPromise ??= import('@/net/firebaseRoom')
+    .then((m) => m.getTransport())
+    .catch((e: unknown) => {
+      transportPromise = null;
+      throw new ServerUnreachableError(`Could not load the online code (${(e as Error).message}).`);
+    });
+  return transportPromise;
 }
 
+/** Load the online code and sign in ahead of time (call when the online menu opens). */
+export function warmUpNetwork(): void {
+  loadTransport().then((t) => t.warmUp(), () => {});
+}
+
+// Internal (non-reactive) session state.
+let conn: RoomConnection | null = null;
+let session = 0; // bumped on every create / join / leave; stale callbacks compare against it
+let sync: ActionSync<GameSnapshot> | null = null;
+let seatToUuid: (string | null)[] = []; // index = playerId 'pN' slot
+let gameStarted = false;
+let lastPresence: Map<string, string> | null = null; // uuid → name
+
 function emptyLobby(): LobbyState {
-  return { seats: [], victoryPointsToWin: DEFAULT_VP, seed: Math.floor(Math.random() * 0xffffffff) };
+  return { hostUuid: '', seats: [], victoryPointsToWin: null, seed: 0, game: defaultLobbyGame() };
+}
+
+function randomSeed(): number {
+  return Math.floor(Math.random() * 0xffffffff);
 }
 
 function freeColor(seats: LobbySeat[]): PlayerColor {
@@ -121,207 +145,204 @@ function freeColor(seats: LobbySeat[]): PlayerColor {
   return DEFAULT_COLORS[seats.length % DEFAULT_COLORS.length]!;
 }
 
+function messageId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function sysMessage(text: string, myUuid: string): ChatMessage {
-  return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    senderUuid: myUuid,
-    senderName: SYSTEM_NAME,
-    text,
-    timestamp: Date.now(),
-    kind: 'system',
-  };
+  return { id: messageId(), senderUuid: myUuid, senderName: SYSTEM_NAME, text, timestamp: Date.now(), kind: 'system' };
 }
 
 function userMessage(text: string, uuid: string, name: string): ChatMessage {
-  return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    senderUuid: uuid,
-    senderName: name,
-    text,
-    timestamp: Date.now(),
-    kind: 'user',
-  };
+  return { id: messageId(), senderUuid: uuid, senderName: name, text, timestamp: Date.now(), kind: 'user' };
+}
+
+/** Take (or keep) a seat for `uuid` while the lobby is open. */
+function seatEdit(lobby: LobbyState, uuid: string, name: string): LobbyState | null {
+  if (lobby.started) return null;
+  const i = lobby.seats.findIndex((s) => s.uuid === uuid);
+  if (i >= 0) {
+    if (lobby.seats[i]!.name === name) return null;
+    return { ...lobby, seats: lobby.seats.map((s, j) => (j === i ? { ...s, name } : s)) };
+  }
+  if (lobby.seats.length >= MAX_SEATS) return null;
+  return { ...lobby, seats: [...lobby.seats, { uuid, name, isAI: false, color: freeColor(lobby.seats) }] };
+}
+
+function nextAiName(seats: LobbySeat[]): string {
+  for (let n = 1; ; n++) {
+    const name = `AI ${n}`;
+    if (!seats.some((s) => s.name === name)) return name;
+  }
 }
 
 export const useNetworkStore = create<NetStore>((set, get) => {
-  // Register the broadcast hook + online predicate once at module init.
   registerOnlinePredicate(() => {
     const c = get().connection;
     return c === 'lobby' || c === 'in-game';
   });
-  registerBroadcastHandler((action: Action) => {
-    if (!bindings) return;
-    const me = get().myUuid;
-    bindings.sendAction({ action, byUuid: me });
+  registerBroadcastHandler((action, before, at) => sync?.local(action, before, at));
+  // Act only for your own seat (the host also for AI seats), so nothing is
+  // ever written for a seat this device doesn't own.
+  registerDispatchGuard((action) => {
+    const s = get();
+    if (s.connection !== 'in-game') return null;
+    if (s.role === 'spectator') return "You're watching this game, not playing in it.";
+    const owner = s.uuidForPlayer(action.playerId);
+    if (owner === s.myUuid || (owner === null && s.role === 'host')) return null;
+    return "That's another player's seat.";
   });
 
   const myUuid = getOrCreateUuid();
-  const myDisplayName = getSavedDisplayName();
 
-  // Wire incoming-action handler with role check
-  function attachBindings(b: RoomBindings, asHost: boolean): void {
-    bindings = b;
+  /** End the current session (if any) and start a new one; returns its id. */
+  function beginSession(): number {
+    session++;
+    sync?.close();
+    sync = null;
+    conn?.leave();
+    conn = null;
+    seatToUuid = [];
+    gameStarted = false;
+    lastPresence = null;
+    return session;
+  }
 
-    b.recvHello((msg, peerId) => {
-      const s = get();
-      // Track peerId -> UUID
-      set({
-        uuidByPeerId: { ...s.uuidByPeerId, [peerId]: msg.uuid },
-        onlineUuids: new Set([...s.onlineUuids, msg.uuid]),
-      });
-      // System chat
-      if (s.chat.every((c) => c.senderUuid !== msg.uuid || c.kind !== 'system')) {
-        set({ chat: [...get().chat, sysMessage(`${msg.displayName} joined`, get().myUuid)] });
-      }
+  function addSystem(text: string): void {
+    set({ chat: [...get().chat, sysMessage(text, get().myUuid)] });
+  }
 
-      // If we're the host and still in lobby, add this UUID to a free seat.
-      if (asHost && get().connection === 'lobby') {
-        const lobby = get().lobby;
-        const existing = lobby.seats.findIndex((seat) => seat.uuid === msg.uuid);
-        if (existing >= 0) return; // already seated (rejoin)
-        if (lobby.seats.length < MAX_SEATS) {
-          const seats: LobbySeat[] = [
-            ...lobby.seats,
-            { uuid: msg.uuid, name: msg.displayName, isAI: false, color: freeColor(lobby.seats) },
-          ];
-          const newLobby = { ...lobby, seats };
-          set({ lobby: newLobby });
-          b.sendLobby(newLobby);
-        }
-      }
-
-      // If we're the host and a game is in progress, send a snapshot.
-      // Otherwise the lowest-peerId-among-connected sends; for simplicity in
-      // this version, the host alone is the snapshot source.
-      if (asHost && get().connection === 'in-game') {
-        const gs = useGameStore.getState().game;
-        if (gs) {
-          b.sendSnapshot(
-            {
-              gameState: gs,
-              chat: get().chat,
-              hostUuid: get().myUuid,
-              seatUuids: seatToUuid,
-            },
-            peerId,
-          );
-        }
-      }
-    });
-
-    b.recvLobby((state) => {
-      clearJoinTimeout();
-      // Authoritative from host — overwrite ours.
-      set({
-        lobby: state,
-        hostUuid: state.seats[0]?.uuid ?? null,
-        connection: get().connection === 'connecting' ? 'lobby' : get().connection,
-        errorMessage: null,
-        joinStartedAt: null,
-      });
-    });
-
-    b.recvStart((msg) => {
-      clearJoinTimeout();
-      // Carry the seat→UUID mapping directly from the start payload so we
-      // don't depend on the 'lobby' channel landing first (the two channels
-      // are unordered and the lobby broadcast can lose the race with start).
-      seatToUuid = msg.seatUuids.slice();
-      const me = get().myUuid;
-      const isPlayer = seatToUuid.some((u) => u === me);
-      useGameStore.getState().setGameState(msg.gameState);
-      set({
-        connection: 'in-game',
-        role: isPlayer ? 'guest' : 'spectator',
-        hostUuid: msg.hostUuid,
-        chat: [...get().chat, sysMessage('Game started', me)],
-        errorMessage: null,
-        joinStartedAt: null,
-      });
-    });
-
-    b.recvAction((env) => {
-      // Soft verify: the sending UUID must own the seat for this action.
-      const expectedUuid = get().uuidForPlayer(env.action.playerId);
-      if (expectedUuid && expectedUuid !== env.byUuid) {
-        console.warn('[net] dropping action: UUID/seat mismatch', env);
-        return;
-      }
-      useGameStore.getState().applyLocal(env.action);
-    });
-
-    b.recvSnapshot((msg) => {
-      clearJoinTimeout();
-      // Snapshot is authoritative — use its seat mapping.
-      seatToUuid = msg.seatUuids.slice();
-      const me = get().myUuid;
-      const isPlayer = seatToUuid.some((u) => u === me);
-      useGameStore.getState().setGameState(msg.gameState);
-      set({
-        connection: 'in-game',
-        role: isPlayer ? 'guest' : 'spectator',
-        hostUuid: msg.hostUuid,
-        chat: [...msg.chat, sysMessage(isPlayer ? 'Rejoined game' : 'Spectating', me)],
-        errorMessage: null,
-        joinStartedAt: null,
-      });
-    });
-
-    b.recvSnapshotRequest((_msg, peerId) => {
-      // Any peer with state can fulfill; host preferred. We always answer.
-      const gs = useGameStore.getState().game;
-      if (gs) {
-        b.sendSnapshot(
-          {
-            gameState: gs,
-            chat: get().chat,
-            hostUuid: get().hostUuid ?? get().myUuid,
-            seatUuids: seatToUuid,
-          },
-          peerId,
-        );
-      }
-    });
-
-    b.recvChat((msg) => {
-      set({ chat: [...get().chat, msg] });
-    });
-
-    b.onPeerJoin((peerId) => {
-      if (get().connection === 'connecting') peersSeenWhileJoining++;
-      // Send our hello so they can map us.
-      b.sendHello({ uuid: get().myUuid, displayName: get().myDisplayName }, peerId);
-      // Also send current lobby state if host.
-      if (asHost && get().connection === 'lobby') {
-        b.sendLobby(get().lobby, peerId);
-      }
-    });
-
-    b.onPeerLeave((peerId) => {
-      const s = get();
-      const uuid = s.uuidByPeerId[peerId];
-      if (!uuid) return;
-      const { [peerId]: _drop, ...rest } = s.uuidByPeerId;
-      // A single UUID may be reachable via multiple peers (e.g., two windows
-      // sharing localStorage). Only mark it offline / emit a disconnect if no
-      // other peerId still maps to that UUID.
-      const stillOnline = Object.values(rest).includes(uuid);
-      const online = new Set(s.onlineUuids);
-      if (!stillOnline) online.delete(uuid);
-      const name =
-        s.lobby.seats.find((seat) => seat.uuid === uuid)?.name ?? 'A player';
-      set({
-        uuidByPeerId: rest,
-        onlineUuids: online,
-        chat: stillOnline
-          ? s.chat
-          : [...s.chat, sysMessage(`${name} disconnected`, s.myUuid)],
-      });
+  function makeSync(): ActionSync<GameSnapshot> {
+    return new ActionSync<GameSnapshot>({
+        apply: (entry) => {
+          useGameStore.getState().applyLocal(entry.action, entry.at);
+        },
+        reapply: (entry) => useGameStore.getState().applyLocal(entry.action, entry.at),
+        snapshot: () => useGameStore.getState().takeSnapshot()!,
+        restore: (snap) => useGameStore.getState().restoreSnapshot(snap),
+        write: (seq, entry) => (conn ? conn.appendAction(seq, entry) : Promise.resolve(false)),
+        dropped: (_action, why) => {
+          useGameStore.setState({
+            error:
+              why === 'overtaken'
+                ? "Another player's move went through first, so yours was taken back."
+                : 'The server refused that move.',
+          });
+        },
     });
   }
 
-  function cacheSeatToUuidFromLobby(lobby: LobbyState): void {
-    seatToUuid = lobby.seats.map((s) => s.uuid);
+  function onLobby(raw: LobbyState): void {
+    // A lobby written by another app build may lack newer game fields
+    // (e.g. the T&B variants): fill them in before anything reads them.
+    const lobby: LobbyState = { ...raw, game: normalizeLobbyGame(raw.game ?? defaultLobbyGame()) };
+    const s = get();
+    const me = s.myUuid;
+    // A started lobby means the game record is on its way: stay on the
+    // "joining" card rather than flash the lobby.
+    const toLobby = s.connection === 'connecting' && !gameStarted && !lobby.started;
+    set({
+      lobby,
+      hostUuid: lobby.hostUuid,
+      role: gameStarted ? s.role : lobby.hostUuid === me ? 'host' : 'guest',
+      connection: toLobby ? 'lobby' : s.connection,
+    });
+  }
+
+  function onStart(rec: StartRecord): void {
+    if (gameStarted) return; // written once; ignore repeats
+    gameStarted = true;
+    seatToUuid = rec.seatUuids.slice();
+    const me = get().myUuid;
+    const wasInLobby = get().connection === 'lobby';
+    const isPlayer = seatToUuid.includes(me);
+    const role: LocalRole = rec.hostUuid === me ? 'host' : isPlayer ? 'guest' : 'spectator';
+    set({
+      connection: 'in-game',
+      role,
+      hostUuid: rec.hostUuid,
+      errorMessage: null,
+      joinFailure: null,
+    });
+    addSystem(wasInLobby ? 'Game started' : isPlayer ? 'Rejoined the game' : 'Spectating');
+    // Every device builds the starting game from the same inputs.
+    let game: GameState;
+    try {
+      game = createGame(rec.options);
+    } catch (e) {
+      addSystem(`This device couldn't set up the game (${(e as Error).message}). Reload the page.`);
+      return;
+    }
+    if (gameChecksum(game) !== rec.check) {
+      addSystem(
+        "This device set up a different board from the host's, so moves won't line up. "
+          + "Reload every device's page so they all run the same version.",
+      );
+    }
+    useGameStore.getState().setGameState(game, rec.startedAt);
+    // Replay the log from the start: every device ends up with the same
+    // game and the full history (log, replay, the trained AI's card counts).
+    sync?.begin();
+  }
+
+  function onChat(msg: ChatMessage): void {
+    if (get().chat.some((c) => c.id === msg.id)) return;
+    set({ chat: [...get().chat, msg] });
+  }
+
+  function onPresence(people: Presence[]): void {
+    const me = get().myUuid;
+    const now = new Map<string, string>(people.map((p) => [p.uuid, p.name]));
+    const online = new Set(now.keys());
+    online.add(me);
+    const lines: string[] = [];
+    if (lastPresence) {
+      for (const [uuid, name] of now) {
+        if (!lastPresence.has(uuid) && uuid !== me) lines.push(`${name || 'A player'} joined`);
+      }
+      for (const [uuid, name] of lastPresence) {
+        if (!now.has(uuid) && uuid !== me) lines.push(`${name || 'A player'} disconnected`);
+      }
+    }
+    lastPresence = now;
+    set({
+      onlineUuids: online,
+      chat: lines.length ? [...get().chat, ...lines.map((l) => sysMessage(l, me))] : get().chat,
+    });
+  }
+
+  function roomEvents(my: number): RoomEvents {
+    const live = () => my === session;
+    return {
+      lobby: (lobby) => live() && onLobby(lobby),
+      start: (rec) => live() && onStart(rec),
+      action: (seq, entry) => live() && sync?.receive(seq, entry),
+      chat: (msg) => live() && onChat(msg),
+      presence: (people) => live() && onPresence(people),
+      connected: (up) => live() && set({ serverConnected: up }),
+    };
+  }
+
+  function editLobby(edit: (lobby: LobbyState) => LobbyState | null): Promise<LobbyState | null> {
+    if (!conn) return Promise.resolve(null);
+    const normalized = (l: LobbyState) => edit({ ...l, game: normalizeLobbyGame(l.game ?? defaultLobbyGame()) });
+    return conn.updateLobby(normalized).catch((e: unknown) => {
+      console.warn('[net] lobby update failed:', (e as Error).message);
+      return null;
+    });
+  }
+
+  function failJoin(code: string, reason: JoinFailure['reason'], detail?: string): void {
+    beginSession();
+    if (reason === 'notFound') setRoomCodeInUrl(null);
+    set({
+      connection: 'error',
+      joinFailure: { code, reason, detail },
+      errorMessage:
+        reason === 'notFound'
+          ? `There's no room with code ${code}. Check the code with the host (rooms are cleared a week after they're made).`
+          : UNREACHABLE_TEXT,
+    });
   }
 
   return {
@@ -329,13 +350,12 @@ export const useNetworkStore = create<NetStore>((set, get) => {
     errorMessage: null,
     role: 'solo',
     myUuid,
-    myDisplayName: myDisplayName || 'Player',
+    myDisplayName: getSavedDisplayName() || 'Player',
     roomCode: null,
     hostUuid: null,
-    joinStartedAt: null,
     joinFailure: null,
+    serverConnected: true,
     lobby: emptyLobby(),
-    uuidByPeerId: {},
     onlineUuids: new Set(),
     chat: [],
 
@@ -344,205 +364,261 @@ export const useNetworkStore = create<NetStore>((set, get) => {
       set({ myDisplayName: name });
     },
 
-    createRoom: (name) => {
+    createRoom: async (name) => {
       saveDisplayName(name);
-      const code = generateRoomCode();
-      const uuid = get().myUuid;
-      const initialLobby: LobbyState = {
-        seats: [{ uuid, name, isAI: false, color: DEFAULT_COLORS[0]! }],
-        victoryPointsToWin: DEFAULT_VP,
+      const my = beginSession();
+      const me = get().myUuid;
+      const lobby: LobbyState = {
+        hostUuid: me,
+        seats: [{ uuid: me, name, isAI: false, color: DEFAULT_COLORS[0]! }],
+        victoryPointsToWin: null,
         aiLevel: DEFAULT_AI_LEVEL,
-        seed: Math.floor(Math.random() * 0xffffffff),
+        seed: randomSeed(),
+        game: defaultLobbyGame(),
       };
-      try {
-        const b = bindRoom(code);
-        attachBindings(b, true);
-      } catch (err) {
-        console.error('[net] failed to create room', err);
-        set({
-          connection: 'error',
-          errorMessage:
-            'Could not reach the matchmaking relays. Check your internet connection.',
-        });
-        return;
-      }
+      sync = makeSync();
       set({
-        connection: 'lobby',
+        connection: 'connecting',
         role: 'host',
         myDisplayName: name,
-        roomCode: code,
-        hostUuid: uuid,
-        joinStartedAt: null,
+        roomCode: null,
+        hostUuid: me,
         joinFailure: null,
-        lobby: initialLobby,
-        onlineUuids: new Set([uuid]),
-        chat: [],
         errorMessage: null,
+        serverConnected: true,
+        lobby,
+        onlineUuids: new Set([me]),
+        chat: [],
       });
-    },
-
-    joinRoom: (code, name) => {
-      saveDisplayName(name);
-      const upper = code.trim().toUpperCase();
-      clearJoinTimeout();
       try {
-        bindings?.leave();
-      } catch {
-        /* ignore */
-      }
-      bindings = null;
-      peersSeenWhileJoining = 0;
-      try {
-        const b = bindRoom(upper);
-        attachBindings(b, false);
-      } catch (err) {
-        console.error('[net] failed to join room', err);
+        const transport = await loadTransport();
+        let c: RoomConnection | null = null;
+        // A code still in use by a live room is refused; draw another.
+        for (let attempt = 0; attempt < 6 && !c && my === session; attempt++) {
+          c = await transport.createRoom(
+            generateRoomCode(),
+            { hostUuid: me, createdAt: Date.now(), build: APP_BUILD },
+            lobby,
+            { uuid: me, name },
+            roomEvents(my),
+          );
+        }
+        if (my !== session) {
+          c?.leave();
+          return;
+        }
+        if (!c) throw new Error('Could not find a free room code. Try again.');
+        conn = c;
+        setRoomCodeInUrl(c.code);
+        set({ roomCode: c.code, connection: get().connection === 'connecting' ? 'lobby' : get().connection });
+      } catch (e) {
+        if (my !== session) return;
+        console.error('[net] failed to create room', e);
+        beginSession();
         set({
           connection: 'error',
-          errorMessage:
-            'Could not reach the matchmaking relays. Check your internet connection.',
+          joinFailure: null,
+          errorMessage: e instanceof ServerUnreachableError ? UNREACHABLE_TEXT : (e as Error).message,
         });
-        return;
       }
-      const startedAt = Date.now();
+    },
+
+    joinRoom: async (code, name) => {
+      saveDisplayName(name);
+      const upper = normalizeRoomCode(code);
+      const my = beginSession();
+      const me = get().myUuid;
+      sync = makeSync();
       set({
         connection: 'connecting',
         role: 'guest',
         myDisplayName: name,
         roomCode: upper,
+        hostUuid: null,
         lobby: emptyLobby(),
         chat: [],
         errorMessage: null,
-        joinStartedAt: startedAt,
         joinFailure: null,
+        serverConnected: true,
+        onlineUuids: new Set([me]),
       });
-      // If no host has answered with a lobby/start/snapshot by then, report
-      // the room as not found (with what this device could see) rather than
-      // sitting in an empty-looking room.
-      joinTimeoutId = setTimeout(() => {
-        joinTimeoutId = null;
-        if (get().connection !== 'connecting') return;
-        const relays = bindings?.relayStatus() ?? relayStatus();
-        const failure: JoinFailure = {
-          code: upper,
-          reason: relays.connected === 0 ? 'noRelays' : peersSeenWhileJoining > 0 ? 'noHost' : 'notFound',
-          relays,
-          peersSeen: peersSeenWhileJoining,
-          waitedMs: Date.now() - startedAt,
-        };
-        try {
-          bindings?.leave();
-        } catch {
-          /* ignore */
-        }
-        bindings = null;
-        set({
-          connection: 'error',
-          errorMessage: JOIN_FAILURE_TEXT[failure.reason](upper),
-          joinFailure: failure,
-          joinStartedAt: null,
-        });
-      }, JOIN_TIMEOUT_MS);
+      let c: RoomConnection | null;
+      try {
+        const transport = await loadTransport();
+        c = await transport.joinRoom(upper, { uuid: me, name }, roomEvents(my));
+      } catch (e) {
+        if (my !== session) return;
+        console.error('[net] failed to join room', e);
+        failJoin(upper, 'unreachable', (e as Error).message);
+        return;
+      }
+      if (my !== session) {
+        c?.leave();
+        return;
+      }
+      if (!c) {
+        failJoin(upper, 'notFound');
+        return;
+      }
+      conn = c;
+      setRoomCodeInUrl(upper);
+      if (c.meta.build !== APP_BUILD) {
+        addSystem(
+          `This room was made by another version of the game (${c.meta.build}; this device runs ${APP_BUILD}). `
+            + "If moves stop lining up, reload every device's page.",
+        );
+      }
+      // Take a seat while the lobby is open (rejoining keeps yours).
+      await editLobby((lobby) => seatEdit(lobby, me, name));
     },
 
     retryJoin: () => {
       const code = get().joinFailure?.code ?? get().roomCode;
-      if (code) get().joinRoom(code, get().myDisplayName);
+      if (code) void get().joinRoom(code, get().myDisplayName);
     },
 
-    relayStatus: () => bindings?.relayStatus() ?? relayStatus(),
-
     leaveRoom: () => {
-      clearJoinTimeout();
-      try {
-        bindings?.leave();
-      } catch {
-        /* ignore */
+      const s = get();
+      const c = conn;
+      conn = null;
+      // A guest leaving the lobby gives up their seat.
+      if (c && s.connection === 'lobby' && s.role !== 'host') {
+        const me = s.myUuid;
+        c.updateLobby((l) =>
+          l.started || !l.seats.some((x) => x.uuid === me)
+            ? null
+            : { ...l, seats: l.seats.filter((x) => x.uuid !== me) },
+        )
+          .catch(() => null)
+          .finally(() => c.leave());
+      } else {
+        c?.leave();
       }
-      bindings = null;
-      seatToUuid = [];
+      beginSession();
+      setRoomCodeInUrl(null);
       set({
         connection: 'disconnected',
         errorMessage: null,
         role: 'solo',
         roomCode: null,
         hostUuid: null,
-        joinStartedAt: null,
         joinFailure: null,
+        serverConnected: true,
         lobby: emptyLobby(),
-        uuidByPeerId: {},
-        onlineUuids: new Set([get().myUuid]),
+        onlineUuids: new Set(),
         chat: [],
       });
     },
 
     clearError: () => {
-      set({ connection: 'disconnected', errorMessage: null, joinFailure: null, roomCode: null });
+      beginSession();
+      setRoomCodeInUrl(null);
+      set({ connection: 'disconnected', role: 'solo', errorMessage: null, joinFailure: null, roomCode: null });
     },
 
     hostAddAISeat: () => {
       if (get().role !== 'host') return;
-      const lobby = get().lobby;
-      if (lobby.seats.length >= MAX_SEATS) return;
-      const seats: LobbySeat[] = [
-        ...lobby.seats,
-        {
-          uuid: null,
-          name: `AI ${lobby.seats.filter((s) => s.isAI).length + 1}`,
-          isAI: true,
-          color: freeColor(lobby.seats),
-        },
-      ];
-      const newLobby = { ...lobby, seats };
-      set({ lobby: newLobby });
-      bindings?.sendLobby(newLobby);
+      void editLobby((l) =>
+        l.started || l.seats.length >= MAX_SEATS
+          ? null
+          : {
+              ...l,
+              seats: [...l.seats, { uuid: null, name: nextAiName(l.seats), isAI: true, color: freeColor(l.seats) }],
+            },
+      );
     },
 
     hostRemoveSeat: (slot) => {
-      if (get().role !== 'host') return;
-      const lobby = get().lobby;
-      if (slot === 0) return; // can't remove host
-      if (slot < 0 || slot >= lobby.seats.length) return;
-      const seats = lobby.seats.filter((_, i) => i !== slot);
-      const newLobby = { ...lobby, seats };
-      set({ lobby: newLobby });
-      bindings?.sendLobby(newLobby);
+      if (get().role !== 'host' || slot <= 0) return; // can't remove the host
+      const target = get().lobby.seats[slot];
+      if (!target) return;
+      const same = (s: LobbySeat) => s.uuid === target.uuid && s.name === target.name && s.isAI === target.isAI;
+      void editLobby((l) => {
+        const i = l.seats.findIndex(same);
+        return l.started || i <= 0 ? null : { ...l, seats: l.seats.filter((_, j) => j !== i) };
+      });
     },
 
     hostSetVP: (vp) => {
       if (get().role !== 'host') return;
-      const newLobby = { ...get().lobby, victoryPointsToWin: vp };
-      set({ lobby: newLobby });
-      bindings?.sendLobby(newLobby);
+      void editLobby((l) => (l.started ? null : { ...l, victoryPointsToWin: vp }));
     },
 
     hostSetAiLevel: (level) => {
       if (get().role !== 'host') return;
-      const newLobby = { ...get().lobby, aiLevel: level };
-      set({ lobby: newLobby });
-      bindings?.sendLobby(newLobby);
+      void editLobby((l) => (l.started ? null : { ...l, aiLevel: level }));
     },
 
-    hostStartGame: () => {
+    hostSetGame: (game) => {
       if (get().role !== 'host') return;
-      const lobby = get().lobby;
-      if (lobby.seats.length < MIN_SEATS) return;
-      cacheSeatToUuidFromLobby(lobby);
-      const game = createGame({
-        playerNames: lobby.seats.map((s) => s.name),
-        playerTypes: lobby.seats.map((s) => (s.isAI ? 'ai' : 'human')),
-        seed: lobby.seed,
-        settings: { victoryPointsToWin: lobby.victoryPointsToWin, aiLevel: lobby.aiLevel ?? DEFAULT_AI_LEVEL },
+      // One expansion at a time, a map and variants the rules allow.
+      const next = normalizeLobbyGame(game);
+      // A new scenario brings its own recommended VP target (a variant
+      // toggle alone keeps the host's VP choice).
+      void editLobby((l) => {
+        if (l.started) return null;
+        const sameScenario =
+          JSON.stringify({ ...l.game, variants: null }) === JSON.stringify({ ...next, variants: null });
+        return { ...l, game: next, victoryPointsToWin: sameScenario ? l.victoryPointsToWin : null };
       });
-      useGameStore.getState().setGameState(game);
-      set({
-        connection: 'in-game',
-        chat: [...get().chat, sysMessage('Game started', get().myUuid)],
-      });
-      bindings?.sendStart({
-        gameState: game,
-        seatUuids: seatToUuid.slice(),
-        hostUuid: get().myUuid,
+    },
+
+    hostStartGame: async () => {
+      const c = conn;
+      const my = session;
+      if (get().role !== 'host' || !c || lobbyStartProblem(get().lobby)) return;
+      // Lock the seats and settings first, atomically: a guest taking a seat
+      // at the same moment either makes it in or finds the lobby closed.
+      const final = await editLobby((l) => (l.started || lobbyStartProblem(l) ? null : { ...l, started: true }));
+      if (!final || my !== session) return;
+      const reopen = (why: string) => {
+        addSystem(`Couldn't start the game: ${why}`);
+        void editLobby((l) => ({ ...l, started: false }));
+      };
+      const options: CreateGameOptions = {
+        playerNames: final.seats.map((s) => s.name),
+        playerTypes: final.seats.map((s) => (s.isAI ? 'ai' : 'human')),
+        playerColors: final.seats.map((s) => s.color),
+        seed: final.seed,
+        settings: lobbySettings(final),
+      };
+      let check: string;
+      try {
+        check = gameChecksum(createGame(options));
+      } catch (e) {
+        reopen((e as Error).message);
+        return;
+      }
+      try {
+        await c.start({
+          options,
+          seatUuids: final.seats.map((s) => s.uuid),
+          hostUuid: get().myUuid,
+          startedAt: Date.now(),
+          check,
+        });
+      } catch (e) {
+        if (my === session && !gameStarted) reopen((e as Error).message);
+      }
+    },
+
+    setSeatColor: (slot, color) => {
+      const s = get();
+      const target = s.lobby.seats[slot];
+      if (!target || s.connection !== 'lobby') return;
+      const mine = target.uuid === s.myUuid;
+      if (!mine && !(target.isAI && s.role === 'host')) return;
+      const same = (x: LobbySeat) => x.uuid === target.uuid && x.name === target.name && x.isAI === target.isAI;
+      void editLobby((l) => {
+        const i = l.seats.findIndex(same);
+        const seat = l.seats[i];
+        if (l.started || !seat || seat.color === color) return null;
+        return {
+          ...l,
+          seats: l.seats.map((x, j) =>
+            j === i ? { ...x, color } : x.color === color ? { ...x, color: seat.color } : x,
+          ),
+        };
       });
     },
 
@@ -550,8 +626,9 @@ export const useNetworkStore = create<NetStore>((set, get) => {
       const trimmed = text.trim();
       if (!trimmed) return;
       const msg = userMessage(trimmed, get().myUuid, get().myDisplayName);
+      // Shown at once; the room's copy is de-duplicated by id.
       set({ chat: [...get().chat, msg] });
-      bindings?.sendChat(msg);
+      conn?.sendChat(msg).catch((e: unknown) => console.warn('[net] chat send failed:', (e as Error).message));
     },
 
     uuidForPlayer: (playerId) => {
@@ -577,7 +654,7 @@ export function isMyPlayer(playerId: PlayerId): boolean {
   return uuid === s.myUuid;
 }
 
-// Helper: the player UUID for our local seat, or null if spectator / not started.
+// Helper: the player id for our local seat, or null if spectator / not started.
 export function getMyPlayerId(game: GameState | null): PlayerId | null {
   if (!game) return null;
   const s = useNetworkStore.getState();

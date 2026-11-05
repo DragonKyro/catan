@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createGame } from '../../../../createGame';
+import { TB_FRAME_PORTS_3_4 } from '../frame';
 
 function newMerchantGame() {
   return createGame({
@@ -59,10 +60,27 @@ describe('Merchant Trains scenario', () => {
     expect(deserts.length).toBe(0);
   });
 
-  it('rejects 5+ player merchant trains games', () => {
+  it('uses the T&B frame harbors with their printed types', () => {
+    for (const seed of [1, 2, 3]) {
+      const s = createGame({
+        playerNames: ['A', 'B', 'C', 'D'],
+        seed,
+        settings: { expansions: ['traders'], tradersScenarioId: 'merchantTrains' },
+      });
+      expect(s.board.ports).toHaveLength(9);
+      // Each harbor sits on an edge of its frame anchor's land hex, with that type.
+      for (const a of TB_FRAME_PORTS_3_4) {
+        const hexId = `${a.q},${a.r}`;
+        const port = s.board.ports.find((p) => s.board.edges[p.edge]!.hexes.includes(hexId) && p.type === a.fixedType);
+        expect(port, `${hexId} ${a.fixedType}`).toBeDefined();
+      }
+    }
+  });
+
+  it('rejects 7+ player merchant trains games', () => {
     expect(() =>
       createGame({
-        playerNames: ['A', 'B', 'C', 'D', 'E'],
+        playerNames: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
         seed: 1,
         settings: {
           expansions: ['traders'],
@@ -70,6 +88,6 @@ describe('Merchant Trains scenario', () => {
         },
         randomizeTurnOrder: false,
       }),
-    ).toThrow(/3-4 players only/);
+    ).toThrow(/at most 6 players/);
   });
 });

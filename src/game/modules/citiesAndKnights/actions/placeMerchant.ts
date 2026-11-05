@@ -1,40 +1,32 @@
-import type { GameState, PlaceMerchantAction } from '../../../types';
+import type { GameState, HexId, PlaceMerchantAction, PlayerId } from '../../../types';
 import { currentPlayerId } from '../../../helpers';
+import { resumeFlow } from '../flow';
 
-// Place the merchant on a land hex adjacent to one of your buildings.
-// Merchant ownership grants +1 VP and a 2:1 trade rate on the resource the
-// merchant's hex produces. Only legal in `placeMerchant` phase entered by
-// playing the Merchant progress card.
-export function handlePlaceMerchant(
-  state: GameState,
-  action: PlaceMerchantAction,
-): GameState {
+// Merchant (p.7, p.14): "Place it on any land hex next to one of your
+// buildings." Any land hex counts — even the desert, which gives its owner
+// the 1 VP but no 2:1 trade (gold fields are excluded, p.12).
+export function canPlaceMerchantOn(state: GameState, playerId: PlayerId, hexId: HexId): boolean {
+  const hex = state.board.hexes[hexId];
+  if (!hex || hex.terrain === 'sea' || hex.terrain === 'gold') return false;
+  const p = state.players.find((pl) => pl.id === playerId);
+  if (!p) return false;
+  return hex.corners.some((v) => p.settlements.includes(v) || p.cities.includes(v));
+}
+
+export function merchantSites(state: GameState, playerId: PlayerId): HexId[] {
+  return state.board.hexIds.filter((h) => canPlaceMerchantOn(state, playerId, h));
+}
+
+// Take control of the merchant and put it on a hex (placeMerchant phase,
+// entered by playing the Merchant card). Worth 1 VP while you control it,
+// and 2:1 trades in that hex's resource.
+export function handlePlaceMerchant(state: GameState, action: PlaceMerchantAction): GameState {
   if (state.phase !== 'placeMerchant') {
     throw new Error(`Cannot place merchant in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
-  const hex = state.board.hexes[action.hex];
-  if (!hex) throw new Error('Unknown hex');
-  if (hex.terrain === 'sea' || hex.terrain === 'desert' || hex.terrain === 'gold') {
-    throw new Error('Merchant must sit on a resource-producing land hex');
+  if (!canPlaceMerchantOn(state, action.playerId, action.hex)) {
+    throw new Error('The merchant goes on a land hex next to one of your buildings');
   }
-  const player = state.players.find((p) => p.id === action.playerId);
-  if (!player) throw new Error('Unknown player');
-  // Must have a building adjacent to the hex.
-  let adjacent = false;
-  for (const v of Object.values(state.board.vertices)) {
-    if (!v.hexes.includes(action.hex)) continue;
-    if (player.settlements.includes(v.id) || player.cities.includes(v.id)) {
-      adjacent = true;
-      break;
-    }
-  }
-  if (!adjacent) {
-    throw new Error('Merchant hex must be adjacent to one of your buildings');
-  }
-  return {
-    ...state,
-    phase: 'main',
-    merchant: { ownerId: action.playerId, hexId: action.hex },
-  };
+  return resumeFlow({ ...state, merchant: { ownerId: action.playerId, hexId: action.hex } });
 }

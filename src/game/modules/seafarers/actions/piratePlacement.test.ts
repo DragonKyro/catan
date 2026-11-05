@@ -75,6 +75,11 @@ describe('pirate blocks ship build / move', () => {
     if (!shipEdge) return; // p0 has no coastal reach on this seed — skip
 
     s = applyAction(s, { type: 'buildShip', playerId: 'p0', edge: shipEdge });
+    // A ship can't move on the turn it's built; pretend a turn passed.
+    s = {
+      ...s,
+      players: s.players.map((p) => (p.id === 'p0' ? { ...p, builtShipsThisTurn: undefined } : p)),
+    };
 
     // Need the ship to be "movable" (an open end). The ship we just built
     // anchors on a vertex that's our settlement/road; the OTHER vertex is

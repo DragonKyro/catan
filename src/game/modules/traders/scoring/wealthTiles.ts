@@ -5,10 +5,12 @@ import {
 } from '../constants';
 
 // Recalculate Wealthiest / Poor Catanian holders from the current per-player
-// gold totals. Wealthiest = unique max-gold player with ≥ 1 gold (ties leave
-// it null — rulebook: "If there is a tie, the Wealthiest Catanian tile
-// remains next to the supply"). Poor = every player tied at the min gold
-// count. Multiple Poor holders are explicitly allowed by the rulebook.
+// gold totals (Rivers of Catan). Wealthiest = unique max-gold player with
+// ≥ 1 gold (ties leave it null — rulebook: "If there is a tie, the
+// Wealthiest Catanian tile remains next to the supply"). Poor = every player
+// tied at the least gold, even when that is everyone ("The player(s) with
+// the least gold immediately receives a Poor Catanian tile"; at setup each
+// player takes one, and everyone starts on 0 gold).
 //
 // Structural input — only reads `players` — so the createGame seed path
 // can call this before the full GameState is assembled.
@@ -36,12 +38,9 @@ export function recalcWealthTiles(input: {
     if (tied.length === 1) wealthiest = tied[0]!.id;
   }
 
-  // Poor: everyone tied at the lowest gold count. When max === min (all
-  // players equal), the rulebook gives Poor to nobody (there is no "least"
-  // — they're all even). Encoding that as "max > min" gates the case.
-  const poor: PlayerId[] = maxGold > minGold
-    ? golds.filter((g) => g.gold === minGold).map((g) => g.id)
-    : [];
+  // Poor: everyone tied at the lowest gold count — all players when they
+  // are all level.
+  const poor: PlayerId[] = golds.filter((g) => g.gold === minGold).map((g) => g.id);
 
   return { wealthiest, poor };
 }

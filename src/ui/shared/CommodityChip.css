@@ -10,21 +10,25 @@
   justify-content: center;
 }
 
-/* Paper sits next to wood: parchment yellow. */
+/* Commodity cards share their terrain's colour (2025 card art): paper on
+   forest green, cloth on pasture green, coin on mountain grey. A dashed
+   border sets them apart from the resource chip of the same terrain. */
 .cchip-paper {
-  background: rgba(214, 192, 138, 0.3);
-  border-color: rgba(180, 150, 90, 0.7);
+  background: rgba(61, 122, 61, 0.22);
+  border-color: var(--terrain-wood);
+  border-style: dashed;
 }
-/* Cloth sits next to sheep: lavender / dyed wool. */
 .cchip-cloth {
-  background: rgba(196, 152, 196, 0.3);
-  border-color: rgba(160, 110, 160, 0.7);
+  background: rgba(168, 217, 107, 0.22);
+  border-color: var(--terrain-sheep);
+  border-style: dashed;
 }
-/* Coin sits next to ore: muted gold over stone. */
 .cchip-coin {
-  background: rgba(232, 196, 90, 0.3);
-  border-color: rgba(190, 150, 60, 0.7);
+  background: rgba(138, 138, 150, 0.28);
+  border-color: var(--terrain-ore);
+  border-style: dashed;
 }
+.cchip-icon { display: inline-flex; }
 
 .cchip-sm { font-size: 0.8em; padding: 1px 6px; }
 .cchip-md { font-size: 0.95em; }

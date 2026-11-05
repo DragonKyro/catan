@@ -7,10 +7,13 @@ export const TRADERS_SCENARIO_RIVERS = 'riversOfCatan';
 export const TRADERS_SCENARIO_FISHING = 'fishingOnCatan';
 export const TRADERS_SCENARIO_MERCHANT_TRAINS = 'merchantTrains';
 export const TRADERS_SCENARIO_BARBARIAN_ATTACK = 'barbarianAttack';
+export const TRADERS_SCENARIO_TRADERS_BARBARIANS = 'tradersAndBarbarians';
 
 // Merchant Trains: rulebook ships 22 wagon tokens in a shared neutral
 // supply. Each successful `placeWagon` action draws one.
 export const MERCHANT_WAGON_SUPPLY = 22;
+// T&B 5-6 adds 11 trade wagons (rulebook p. 7): 33.
+export const MERCHANT_WAGON_SUPPLY_5_6 = 33;
 
 // Merchant Trains victory-point target (rulebook: "If you have 12 or more
 // VPs at any point during your turn, the game ends and you are the winner!").
@@ -20,9 +23,9 @@ export const MERCHANT_TRAINS_DEFAULT_VP = 12;
 // round. Other resources are rejected by `handleSubmitWagonVote`.
 export const MERCHANT_BID_RESOURCES = ['sheep', 'wheat'] as const;
 
-// Fishing on Catan: cap on fish tokens a player may hold (rulebook). Excess
-// draws are blocked once the cap is reached; the per-turn discard-and-
-// replace nicety is deferred.
+// Fishing on Catan: cap on fish tokens a player may hold, not counting the
+// old boot (rulebook). A draw that would go past it stops the player's
+// drawing; they may then swap one token for a fresh draw ('fishSwap').
 export const FISH_TOKEN_CAP = 7;
 
 // Fish-token face values (cost units). Old boot has no value — never
@@ -47,6 +50,13 @@ export const OLD_BOOT_VP_TAX = 1;
 // Bridge build payoff (rules: +3 gold per built bridge).
 export const BRIDGE_GOLD_REWARD = 3;
 
+// Bridges per player (3 in each colour).
+export const MAX_BRIDGES = 3;
+
+// Coins: 2 gold buys 1 resource card of your choice, at most twice a turn.
+export const GOLD_PER_RESOURCE = 2;
+export const MAX_GOLD_SPENDS_PER_TURN = 2;
+
 // River-tile build payoff (rules: +1 gold per road or settlement built on a
 // river-tile edge / vertex). Bridges have their own larger reward above.
 export const RIVER_BUILD_GOLD_REWARD = 1;
@@ -64,14 +74,34 @@ export const STRONGEST_PORTS_VP = 2;
 export const WEALTHIEST_CATANIAN_VP = 1;
 export const POOR_CATANIAN_VP = -2;
 
-// Barbarian Attack defaults.
+// Barbarian Attack (rulebook pp.15-19).
 export const BARBARIAN_ATTACK_DEFAULT_VP = 12;
-// Shared supply of defender knights. 18 = 6 per max player; finite to keep
-// scarcity bite even if everyone hires aggressively.
-export const BARBARIAN_KNIGHT_SUPPLY = 18;
-// Length of each barbarian path including the castle hex as the final
-// index. So with 4 hexes, position 0 = farthest, position 3 = at the
-// castle (combat tick).
-export const BARBARIAN_PATH_LENGTH = 4;
-// Default strength every barbarian group hits the castle with.
-export const BARBARIAN_BASE_STRENGTH = 4;
+// 36 barbarian figures: 1 starts on the 2 hex, 1 on the 12 hex, the rest
+// next to the board.
+export const BARBARIAN_TOTAL = 36;
+// T&B 5-6 adds 12 more (rulebook p. 2 / p. 8).
+export const BARBARIAN_TOTAL_5_6 = 48;
+// Three barbarians on a coastal hex conquer it.
+export const BARBARIANS_TO_CONQUER = 3;
+// Barbarians placed (dice rolls) after each building placed.
+export const BARBARIAN_LANDING_ROLLS = 3;
+// Knights in each player's colour.
+export const BARBARIAN_KNIGHTS_PER_PLAYER = 6;
+// End-of-turn knight move: up to 3 edges, or 5 for 1 wheat.
+export const BARBARIAN_KNIGHT_MOVE = 3;
+export const BARBARIAN_KNIGHT_MOVE_BOOSTED = 5;
+export const BARBARIAN_KNIGHT_BOOST_COST = { wheat: 1 } as const;
+// Gold for an involved player left without a prisoner, and per knight lost.
+export const BARBARIAN_CONSOLATION_GOLD = 3;
+export const BARBARIAN_KNIGHT_LOSS_GOLD = 3;
+// Treason pays 2 gold.
+export const BARBARIAN_TREASON_GOLD = 2;
+// Every 2 prisoners = 1 VP.
+export const BARBARIAN_PRISONERS_PER_VP = 2;
+// The scenario's development deck (26 cards).
+export const BARBARIAN_DECK_COUNTS = {
+  capture: 4,
+  knighthood: 14,
+  swiftKnight: 4,
+  treason: 4,
+} as const;

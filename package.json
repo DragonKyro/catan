@@ -13,7 +13,7 @@
     "train:build": "vite build --config training/vite.config.ts"
   },
   "dependencies": {
-    "@trystero-p2p/nostr": "^0.26.0",
+    "firebase": "^12.19.0",
     "honeycomb-grid": "^4.1.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

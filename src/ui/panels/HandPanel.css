@@ -169,7 +169,8 @@
    The flag badge row can grow to 10+ emojis, so let it scroll
    horizontally inside the header rather than wrapping or overflowing
    into the resource chips. */
-@media (max-width: 767px) {
+@media (max-width: 767px),
+  (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
   .hand {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto auto;

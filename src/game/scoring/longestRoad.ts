@@ -50,6 +50,8 @@ export function calculateLongestRoad(state: GameState, playerId: PlayerId): numb
   for (const [vid, k] of Object.entries(state.knights ?? {})) {
     if (k.playerId !== playerId) blocked.add(vid);
   }
+  // Unowned settlements (the 5-player beginner set-up) block like any other.
+  for (const v of state.inactiveSettlements ?? []) blocked.add(v);
 
   let best = 0;
   const used = new Set<EdgeId>();

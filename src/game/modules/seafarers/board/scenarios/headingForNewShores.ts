@@ -1,6 +1,7 @@
 import type { ScenarioLayout, ScenarioPosition } from '../types';
 import { buildScenario } from './builder';
 import { seaPositionsInDisk } from './helpers';
+import { type MapRow, parseRows, seafarers56PortTypes } from './frame5_6';
 
 // Heading for New Shores — the canonical Seafarers introductory scenario.
 // Main island (centre-left) plus three smaller outer islands. Two gold hexes
@@ -145,120 +146,74 @@ const LAYOUT_3_4P: ScenarioLayout = {
 };
 
 // ---------------------------------------------------------------------------
-// 5-6 player layout from `heading for newshores 56.json`. 40 land + 18 sea
-// inside a radius-6 disk. 3 fixed-gold tiles (one on each outer island).
-// 12 ports (5×2:1 + 7×3:1).
+// 5-6 players (Seafarers 5-6 rulebook p. 4; docs/map-specs/SEAFARERS56-SPEC-A.md).
+// "Set up the small islands as shown. The main island is created using the
+// CATAN 5–6 Variable Setup rules, randomly placing ports on the indicated
+// locations." The main island is the CATAN 5-6 board (rows 3-4-5-6-5-4-3,
+// `?`); the ten small-island hexes are printed (terrain + disc). The frame's
+// two middle-row points are sea hexes too (the table's 16 sea leaves them
+// out). Pirate on the east point.
+//
+// The map's dark-blue outlines (= small islands) wrap each pair of east
+// hexes together with the sea hex between them — {(4,-3), (4,-1)} and
+// {(3,1), (1,3)} — so the rulebook has 4 small islands. Islands here are
+// connected land, so each east hex is its own island (6 bonus islands); see
+// the spec.
 // ---------------------------------------------------------------------------
+const ROWS_5_6P: MapRow[] = [
+  [-3, -2, 'G9  ~ ? ? ?   ~ O6'],
+  [-2, -3, 'O11 ~ ? ? ? ?   ~ ~'],
+  [-1, -4, 'P8  ~ ? ? ? ? ?   ~ B12'],
+  [0, -5, '~ ~  ? ? ? ? ? ?   ~ ~'],
+  [1, -5, 'B4 ~  ? ? ? ? ?   ~ W3'],
+  [2, -5, 'F2 ~  ? ? ? ?   ~ ~'],
+  [3, -5, 'G5 ~  ? ? ?   ~ G10'],
+];
+
 const LAYOUT_5_6P: ScenarioLayout = {
-  positions: [
-    // Main island core + south arm.
-    { q: -4, r: 1, kind: 'land' },
-    { q: -4, r: 3, kind: 'land' },
-    { q: -4, r: 4, kind: 'land' },
-    { q: -4, r: 5, kind: 'land' },
-    { q: -4, r: 6, kind: 'land' },
-    { q: -3, r: 2, kind: 'land' },
-    { q: -3, r: 3, kind: 'land' },
-    { q: -3, r: 4, kind: 'land' },
-    { q: -3, r: 5, kind: 'land' },
-    { q: -3, r: 6, kind: 'land' },
-    { q: -2, r: 1, kind: 'land' },
-    { q: -2, r: 2, kind: 'land' },
-    { q: -2, r: 3, kind: 'land' },
-    { q: -2, r: 4, kind: 'land' },
-    { q: -2, r: 5, kind: 'land' },
-    { q: -2, r: 6, kind: 'land' },
-    { q: -1, r: 0, kind: 'land' },
-    { q: -1, r: 1, kind: 'land' },
-    { q: -1, r: 2, kind: 'land' },
-    { q: -1, r: 3, kind: 'land' },
-    { q: -1, r: 4, kind: 'land' },
-    { q: -1, r: 5, kind: 'land' },
-    { q: 0, r: 0, kind: 'land' },
-    { q: 0, r: 1, kind: 'land' },
-    { q: 0, r: 2, kind: 'land' },
-    { q: 0, r: 3, kind: 'land' },
-    { q: 0, r: 4, kind: 'land' },
-    { q: 1, r: 0, kind: 'land' },
-    { q: 1, r: 1, kind: 'land' },
-    { q: 1, r: 2, kind: 'land' },
-    { q: 1, r: 3, kind: 'land' },
-    { q: 1, r: 5, kind: 'land' },
-    { q: 2, r: 4, kind: 'land' },
-    { q: 3, r: 2, kind: 'land' },
-    // Outer-island gold anchors.
-    { q: -6, r: 4, kind: 'land' },
-    { q: -6, r: 6, kind: 'land' },
-    { q: -5, r: 2, kind: 'land' },
-    { q: -3, r: 0, kind: 'land', fixedTerrain: 'gold' },
-    { q: 0, r: 6, kind: 'land', fixedTerrain: 'gold' },
-    { q: 3, r: 0, kind: 'land', fixedTerrain: 'gold' },
-    // Sea hexes painted around the islands.
-    { q: -6, r: 3, kind: 'sea' },
-    { q: -6, r: 5, kind: 'sea' },
-    { q: -5, r: 3, kind: 'sea' },
-    { q: -5, r: 4, kind: 'sea' },
-    { q: -5, r: 5, kind: 'sea' },
-    { q: -5, r: 6, kind: 'sea' },
-    { q: -4, r: 2, kind: 'sea' },
-    { q: -3, r: 1, kind: 'sea' },
-    { q: -2, r: 0, kind: 'sea' },
-    { q: -1, r: 6, kind: 'sea' },
-    { q: 0, r: 5, kind: 'sea' },
-    { q: 1, r: 4, kind: 'sea' },
-    { q: 2, r: 0, kind: 'sea' },
-    { q: 2, r: 1, kind: 'sea' },
-    { q: 2, r: 2, kind: 'sea' },
-    { q: 2, r: 3, kind: 'sea' },
-    { q: 3, r: 1, kind: 'sea' },
-    { q: 3, r: 3, kind: 'sea' },
-  ],
-  // 12 port anchors. Direction mapping: 0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE.
+  positions: parseRows(ROWS_5_6P).positions,
+  // 11 harbors, all on the main island; types drawn at random.
+  // Direction: 0 E, 1 SE, 2 SW, 3 W, 4 NW, 5 NE.
   portAnchors: [
-    { q: -4, r: 5, direction: 2 },
-    { q: -2, r: 6, direction: 1 },
-    { q: -3, r: 6, direction: 2 },
-    { q: 0, r: 5, direction: 3 },
-    { q: 1, r: 4, direction: 4 },
-    { q: 2, r: 2, direction: 3 },
-    { q: 2, r: 0, direction: 2 },
-    { q: 1, r: -1, direction: 2 },
-    { q: -2, r: 1, direction: 4 },
-    { q: -3, r: 2, direction: 3 },
-    { q: -4, r: 3, direction: 2 },
-    { q: 0, r: 0, direction: 5 },
+    { q: 1, r: -3, direction: 5 },
+    { q: -1, r: -2, direction: 4 },
+    { q: 2, r: -2, direction: 5 },
+    { q: -2, r: -1, direction: 3 },
+    { q: 2, r: -1, direction: 0 },
+    { q: -3, r: 0, direction: 2 },
+    { q: 2, r: 0, direction: 1 },
+    { q: 0, r: 2, direction: 0 },
+    { q: -3, r: 2, direction: 2 },
+    { q: -2, r: 3, direction: 2 },
+    { q: -1, r: 3, direction: 1 },
   ],
+  pirateStart: { q: 4, r: 0 },
   pools: {
-    // 37 pool-drawn land hexes (3 gold are fixed). Standard 7-of-each
-    // resource + 2 deserts = 37.
+    // The 30 main-island hexes: the CATAN + 5-6 hex set (the table's 40 land
+    // minus the ten printed small-island hexes). Robber on a desert.
     terrainCounts: {
-      wood: 7,
-      brick: 7,
-      sheep: 7,
-      wheat: 7,
-      ore: 7,
+      brick: 5,
+      wood: 6,
+      sheep: 6,
+      wheat: 6,
+      ore: 5,
       desert: 2,
     },
-    // 38 tokens — one per producing land hex (37 pool-drawn + 3 fixed gold
-    // − 2 pool-drawn deserts = 38). Fully symmetric around 7.
+    // The 28 CATAN 5-6 discs (the small islands print one of each number,
+    // which makes the table's 3 / 4 / 4 / 4 / 4 / 4 / 4 / 4 / 4 / 3).
     tokens: [
-      2, 2, 2,
-      3, 3, 3, 3,
-      4, 4, 4, 4,
-      5, 5, 5, 5,
-      6, 6, 6, 6,
-      8, 8, 8, 8,
-      9, 9, 9, 9,
-      10, 10, 10, 10,
-      11, 11, 11, 11,
-      12, 12, 12,
+      2, 2,
+      3, 3, 3,
+      4, 4, 4,
+      5, 5, 5,
+      6, 6, 6,
+      8, 8, 8,
+      9, 9, 9,
+      10, 10, 10,
+      11, 11, 11,
+      12, 12,
     ],
-    // 12 port types — 5 single-resource (2:1) + 7 generic (3:1).
-    portTypes: [
-      'brick', 'wheat', 'ore', 'sheep', 'wood',
-      'generic', 'generic', 'generic', 'generic',
-      'generic', 'generic', 'generic',
-    ],
+    portTypes: seafarers56PortTypes(),
   },
 };
 
@@ -274,4 +229,12 @@ export const headingForNewShores = buildScenario({
   maxPlayers: 6,
   layout3p: LAYOUT_3_4P,
   layout5_6p: LAYOUT_5_6P,
+  // The dark-blue outlines wrap each pair of eastern islets with the sea
+  // between them: 4 small islands, not 6 (SEAFARERS56-SPEC-A).
+  extras5_6: {
+    islandGroups: [
+      [{ q: 4, r: -3 }, { q: 4, r: -1 }],
+      [{ q: 3, r: 1 }, { q: 1, r: 3 }],
+    ],
+  },
 });

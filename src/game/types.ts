@@ -28,6 +28,9 @@ export const COMMODITIES: readonly Commodity[] = ['paper', 'cloth', 'coin'] as c
 
 export type CommodityBank = Record<Commodity, number>;
 
+// Anything that can change hands with the supply under Cities & Knights.
+export type TradeGood = Resource | Commodity;
+
 // Maps the base-game terrain to the commodity its cities produce. Wheat and
 // brick fields don't produce a commodity — their cities just yield 2 of the
 // base resource (per the rulebook).
@@ -71,6 +74,14 @@ export interface KnightRecord {
   playerId: PlayerId;
   strength: KnightStrength;
   active: boolean;
+  // Set when this knight was stood up this turn (Activate, Encouragement, an
+  // active Treason placement). Rulebook p.9: only knights that were active
+  // at the start of the Action phase may take a knight action. Cleared at
+  // endTurn. Read through `knightCanAct` (knights/legal.ts).
+  activatedThisTurn?: true;
+  // Set when this knight was promoted this turn: a knight may only be
+  // promoted once per turn (p.9, Smithing p.14). Cleared at endTurn.
+  promotedThisTurn?: true;
 }
 
 // Per-player supply of knight tokens by strength. Rulebook ships 2 of each.
@@ -154,7 +165,14 @@ export type Terrain =
   | 'swamp'
   | 'lake'
   | 'wateringHole'
-  | 'castle';
+  | 'castle'
+  // Traders & Barbarians scenario: the quarry / castle / glassworks
+  // commodity hexes (non-producing, no number). Which location a hex is
+  // lives in `state.tradersBarbarians.locations`.
+  | 'commodity'
+  // Explorers & Pirates: a spice farm (land, no number). Its advantage
+  // lives in `state.explorersPirates.farms`.
+  | 'spice';
 
 export interface HexCoord {
   q: number;
@@ -168,6 +186,12 @@ export interface Hex {
   coord: HexCoord;
   terrain: Terrain;
   numberToken: number | null;
+  // Further numbers this hex also produces on, beyond `numberToken`. Absent
+  // on ordinary hexes. Traders & Barbarians uses it for the Rivers of Catan
+  // hex that carries both the 12 and the 2 disc, and for Fishing on Catan's
+  // lake (printed 2 / 3 / 11 / 12). Read a hex's numbers through
+  // `hexNumbers` / `hexRollsOn` in src/game/board/hexNumbers.ts.
+  extraNumbers?: number[];
   corners: VertexId[]; // 6 vertex IDs in clockwise order, for SVG polygon rendering
   center: { x: number; y: number }; // pixel center of the hex
 }
@@ -280,15 +304,21 @@ export interface Player {
   // non-empty when the 'seafarers' expansion is active.
   ships: EdgeId[];
   movedShipThisTurn?: boolean;
-  // Seafarers / Forgotten Tribe: commercial harbor tokens awarded by tribe
-  // hexes. Each token unconditionally lowers the player's bank trade rate
-  // floor to 2:1 (better than generic 3:1 ports). Count, not boolean, so
-  // future scenarios can stack effects if needed.
-  commercialHarbors?: number;
-  // Seafarers / Cloth for Catan: cloth tokens earned by settling adjacent
-  // to a cloth-producing hex. Not a regular resource — can't be traded or
-  // spent on builds. Worth 1 VP per 2 cloth at game end (Math.floor).
+  // Seafarers: ships built during the current turn. They may not be moved
+  // this turn (rulebook p.2). Cleared when the turn advances.
+  builtShipsThisTurn?: EdgeId[];
+  // Seafarers / Forgotten Tribe: ports picked up from the tribe that the
+  // player has not placed yet (no valid coastal-settlement edge at pickup
+  // time). Placed as soon as a valid edge exists.
+  heldPorts?: PortType[];
+  // Seafarers / Forgotten Tribe: VP tokens picked up by ships (1 VP each).
+  tribeVp?: number;
+  // Seafarers / Cloth for Catan: cloth tokens collected from villages. Not a
+  // resource — can't be traded or spent. Each pair is worth 1 VP.
   cloth?: number;
+  // Seafarers / Pirate Islands: ships converted to warships with Knight
+  // cards. Subset of `ships`. Strength against the pirates = count.
+  warships?: EdgeId[];
   // Cities & Knights commodity hand (paper / cloth / coin). Empty bank when
   // the expansion isn't active. Note: `Player.cloth` (Seafarers cloth tokens)
   // and `commodities.cloth` (C&K commodity) are distinct — the two
@@ -301,10 +331,13 @@ export interface Player {
   // Cities & Knights: improvement track levels (0..5 each). Only populated
   // under C&K.
   improvements?: ImprovementLevels;
-  // Cities & Knights: progress card hand by track. VP cards stay here and
-  // are visible (auto-flipped). Non-VP cards are secret and counted toward
-  // the 4-card hand limit.
+  // Cities & Knights: progress card hand by track. Secret, counted toward
+  // the 4-card hand limit. Victory Point cards never sit here.
   progressCards?: ProgressCardHand;
+  // Cities & Knights: Victory Point progress cards (Printing, Constitution)
+  // placed face up in the player area as soon as they're drawn (p.10). Not
+  // part of the hand: no limit, no Espionage, worth 1 VP each.
+  progressVpCards?: ProgressCardKind[];
   // Cities & Knights: number of "Defender of Catan" VP tokens earned by
   // contributing the most defender strength when the barbarians lost. 1 VP
   // each.
@@ -325,11 +358,6 @@ export interface Player {
   // the rulebook. Not a resource — doesn't count toward 7-roll discard,
   // can't be stolen by robber, can't be traded.
   fishTokens?: Array<'one' | 'two' | 'three'>;
-  // Traders & Barbarians / Barbarian Attack: edges where this player has
-  // hired a defender knight. T&B knights are simple stationary pieces
-  // (no levels, no activation) — distinct from the C&K knight system
-  // which uses `state.knights` keyed by vertex.
-  defenderKnights?: EdgeId[];
 }
 
 // ----- Traders & Barbarians / Fishing on Catan -----
@@ -340,15 +368,28 @@ export interface Player {
 // the pile reshuffles into a fresh pool when the pool empties.
 export type FishTokenType = 'one' | 'two' | 'three' | 'oldBoot';
 
-// Fishing ground tile: placed on a frame edge at a coastal vertex. The tile
-// has its own number token; on roll, the settlement/city at the anchor
-// vertex (if any) draws fish tokens. Vertices uniquely identify a fishing
-// ground (one per coastal "V" notch on the frame).
+// Fishing ground tile: a frame piece filling one of the six coastal "V"
+// notches. It touches two coastal edges and so three corners of the island;
+// when its number is rolled every settlement (1 fish) / city (2 fish) on one
+// of those corners draws fish tokens. Not a hex: the robber never sits here.
 export interface FishingGround {
-  // Anchor vertex on the main island. Settlements/cities on this vertex
-  // earn fish when `token` is rolled.
-  vertex: VertexId;
+  // The three coastal corners the tile touches (the notch's inner corner
+  // is the middle one).
+  vertices: VertexId[];
+  // The two coastal edges the tile lies against.
+  edges: EdgeId[];
   token: number;
+}
+
+// ----- Traders & Barbarians / Rivers of Catan -----
+
+// One river tile: the hexes it runs through, from its source (inside the
+// first hex, a mountain) downstream, plus the coastal edge where it meets
+// the sea (null if it ends inland). Every edge the river crosses or meets is
+// a bridge site (`state.riverEdges`).
+export interface RiverPath {
+  hexes: HexId[];
+  mouth: EdgeId | null;
 }
 
 // ----- Traders & Barbarians / Merchant Trains -----
@@ -358,53 +399,488 @@ export interface FishingGround {
 // edge. Wagons form merchant trains starting at the watering hole hex.
 export interface TradeWagon {
   edge: EdgeId;
+  // The intersection the wagon faces (the train's front when it was
+  // placed). Wagons sit nose-to-tail, so this is what shows which way a
+  // train runs. Optional for snapshots from before trains were modelled.
+  front?: VertexId;
+  // Id of the merchant train the wagon was added to.
+  train?: number;
 }
 
-// A single bid in the end-of-turn voting round. `cards` is the wool/wheat
-// stack the player has committed to the location at `target`. `target` is
-// the edge they want the wagon placed on (`null` to abstain).
+// One of the watering hole's three train start points (rulebook: its NW,
+// NE and S corners). A new train's first wagon goes on `edge`, the edge
+// leaving `corner` away from the watering hole, facing `head`.
+export interface WagonStartPoint {
+  label: 'NW' | 'NE' | 'S';
+  corner: VertexId;
+  edge: EdgeId;
+  head: VertexId;
+}
+
+// A merchant train: a string of wagons from a watering-hole corner. Only
+// the front (`head`) can be extended — trains never branch.
+export interface MerchantTrain {
+  id: number;
+  start: VertexId;
+  head: VertexId;
+  // No more wagons can be added: it ran into another train's middle, was
+  // merged into another train, or its front has no free edge left.
+  ended: boolean;
+  // The train this one merged into (its head met that train's head; the
+  // merged train continues from there).
+  mergedInto?: number;
+}
+
+// Where a wagon can go: the edge, plus the train it extends (null = start a
+// new train on a start edge). The same edge can extend two different
+// trains when their fronts face each other, so the pair is the identity.
+export interface WagonPlacement {
+  edge: EdgeId;
+  train: number | null;
+}
+
+// A player's public bid in the voting round: wool and wheat cards laid face
+// up (both 0 = the player passed).
 export interface WagonVoteBid {
-  cards: Partial<ResourceBank>;
-  target: EdgeId | null;
+  sheep: number;
+  wheat: number;
 }
 
-// State for the wagon-voting phase. Built when a player ends their action
-// phase after having built ≥ 1 piece this turn (settlement / city / road
-// / bridge). All players (including the active one) submit a bid; the
-// engine auto-resolves once every player has spoken.
+// State for the Merchant Trains voting round (end of a turn in which the
+// active player built a settlement or city). Bids go round once, starting
+// with the active player clockwise. With no absolute majority, every bidder
+// then names one location for all of their votes (stage 'assign').
 export interface WagonVoteState {
-  // Player who acquired the wagon (the one who built and ended turn).
-  // They receive the placement-fallback by default and break ties at the
-  // edge level.
+  // Player who acquired the wagon (the active player).
   acquirerId: PlayerId;
-  // Submitted bids, keyed by player id. A player who hasn't submitted yet
-  // is absent from the map.
+  // Everyone, starting with the active player, clockwise.
+  order: PlayerId[];
+  stage: 'bid' | 'assign';
+  // Index of the next player to act: into `order` while bidding, into the
+  // bidders (players with a bid of 1+, in `order`) while assigning.
+  turn: number;
+  // Bids placed so far (public).
   bids: Record<PlayerId, WagonVoteBid>;
+  // Assign stage: the location each bidder gave their votes to.
+  assignments: Record<PlayerId, WagonPlacement>;
 }
 
-// Mid-resolution: the voting closed and the placer has been chosen, but
-// they still need to pick an edge (the bid-winner location was ambiguous).
-// When the location is unambiguous after voting, we skip straight to
-// placing the wagon and never enter this phase.
+// Mid-resolution: the voting closed and a player must choose where the
+// wagon goes. `reason` is for the prompt / log.
 export interface PendingWagonPlacement {
   placerId: PlayerId;
+  reason?: 'majority' | 'mostVotes' | 'activePlayer' | 'noVotes';
+}
+
+// Outcome of the latest voting round, for the Scenario panel and the log.
+export interface WagonVoteResult {
+  acquirerId: PlayerId;
+  bids: Record<PlayerId, WagonVoteBid>;
+  assignments: Record<PlayerId, WagonPlacement>;
+  // How the location was decided.
+  decidedBy: 'majority' | 'location' | 'mostVotes' | 'activePlayer' | 'noVotes' | 'onlyOption';
+  chooser: PlayerId | null;
+  placement: WagonPlacement;
+}
+
+// ----- Traders & Barbarians / Catan Event Cards -----
+
+export type EventCardKind =
+  | 'beautifulDay'
+  | 'calmSeas'
+  | 'conflict'
+  | 'earthquake'
+  | 'epidemic'
+  | 'goodNeighbors'
+  | 'helpfulNeighbor'
+  | 'newYear'
+  | 'plentifulYear'
+  | 'robberAttacks'
+  | 'robberFlees'
+  | 'tournament'
+  | 'tradeAdvantage';
+
+export interface EventCard {
+  id: number;
+  kind: EventCardKind;
+  // Production number on the card's disc. null only for New Year.
+  number: number | null;
+}
+
+// One answer an event is waiting for, from one player.
+export interface EventChoice {
+  playerId: PlayerId;
+  // takeResource: pick 1 resource from the supply (Plentiful Year, Calm
+  // Seas, Tournament). giveResource: give 1 card of your choice (Good
+  // Neighbors: to `recipients[0]`, the player on your left; Helpful
+  // Neighbor: to any of `recipients`). steal: take 1 random card from a
+  // player of your choice, or pass (Conflict, Trade Advantage). damageRoad:
+  // turn one of your roads sideways (Earthquake).
+  kind: 'takeResource' | 'giveResource' | 'steal' | 'damageRoad';
+  recipients?: PlayerId[];
+}
+
+export interface EventCardsState {
+  // Face-down deck; index 0 is the top card.
+  deck: EventCard[];
+  // The card flipped this turn (shown in place of the dice). Kept until the
+  // next flip.
+  current: EventCard | null;
+  // True when this turn's flip hit New Year and the deck was rebuilt.
+  newYear?: boolean;
+  // An event waiting on answers (phase 'eventResolution'); production for
+  // `card.number` follows once `choices` is empty.
+  pending?: {
+    card: EventCard;
+    choices: EventChoice[];
+    // Good Neighbors: gifts are handed over together once everyone chose,
+    // so nobody passes on a card they just received.
+    gifts: Array<{ from: PlayerId; to: PlayerId; resource: Resource }>;
+  };
 }
 
 // ----- Traders & Barbarians / Barbarian Attack -----
 
-// One castle on the board. Three of these per Barbarian Attack scenario.
-// `barbarianPath` walks from an outer sea hex inward to the castle; the
-// barbarian piece advances along it one hex per endTurn. Combat resolves
-// when `barbarianPosition === barbarianPath.length - 1`.
-export interface CastleState {
+// The scenario's own 26-card development deck (rulebook p.15). A bought card
+// is played at once.
+export type BarbarianCardType = 'capture' | 'knighthood' | 'swiftKnight' | 'treason';
+
+// Treason moves one barbarian. `from: null` = from the supply (only when the
+// coastal hexes don't hold enough barbarians to move).
+export interface BarbarianTreasonMove {
+  from: HexId | null;
+  to: HexId;
+}
+
+// Knight-loss die faces → the castle tile's three edge colours. Purple = the
+// edges parallel to a hex's NW and SE edges ("/"), green = parallel to NE and
+// SW ("\"), brown = the vertical W / E edges.
+export type BarbarianEdgeColor = 'purple' | 'green' | 'brown';
+
+// One victory over the barbarians on a coastal hex (expel step), kept for
+// the log and the scenario panel.
+export interface BarbarianExpelResult {
+  hex: HexId;
+  barbarians: number;
+  // Knights on the hex's edges, per involved player.
+  knights: Record<PlayerId, number>;
+  prisoners: Record<PlayerId, number>;
+  // Involved players who got no prisoner (3 gold each instead).
+  consolation: PlayerId[];
+  // Tie-break dice (2d6 sums), in the order rolled, when any were needed.
+  rolls?: Record<PlayerId, number[]>;
+  // The hex was conquered and is now liberated.
+  liberated: boolean;
+  lossDie: number;
+  lossColor: BarbarianEdgeColor;
+  knightsLost: Record<PlayerId, number>;
+}
+
+export type BarbarianAttackEvent =
+  | {
+      kind: 'landing';
+      playerId: PlayerId;
+      // The accepted rolls (7s and repeats were re-rolled), in order.
+      rolls: Array<{ dice: [number, number]; hex: HexId; placed: boolean; conquered: boolean }>;
+      // The supply ran out before the third roll.
+      supplyEmpty: boolean;
+    }
+  | {
+      kind: 'cardDrawn';
+      playerId: PlayerId;
+      card: BarbarianCardType;
+      // Capture cards drawn first and discarded (no barbarian to capture).
+      skippedCaptures: number;
+      // The card could not be used (no knight left / no free castle edge /
+      // no legal Treason move) and was discarded.
+      wasted: boolean;
+    }
+  | { kind: 'expel'; playerId: PlayerId; results: BarbarianExpelResult[] };
+
+export interface BarbarianAttackState {
+  // Barbarians standing on each coastal hex (0-3). Missing key = 0. Three
+  // barbarians = the hex is conquered.
+  barbarians: Record<HexId, number>;
+  // Barbarians next to the board. 36 total = supply + on hexes + prisoners.
+  supply: number;
+  // The 12 coastal hexes in expel order: clockwise from the 4 next to the
+  // castle, ending with the castle hex.
+  coastalHexes: HexId[];
+  castleHex: HexId;
+  // 5-6 players: both castle hexes (`castleHex` is the first). Absent with
+  // one castle — read castles through `castleHexes(ba)` (barbarianAttack/state.ts).
+  castleHexes?: HexId[];
+  // Knights on edges. One knight per edge.
+  knights: Record<EdgeId, PlayerId>;
+  // Barbarians taken prisoner, per player. Every 2 = 1 VP.
+  prisoners: Record<PlayerId, number>;
+  // Face-down development deck (drawn from the end) and the discard pile
+  // (reshuffled with the seeded RNG when the deck runs out).
+  deck: BarbarianCardType[];
+  discard: BarbarianCardType[];
+  // A bought card waiting for its choice (phase 'barbarianCard').
+  pendingCard?: { playerId: PlayerId; card: BarbarianCardType };
+  // End-of-turn knight movement (phase 'barbarianKnightMoves'): edges where
+  // a knight already moved this turn sits.
+  movedKnights?: EdgeId[];
+  // Events produced by the most recent action that produced any (landing
+  // rolls, card draws, expel results). `seq` increments each time so the log
+  // can tell a new batch from an old one.
+  lastEvents?: { seq: number; events: BarbarianAttackEvent[] };
+}
+
+// ----------------------------------------------------------------------------
+// Traders & Barbarians scenario (2025 rulebook pp. 20-24)
+// ----------------------------------------------------------------------------
+
+export type CommodityLocationId = 'quarry' | 'castle' | 'glassworks';
+export type CommodityGood = 'sand' | 'marble' | 'tools' | 'glass';
+// The scenario's 25-card development deck. Knight / Road Building / VP go
+// into `player.devCards` like base cards; Swift Journey is held in
+// `TradersBarbariansState.swiftJourney` (it isn't a base DevCardType).
+export type TbDevCard = 'knight' | 'roadBuilding' | 'swiftJourney' | 'victoryPoint';
+
+export interface CommodityLocation {
+  id: CommodityLocationId;
+  hex: HexId;
+  // The centre plaza: an extra board vertex at the hex centre (no
+  // settlement; a wagon entering it ends its move, delivers, picks up).
+  plaza: VertexId;
+  // The 4 interior paths (corner -> plaza), ordinary road-buildable edges.
+  paths: EdgeId[];
+  // The 3 frame-side edges with an "X" marker (no roads).
+  xEdges: EdgeId[];
+  // Face-down token stack, drawn from the END (top = last element).
+  stack: CommodityGood[];
+  // Goods this location buys.
+  needs: CommodityGood[];
+}
+
+export interface TbWagon {
+  vertex: VertexId;
+  // Wagon board column, 1..5.
+  level: number;
+  // The token on the wagon board (face up), with the location it came from.
+  cargo: { good: CommodityGood; from: CommodityLocationId } | null;
+  // Tokens delivered (kept face down, 1 VP each).
+  delivered: number;
+}
+
+// The End of Turn phase ('wagonMoves'): the active player's movement.
+export interface TbWagonTurn {
+  // Movement points left in the current "Move your wagon" action.
+  mp: number;
+  // 1 = the normal move; 2 = the extra move a Swift Journey grants.
+  moveAction: 1 | 2;
+  // Wheat already spent for +2 MP in this move action.
+  boosted: boolean;
+  // The wagon entered a plaza: this move action is over.
+  ended: boolean;
+  // Edges moved this turn (both move actions).
+  steps: number;
+  // Barbarians (indices into `barbarians`) already driven at this turn.
+  triedBarbarians: number[];
+  // A Swift Journey was played this turn.
+  swiftJourney: boolean;
+}
+
+export type TbEvent =
+  | { kind: 'reroll'; playerId: PlayerId; dice: [number, number]; rerolled: Array<[number, number]> }
+  | {
+      kind: 'barbarianMoved';
+      playerId: PlayerId;
+      reason: 'seven' | 'knight' | 'driveOff';
+      barbarian: number;
+      from: EdgeId;
+      to: EdgeId;
+      // Road owner robbed (7 / Knight on a road), and whether a card was taken.
+      victim?: PlayerId;
+      stole?: boolean;
+    }
+  | { kind: 'driveOff'; playerId: PlayerId; barbarian: number; die: number; success: boolean }
+  | { kind: 'toll'; playerId: PlayerId; owner: PlayerId }
+  | { kind: 'deliver'; playerId: PlayerId; good: CommodityGood; location: CommodityLocationId; gold: number }
+  | { kind: 'pickUp'; playerId: PlayerId; good: CommodityGood; location: CommodityLocationId }
+  | { kind: 'stackEmpty'; playerId: PlayerId; location: CommodityLocationId }
+  | { kind: 'upgrade'; playerId: PlayerId; level: number }
+  | { kind: 'boost'; playerId: PlayerId }
+  | { kind: 'swiftJourney'; playerId: PlayerId }
+  | { kind: 'wagonDone'; playerId: PlayerId; steps: number };
+
+export interface TradersBarbariansState {
+  locations: CommodityLocation[];
+  // The 3 barbarians, each on an edge. Index = the barbarian's identity
+  // (drive-offs are once per barbarian per turn).
+  barbarians: EdgeId[];
+  wagons: Record<PlayerId, TbWagon>;
+  // The scenario's face-down development deck (drawn from the end).
+  deck: TbDevCard[];
+  // Swift Journey cards held (bought this turn = not yet playable).
+  swiftJourney: Record<PlayerId, { unplayed: number; boughtThisTurn: number }>;
+  // Present iff phase is 'wagonMoves'.
+  wagonTurn?: TbWagonTurn;
+  // Present iff phase is 'moveBarbarian': who moves which barbarian, why,
+  // and the phase play resumes in.
+  pendingBarbarian?: {
+    playerId: PlayerId;
+    reason: 'seven' | 'knight' | 'driveOff';
+    // Drive-off: the barbarian that must move. Otherwise any of the 3.
+    barbarian?: number;
+    returnTo: 'rollOrPlayKnight' | 'main' | 'wagonMoves';
+  };
+  // Events of the most recent action that produced any (log). `seq`
+  // increments each time.
+  lastEvents?: { seq: number; events: TbEvent[] };
+}
+
+// ----- Explorers & Pirates -----
+
+// The two unexplored regions: parrot hexes (green, north) and goose hexes
+// (orange, south). Each has its own face-down number disc stack.
+export type EpRegion = 'parrot' | 'goose';
+
+// Pieces carried by ships and stored on harbor settlements. Settlers and
+// fish hauls are large (fill both slots); crews and spice sacks are small.
+export type EpCargo = 'settler' | 'crew' | 'fish' | 'spice';
+
+// Spice farm advantages (rulebook p. 15).
+export type EpSpiceAbility = 'swiftVoyage' | 'fastGold' | 'pirateBonus';
+
+export type EpMission = 'pirateLairs' | 'fish' | 'spice';
+
+// What lies under a face-down hex. The board shows sea until it's explored.
+export interface EpHiddenTile {
+  region: EpRegion;
+  terrain: Terrain;
+  // Fish shoal (terrain 'sea'): its die number 1-6.
+  shoal?: number;
+  // Spice farm (terrain 'spice'): its advantage (+ the Pirate Bonus number).
+  ability?: EpSpiceAbility;
+  pirateNumber?: number;
+}
+
+export interface EpShip {
   id: string;
-  hexId: HexId;
-  barbarianPath: HexId[];
-  barbarianPosition: number;
-  barbarianStrength: number;
-  // VP accumulated by each player from successful defenses at this castle.
-  // 1 VP per knight a player brought to a winning defense.
-  defenderVp: Record<PlayerId, number>;
+  owner: PlayerId;
+  edge: EdgeId;
+  cargo: EpCargo[];
+}
+
+// A gold field found by exploring. Pirates hold it until the third crew
+// lands; `number` is the lair token's face-down number disc.
+export interface EpLair {
+  hex: HexId;
+  number: number;
+  crews: PlayerId[];
+  captured: boolean;
+}
+
+export interface EpSpiceFarm {
+  hex: HexId;
+  ability: EpSpiceAbility;
+  pirateNumber?: number;
+  // Players whose spice sack is still on the farm (one each).
+  sacks: PlayerId[];
+  // Players with a crew on the farm (permanent, one each).
+  crews: PlayerId[];
+}
+
+export interface EpShoal {
+  hex: HexId;
+  number: number;
+  haul: boolean;
+}
+
+// Where a piece sits: on a harbor settlement or on a ship.
+export type EpLocation = { harbor: VertexId } | { ship: string };
+
+export interface EpMovementState {
+  // The ship whose move is under way and its movement points left.
+  moving: string | null;
+  mp: number;
+  // Ships that have moved (or started moving) this turn — never battle-ready
+  // again this turn, and their move can't be resumed once another starts.
+  moved: string[];
+  // Ships boosted with 1 wool this turn (+2 MP, once per ship).
+  boosted: string[];
+  // Ships that already paid the pirate's tribute this turn.
+  paidTribute: string[];
+  // Ships that already tried to chase the pirate away this turn.
+  chased: string[];
+  // The once-per-turn fish roll.
+  fishRolled: boolean;
+}
+
+export type EpEvent =
+  | { kind: 'explore'; playerId: PlayerId; hex: HexId; terrain: Terrain; number?: number; reward: Resource | 'gold' | null }
+  | { kind: 'production'; total: number; gold: Record<PlayerId, number> }
+  | { kind: 'tribute'; playerId: PlayerId; to: PlayerId }
+  | { kind: 'chase'; playerId: PlayerId; die: number; success: boolean }
+  | { kind: 'pirate'; playerId: PlayerId; hex: HexId; stoleFrom: PlayerId | null; stoleGold: boolean; haulLost: boolean }
+  | { kind: 'fishRoll'; playerId: PlayerId; die: number; hex: HexId | null }
+  | { kind: 'loadFish'; playerId: PlayerId; hex: HexId }
+  | { kind: 'loadSpice'; playerId: PlayerId; hex: HexId }
+  | { kind: 'crewToFarm'; playerId: PlayerId; hex: HexId; ability: EpSpiceAbility }
+  | { kind: 'crewToLair'; playerId: PlayerId; hex: HexId; crews: number }
+  | { kind: 'deliver'; playerId: PlayerId; fish: number; spice: number }
+  | { kind: 'found'; playerId: PlayerId; vertex: VertexId }
+  | {
+      kind: 'lairCaptured';
+      hex: HexId;
+      number: number;
+      involved: PlayerId[];
+      rolls: Array<{ playerId: PlayerId; die: number; crews: number }>;
+      hero: PlayerId;
+    }
+  | { kind: 'track'; playerId: PlayerId; mission: EpMission; from: number; to: number }
+  | { kind: 'fastGold'; playerId: PlayerId; give: Resource };
+
+export interface ExplorersPiratesState {
+  // Face-down hexes and what lies under each (removed when explored).
+  hidden: Record<HexId, EpHiddenTile>;
+  // Region of every hex from the two unexplored areas (art for the backs).
+  regionOf: Record<HexId, EpRegion>;
+  // Face-down number disc stacks per region and the pirate lair tokens
+  // (drawn from the end).
+  discs: Record<EpRegion, number[]>;
+  lairTokens: number[];
+  // The Council of Catan hex and its two anchors (deliveries).
+  councilHex: HexId;
+  councilAnchors: VertexId[];
+  // Hexes of the starting island; the pirate may not go next to it.
+  startIsland: HexId[];
+  // Sea printed on the frame (ships sail there, the pirate may not).
+  frameHexes: HexId[];
+  // Setup intersections for the starting harbor settlements.
+  harborSites: VertexId[];
+  // Harbor settlements → the pieces stored on them. The owner is whoever
+  // has the vertex in `player.settlements` (a harbor settlement produces
+  // like a settlement and is worth 2 VP).
+  harbors: Record<VertexId, EpCargo[]>;
+  ships: EpShip[];
+  nextShipId: number;
+  // The pirate ship on the board (at most one at a time).
+  pirate: { owner: PlayerId; hex: HexId } | null;
+  lairs: EpLair[];
+  farms: EpSpiceFarm[];
+  shoals: EpShoal[];
+  fishSupply: number;
+  // Crews returned from captured lairs to the supply are just "not on the
+  // board"; crews on board are counted from ships / harbors / lairs / farms.
+  // Mission tracks: position per player (0 = start) and when the marker
+  // arrived on its space (lower = deeper in the stack, keeps the tile).
+  tracks: Record<EpMission, Record<PlayerId, number>>;
+  arrivals: Record<EpMission, Record<PlayerId, number>>;
+  trackSeq: number;
+  // Present iff phase is 'epMovement'.
+  movement?: EpMovementState;
+  // Lairs captured during this Movement phase; resolved when it ends.
+  pendingLairs: HexId[];
+  // Present iff phase is 'epPlacePirate'.
+  pendingPirate?: { playerId: PlayerId; reason: 'seven' | 'chase'; returnTo: 'main' | 'epMovement' };
+  // Fast Gold trades made this turn (once per Fast Gold farm with a crew).
+  fastGoldUsed: number;
+  lastEvents?: { seq: number; events: EpEvent[] };
 }
 
 // ============================================================================
@@ -414,6 +890,9 @@ export interface CastleState {
 export type GamePhase =
   | 'setupRound1'
   | 'setupRound2'
+  // Seafarers / Cloth for Catan: a third starting settlement, placed in
+  // normal turn order after the snake rounds.
+  | 'setupRound3'
   | 'rollOrPlayKnight'
   | 'discard'
   | 'moveRobber'
@@ -422,10 +901,30 @@ export type GamePhase =
   // Traders & Barbarians / Merchant Trains: end-of-turn voting + placement.
   | 'wagonVoting'
   | 'placeWagon'
+  // Traders & Barbarians / Barbarian Attack: the choice for a development
+  // card played on purchase, and the end-of-turn knight movement step.
+  | 'barbarianCard'
+  | 'barbarianKnightMoves'
+  // Traders & Barbarians scenario: placing a barbarian (after a 7, a Knight
+  // or a successful drive-off), and the End of Turn wagon movement.
+  | 'moveBarbarian'
+  | 'wagonMoves'
+  // Traders & Barbarians / Catan Event Cards: players answer the flipped
+  // event (pick / give / steal / damage a road) before production.
+  | 'eventResolution'
+  // Traders & Barbarians / Fishing on Catan: players whose fish draws hit
+  // the 7-token cap this production decide (in turn order) whether to swap
+  // one token for a fresh draw (`swapFish`).
+  | 'fishSwap'
   // Seafarers extension phases.
   | 'chooseRobberOrPirate'
   | 'movePirate'
   | 'chooseGoldResource'
+  // Seafarers / Forgotten Tribe: place a port picked up from the tribe.
+  | 'placeTribePort'
+  // Seafarers / Pirate Islands: there is no robber; on a 7 the roller
+  // steals one random card from any player.
+  | 'stealResource'
   // Cities & Knights sub-phases. All transitions live on the C&K module.
   | 'displacedKnightMove'
   | 'placeMetropolis'
@@ -437,10 +936,22 @@ export type GamePhase =
   | 'treasonPlaceKnight'
   | 'commercialHarborOffer'
   | 'weddingGive'
-  | 'aqueductPick';
+  | 'aqueductPick'
+  // Barbarians driven off with a tie at the top: each tied player draws a
+  // progress card from the deck of their choice (pendingDefenderTieDraw).
+  | 'defenderTieDraw'
+  // Barbarians won: a losing player with 2+ pillageable cities picks which
+  // one is reduced to a settlement (pendingPillage).
+  | 'choosePillage'
+  // Explorers & Pirates: the Movement phase after the Action phase, and
+  // placing your pirate ship (after a 7 or a successful chase).
+  | 'epMovement'
+  | 'epPlacePirate';
 
 export interface SetupState {
-  step: 'settlement' | 'road';
+  // 'ship': Explorers & Pirates' third setup round places a ship (with a
+  // settler) next to the starting harbor settlement after the road.
+  step: 'settlement' | 'road' | 'ship';
   lastPlacedSettlement: VertexId | null;
 }
 
@@ -487,25 +998,45 @@ export interface GameSettings {
   // Variants are tiny rule modifiers shipped with the T&B box but composable
   // with base / Seafarers / Fun Map games.
   tradersVariants?: {
-    // "Friendly Robber" — you may not place the robber on a hex whose only
-    // adjacent buildings belong to players with ≤ 2 VPs. Falls back to the
-    // desert when no valid hex exists.
+    // "Friendly Robber" — the robber may not go to a hex with a building of
+    // a player who has only 2 (public) VPs. With no valid hex it goes to
+    // the desert, stealing only from a neighbour with more than 2 VPs.
+    // Variants work with any rule set (base, Seafarers, T&B scenarios).
     friendlyRobber?: boolean;
-    // "Strongest Ports / Harbors of Catan" — the player with ≥ 3 VPs in
-    // port-buildings holds a 2 VP bonus tile. Target VP bumps by 1 when on.
+    // "Strongest Ports / Harbors of Catan" — the first player with 3 VPs
+    // in buildings on harbors takes a 2 VP tile; a player with more takes
+    // it over. Target VP bumps by 1 when on.
     strongestPorts?: boolean;
+    // "Catan Event Cards" — an event deck replaces the dice: each turn
+    // flips a card, resolves its event, then produces for its number.
+    eventCards?: boolean;
   };
   // User-authored custom map. When set, overrides every other board source
   // (Seafarers scenario, Fun Map, base) — createGame routes through
   // `generateCustomMapBoard`. The map's `seafarers` flag determines whether
   // island chips / fog state are populated.
   customMap?: import('./customMap/types').CustomMap;
+  // Number of starting-settlement rounds. 3 = Cloth for Catan (a third
+  // settlement in normal order; only the third collects resources).
+  // Set by createGame from the scenario; undefined = 2.
+  setupRounds?: 2 | 3;
+  // Explorers & Pirates: scenario id (only 'explorersPirates', the
+  // Rulebook's complete scenario, ships today).
+  explorersPiratesScenarioId?: string;
 }
 
 export interface PendingTrade {
   proposerId: PlayerId;
   give: Partial<ResourceBank>;
   receive: Partial<ResourceBank>;
+  // Traders & Barbarians coins (only when `state.coinsInPlay`): gold the
+  // proposer offers / asks for alongside (or instead of) cards.
+  giveGold?: number;
+  receiveGold?: number;
+  // Cities & Knights: commodities on either side of the offer (p.7 "you may
+  // trade any combination of resources and commodities").
+  giveCommodities?: Partial<CommodityBank>;
+  receiveCommodities?: Partial<CommodityBank>;
   // Players who have explicitly rejected this offer. Purely informational —
   // a rejection does not cancel the trade; the proposer can still wait for
   // another player to accept or for the timer/end-turn auto-cancel.
@@ -574,42 +1105,62 @@ export interface GameState {
   // the pick is made we drop back into setup road placement.
   goldChoiceState?: {
     pending: Record<PlayerId, number>;
-    returnTo?: 'main' | 'setupRound2';
+    returnTo?: 'main' | 'setupRound1' | 'setupRound2' | 'setupRound3' | 'rollOrPlayKnight';
+    // Pirate Islands: the picks came from beating the pirate fleet on a 7;
+    // once they're made, "Resolve a 7" starts (discards, then the steal).
+    afterPicks?: 'resolveSeven';
   };
   islandChips?: IslandChip[];
-  // Seafarers / Forgotten Tribe: friendly-tribe tokens placed on outer
-  // islets. Claimed the first time any player settles on a vertex
-  // adjacent to the token's hex. Each type has its own one-shot effect
-  // (see TribeTokenType). Tokens stay on the board in `claimedBy` form so
-  // the UI can render who got what.
+  // Seafarers: island ids (see board.islandOfHex) that starting settlements
+  // must touch. Undefined = anywhere.
+  startingIslands?: string[];
+  // Seafarers: land hexes that don't count as land for settlement placement
+  // (Forgotten Tribe: hexes without a number disc; Cloth for Catan: the
+  // small village islands). A settlement needs at least one adjacent land
+  // hex outside this list.
+  settlementBlockedHexes?: HexId[];
+  // Seafarers: land hexes the robber may not be moved to (Forgotten Tribe:
+  // hexes without a number disc; Cloth for Catan: the small islands).
+  robberBlockedHexes?: HexId[];
+  // Seafarers: vertices where starting settlements may not go (Wonders of
+  // Catan: Great Wall / Great Bridge / "X" markers).
+  setupBlockedVertices?: VertexId[];
+  // Settlements nobody owns (the 5-player beginner set-up leaves the unused
+  // color's settlements on the board). They count like an opponent's
+  // building for the distance rule and stop roads and Longest Road passing
+  // through, but produce nothing and score nothing.
+  inactiveSettlements?: VertexId[];
+  // Seafarers: the Longest Route / Largest Army tiles are returned to the box
+  // in some scenarios (Cloth for Catan, Pirate Islands).
+  noLongestRoad?: boolean;
+  noLargestArmy?: boolean;
+  // Seafarers / Forgotten Tribe: VP tokens, development cards and ports
+  // placed on edges around the tribe's islands. Picked up by building or
+  // moving a ship onto the edge.
   tribeTokens?: TribeToken[];
+  // Seafarers / Forgotten Tribe: port being placed in the 'placeTribePort'
+  // phase (taken from the placing player's `heldPorts`).
+  pendingTribePort?: { playerId: PlayerId; portType: PortType };
+  // Seafarers / Wonders of Catan: marker vertices that gate wonder claims
+  // (Great Wall, Great Bridge, Lighthouse).
+  wonderSites?: Partial<Record<WonderId, VertexId[]>>;
+  // Seafarers / Cloth for Catan: the villages on the small islands, plus
+  // the general cloth supply.
+  clothVillages?: ClothVillage[];
+  clothSupply?: number;
+  // Seafarers / Pirate Islands state (fleet path, fortresses, last attack).
+  pirateIslands?: PirateIslandsState;
   // Seafarers / Fog Island: hexes that start hidden under fog. Removed
   // from this list as players build settlements / roads / ships adjacent
   // to them. Empty / undefined when no fog is active. The terrain on the
   // hex itself is still set; we just gate the UI on this list and grant
   // the reveal bonus at the moment of unveiling.
   unrevealedFogHexes?: HexId[];
-  // Seafarers / Wonders of Catan: one entry per wonder defined for the
-  // scenario. `builtBy` is null until a player builds the first level,
-  // then locked to that player for the rest of the game (only one
-  // builder per wonder). `level` increments to the wonder's max; on
-  // reaching max the game ends with that player as winner.
+  // Seafarers / Wonders of Catan: one entry per wonder tile in play. A
+  // player claims one wonder (meeting its requirement), then builds its
+  // four levels. Completing level 4 wins; so does reaching the VP target
+  // with a strictly higher wonder level than everyone else.
   wonders?: WonderState[];
-  // Seafarers / Pirate Islands: enemy fleet anchored at a sea hex.
-  // Players attack it with ships; when strength hits 0 the fleet is
-  // defeated and the player who landed the final blow gets a bonus VP.
-  // The fleet is independent of the regular `board.pirateHex` (the
-  // movable pirate token); both can coexist on the board.
-  pirateFleet?: PirateFleet;
-  // Per-turn flag: has the current player already attacked the fleet
-  // this turn? Caps combat to one attack per turn so each player gets
-  // a roughly proportional shot at the killing blow. Cleared on endTurn.
-  attackedPirateThisTurn?: boolean;
-  // Seafarers / Cloth for Catan: hexes that produce cloth tokens instead
-  // of their regular resource on roll. Settled players get 1 cloth per
-  // settlement, 2 per city — same multiplier as resources. Cloth lives
-  // on player.cloth and converts to VP at 2:1 in scoring.
-  clothHexes?: HexId[];
   // ----- Cities & Knights extension -----
   // Commodity bank (paper / cloth / coin). Mirrors `bank` but for the three
   // C&K commodities. Decrements when cities produce commodities; refunds on
@@ -648,11 +1199,19 @@ export interface GameState {
   // and a 2:1 trade rate on the hex's resource (not commodity).
   merchant?: { ownerId: PlayerId; hexId: HexId };
   // Per-turn flags reset on endTurn:
+  // Deprecated: promotion is once per KNIGHT per turn
+  // (KnightRecord.promotedThisTurn). Never set any more.
   promotedKnightThisTurn?: boolean;
-  // Vertices of knights activated this turn — they can't take an action
-  // this same turn (rulebook p.9 "you may not activate a knight and then
-  // take an action with it on the same turn").
+  // Vertices of knights activated this turn (they can't take an action this
+  // same turn, p.9). Kept for readers; the source of truth is
+  // KnightRecord.activatedThisTurn (see knightCanAct).
   activatedKnightsThisTurn?: VertexId[];
+  // Commercial Harbor played this turn: the active player may offer each
+  // other player one resource (once each) for a commodity of their choice.
+  commercialHarbor?: { offererId: PlayerId; offeredTo: PlayerId[] };
+  // Set when endTurn found the active player over the 4-card progress limit:
+  // once they've discarded down, the turn ends by itself.
+  endTurnAfterProgressDiscard?: boolean;
   hasPlayedProgressCardThisTurn?: boolean;
   // Merchant Fleet card flag (this turn only): 2:1 on this resource/commodity.
   merchantFleetActive?: {
@@ -695,9 +1254,20 @@ export interface GameState {
     attackerId: PlayerId;
     targetId: PlayerId;
     removedStrength?: KnightStrength;
+    // Status of the removed knight: the attacker's replacement takes it.
+    removedActive?: boolean;
   };
   pendingWedding?: { collector: PlayerId; remaining: PlayerId[] };
-  pendingCommercialHarbor?: { offererId: PlayerId; remaining: PlayerId[] };
+  // One Commercial Harbor offer in flight: `targetId` must answer with one of
+  // their commodities in exchange for `resource`.
+  pendingCommercialHarbor?: {
+    offererId: PlayerId;
+    targetId: PlayerId;
+    resource: Resource;
+  };
+  // Barbarians won: players (in turn order from the active player) who must
+  // pick which of their cities is pillaged.
+  pendingPillage?: PlayerId[];
   // Progress card discard required after a draw pushed someone over the
   // 4-card cap. Same shape as `discardState.required` but for progress
   // cards.
@@ -709,11 +1279,40 @@ export interface GameState {
   // contribution is tied across multiple players, each tied player draws
   // a progress card of their choice. Queued here in turn order.
   pendingDefenderTieDraw?: PlayerId[];
+  // Production dice total held back while a barbarian attack still needs
+  // answers (tie draws, pillage choices): cities pillaged by the attack
+  // produce as settlements on the same roll (p.6: the event die resolves
+  // before production). Set and consumed by the C&K roll flow.
+  pendingProduction?: number;
+  // Outcome of the most recent barbarian attack, for the tracker and log.
+  lastBarbarianAttack?: {
+    barbarianStrength: number;
+    defenderStrength: number;
+    outcome: 'defended' | 'pillaged';
+    // Defended: the unique top contributor (VP token), or the tied players
+    // who each draw a progress card.
+    defender?: PlayerId;
+    tied?: PlayerId[];
+    // Pillaged: players who lose a city (filled in as choices resolve).
+    losers?: PlayerId[];
+  };
   // ----- Traders & Barbarians extension -----
   // Edges flagged as "river edges" by the active T&B scenario. Roads are
   // forbidden on these edges; bridges are the only structure that can
   // occupy them. Empty / undefined when T&B is inactive.
   riverEdges?: EdgeId[];
+  // Rivers of Catan: the two river tiles (hexes source → mouth). Every
+  // corner / edge of these hexes pays gold on build; the renderer draws the
+  // water along them.
+  rivers?: RiverPath[];
+  // Traders & Barbarians scenarios that use coins (Rivers of Catan,
+  // Barbarian Attack, Traders & Barbarians): enables `spendGold` (2 gold → 1
+  // resource of choice, at most twice per turn) and `buyGold` (resources →
+  // 1 gold at your bank trade rate). Set by createGame from the scenario.
+  coinsInPlay?: boolean;
+  // How many times the acting player has spent gold this turn (the
+  // 2-per-turn cap). Cleared when a new turn starts.
+  goldSpendsThisTurn?: number;
   // Wealthiest / Poor Catanian bonus tiles. Recalculated after every gold
   // change. `wealthiest` = unique max-gold player (≥ 1 gold; ties leave it
   // null). `poor` = all players strictly below the min — i.e. everyone tied
@@ -745,6 +1344,13 @@ export interface GameState {
   // Hex id of the lake (a non-resource hex with a number that produces fish
   // on roll). Robber may sit on the lake to block its production.
   lakeHexId?: HexId;
+  // 5-6 players: every lake (two; `lakeHexId` is the first). Absent with one
+  // lake — read lakes through `lakeHexes(state)` (traders/fishing/lakes.ts).
+  lakeHexIds?: HexId[];
+  // Fishing on Catan: present iff phase is 'fishSwap'. Players (turn order)
+  // whose draws were cut off by the 7-token cap and may still swap one token.
+  // `returnTo` is the phase play resumes in afterwards.
+  fishSwap?: { queue: PlayerId[]; returnTo: GamePhase };
   // Holder of the old boot (≥1 extra VP needed to win). Drawn from the fish
   // pool. Players may pass it during their turn to any player with ≥ their
   // VPs. null when in the supply.
@@ -752,6 +1358,9 @@ export interface GameState {
   // Merchant Trains: hex id of the watering hole (non-producing centre hex,
   // origin of every merchant train).
   wateringHoleHexId?: HexId;
+  // 5-6 players: both watering holes (`wateringHoleHexId` is the first).
+  // Absent with one — read them through `wateringHoles(state)` (trains.ts).
+  wateringHoleHexIds?: HexId[];
   // All placed trade wagons in the scenario. Neutral pieces — they extend
   // the road network of whichever player owns a road on the same edge.
   wagons?: TradeWagon[];
@@ -759,62 +1368,143 @@ export interface GameState {
   // each placement. When 0, no more wagons can be placed (and the voting
   // phase still runs but resolves to a no-op).
   wagonSupply?: number;
-  // Did the active player build at least one piece this turn? Determines
-  // whether `endTurn` opens the voting phase. Cleared on turn advance.
+  // Did the active player build a building (settlement or city) in their
+  // Action phase this turn? Earns the turn's wagon, placed in the voting
+  // round when the turn ends. Roads and bridges don't count. Cleared when
+  // the turn ends.
   builtThisTurn?: boolean;
+  // The watering hole's three train start points (NW, NE, S corners).
+  wagonStarts?: WagonStartPoint[];
+  // Every merchant train on the board, in the order they were started.
+  merchantTrains?: MerchantTrain[];
   // Voting state — present iff phase is 'wagonVoting'.
   wagonVote?: WagonVoteState;
   // Pending placement — present iff phase is 'placeWagon'. Resolved by a
   // `placeWagon` action.
   pendingWagonPlacement?: PendingWagonPlacement;
-  // Barbarian Attack: three castles + their barbarian advance state. Empty /
-  // undefined when the scenario isn't active.
-  castles?: CastleState[];
-  // Shared supply of defender knights left in the bag. Decrements on
-  // hireKnight; refunded when knights die in combat. Distinct from
-  // `state.knightSupply` (C&K, per-player by strength).
-  barbarianKnightSupply?: number;
+  // Traders & Barbarians / Barbarian Attack: barbarians on the coast, knights
+  // on edges, prisoners and the scenario's development deck. Undefined in
+  // every other game.
+  barbarianAttack?: BarbarianAttackState;
+  // Traders & Barbarians scenario: commodity locations, barbarians on edges,
+  // wagons, the scenario deck. Undefined in every other game.
+  tradersBarbarians?: TradersBarbariansState;
+  // Edges where no road may be built (T&B scenario "X" markers).
+  roadBlockedEdges?: EdgeId[];
+  // The latest voting round's outcome (Scenario panel / log).
+  lastWagonVote?: WagonVoteResult;
+  // ----- Traders & Barbarians variant: Catan Event Cards -----
+  // The event deck that replaces the dice (`tradersVariants.eventCards`).
+  eventCards?: EventCardsState;
+  // Earthquake: roads turned sideways. Their owners can't build roads until
+  // they repair them all, and nobody may build a settlement at either end.
+  // They still count for the Longest Route.
+  damagedRoads?: EdgeId[];
+  // ----- Explorers & Pirates -----
+  explorersPirates?: ExplorersPiratesState;
+  // Rate for trades with the supply when the player has no harbor
+  // (undefined = 4). Explorers & Pirates trades 3:1.
+  supplyTradeRate?: number;
 }
 
+// Seafarers island bonus. Every player earns an island's bonus once, on
+// their first settlement there — it does not matter whether other players
+// settled it first (rulebook). Islands a player started on are that
+// player's home islands and never pay them a bonus.
 export interface IslandChip {
   islandId: string;
   vp: number;
-  firstSettler: PlayerId | null;
+  // Players who have earned this island's bonus.
+  claimedBy: PlayerId[];
+  // Players for whom this is a home island (a starting settlement is here).
+  homeOf: PlayerId[];
 }
 
-export type TribeTokenType = 'devCard' | 'victoryPoint' | 'commercialHarbor';
+export type TribeTokenType = 'victoryPoint' | 'devCard' | 'port';
 
 export interface TribeToken {
-  hexId: HexId;
+  edge: EdgeId;
   type: TribeTokenType;
+  // type 'port': which port the tribe hands over.
+  portType?: PortType;
+  // type 'devCard': the face-down card (drawn from the deck at setup).
+  devCard?: DevCardType;
   claimedBy: PlayerId | null;
 }
 
 export type WonderId =
-  | 'greatWall'
+  | 'grandCastle'
+  | 'grandMonument'
   | 'greatBridge'
-  | 'hangingGardens'
-  | 'cathedral'
-  | 'tradeOffice';
+  | 'grandTheater'
+  | 'greatWall'
+  // Seafarers 5-6 player extension.
+  | 'lighthouse'
+  | 'greatLibrary';
 
 export interface WonderState {
   id: WonderId;
-  // Player who first started this wonder. Only they can keep building it;
-  // other players are locked out once it's claimed.
-  builtBy: PlayerId | null;
-  // 0 = not started, increments by 1 per built level up to the wonder's
-  // max (defined in the wonder catalogue alongside cost and prereq).
+  // The player who claimed this wonder (each player may claim one). Locked
+  // for the rest of the game.
+  claimedBy: PlayerId | null;
+  // Levels built, 0..4. Level 4 = complete.
   level: number;
 }
 
-export interface PirateFleet {
-  hexId: HexId;
-  // Remaining strength. Each attack drops this by 1; 0 means defeated.
-  strength: number;
-  maxStrength: number;
-  // Player who landed the killing blow (strength → 0). Awarded a +2 VP
-  // bonus on top of standard scoring.
-  defeatedBy: PlayerId | null;
+// Cloth for Catan village: a number disc on a small-island intersection.
+export interface ClothVillage {
+  vertex: VertexId;
+  number: number;
+  // Cloth tokens left next to this village. 0 = exhausted (no production).
+  supply: number;
+  // Players who established trade relations (a route from one of their
+  // buildings to this village).
+  partners: PlayerId[];
+}
+
+// Pirate Islands fortress: a pirate-held settlement in one player's color.
+export interface PirateFortress {
+  playerId: PlayerId;
+  vertex: VertexId;
+  // The player's beachhead marker: their western line of ships must pass
+  // here, and they may build a settlement here once it arrives.
+  beachhead: VertexId;
+  // Pirate lair tokens left (3 → 0). 0 = recaptured (becomes a settlement).
+  lairs: number;
+}
+
+export interface PirateIslandsState {
+  // Island id (board.islandOfHex) of the eastern main island. Everything
+  // else is a pirate island.
+  mainIsland: string;
+  // The pirate fleet's loop of sea hexes, in travel order.
+  path: HexId[];
+  // Seafarers 5-6: the fleet doesn't attack from this hex.
+  noAttackHex?: HexId;
+  // Index into `path` of the fleet's hex. -1 once every fortress is
+  // recaptured and the pirate ship is removed.
+  fleetIndex: number;
+  fortresses: PirateFortress[];
+  // Most recent fleet attack, for the log / UI.
+  lastFleetAttack?: {
+    hex: HexId;
+    strength: number;
+    results: Array<{
+      playerId: PlayerId;
+      warships: number;
+      outcome: 'lost' | 'won' | 'tied';
+      discarded: number;
+    }>;
+  };
+  // Most recent fortress attack, for the log / UI.
+  lastFortressAttack?: {
+    playerId: PlayerId;
+    die: number;
+    warships: number;
+    outcome: 'won' | 'lost' | 'tied';
+    shipsLost: number;
+    captured: boolean;
+  };
 }
 
 // ============================================================================
@@ -884,7 +1574,10 @@ export interface PlayKnightAction extends ActionBase {
 
 export interface PlayRoadBuildingAction extends ActionBase {
   type: 'playRoadBuilding';
-  edges: [EdgeId] | [EdgeId, EdgeId];
+  // Free roads, placed in order.
+  edges: EdgeId[];
+  // Seafarers: free ships, placed after the roads. Roads + ships <= 2.
+  ships?: EdgeId[];
 }
 
 export interface PlayYearOfPlentyAction extends ActionBase {
@@ -910,6 +1603,12 @@ export interface ProposeTradeAction extends ActionBase {
   type: 'proposeTrade';
   give: Partial<ResourceBank>;
   receive: Partial<ResourceBank>;
+  // T&B coins: gold offered / asked (see PendingTrade).
+  giveGold?: number;
+  receiveGold?: number;
+  // Cities & Knights: commodities in the offer.
+  giveCommodities?: Partial<CommodityBank>;
+  receiveCommodities?: Partial<CommodityBank>;
 }
 
 export interface AcceptTradeAction extends ActionBase {
@@ -928,6 +1627,12 @@ export interface CounterTradeAction extends ActionBase {
   type: 'counterTrade';
   give: Partial<ResourceBank>;
   receive: Partial<ResourceBank>;
+  // T&B coins: gold offered / asked (see PendingTrade).
+  giveGold?: number;
+  receiveGold?: number;
+  // Cities & Knights: commodities in the counter-offer.
+  giveCommodities?: Partial<CommodityBank>;
+  receiveCommodities?: Partial<CommodityBank>;
 }
 
 export interface EndTurnAction extends ActionBase {
@@ -961,6 +1666,8 @@ export interface MovePirateAction extends ActionBase {
   type: 'movePirate';
   hex: HexId;
   stealFrom: PlayerId | null;
+  // Cloth for Catan: steal a cloth token instead of a resource card.
+  stealCloth?: boolean;
 }
 
 export interface ChooseGoldResourceAction extends ActionBase {
@@ -968,13 +1675,35 @@ export interface ChooseGoldResourceAction extends ActionBase {
   resources: Resource[];
 }
 
+// Wonders of Catan: claim a wonder tile (requirements must be met).
+export interface ClaimWonderAction extends ActionBase {
+  type: 'claimWonder';
+  wonderId: WonderId;
+}
+
+// Wonders of Catan: build the next level of the player's claimed wonder.
 export interface BuildWonderAction extends ActionBase {
   type: 'buildWonder';
   wonderId: WonderId;
 }
 
-export interface AttackPirateFleetAction extends ActionBase {
-  type: 'attackPirateFleet';
+// Seafarers setup: a coastal starting settlement may take a ship instead
+// of a road.
+export interface PlaceInitialShipAction extends ActionBase {
+  type: 'placeInitialShip';
+  edge: EdgeId;
+}
+
+// Forgotten Tribe: place a port picked up from the tribe.
+export interface PlaceTribePortAction extends ActionBase {
+  type: 'placeTribePort';
+  edge: EdgeId;
+}
+
+// Pirate Islands: steal one random resource card from any player on a 7.
+export interface StealResourceAction extends ActionBase {
+  type: 'stealResource';
+  stealFrom: PlayerId | null;
 }
 
 // ----------------------------------------------------------------------------
@@ -992,10 +1721,13 @@ export interface BuildBridgeAction extends ActionBase {
 // "you lose the excess fish"). `effect.kind` discriminates the action.
 export type FishSpendEffect =
   | { kind: 'removeRobber' }
-  | { kind: 'steal'; target: PlayerId; resource: Resource }
+  // The stolen card is picked from the victim's hand with the seeded RNG
+  // (same as a robber steal) so every peer reduces the same card.
+  | { kind: 'steal'; target: PlayerId }
   | { kind: 'takeFromBank'; resource: Resource }
   | { kind: 'buildRoad'; edge: EdgeId }
-  | { kind: 'buyDevCard'; drawn: DevCardType };
+  // Takes the top card of the development deck, free.
+  | { kind: 'buyDevCard' };
 
 export interface SpendFishAction extends ActionBase {
   type: 'spendFish';
@@ -1006,6 +1738,28 @@ export interface SpendFishAction extends ActionBase {
   effect: FishSpendEffect;
 }
 
+// Fishing on Catan, 'fishSwap' phase: the player at the head of the queue
+// discards one fish token and draws a replacement (`token`), or declines
+// (`token: null`).
+export interface SwapFishAction extends ActionBase {
+  type: 'swapFish';
+  token: 'one' | 'two' | 'three' | null;
+}
+
+// Coins (Rivers of Catan / Barbarian Attack): pay 2 gold for 1 resource
+// card of your choice from the supply. At most twice per turn.
+export interface SpendGoldAction extends ActionBase {
+  type: 'spendGold';
+  resource: Resource;
+}
+
+// Coins: trade resource cards to the supply for 1 gold, at your bank rate
+// for that resource (4:1, 3:1 with a generic port, 2:1 with its port).
+export interface BuyGoldAction extends ActionBase {
+  type: 'buyGold';
+  give: Resource;
+}
+
 // Hand the old boot to another player. Legal target: any other player whose
 // total VP ≥ yours. The recipient now needs +1 VP to win.
 export interface PassOldBootAction extends ActionBase {
@@ -1013,32 +1767,102 @@ export interface PassOldBootAction extends ActionBase {
   to: PlayerId;
 }
 
-// Merchant Trains end-of-turn voting. Every player (including the active
-// one) dispatches this exactly once per voting round. `cards` are
-// wool/wheat resource cards spent on the bid; `target` is the edge to
-// vote for (null = abstain). Engine auto-resolves once all players have
-// submitted.
+// Merchant Trains voting round, bid stage: the player whose turn it is lays
+// any number of wool / wheat cards face up (none = pass). Only `sheep` and
+// `wheat` may be set.
 export interface SubmitWagonVoteAction extends ActionBase {
   type: 'submitWagonVote';
   cards: Partial<ResourceBank>;
-  target: EdgeId | null;
 }
 
-// Merchant Trains placement after the vote resolves to a placer-with-no-
-// majority-location. Only the placer (set on state.pendingWagonPlacement)
-// may dispatch this. The edge must be a legal merchant-train extension.
+// Merchant Trains voting round, assign stage (no absolute majority): a
+// bidder gives all of their votes to one wagon location.
+export interface AssignWagonVotesAction extends ActionBase {
+  type: 'assignWagonVotes';
+  location: WagonPlacement;
+}
+
+// Merchant Trains: the chosen player places the wagon. `train` names the
+// train extended (null = start a new train); omitted, the engine picks the
+// only placement on `edge` (the first, if two trains' fronts share it).
 export interface PlaceWagonAction extends ActionBase {
   type: 'placeWagon';
   edge: EdgeId;
+  train?: number | null;
 }
 
-// Barbarian Attack: hire a defender knight on an edge adjacent to a
-// castle. Cost: 1 wheat + 1 ore. Knight is consumed from the shared
-// `state.barbarianKnightSupply`; the edge must be unoccupied and the
-// player must have a connecting road/settlement/city/defender-knight.
-export interface HireKnightAction extends ActionBase {
-  type: 'hireKnight';
+// Catan Event Cards: answer the oldest open choice of this player in the
+// current event. `resource` for take / give; `target` for give (Helpful
+// Neighbor) and steal (null = don't steal); `edge` for Earthquake.
+export interface ResolveEventAction extends ActionBase {
+  type: 'resolveEvent';
+  resource?: Resource | null;
+  target?: PlayerId | null;
+  edge?: EdgeId | null;
+}
+
+// Catan Event Cards / Earthquake: repair one of your damaged roads.
+export interface RepairRoadAction extends ActionBase {
+  type: 'repairRoad';
   edge: EdgeId;
+}
+
+// Barbarian Attack: the choice for the development card just bought
+// (phase 'barbarianCard'). Capture names a coastal hex with a barbarian;
+// Knighthood a free castle edge; Swift Knight any edge without a knight;
+// Treason the two barbarian moves.
+export interface ResolveBarbarianCardAction extends ActionBase {
+  type: 'resolveBarbarianCard';
+  hex?: HexId;
+  edge?: EdgeId;
+  moves?: BarbarianTreasonMove[];
+}
+
+// Barbarian Attack, end of turn (phase 'barbarianKnightMoves'): move one of
+// your knights up to 3 edges, or up to 5 when `boost` pays 1 wheat. Each
+// knight moves at most once a turn. `endTurn` finishes the step and expels
+// the barbarians.
+export interface MoveBarbarianKnightAction extends ActionBase {
+  type: 'moveBarbarianKnight';
+  from: EdgeId;
+  to: EdgeId;
+  boost?: boolean;
+}
+
+// Traders & Barbarians scenario.
+// Move a barbarian (phase 'moveBarbarian'): `barbarian` indexes
+// `tradersBarbarians.barbarians`; `edge` must hold no barbarian.
+export interface MoveTbBarbarianAction extends ActionBase {
+  type: 'moveTbBarbarian';
+  barbarian: number;
+  edge: EdgeId;
+}
+
+// One step of the wagon along an edge (phase 'wagonMoves').
+export interface MoveWagonAction extends ActionBase {
+  type: 'moveWagon';
+  to: VertexId;
+}
+
+// Spend 1 wheat for +2 MP (once per move action).
+export interface BoostWagonAction extends ActionBase {
+  type: 'boostWagon';
+}
+
+// Try to drive off a barbarian whose edge touches the wagon's intersection.
+export interface DriveOffBarbarianAction extends ActionBase {
+  type: 'driveOffBarbarian';
+  barbarian: number;
+}
+
+// Move the wagon-board cube one column right (Action phase).
+export interface UpgradeWagonAction extends ActionBase {
+  type: 'upgradeWagon';
+}
+
+// Swift Journey: a second "Move your wagon" action this turn.
+export interface PlaySwiftJourneyAction extends ActionBase {
+  type: 'playSwiftJourney';
 }
 
 // ----------------------------------------------------------------------------
@@ -1133,9 +1957,9 @@ export interface PlayProgressCardAction extends ActionBase {
   dice?: [number, number]; // alchemy
   fromHex?: HexId; // invention
   toHex?: HexId; // invention
-  vertex?: VertexId; // medicine, intrigue source, treason placement
+  vertex?: VertexId; // medicine / engineering target, intrigue victim
   toVertex?: VertexId; // intrigue dest
-  edges?: [EdgeId] | [EdgeId, EdgeId]; // progressRoadBuilding
+  edges?: EdgeId[]; // progressRoadBuilding (0-2 roads)
   resource?: Resource; // resourceMonopoly, merchantFleet (if resource), guildDues target
   commodity?: Commodity; // tradeMonopoly, merchantFleet (if commodity)
   targetId?: PlayerId; // espionage, guildDues, treason, intrigue, taxation
@@ -1143,6 +1967,7 @@ export interface PlayProgressCardAction extends ActionBase {
 }
 
 // Generic "pick a card from this hand" follow-up used by Espionage + Guild Dues.
+// Espionage: omit `card` to take nothing ("you MAY choose to take 1 card").
 export interface ChooseProgressCardPickAction extends ActionBase {
   type: 'chooseProgressCardPick';
   // For Espionage: which deck the picked card came from.
@@ -1178,18 +2003,44 @@ export interface TreasonRemoveKnightAction extends ActionBase {
   vertex: VertexId;
 }
 
+// Omit vertex + strength to decline the placement ("you MAY then place").
 export interface TreasonPlaceKnightAction extends ActionBase {
   type: 'treasonPlaceKnight';
-  vertex: VertexId;
-  strength: KnightStrength;
+  vertex?: VertexId;
+  strength?: KnightStrength;
 }
 
-// Commercial Harbor (C&K card) opponent reply: pick the commodity you'll
-// give back in exchange for the resource offered.
+// Commercial Harbor (C&K card): the active player offers one opponent one
+// of their resources (once per opponent per card).
+export interface CommercialHarborProposeAction extends ActionBase {
+  type: 'commercialHarborPropose';
+  targetId: PlayerId;
+  resource: Resource;
+}
+
+// Commercial Harbor reply: the offered player hands over a commodity of
+// their choice and takes the resource. `null` is only accepted when they
+// hold no commodity at all (the resource then goes back).
 export interface CommercialHarborOfferAction extends ActionBase {
   type: 'commercialHarborOffer';
-  // null means "I have no commodity" — the resource bounces back.
   commodity: Commodity | null;
+}
+
+// Cities & Knights bank trade with a commodity on either side (p.7):
+// 4:1, 3:1 at a generic harbor, 2:1 with the Merchant Guild (trade level 3)
+// or a Merchant Fleet naming the given good; resource 2:1 harbors only
+// apply to their resource. Resource-for-resource trades stay `bankTrade`.
+export interface BankTradeCKAction extends ActionBase {
+  type: 'bankTradeCK';
+  give: TradeGood;
+  receive: TradeGood;
+  count?: number;
+}
+
+// Barbarians won: pick which of your (non-metropolis) cities is pillaged.
+export interface ChoosePillagedCityAction extends ActionBase {
+  type: 'choosePillagedCity';
+  vertex: VertexId;
 }
 
 // Wedding opponent give-back.
@@ -1203,6 +2054,136 @@ export interface WeddingGiveAction extends ActionBase {
 export interface DefenderTieDrawAction extends ActionBase {
   type: 'defenderTieDraw';
   deck: ImprovementTrack;
+}
+
+// ----------------------------------------------------------------------------
+// Explorers & Pirates actions
+// ----------------------------------------------------------------------------
+
+// Action phase: replace one of your coastal settlements with a harbor
+// settlement (2 wheat + 2 ore, 2 VP).
+export interface EpBuildHarborAction extends ActionBase {
+  type: 'epBuildHarbor';
+  vertex: VertexId;
+}
+
+// Action phase: a ship on an empty sea edge next to your harbor settlement.
+// With all 3 ships on the board, `recycle` names the one (and its cargo)
+// returned to your supply first.
+export interface EpBuildShipAction extends ActionBase {
+  type: 'epBuildShip';
+  edge: EdgeId;
+  recycle?: string;
+}
+
+// Action phase: a settler / crew onto a harbor settlement or a ship next to
+// one. `evict` returns a piece from that spot to the supply to make room.
+export interface EpBuildSettlerAction extends ActionBase {
+  type: 'epBuildSettler';
+  at: EpLocation;
+  evict?: EpCargo[];
+}
+
+export interface EpBuildCrewAction extends ActionBase {
+  type: 'epBuildCrew';
+  at: EpLocation;
+  evict?: EpCargo[];
+}
+
+// Fast Gold spice farm: trade 1 resource card for 1 gold (Action phase).
+export interface EpFastGoldAction extends ActionBase {
+  type: 'epFastGold';
+  give: Resource;
+}
+
+// Movement phase: move a ship one edge.
+export interface EpMoveShipAction extends ActionBase {
+  type: 'epMoveShip';
+  ship: string;
+  to: EdgeId;
+}
+
+// Movement phase: pay 1 wool for +2 MP on one ship (once per ship a turn).
+export interface EpBoostShipAction extends ActionBase {
+  type: 'epBoostShip';
+  ship: string;
+}
+
+// Movement phase: move pieces between a ship and an adjacent harbor
+// settlement (`load` harbor → ship, `unload` ship → harbor, at once).
+export interface EpTransferAction extends ActionBase {
+  type: 'epTransfer';
+  ship: string;
+  harbor: VertexId;
+  load: EpCargo[];
+  unload: EpCargo[];
+}
+
+// Movement phase: a ship with a settler builds a settlement at one of its
+// ends (ship and settler return to the supply).
+export interface EpFoundSettlementAction extends ActionBase {
+  type: 'epFoundSettlement';
+  ship: string;
+  vertex: VertexId;
+}
+
+// Movement phase: unload a crew onto a pirate lair (gold field).
+export interface EpCrewToLairAction extends ActionBase {
+  type: 'epCrewToLair';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: load one of your crews left on a captured gold field.
+export interface EpCrewFromLairAction extends ActionBase {
+  type: 'epCrewFromLair';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: unload a crew onto a spice farm (stays for the game).
+export interface EpCrewToFarmAction extends ActionBase {
+  type: 'epCrewToFarm';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: load your spice sack from a farm with your crew on it.
+export interface EpLoadSpiceAction extends ActionBase {
+  type: 'epLoadSpice';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: load the fish haul from a shoal next to the ship.
+export interface EpLoadFishAction extends ActionBase {
+  type: 'epLoadFish';
+  ship: string;
+  hex: HexId;
+}
+
+// Movement phase: unload fish hauls and spice sacks at the Council of Catan.
+export interface EpDeliverAction extends ActionBase {
+  type: 'epDeliver';
+  ship: string;
+}
+
+// Movement phase: a battle-ready ship tries to chase away the pirate ship.
+export interface EpChasePirateAction extends ActionBase {
+  type: 'epChasePirate';
+  ship: string;
+}
+
+// Movement phase: the once-per-turn fish roll.
+export interface EpFishRollAction extends ActionBase {
+  type: 'epFishRoll';
+}
+
+// Place your pirate ship (after a 7 or a chase) and rob a ship owner there.
+export interface EpPlacePirateAction extends ActionBase {
+  type: 'epPlacePirate';
+  hex: HexId;
+  stealFrom: PlayerId | null;
 }
 
 export type Action =
@@ -1233,13 +2214,29 @@ export type Action =
   | MovePirateAction
   | ChooseGoldResourceAction
   | BuildWonderAction
-  | AttackPirateFleetAction
+  | ClaimWonderAction
+  | PlaceInitialShipAction
+  | PlaceTribePortAction
+  | StealResourceAction
   | BuildBridgeAction
   | SpendFishAction
   | PassOldBootAction
+  | SwapFishAction
+  | SpendGoldAction
+  | BuyGoldAction
   | SubmitWagonVoteAction
+  | AssignWagonVotesAction
   | PlaceWagonAction
-  | HireKnightAction
+  | ResolveBarbarianCardAction
+  | MoveBarbarianKnightAction
+  | MoveTbBarbarianAction
+  | MoveWagonAction
+  | BoostWagonAction
+  | DriveOffBarbarianAction
+  | UpgradeWagonAction
+  | PlaySwiftJourneyAction
+  | ResolveEventAction
+  | RepairRoadAction
   | BuildCityWallAction
   | DiscardCKAction
   | RecruitKnightAction
@@ -1259,9 +2256,30 @@ export type Action =
   | PlaceMerchantAction
   | TreasonRemoveKnightAction
   | TreasonPlaceKnightAction
+  | CommercialHarborProposeAction
   | CommercialHarborOfferAction
+  | BankTradeCKAction
+  | ChoosePillagedCityAction
   | WeddingGiveAction
-  | DefenderTieDrawAction;
+  | DefenderTieDrawAction
+  | EpBuildHarborAction
+  | EpBuildShipAction
+  | EpBuildSettlerAction
+  | EpBuildCrewAction
+  | EpFastGoldAction
+  | EpMoveShipAction
+  | EpBoostShipAction
+  | EpTransferAction
+  | EpFoundSettlementAction
+  | EpCrewToLairAction
+  | EpCrewFromLairAction
+  | EpCrewToFarmAction
+  | EpLoadSpiceAction
+  | EpLoadFishAction
+  | EpDeliverAction
+  | EpChasePirateAction
+  | EpFishRollAction
+  | EpPlacePirateAction;
 
 export type ActionType = Action['type'];
 
@@ -1279,8 +2297,7 @@ export const COSTS: Record<
   | 'knight'
   | 'activateKnight'
   | 'promoteKnight'
-  | 'cityMedicine'
-  | 'hireKnight',
+  | 'cityMedicine',
   Partial<ResourceBank>
 > = {
   road: { wood: 1, brick: 1 },
@@ -1297,13 +2314,7 @@ export const COSTS: Record<
   // Cities & Knights / Medicine progress card: city upgrade cost while the
   // card's effect is live.
   cityMedicine: { wheat: 1, ore: 2 },
-  // Traders & Barbarians / Rivers of Catan: same as a road. Sits in the road
-  // column of the rulebook's player aid; the visible payoff is +3 gold on
-  // build, so a road-equivalent cost keeps the math balanced.
-  bridge: { wood: 1, brick: 1 },
-  // Traders & Barbarians / Barbarian Attack: hire a defender knight.
-  // Rulebook is 1 wool + 1 wheat + 1 ore; we drop wool so the wool
-  // economy stays free for Merchant Trains-style bids in the combo
-  // scenario down the line.
-  hireKnight: { wheat: 1, ore: 1 },
+  // Traders & Barbarians / Rivers of Catan: 2 brick + 1 lumber (rulebook
+  // building-cost box). Pays +3 gold on build.
+  bridge: { brick: 2, wood: 1 },
 };

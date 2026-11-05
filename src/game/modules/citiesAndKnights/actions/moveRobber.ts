@@ -1,108 +1,102 @@
 import type {
+  Commodity,
   GameState,
   MoveRobberAction,
   PlayerId,
   Resource,
-  Commodity,
 } from '../../../types';
-import { COMMODITIES, RESOURCES } from '../../../types';
+import { COMMODITIES } from '../../../types';
 import { currentPlayerId, updatePlayer } from '../../../helpers';
-import { totalResources, flattenBank } from '../../../resources';
-import { totalCommodities, flattenCommodities } from '../../../commodities';
+import { flattenBank } from '../../../resources';
+import { flattenCommodities } from '../../../commodities';
 import { pickOne } from '../../../rng';
+import { canMoveRobberTo } from '../../../placement';
+import { ckHandSize } from '../production';
+import { resumeFlow } from '../flow';
 
-// Cities & Knights moveRobber override. Differences from base:
-//   1. Robber is gated on `state.robberActive` — until the first barbarian
-//      attack resolves, the robber lives "offshore" and cannot be moved or
-//      used to steal.
-//   2. Steal pool is the combined resources + commodities. One card is
-//      picked uniformly; if it's a commodity, the transfer is to/from the
-//      commodity banks instead of resources.
-export function handleMoveRobberCK(
-  state: GameState,
-  action: MoveRobberAction,
-): GameState {
+const NO_COMMODITIES = { paper: 0, cloth: 0, coin: 0 };
+
+// Opponents with a building on `hexId` and at least one resource/commodity
+// card: who the robber can steal from there.
+export function ckStealCandidates(state: GameState, hexId: string, thiefId: PlayerId): PlayerId[] {
+  const corners = state.board.hexes[hexId]?.corners ?? [];
+  const out: PlayerId[] = [];
+  for (const p of state.players) {
+    if (p.id === thiefId) continue;
+    const there = corners.some((v) => p.settlements.includes(v) || p.cities.includes(v));
+    if (there && ckHandSize(state, p.id) > 0) out.push(p.id);
+  }
+  return out;
+}
+
+// Cities & Knights moveRobber. Differences from CATAN:
+//   1. The robber only moves once it's on the board (first barbarian attack).
+//   2. A steal takes 1 random card from resources + commodities (p.7).
+//   3. Taxation (p.16): steal 1 random card from EACH player with a
+//      building on the new hex (1 card even with several buildings);
+//      `stealFrom` is ignored.
+// Reached from a 7, a knight chasing the robber, or Taxation; afterwards
+// the turn flow carries on (e.g. an Aqueduct pick can't follow a 7, but a
+// 7's discards always precede it).
+export function handleMoveRobberCK(state: GameState, action: MoveRobberAction): GameState {
   if (state.phase !== 'moveRobber') {
     throw new Error(`Cannot move robber in phase ${state.phase}`);
   }
   if (!state.pendingRobberMove) throw new Error('No pending robber move');
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
   if (!state.robberActive) {
-    // Should never happen — the dice handler refuses to enter moveRobber
-    // when the robber is inactive. Defensive throw in case a stale UI
-    // dispatches it anyway.
-    throw new Error('Robber is not yet active in Cities & Knights');
+    throw new Error('The robber is not on the board until the first barbarian attack');
   }
   if (action.hex === state.board.robberHex) {
     throw new Error('Robber must move to a different hex');
   }
-  if (!state.board.hexes[action.hex]) throw new Error('Unknown hex');
+  if (!canMoveRobberTo(state, action.hex)) throw new Error('The robber cannot go there');
 
-  // Find players adjacent to the target hex with at least one card to steal.
-  const stealCandidates = new Set<PlayerId>();
-  for (const v of Object.values(state.board.vertices)) {
-    if (!v.hexes.includes(action.hex)) continue;
-    for (const p of state.players) {
-      if (p.id === action.playerId) continue;
-      const occupies = p.settlements.includes(v.id) || p.cities.includes(v.id);
-      const handSize =
-        totalResources(p.resources) + totalCommodities(p.commodities ?? { paper: 0, cloth: 0, coin: 0 });
-      if (occupies && handSize > 0) stealCandidates.add(p.id);
-    }
-  }
+  const candidates = ckStealCandidates(state, action.hex, action.playerId);
+  let next: GameState = { ...state, board: { ...state.board, robberHex: action.hex } };
 
-  let next: GameState = {
-    ...state,
-    board: { ...state.board, robberHex: action.hex },
-  };
-
-  if (action.stealFrom !== null) {
-    if (!stealCandidates.has(action.stealFrom)) {
-      throw new Error('Cannot steal from that player');
-    }
-    const target = state.players.find((p) => p.id === action.stealFrom)!;
-    const pool: Array<Resource | Commodity> = [
-      ...flattenBank(target.resources),
-      ...flattenCommodities(
-        target.commodities ?? { paper: 0, cloth: 0, coin: 0 },
-      ),
-    ];
-    const [stolen, newRng] = pickOne(next.rngState, pool);
-    next = { ...next, rngState: newRng };
-    const isCommodity = (COMMODITIES as readonly string[]).includes(stolen as string);
-    if (isCommodity) {
-      const c = stolen as Commodity;
-      next = updatePlayer(next, action.stealFrom, (p) => ({
-        ...p,
-        commodities: {
-          ...(p.commodities ?? { paper: 0, cloth: 0, coin: 0 }),
-          [c]: (p.commodities?.[c] ?? 0) - 1,
-        },
-      }));
-      next = updatePlayer(next, action.playerId, (p) => ({
-        ...p,
-        commodities: {
-          ...(p.commodities ?? { paper: 0, cloth: 0, coin: 0 }),
-          [c]: (p.commodities?.[c] ?? 0) + 1,
-        },
-      }));
-    } else {
-      const r = stolen as Resource;
-      // Sanity: keep the resource shape stable.
-      void RESOURCES;
-      next = updatePlayer(next, action.stealFrom, (p) => ({
-        ...p,
-        resources: { ...p.resources, [r]: p.resources[r] - 1 },
-      }));
-      next = updatePlayer(next, action.playerId, (p) => ({
-        ...p,
-        resources: { ...p.resources, [r]: p.resources[r] + 1 },
-      }));
-    }
-  } else if (stealCandidates.size > 0) {
+  if (state.pendingRobberMove.reason === 'taxation') {
+    for (const victim of candidates) next = stealOne(next, action.playerId, victim);
+  } else if (action.stealFrom !== null) {
+    if (!candidates.includes(action.stealFrom)) throw new Error('Cannot steal from that player');
+    next = stealOne(next, action.playerId, action.stealFrom);
+  } else if (candidates.length > 0) {
     throw new Error('Must select a player to steal from');
   }
 
-  const returnTo = state.pendingRobberMove.returnTo;
-  return { ...next, phase: returnTo, pendingRobberMove: undefined };
+  return resumeFlow({ ...next, pendingRobberMove: undefined });
+}
+
+// Move one random resource/commodity card from `victimId` to `thiefId`.
+function stealOne(state: GameState, thiefId: PlayerId, victimId: PlayerId): GameState {
+  const victim = state.players.find((p) => p.id === victimId)!;
+  const pool: Array<Resource | Commodity> = [
+    ...flattenBank(victim.resources),
+    ...flattenCommodities(victim.commodities ?? NO_COMMODITIES),
+  ];
+  if (pool.length === 0) return state;
+  const [stolen, rng] = pickOne(state.rngState, pool);
+  let next: GameState = { ...state, rngState: rng };
+  if ((COMMODITIES as readonly string[]).includes(stolen)) {
+    const c = stolen as Commodity;
+    next = updatePlayer(next, victimId, (p) => ({
+      ...p,
+      commodities: { ...(p.commodities ?? NO_COMMODITIES), [c]: (p.commodities?.[c] ?? 0) - 1 },
+    }));
+    next = updatePlayer(next, thiefId, (p) => ({
+      ...p,
+      commodities: { ...(p.commodities ?? NO_COMMODITIES), [c]: (p.commodities?.[c] ?? 0) + 1 },
+    }));
+  } else {
+    const r = stolen as Resource;
+    next = updatePlayer(next, victimId, (p) => ({
+      ...p,
+      resources: { ...p.resources, [r]: p.resources[r] - 1 },
+    }));
+    next = updatePlayer(next, thiefId, (p) => ({
+      ...p,
+      resources: { ...p.resources, [r]: p.resources[r] + 1 },
+    }));
+  }
+  return next;
 }

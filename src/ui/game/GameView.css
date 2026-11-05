@@ -45,10 +45,6 @@
   align-items: center;
 }
 
-.gameview-topctrl-mobile {
-  display: none;
-}
-
 .gameview-topctrl-btn {
   width: 32px;
   height: 32px;
@@ -161,6 +157,40 @@
   margin-top: 4px;
 }
 
+/* Opens the players / log / chat drawer on compact screens. Bottom-left of the
+   map: within thumb reach, clear of the controls and dice at the top and the
+   zoom buttons at the right. */
+.gameview-players-btn {
+  display: none;
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95em;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.gameview-players-btn:active {
+  background: var(--accent);
+  color: #1a1a1a;
+}
+
+/* The drawer's own header (title + Close) only exists in the drawer. */
+.gameview-side-head {
+  display: none;
+}
+
 .gameview-bottom {
   grid-area: bottom;
   display: flex;
@@ -257,48 +287,32 @@
   height: 100%;
 }
 
-@media (max-width: 900px) {
-  .gameview {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(50vh, 1fr) auto auto;
-    grid-template-areas:
-      "board"
-      "bottom"
-      "side";
-    max-height: none;
-  }
-}
-
-/* Phone: same stacked layout, but the side panel is hidden behind a
-   slide-up drawer toggled from the top-control row. ActionBar drops
-   below HandPanel inside .gameview-bottom (handled in ActionBar.css). */
-@media (max-width: 767px) {
+/* Compact screens: phones, small tablets, and short landscape windows.
+   The game fills exactly one screen and never scrolls as a page. A page
+   taller than the screen puts the panels below the fold, and since the map
+   claims every touch drag to pan, there would be no way to scroll down to
+   them. The board takes whatever height the hand strip leaves; the players /
+   log / chat panel is a drawer opened with the Players button.
+   (The landscape clause below is repeated in HandPanel.css and ActionBar.css.) */
+@media (max-width: 900px),
+  (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
   .gameview {
     gap: 8px;
     padding: 8px;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
     grid-template-areas:
       "board"
       "bottom";
-  }
-
-  .gameview-topctrl-mobile {
-    display: inline-flex;
-  }
-
-  .gameview-topctrl-btn {
-    min-width: 40px;
-    min-height: 40px;
-    width: 40px;
-    height: 40px;
-  }
-
-  .gameview-bottom {
-    flex-direction: column;
-    height: auto;
+    height: 100vh;
+    height: 100dvh;
     min-height: 0;
-    gap: 8px;
-    padding: 8px;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .gameview-players-btn {
+    display: inline-flex;
   }
 
   .gameview-side {
@@ -310,15 +324,48 @@
     border-top: 1px solid var(--panel-border);
     border-top-left-radius: 16px;
     border-top-right-radius: 16px;
-    padding: 12px;
+    padding: 0 12px 12px;
     box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.5);
     transform: translateY(100%);
     transition: transform 0.22s ease-out;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .gameview-side.is-open {
     transform: translateY(0);
+  }
+
+  /* Players first: that is what the drawer is opened for (the log below it
+     is long, and used to push the players off screen). */
+  .gameview-side .opps {
+    order: -1;
+  }
+
+  .gameview-side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    order: -2;
+    padding: 12px 0 8px;
+    background: var(--panel);
+    font-weight: 700;
+  }
+
+  .gameview-side-close {
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: 20px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel-soft);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
   }
 
   .gameview-side-scrim {
@@ -327,6 +374,34 @@
     background: rgba(0, 0, 0, 0.4);
     z-index: 105;
   }
+}
+
+/* Phone, portrait-ish: the hand + actions strip stacks and takes at most
+   about half the screen, scrolling inside itself if it needs more; the
+   board keeps the rest. */
+@media (max-width: 767px) {
+  .gameview-topctrl-btn {
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .gameview-bottom {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    max-height: 50vh;
+    max-height: 50dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .gameview-bottom > * {
+    flex-shrink: 0;
+  }
 
   .gameview-rulebook-overlay {
     padding: 8px;
@@ -334,5 +409,52 @@
 
   .gameview-rulebook {
     height: 92dvh;
+  }
+}
+
+/* Phone held sideways: board on the left, hand + actions in a column on the
+   right (there is no height for a strip under the board), players drawer as
+   a sheet from the right edge. */
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
+  .gameview {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 40vw);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "board bottom";
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .gameview-bottom {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .gameview-bottom > * {
+    flex-shrink: 0;
+  }
+
+  .gameview-side {
+    inset: 0 0 0 auto;
+    width: min(380px, 75vw);
+    max-height: none;
+    border-top: none;
+    border-left: 1px solid var(--panel-border);
+    border-radius: 16px 0 0 16px;
+    box-shadow: -12px 0 36px rgba(0, 0, 0, 0.5);
+    transform: translateX(100%);
+  }
+
+  .gameview-side.is-open {
+    transform: translateX(0);
+  }
+
+  .gameview-rulebook {
+    height: 94dvh;
   }
 }

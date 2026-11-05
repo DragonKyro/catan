@@ -1,3 +1,4 @@
+import { isSetupPhase } from '@/game/actions/setup';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Action, GameState, Player, Resource } from '@/game/types';
 import { RESOURCES } from '@/game/types';
@@ -10,6 +11,7 @@ import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { DEV_ICON, DEV_LABEL } from '@/ui/shared/DevCardChip';
 import { useReplayStore, downloadReplay } from '@/store/replayStore';
+import { EP_MEANINGFUL_ACTIONS, epActionDescription } from '@/ui/game/explorersPirates/replay';
 import './ReplayScreen.css';
 
 // Stops we render slider notches for. proposeTrade / cancelTrade /
@@ -26,7 +28,14 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'buildRoad',
   'buildShip',
   'moveShip',
+  'placeInitialShip',
+  'placeTribePort',
+  'claimWonder',
+  'buildWonder',
+  'stealResource',
   'buyDevCard',
+  'resolveBarbarianCard',
+  'moveBarbarianKnight',
   'playKnight',
   'playRoadBuilding',
   'playYearOfPlenty',
@@ -38,6 +47,42 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'acceptTrade',
   'endTurn',
   'chooseGoldResource',
+  // Traders & Barbarians: Rivers of Catan bridges, Fishing on Catan fish
+  // spends (free roads, the robber leaving the board).
+  'buildBridge',
+  'spendFish',
+  // Cities & Knights.
+  'discardCK',
+  'buildCityWall',
+  'recruitKnight',
+  'activateKnight',
+  'promoteKnight',
+  'moveKnight',
+  'displaceKnight',
+  'displacedKnightMove',
+  'chaseRobber',
+  'buildCityImprovement',
+  'placeMetropolis',
+  'aqueductPick',
+  'defenderTieDraw',
+  'choosePillagedCity',
+  'playProgressCard',
+  'chooseProgressCardPick',
+  'discardProgressCard',
+  'removeRoad',
+  'placeMerchant',
+  'treasonRemoveKnight',
+  'treasonPlaceKnight',
+  'commercialHarborPropose',
+  'commercialHarborOffer',
+  'weddingGive',
+  'bankTradeCK',
+  // Traders & Barbarians scenario: barbarians on edges, wagons.
+  'moveTbBarbarian',
+  'moveWagon',
+  'upgradeWagon',
+  // Explorers & Pirates.
+  ...EP_MEANINGFUL_ACTIONS,
 ]);
 
 const SPEED_PRESETS: Array<{ label: string; ms: number }> = [
@@ -176,9 +221,7 @@ function ReplayBody({
       <div className="rscreen-players">
         {(() => {
           const actingId = getActingPlayerId(replayState);
-          const inSetup =
-            replayState.phase === 'setupRound1' ||
-            replayState.phase === 'setupRound2';
+          const inSetup = isSetupPhase(replayState.phase);
           const paired = !inSetup && usesPairedRules(replayState)
             ? {
                 p1: replayState.playerOrder[
@@ -505,7 +548,31 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} picks gold resources`;
     case 'moveShip':
       return `${who} moves a ship`;
+    case 'placeInitialShip':
+      return `${who} places an initial ship`;
+    case 'placeTribePort':
+      return `${who} places a tribe port`;
+    case 'claimWonder':
+      return `${who} claims a wonder`;
+    case 'buildWonder':
+      return `${who} builds a wonder level`;
+    case 'stealResource':
+      return `${who} steals${action.stealFrom ? ` from ${name(action.stealFrom)}` : ' nothing'}`;
+    case 'resolveBarbarianCard':
+      return action.hex
+        ? `${who} takes a barbarian prisoner`
+        : action.edge
+          ? `${who} places a knight`
+          : `${who} moves barbarians (Treason)`;
+    case 'moveBarbarianKnight':
+      return `${who} moves a knight`;
+    case 'moveTbBarbarian':
+      return `${who} moves a barbarian`;
+    case 'moveWagon':
+      return `${who} moves their wagon`;
+    case 'upgradeWagon':
+      return `${who} upgrades their wagon`;
     default:
-      return `${who} — ${(action as Action).type}`;
+      return epActionDescription(action, who, name) ?? `${who} — ${(action as Action).type}`;
   }
 }

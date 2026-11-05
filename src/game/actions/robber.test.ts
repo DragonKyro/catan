@@ -84,3 +84,25 @@ describe('discard + robber', () => {
     expect(s.phase).toBe('main');
   });
 });
+
+describe('off-board robber (robberActive false)', () => {
+  it('enters on its parked hex and becomes active', () => {
+    let s = setupGame();
+    s = { ...s, robberActive: false, players: s.players.map((p) => ({ ...p, resources: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 } })) };
+    s = applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 4] });
+    expect(s.phase).toBe('moveRobber');
+    const parked = s.board.robberHex;
+    s = applyAction(s, { type: 'moveRobber', playerId: 'p0', hex: parked, stealFrom: null });
+    expect(s.robberActive).toBe(true);
+    expect(s.board.robberHex).toBe(parked);
+  });
+
+  it('an active robber still has to move', () => {
+    let s = setupGame();
+    s = { ...s, players: s.players.map((p) => ({ ...p, resources: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 } })) };
+    s = applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 4] });
+    expect(() =>
+      applyAction(s, { type: 'moveRobber', playerId: 'p0', hex: s.board.robberHex, stealFrom: null }),
+    ).toThrow(/different hex/);
+  });
+});

@@ -1,3 +1,9 @@
 export * from './types';
 export * from './identity';
-export { bindRoom, relayStatus, type RelayStatus, type RoomBindings } from './room';
+export * from './roomLink';
+export {
+  ServerUnreachableError,
+  type RoomConnection,
+  type RoomEvents,
+  type RoomTransport,
+} from './transport';

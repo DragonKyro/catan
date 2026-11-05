@@ -1,8 +1,54 @@
-import type { GameState, PlayerId, VertexId, EdgeId } from './types';
+import type { GameState, PlayerId, VertexId, EdgeId, HexId } from './types';
 import { canStartOnIsland } from './modules/seafarers/validation/setupPlacement';
+import { pirateIslandsSettlementAllowed } from './modules/seafarers/pirateIslands';
+import {
+  edgeTouchesConqueredHex,
+  vertexTouchesConqueredHex,
+} from './modules/traders/barbarianAttack/state';
+import {
+  epEdgeBuildable,
+  epSetupVertexAllowed,
+  epVertexBuildable,
+} from './modules/explorersPirates/state';
 
 // Placement predicates — shared between action handlers (for validation) and
 // the UI (for highlighting legal placements). Pure functions, no mutation.
+
+// A settlement needs at least one adjacent land hex. Scenarios can rule
+// some land out (`settlementBlockedHexes`: Forgotten Tribe's unnumbered
+// hexes, Cloth for Catan's village islands), and unexplored fog isn't on
+// the table yet.
+export function hasSettleableLand(state: GameState, vertexId: VertexId): boolean {
+  const vertex = state.board.vertices[vertexId];
+  if (!vertex) return false;
+  const blocked = state.settlementBlockedHexes;
+  const fog = state.unrevealedFogHexes;
+  return vertex.hexes.some((h: HexId) => {
+    if (state.board.hexes[h]!.terrain === 'sea') return false;
+    if (blocked?.includes(h)) return false;
+    if (fog?.includes(h)) return false;
+    return true;
+  });
+}
+
+// An unowned settlement (`inactiveSettlements`) on this vertex or next to
+// it: the distance rule applies to it like any building.
+function nearInactiveSettlement(state: GameState, vertexId: VertexId): boolean {
+  const inactive = state.inactiveSettlements;
+  if (!inactive || inactive.length === 0) return false;
+  if (inactive.includes(vertexId)) return true;
+  return state.board.vertices[vertexId]!.neighborVertices.some((n) => inactive.includes(n));
+}
+
+// Is any road, ship or bridge already on this edge?
+function edgeTaken(state: GameState, edgeId: EdgeId): boolean {
+  for (const p of state.players) {
+    if (p.roads.includes(edgeId)) return true;
+    if (p.ships.includes(edgeId)) return true;
+    if (p.bridges?.includes(edgeId)) return true;
+  }
+  return false;
+}
 
 export function canPlaceSettlement(
   state: GameState,
@@ -11,18 +57,31 @@ export function canPlaceSettlement(
 ): boolean {
   const vertex = state.board.vertices[vertexId];
   if (!vertex) return false;
-  // Settlements need at least one adjacent land hex.
-  if (!vertex.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea')) return false;
+  if (!hasSettleableLand(state, vertexId)) return false;
   // Cities & Knights: a knight occupies a vertex like a building.
   if (state.knights?.[vertexId]) return false;
+  // T&B / Barbarian Attack: nothing is built on a conquered hex's corners.
+  if (vertexTouchesConqueredHex(state, vertexId)) return false;
+  // Explorers & Pirates: only next to explored hexes, captured gold fields
+  // and spice farms with your crew.
+  if (!epVertexBuildable(state, playerId, vertexId)) return false;
+  // T&B Catan Event Cards / Earthquake: no settlement at either end of a
+  // damaged road.
+  if (state.damagedRoads?.some((e) => state.board.edges[e]?.vertices.includes(vertexId))) {
+    return false;
+  }
   for (const p of state.players) {
     if (p.settlements.includes(vertexId) || p.cities.includes(vertexId)) return false;
     for (const n of vertex.neighborVertices) {
       if (p.settlements.includes(n) || p.cities.includes(n)) return false;
     }
   }
+  if (nearInactiveSettlement(state, vertexId)) return false;
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
+  // Seafarers / Pirate Islands: on the pirate islands only at your own
+  // beachhead; pirate fortresses count for the distance rule.
+  if (!pirateIslandsSettlementAllowed(state, playerId, vertexId)) return false;
   // Connectivity: a settlement may be placed on the network via a road,
   // a Seafarers ship, or a T&B bridge — all three are "a way to get there".
   for (const eid of vertex.edges) {
@@ -40,6 +99,8 @@ export function canPlaceCity(
 ): boolean {
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
+  // T&B / Barbarian Attack: nothing is built on a conquered hex's corners.
+  if (vertexTouchesConqueredHex(state, vertexId)) return false;
   return player.settlements.includes(vertexId);
 }
 
@@ -55,6 +116,12 @@ export function canConnectRoad(
   // T&B / Rivers of Catan: river edges are reserved for bridges. The
   // buildBridge handler is the only entry point that may occupy them.
   if (state.riverEdges?.includes(edgeId)) return false;
+  // Edges a scenario closes to roads (T&B scenario "X" markers).
+  if (state.roadBlockedEdges?.includes(edgeId)) return false;
+  // T&B / Barbarian Attack: nothing is built on a conquered hex's edges.
+  if (edgeTouchesConqueredHex(state, edgeId)) return false;
+  // Explorers & Pirates: the same land rules as settlements.
+  if (!epEdgeBuildable(state, playerId, edgeId)) return false;
   for (const p of state.players) {
     if (p.roads.includes(edgeId)) return false;
     if (p.ships.includes(edgeId)) return false;
@@ -62,6 +129,9 @@ export function canConnectRoad(
   }
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
+  // T&B Catan Event Cards / Earthquake: no new roads until every one of
+  // your damaged roads is repaired.
+  if (state.damagedRoads?.some((e) => player.roads.includes(e))) return false;
   const [v1, v2] = edge.vertices;
   for (const v of [v1, v2]) {
     let blocked = false;
@@ -76,6 +146,7 @@ export function canConnectRoad(
     // settlement/city does (rulebook p.9).
     const knight = state.knights?.[v];
     if (knight && knight.playerId !== playerId) blocked = true;
+    if (state.inactiveSettlements?.includes(v)) blocked = true;
     if (player.settlements.includes(v) || player.cities.includes(v)) return true;
     if (blocked) continue;
     for (const eid of state.board.vertices[v]!.edges) {
@@ -137,15 +208,22 @@ export function canPlaceInitialSettlement(
 ): boolean {
   const vertex = state.board.vertices[vertexId];
   if (!vertex) return false;
-  // Settlements need at least one adjacent land hex.
-  if (!vertex.hexes.some((h) => state.board.hexes[h]!.terrain !== 'sea')) return false;
+  if (!hasSettleableLand(state, vertexId)) return false;
+  // Volcano Fun Map: no starting settlement on the volcano's corners.
+  if (state.board.volcanoHex && vertex.hexes.includes(state.board.volcanoHex)) return false;
+  // Wonders of Catan: no starting settlement on a wonder / "X" marker.
+  if (state.setupBlockedVertices?.includes(vertexId)) return false;
   for (const p of state.players) {
     if (p.settlements.includes(vertexId) || p.cities.includes(vertexId)) return false;
     for (const n of vertex.neighborVertices) {
       if (p.settlements.includes(n) || p.cities.includes(n)) return false;
     }
   }
+  if (nearInactiveSettlement(state, vertexId)) return false;
   if (!canStartOnIsland(state, vertexId)) return false;
+  // Explorers & Pirates: the harbor settlement on a marked intersection,
+  // then a settlement on the starting island.
+  if (!epSetupVertexAllowed(state, vertexId)) return false;
   return true;
 }
 
@@ -163,11 +241,23 @@ export function canPlaceInitialRoad(
   // affordance — the player must anchor their starting road on a non-river
   // edge of their settlement.
   if (state.riverEdges?.includes(edgeId)) return false;
+  if (state.roadBlockedEdges?.includes(edgeId)) return false;
   if (edge.vertices[0] !== placedSettlement && edge.vertices[1] !== placedSettlement) {
     return false;
   }
-  for (const p of state.players) {
-    if (p.roads.includes(edgeId)) return false;
-  }
+  return !edgeTaken(state, edgeId);
+}
+
+// Robber targets: a land hex other than the robber's current one that is on
+// the table (not unexplored fog) and not ruled out by the scenario
+// (`robberBlockedHexes`: Forgotten Tribe's unnumbered hexes, Cloth for
+// Catan's village islands).
+export function canMoveRobberTo(state: GameState, hexId: HexId): boolean {
+  const hex = state.board.hexes[hexId];
+  if (!hex) return false;
+  if (hex.terrain === 'sea') return false;
+  if (hexId === state.board.robberHex && (state.robberActive ?? true)) return false;
+  if (state.unrevealedFogHexes?.includes(hexId)) return false;
+  if (state.robberBlockedHexes?.includes(hexId)) return false;
   return true;
 }

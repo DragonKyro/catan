@@ -1,0 +1,212 @@
+/* Shared styles for the Cities & Knights dialogs. Compact so the docked
+   dialogs fit on phones without page scrolling (they scroll inside). */
+.ck-soft {
+  color: var(--text-soft);
+  font-size: 0.85em;
+}
+.ck-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ck-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ck-goods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ck-good {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  padding: 1px;
+  cursor: pointer;
+}
+.ck-good.is-selected {
+  border-color: var(--accent);
+}
+.ck-good:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.ck-players {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ck-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.ck-player > :last-child {
+  margin-left: auto;
+}
+.ck-player.is-selected {
+  border-color: var(--accent);
+  background: rgba(255, 217, 126, 0.12);
+}
+.ck-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid #00000050;
+  flex: none;
+}
+.ck-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ck-cardtext {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.9em;
+}
+.ck-blocker {
+  color: #ffb4a8;
+  font-size: 0.85em;
+  margin: 0;
+}
+.ck-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ck-section-title {
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+  margin: 2px 0;
+}
+.ck-dice {
+  display: flex;
+  gap: 4px;
+}
+.ck-die {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  font-weight: 800;
+  cursor: pointer;
+  color: #1a1a1a;
+}
+.ck-die.is-selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* Knights dialog */
+.ck-knight-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.ck-knight-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ck-knight-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ck-knight-action strong {
+  font-size: 0.95em;
+}
+.ck-knight-action span {
+  font-size: 0.78em;
+  color: var(--text-soft);
+}
+
+/* City improvement boards */
+.ck-tracks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+@media (max-width: 520px) {
+  .ck-tracks {
+    grid-template-columns: 1fr;
+  }
+}
+.ck-track {
+  border-radius: 8px;
+  padding: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ck-track-science { background: rgba(47, 125, 58, 0.28); }
+.ck-track-trade { background: rgba(155, 207, 79, 0.22); }
+.ck-track-politics { background: rgba(157, 180, 220, 0.22); }
+.ck-track-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+}
+.ck-levels {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+}
+.ck-level {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.78em;
+  background: rgba(0, 0, 0, 0.18);
+}
+.ck-level.is-built {
+  background: rgba(255, 217, 126, 0.25);
+}
+.ck-level.is-next {
+  outline: 1px dashed var(--accent);
+}
+.ck-level-cost {
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+.ck-level-num {
+  font-weight: 800;
+  text-align: center;
+}
+.ck-ability {
+  font-size: 0.75em;
+  font-style: italic;
+  color: var(--text-soft);
+}

@@ -1,5 +1,6 @@
 import type { ScenarioLayout } from '../types';
 import { buildScenario } from './builder';
+import { type MapRow, parseRows, seafarers56PortTypes } from './frame5_6';
 
 // Four Islands — four small clusters with no main island. Per the rulebook,
 // starting settlements are allowed on any cluster (`startingPlacementZone:
@@ -98,113 +99,50 @@ const LAYOUT_3_4P: ScenarioLayout = {
   },
 };
 
-// 5-6 player variant — "Six Islands" geometry authored in the map builder.
-// 32 land + 26 sea hexes inside a radius-6 disk, 11 ports, no fixed
-// terrain. Same any-island starting rule as the 3-4p Four Islands map.
+// ---------------------------------------------------------------------------
+// 5-6 players: The Six Islands (Seafarers 5-6 rulebook p. 5;
+// docs/map-specs/SEAFARERS56-SPEC-A.md). Fixed setup: every hex and disc is
+// printed. "Place the robber on the pasture hex with the number 12 disc and
+// the pirate on the indicated location. Randomly place ports in the
+// indicated locations." Same any-island start as The Four Islands. The
+// frame's two middle-row points are sea hexes too (the table's 24 sea
+// leaves them out); the pirate starts on the west one.
+// ---------------------------------------------------------------------------
+const ROWS_5_6P: MapRow[] = [
+  [-3, -2, 'P12 O4   ~ F6 ~   O9 P6'],
+  [-2, -3, 'F8 O10   ~ O11 B10   ~ W3 B10'],
+  [-1, -4, 'B11 W9   ~ P3 F4   ~ ~ F4 ~'],
+  [0, -5, '~ ~ ~ ~ ~ ~ ~ ~ ~ ~'],
+  [1, -5, '~ B4   ~ ~ P8 F10   ~ F5 W6'],
+  [2, -5, 'F9 W12   ~ W5 O3   ~ B8 P9'],
+  [3, -5, 'P5 O6   ~ P2 ~   B5 W2'],
+];
+
 const LAYOUT_5_6P: ScenarioLayout = {
-  positions: [
-    // Land hexes (32).
-    { q: -6, r: 5, kind: 'land' },
-    { q: -6, r: 6, kind: 'land' },
-    { q: -5, r: 2, kind: 'land' },
-    { q: -5, r: 4, kind: 'land' },
-    { q: -5, r: 5, kind: 'land' },
-    { q: -5, r: 6, kind: 'land' },
-    { q: -4, r: 1, kind: 'land' },
-    { q: -4, r: 2, kind: 'land' },
-    { q: -3, r: 0, kind: 'land' },
-    { q: -3, r: 1, kind: 'land' },
-    { q: -3, r: 5, kind: 'land' },
-    { q: -3, r: 6, kind: 'land' },
-    { q: -2, r: 0, kind: 'land' },
-    { q: -2, r: 2, kind: 'land' },
-    { q: -2, r: 4, kind: 'land' },
-    { q: -2, r: 5, kind: 'land' },
-    { q: -1, r: 1, kind: 'land' },
-    { q: -1, r: 2, kind: 'land' },
-    { q: -1, r: 4, kind: 'land' },
-    { q: -1, r: 6, kind: 'land' },
-    { q: 0, r: 0, kind: 'land' },
-    { q: 0, r: 1, kind: 'land' },
-    { q: 0, r: 5, kind: 'land' },
-    { q: 0, r: 6, kind: 'land' },
-    { q: 1, r: 4, kind: 'land' },
-    { q: 1, r: 5, kind: 'land' },
-    { q: 2, r: 0, kind: 'land' },
-    { q: 2, r: 1, kind: 'land' },
-    { q: 2, r: 2, kind: 'land' },
-    { q: 2, r: 4, kind: 'land' },
-    { q: 3, r: 0, kind: 'land' },
-    { q: 3, r: 1, kind: 'land' },
-    // Sea hexes (26).
-    { q: -6, r: 3, kind: 'sea' },
-    { q: -6, r: 4, kind: 'sea' },
-    { q: -5, r: 3, kind: 'sea' },
-    { q: -4, r: 3, kind: 'sea' },
-    { q: -4, r: 4, kind: 'sea' },
-    { q: -4, r: 5, kind: 'sea' },
-    { q: -4, r: 6, kind: 'sea' },
-    { q: -3, r: 2, kind: 'sea' },
-    { q: -3, r: 3, kind: 'sea' },
-    { q: -3, r: 4, kind: 'sea' },
-    { q: -2, r: 1, kind: 'sea' },
-    { q: -2, r: 3, kind: 'sea' },
-    { q: -2, r: 6, kind: 'sea' },
-    { q: -1, r: 0, kind: 'sea' },
-    { q: -1, r: 3, kind: 'sea' },
-    { q: -1, r: 5, kind: 'sea' },
-    { q: 0, r: 2, kind: 'sea' },
-    { q: 0, r: 3, kind: 'sea' },
-    { q: 0, r: 4, kind: 'sea' },
-    { q: 1, r: 0, kind: 'sea' },
-    { q: 1, r: 1, kind: 'sea' },
-    { q: 1, r: 2, kind: 'sea' },
-    { q: 1, r: 3, kind: 'sea' },
-    { q: 2, r: 3, kind: 'sea' },
-    { q: 3, r: 2, kind: 'sea' },
-    { q: 3, r: 3, kind: 'sea' },
-  ],
-  // 11 port anchors. Direction mapping: 0=E, 1=SE, 2=SW, 3=W, 4=NW, 5=NE.
+  positions: parseRows(ROWS_5_6P).positions,
+  // 11 harbors; types drawn at random. Direction: 0 E, 1 SE, 2 SW, 3 W,
+  // 4 NW, 5 NE.
   portAnchors: [
-    { q: -4, r: 2, direction: 2 },
-    { q: -3, r: 2, direction: 4 },
-    { q: -2, r: 0, direction: 4 },
-    { q: 0, r: 0, direction: 5 },
-    { q: 2, r: 1, direction: 2 },
-    { q: 3, r: 0, direction: 5 },
-    { q: 1, r: 5, direction: 0 },
-    { q: -1, r: 6, direction: 2 },
-    { q: -3, r: 5, direction: 2 },
-    { q: -4, r: 5, direction: 2 },
-    { q: -6, r: 5, direction: 3 },
+    { q: -1, r: -3, direction: 4 },
+    { q: 1, r: -3, direction: 5 },
+    { q: 4, r: -3, direction: 5 },
+    { q: -2, r: -2, direction: 1 },
+    { q: -3, r: -1, direction: 2 },
+    { q: 3, r: -2, direction: 2 },
+    { q: -5, r: 2, direction: 3 },
+    { q: -4, r: 3, direction: 5 },
+    { q: -2, r: 2, direction: 2 },
+    { q: 2, r: 2, direction: 0 },
+    { q: 0, r: 3, direction: 2 },
   ],
+  robberStart: { q: -2, r: -3 },
+  pirateStart: { q: -5, r: 0 },
   pools: {
-    // 32 land hexes — no gold, no desert.
-    terrainCounts: {
-      wood: 7,
-      brick: 6,
-      sheep: 7,
-      wheat: 6,
-      ore: 6,
-    },
-    // 32 tokens — symmetric around 7 except for a single 12.
-    tokens: [
-      2,
-      3, 3, 3,
-      4, 4, 4, 4,
-      5, 5, 5, 5,
-      6, 6, 6, 6,
-      8, 8, 8, 8,
-      9, 9, 9, 9,
-      10, 10, 10, 10,
-      11, 11, 11,
-      12,
-    ],
-    // 11 generic ports.
-    portTypes: [
-      'generic', 'generic', 'generic', 'generic', 'generic', 'generic',
-      'generic', 'generic', 'generic', 'generic', 'generic',
-    ],
+    // Every hex and disc is printed: hills 6, forest 7, pasture 7, fields 6,
+    // mountains 6; discs 2,2 3,3,3 4×4 5×4 6×4 8×3 9×4 10×4 11,11 12,12.
+    terrainCounts: {},
+    tokens: [],
+    portTypes: seafarers56PortTypes(),
   },
 };
 
@@ -212,11 +150,14 @@ export const fourIslands = buildScenario({
   id: 'fourIslands',
   name: 'Four Islands',
   defaultIslandBonusVp: 2,
-  defaultVpToWin: 12,
-  defaultVpToWin5_6: 13,
+  // Rulebook: 13 VP (3-4p and The Six Islands at 5-6p).
+  defaultVpToWin: 13,
   minPlayers: 3,
   maxPlayers: 6,
+  // Start on one or two islands — your home islands; every other island,
+  // the largest included, pays you its bonus.
   startingPlacementZone: 'anyIsland',
+  bonusOnEveryIsland: true,
   layout3p: LAYOUT_3_4P,
   layout5_6p: LAYOUT_5_6P,
 });

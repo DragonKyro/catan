@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { Hex } from '@/game/types';
+import { LakeArt } from './traders/LakeArt';
 
 // Each terrain gets a small, low-contrast motif scattered randomly across
 // its hex. The motifs are seeded by hex.id so they stay the same across
@@ -62,6 +63,9 @@ export function HexTexture({ hex }: Props) {
     }
     return out;
   }, [hex.id, hex.center.x, hex.center.y, hex.numberToken]);
+
+  // T&B Fishing on Catan: the lake tile has its own art.
+  if (hex.terrain === 'lake') return <LakeArt hex={hex} />;
 
   if (hex.terrain === 'desert') {
     // Desert gets a softer treatment — just a few tiny dunes/dots.
@@ -270,6 +274,14 @@ function Glyph({ terrain }: { terrain: string }) {
           <rect x={-2} y={-2.4} width={0.9} height={1.2} fill="#3a3f48" />
           <rect x={-0.4} y={-2.4} width={0.8} height={1.2} fill="#3a3f48" />
           <rect x={1.1} y={-2.4} width={0.9} height={1.2} fill="#3a3f48" />
+        </g>
+      );
+    case 'spice':
+      // A tiny chili pepper with its green stem.
+      return (
+        <g opacity={0.6}>
+          <path d="M-2.6,-1.6 Q0,-2.4 2.4,0.6 Q2.8,2.6 1.4,2.4 Q-0.4,0.4 -2.6,-0.4 Z" fill="#7a1a0c" />
+          <path d="M-2.6,-1 L-3.4,-2.6" stroke="#3d6b22" strokeWidth={0.7} strokeLinecap="round" />
         </g>
       );
     default:

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { createGame } from '@/game/createGame';
 import { BoardSVG } from '@/ui/game/BoardSVG';
 import type { CustomMap } from '@/game/customMap/types';
+import { EXPLORERS_PIRATES_EXPANSION_ID } from '@/game/modules/explorersPirates/constants';
 import './ScenarioPreview.css';
 
 interface Props {
@@ -66,7 +67,9 @@ export function ScenarioPreview({
     }
   }, [numPlayers, expansions, scenarioId, baseScenarioId, tradersScenarioId, customMap, seed]);
 
-  const defaultCaption = scenarioId
+  const defaultCaption = expansions.includes(EXPLORERS_PIRATES_EXPANSION_ID)
+    ? `Explorers & Pirates (${numPlayers}p)`
+    : scenarioId
     ? `${scenarioId} (${numPlayers}p)`
     : tradersScenarioId
       ? `${tradersScenarioId} (${numPlayers}p)`

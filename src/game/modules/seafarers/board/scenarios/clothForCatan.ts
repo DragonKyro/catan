@@ -1,190 +1,175 @@
-import type { ScenarioLayout, ScenarioPosition } from '../types';
+import type { ScenarioLayout, ScenarioVillageDef } from '../types';
 import { buildScenario } from './builder';
-import { seaPositionsInDisk } from './helpers';
+import { fixedPositions, seaHexes, type FixedHex } from './helpers';
 
-// Cloth for Catan — main island plus small "cloth villages" on outer islets.
-// `clothHexes` flip the production rule: rolling a cloth hex's number gives
-// the player cloth tokens instead of the listed resource (1 per settlement
-// and 2 per city, per `actions/dice.ts`). Cloth → VP at floor(cloth / 2).
+// Cloth for Catan — Seafarers rulebook p.14-15 (3-4 players) and Seafarers
+// 5-6 p.9. Fixed setup transcribed from the rulebook maps (terrain and
+// number counts — large-island hexes plus villages — match the component
+// tables exactly; 5-6 map in docs/map-specs/SEAFARERS56-SPEC-B.md, pinned by
+// fiveSix.b.test.ts).
 //
-// Structural migration to the modular schema. Cloth-producing hexes stay
-// anchored at the same coordinates so the mechanic keeps working; underlying
-// terrain there is randomized from the pool (purely visual since rolls
-// produce cloth, not the listed resource).
+// Two large islands (north and south) frame a channel of single-hex small
+// islands. The number discs on the small islands' corners are villages that
+// trade cloth (../../cloth.ts). Nobody may settle the small islands or put
+// the robber on them; there's no Longest Route; each player places three
+// starting settlements and only the third pays starting resources.
+//
+// Corners: 0 NE, 1 SE, 2 S, 3 SW, 4 NW, 5 N. Edge directions: 0 E, 1 SE,
+// 2 SW, 3 W, 4 NW, 5 NE.
 
-// 3 cloth-producing hexes, anchored on outer-island land.
-const CLOTH_HEXES_3_4: { q: number; r: number }[] = [
-  { q: 3, r: -3 },
-  { q: 3, r: 0 },
-  { q: -1, r: 3 },
+// ---------------------------------------------------------------- 3-4p ---
+const HEXES_3_4P: FixedHex[] = [
+  // North island.
+  [-1, -3, 'wood', 4], [0, -3, 'sheep', 6], [1, -3, 'brick', 5], [2, -3, 'sheep', 11],
+  [3, -3, 'wheat', 8],
+  [-2, -2, 'wheat', 3], [-1, -2, 'wood', 12], [2, -2, 'wood', 3], [3, -2, 'ore', 9],
+  [-3, -1, 'wheat', 12],
+  // Village islands (no number discs on the hexes themselves).
+  [0, -1, 'gold', null], [-2, 0, 'desert'], [1, 0, 'desert'], [-1, 1, 'gold', null],
+  // South island.
+  [2, 1, 'ore', 2],
+  [-4, 2, 'brick', 9], [-3, 2, 'wheat', 2], [0, 2, 'sheep', 11], [1, 2, 'ore', 4],
+  [-4, 3, 'sheep', 10], [-3, 3, 'wood', 6], [-2, 3, 'ore', 5], [-1, 3, 'wheat', 10],
+  [0, 3, 'brick', 8],
+  ...seaHexes([
+    [0, -2], [1, -2],
+    [-2, -1], [-1, -1], [1, -1], [2, -1], [3, -1],
+    [-3, 0], [-1, 0], [0, 0], [2, 0], [3, 0],
+    [-4, 1], [-3, 1], [-2, 1], [0, 1], [1, 1],
+    [-2, 2], [-1, 2],
+  ]),
 ];
 
-// 8 main + 1 desert + 6 cloth-islet hexes = 15 land.
-const LAND_3_4P: ScenarioPosition[] = [
-  // Main island (8 land + 1 desert)
-  { q: 0, r: 0, kind: 'land' },
-  { q: 1, r: 0, kind: 'land' },
-  { q: 1, r: -1, kind: 'land' },
-  { q: 0, r: -1, kind: 'land' },
-  { q: -1, r: 0, kind: 'land' },
-  { q: -1, r: 1, kind: 'land' },
-  { q: 0, r: 1, kind: 'land' },
-  { q: -2, r: 1, kind: 'land' },
-  { q: -1, r: -1, kind: 'desert' },
-  // Cloth islets
-  { q: 2, r: -3, kind: 'land' },
-  { q: 3, r: -3, kind: 'land' },
-  { q: 3, r: -1, kind: 'land' },
-  { q: 3, r: 0, kind: 'land' },
-  { q: -1, r: 3, kind: 'land' },
-  { q: 0, r: 3, kind: 'land' },
+const VILLAGES_3_4P: ScenarioVillageDef[] = [
+  { q: 0, r: -1, corner: 5, number: 11 },
+  { q: 0, r: -1, corner: 2, number: 8 },
+  { q: -1, r: 1, corner: 5, number: 6 },
+  { q: -1, r: 1, corner: 2, number: 3 },
+  { q: -2, r: 0, corner: 5, number: 10 },
+  { q: -2, r: 0, corner: 2, number: 9 },
+  { q: 1, r: 0, corner: 5, number: 4 },
+  { q: 1, r: 0, corner: 2, number: 5 },
 ];
 
 const LAYOUT_3_4P: ScenarioLayout = {
-  positions: [
-    ...LAND_3_4P,
-    ...seaPositionsInDisk(LAND_3_4P, 3),
-  ],
+  positions: fixedPositions(HEXES_3_4P),
   portAnchors: [
-    { q: 1, r: -1, direction: 0 },
-    { q: 1, r: 0, direction: 1 },
-    { q: 0, r: 1, direction: 2 },
-    { q: -2, r: 1, direction: 3 },
-    { q: 0, r: -1, direction: 5 },
-    { q: -1, r: 0, direction: 3 },
+    { q: -1, r: -3, direction: 5 },
+    { q: 2, r: -3, direction: 4 },
+    { q: -2, r: -2, direction: 3 },
+    { q: 3, r: -2, direction: 0 },
+    { q: -4, r: 2, direction: 3 },
+    { q: 2, r: 1, direction: 0 },
+    { q: -3, r: 3, direction: 2 },
+    { q: -1, r: 3, direction: 1 },
+    { q: 1, r: 2, direction: 1 },
   ],
   pools: {
-    // 14 non-desert land hexes.
-    terrainCounts: {
-      gold: 3,
-      brick: 1,
-      wood: 2,
-      sheep: 4,
-      wheat: 3,
-      ore: 1,
-    },
-    // 14 tokens — fully symmetric around 7 (no 2 or 12). 3/11: 1, 4/10: 2,
-    // 5/9: 2, 6/8: 2.
-    tokens: [3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11],
-    portTypes: ['generic', 'wood', 'brick', 'sheep', 'wheat', 'ore'],
+    terrainCounts: {},
+    tokens: [],
+    // "Randomly place ports on the locations shown."
+    portTypes: [
+      'wood', 'brick', 'sheep', 'wheat', 'ore',
+      'generic', 'generic', 'generic', 'generic',
+    ],
   },
+  // "Players choose which hex with a number 12 disc should start the game
+  // with the robber" — the map shows the north island's 12 field.
+  robberStart: { q: -3, r: -1 },
+  pirateStart: { q: 3, r: 0 },
 };
 
-// ---------------------------------------------------------------------------
-// 5-6 player layout: 32 land (28 non-desert + 4 desert) + 29 sea = 61 disk
-// Rulebook (Seafarers 5-6p, p9): 2 gold + 4 hills + 6 forests + 5 pastures
-// + 6 fields + 5 mountains + 4 deserts = 32 land; 28 tokens; 11 ports.
-// 6 cloth-producing hexes (vs 3 at 3-4p).
-//
-// Geometry is APPROXIMATE — visual verification against
-// [docs/.scenario-renders/seafarers-56-p09.png] is pending.
-// ---------------------------------------------------------------------------
-const CLOTH_HEXES_5_6: { q: number; r: number }[] = [
-  { q: 3, r: -3 },
-  { q: 3, r: 0 },
-  { q: -1, r: 4 },
-  { q: 4, r: -2 },
-  { q: 1, r: 3 },
-  { q: -3, r: 4 },
+// ---------------------------------------------------------------- 5-6p ---
+const HEXES_5_6P: FixedHex[] = [
+  // North island.
+  [-2, -3, 'wood', 4], [-1, -3, 'sheep', 6], [0, -3, 'brick', 5], [1, -3, 'wheat', 12],
+  [2, -3, 'brick', 3], [3, -3, 'sheep', 11], [4, -3, 'wheat', 8],
+  [-3, -2, 'wheat', 3], [-2, -2, 'wood', 12], [3, -2, 'wood', 3], [4, -2, 'ore', 9],
+  [-4, -1, 'wheat', 11], [4, -1, 'sheep', 3],
+  // Village islands.
+  [-1, -1, 'desert'], [1, -1, 'desert'],
+  [-3, 0, 'gold', null], [2, 0, 'gold', null],
+  [-2, 1, 'desert'], [0, 1, 'desert'],
+  // South island.
+  [-5, 1, 'ore', 8], [3, 1, 'ore', 2],
+  [-5, 2, 'brick', 9], [-4, 2, 'wheat', 2], [1, 2, 'sheep', 11], [2, 2, 'ore', 4],
+  [-5, 3, 'sheep', 10], [-4, 3, 'wood', 6], [-3, 3, 'ore', 5], [-2, 3, 'wood', 11],
+  [-1, 3, 'wood', 8], [0, 3, 'wheat', 10], [1, 3, 'brick', 6],
+  ...seaHexes([
+    [-1, -2], [0, -2], [1, -2], [2, -2],
+    [-3, -1], [-2, -1], [0, -1], [2, -1], [3, -1],
+    // (-5, 0) and (4, 0) are the frame's west / east points: sea hexes on
+    // the map, not in the component table's sea count. The pirate starts on
+    // the east one.
+    [-5, 0], [-4, 0], [-2, 0], [-1, 0], [0, 0], [1, 0], [3, 0], [4, 0],
+    [-4, 1], [-3, 1], [-1, 1], [1, 1], [2, 1],
+    [-3, 2], [-2, 2], [-1, 2], [0, 2],
+  ]),
 ];
 
-const LAND_5_6P: ScenarioPosition[] = [
-  // Main island (18 non-desert + 4 desert)
-  { q: -3, r: 1, kind: 'land' },
-  { q: -3, r: 2, kind: 'land' },
-  { q: -2, r: 0, kind: 'land' },
-  { q: -2, r: 1, kind: 'land' },
-  { q: -2, r: 2, kind: 'land' },
-  { q: -2, r: 3, kind: 'desert' },
-  { q: -1, r: -1, kind: 'desert' },
-  { q: -1, r: 0, kind: 'land' },
-  { q: -1, r: 1, kind: 'land' },
-  { q: -1, r: 2, kind: 'land' },
-  { q: -1, r: 3, kind: 'land' },
-  { q: 0, r: -2, kind: 'desert' },
-  { q: 0, r: -1, kind: 'land' },
-  { q: 0, r: 0, kind: 'land' },
-  { q: 0, r: 1, kind: 'land' },
-  { q: 0, r: 2, kind: 'land' },
-  { q: 0, r: 3, kind: 'land' },
-  { q: 1, r: -2, kind: 'land' },
-  { q: 1, r: -1, kind: 'land' },
-  { q: 1, r: 0, kind: 'land' },
-  { q: 1, r: 1, kind: 'land' },
-  { q: 1, r: 2, kind: 'desert' },
-  // Cloth islets + extras (10 non-desert)
-  { q: 3, r: -3, kind: 'land' },
-  { q: 3, r: 0, kind: 'land' },
-  { q: -1, r: 4, kind: 'land' },
-  { q: 4, r: -2, kind: 'land' },
-  { q: 1, r: 3, kind: 'land' },
-  { q: -3, r: 4, kind: 'land' },
-  { q: 4, r: -3, kind: 'land' },
-  { q: 4, r: 0, kind: 'land' },
-  { q: -2, r: 4, kind: 'land' },
-  { q: 2, r: 1, kind: 'land' },
+const VILLAGES_5_6P: ScenarioVillageDef[] = [
+  { q: -1, r: -1, corner: 5, number: 2 },
+  { q: -1, r: -1, corner: 2, number: 5 },
+  { q: 1, r: -1, corner: 5, number: 10 },
+  { q: 1, r: -1, corner: 2, number: 8 },
+  { q: -3, r: 0, corner: 5, number: 4 },
+  { q: -3, r: 0, corner: 2, number: 9 },
+  { q: 2, r: 0, corner: 5, number: 4 },
+  { q: 2, r: 0, corner: 2, number: 5 },
+  { q: -2, r: 1, corner: 5, number: 6 },
+  { q: -2, r: 1, corner: 2, number: 12 },
+  { q: 0, r: 1, corner: 5, number: 9 },
+  { q: 0, r: 1, corner: 2, number: 10 },
 ];
 
 const LAYOUT_5_6P: ScenarioLayout = {
-  positions: [
-    ...LAND_5_6P,
-    ...seaPositionsInDisk(LAND_5_6P, 4),
-  ],
-  // 11 ports — each anchor faces an in-disk sea hex.
+  positions: fixedPositions(HEXES_5_6P),
   portAnchors: [
-    { q: -3, r: 1, direction: 3 }, // → (-4, 1) sea
-    { q: -3, r: 2, direction: 3 }, // → (-4, 2) sea
-    { q: -2, r: 0, direction: 4 }, // → (-2, -1) sea
-    { q: 1, r: -2, direction: 4 }, // → (1, -3) sea
-    { q: 1, r: -1, direction: 0 }, // → (2, -1) sea
-    { q: 0, r: 3, direction: 1 }, // → (0, 4) sea
-    { q: -2, r: 2, direction: 2 }, // → (-3, 3) sea
-    { q: 4, r: -3, direction: 4 }, // → (4, -4) sea
-    { q: 4, r: 0, direction: 2 }, // → (3, 1) sea
-    { q: 2, r: 1, direction: 1 }, // → (2, 2) sea
-    { q: -3, r: 4, direction: 3 }, // → (-4, 4) sea
+    { q: -2, r: -3, direction: 5 },
+    { q: 1, r: -3, direction: 4 },
+    { q: 3, r: -3, direction: 4 },
+    { q: -3, r: -2, direction: 3 },
+    { q: 4, r: -2, direction: 0 },
+    { q: 3, r: 1, direction: 0 },
+    { q: -5, r: 2, direction: 3 },
+    { q: 2, r: 2, direction: 1 },
+    { q: -4, r: 3, direction: 2 },
+    { q: -3, r: 3, direction: 1 },
+    { q: 0, r: 3, direction: 1 },
   ],
   pools: {
-    // 28 non-desert land hexes (4 deserts are fixed positions).
-    terrainCounts: {
-      gold: 2,
-      brick: 4,
-      wood: 6,
-      sheep: 5,
-      wheat: 6,
-      ore: 5,
-    },
-    // 28 tokens — fully symmetric around 7. 2/12: 1, 3/11: 3, 4/10: 3,
-    // 5/9: 3, 6/8: 4.
-    tokens: [
-      2,
-      3, 3, 3,
-      4, 4, 4,
-      5, 5, 5,
-      6, 6, 6, 6,
-      8, 8, 8, 8,
-      9, 9, 9,
-      10, 10, 10,
-      11, 11, 11,
-      12,
-    ],
+    terrainCounts: {},
+    tokens: [],
     portTypes: [
-      'generic', 'generic', 'generic', 'generic', 'generic', 'generic',
-      'wood', 'brick', 'sheep', 'wheat', 'ore',
+      'wood', 'brick', 'sheep', 'wheat', 'ore', 'sheep',
+      'generic', 'generic', 'generic', 'generic', 'generic',
     ],
   },
+  robberStart: { q: -4, r: -1 },
+  pirateStart: { q: 4, r: 0 },
 };
 
 export const clothForCatan = buildScenario({
   id: 'clothForCatan',
   name: 'Cloth for Catan',
-  defaultIslandBonusVp: 3,
+  defaultIslandBonusVp: 0,
   defaultVpToWin: 14,
-  defaultVpToWin5_6: 16,
   minPlayers: 3,
   maxPlayers: 6,
-  clothHexes: CLOTH_HEXES_3_4,
-  clothHexes5_6: CLOTH_HEXES_5_6,
+  // "Your starting settlements ... may be placed on one of the large islands
+  // or split across both large islands."
+  startingPlacementZone: 'listedIslands',
+  setupRounds: 3,
+  // "Return the Longest Route tile to the box."
+  noLongestRoad: true,
+  extras3_4: {
+    villages: VILLAGES_3_4P,
+    startingIslandHexes: [{ q: -1, r: -3 }, { q: -4, r: 3 }],
+  },
+  extras5_6: {
+    villages: VILLAGES_5_6P,
+    startingIslandHexes: [{ q: -2, r: -3 }, { q: -5, r: 3 }],
+  },
   layout3p: LAYOUT_3_4P,
   layout5_6p: LAYOUT_5_6P,
 });

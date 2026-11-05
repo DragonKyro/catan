@@ -14,7 +14,7 @@ All state mutations happen here via `applyAction(state, action) => state`. The e
 
 ## Rules of this layer
 
-- No imports from `react`, `react-dom`, `trystero`, `@/ui`, `@/net`, or `@/store`.
+- No imports from `react`, `react-dom`, `firebase`, `@/ui`, `@/net`, or `@/store`.
 - Every public function should be unit-testable without mocks.
 - No `Date.now()`, `Math.random()`, or other non-determinism. Use a seeded RNG passed in via state.
 - Randomness from dice rolls and dev card draws is decided by the acting player and carried in the action payload, not generated inside `applyAction`.

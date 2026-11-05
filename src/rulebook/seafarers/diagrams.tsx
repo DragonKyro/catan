@@ -79,7 +79,7 @@ export function IslandBonusDiagram() {
         transform="translate(-12, 5)"
       />
       <text x="60" y="105" textAnchor="middle" fontSize="11" fill="#cfe5ff">
-        First settler: +2 VP
+        Your first settlement: +2 VP
       </text>
       {/* Chip badge */}
       <g transform="translate(170, 55)">
@@ -87,7 +87,7 @@ export function IslandBonusDiagram() {
         <text textAnchor="middle" dominantBaseline="central" fontSize="18" fontWeight="700" fill="#1a1a1a">+2</text>
       </g>
       <text x="170" y="105" textAnchor="middle" fontSize="11" fill="#cfe5ff">
-        Island chip
+        Island bonus
       </text>
     </svg>
   );
@@ -116,7 +116,7 @@ export function TradeRouteDiagram() {
         <path d="M0,-12 L11,-1 L0,-1 Z" fill="#fdfbf3" stroke="#1a1a1a" strokeWidth="0.8" />
       </g>
       <text x="140" y="86" textAnchor="middle" fontSize="11" fill="#cfe5ff">
-        Trade route length 3 (road + settlement + ship + ship)
+        Route of 3: road, settlement, then 2 ships
       </text>
     </svg>
   );

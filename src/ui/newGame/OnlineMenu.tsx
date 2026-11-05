@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/ui/shared/Button';
-import { useNetworkStore } from '@/store/networkStore';
-import { NetworkTest } from './NetworkTest';
+import { useNetworkStore, warmUpNetwork } from '@/store/networkStore';
+import { roomCodeFromUrl } from '@/net';
 import './OnlineMenu.css';
 
 interface Props {
@@ -13,17 +13,20 @@ export function OnlineMenu({ onBack }: Props) {
   const createRoom = useNetworkStore((s) => s.createRoom);
   const joinRoom = useNetworkStore((s) => s.joinRoom);
 
+  // Opened from an invite link (?room=ABCD): straight to joining that room.
+  const [linkCode] = useState(roomCodeFromUrl);
   const [name, setName] = useState(myDisplayName || '');
-  const [code, setCode] = useState('');
-  const [view, setView] = useState<'choose' | 'join' | 'test'>('choose');
+  const [code, setCode] = useState(linkCode ?? '');
+  const [view, setView] = useState<'choose' | 'join'>(linkCode ? 'join' : 'choose');
+
+  // Load the online code and sign in while the player types.
+  useEffect(() => warmUpNetwork(), []);
 
   const nameOk = name.trim().length > 0;
   const codeOk = code.trim().length >= 3;
   const join = () => {
-    if (nameOk && codeOk) joinRoom(code.trim(), name.trim());
+    if (nameOk && codeOk) void joinRoom(code.trim(), name.trim());
   };
-
-  if (view === 'test') return <NetworkTest onBack={() => setView('choose')} />;
 
   return (
     <div className="online-wrap">
@@ -52,16 +55,13 @@ export function OnlineMenu({ onBack }: Props) {
               size="lg"
               fullWidth
               disabled={!nameOk}
-              onClick={() => createRoom(name.trim())}
+              onClick={() => void createRoom(name.trim())}
             >
               Create a new room
             </Button>
             <div className="online-divider"><span>or</span></div>
             <Button size="lg" fullWidth disabled={!nameOk} onClick={() => setView('join')}>
               Join with a code
-            </Button>
-            <Button variant="ghost" size="sm" fullWidth onClick={() => setView('test')}>
-              Network test (check this device's connection)
             </Button>
           </div>
         )}

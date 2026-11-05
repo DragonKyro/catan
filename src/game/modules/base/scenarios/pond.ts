@@ -49,7 +49,8 @@ const LAYOUT_3_4: ScenarioLayout = {
       ore: 3,
       desert: 1,
     },
-    tokens: [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 10, 10, 11, 11, 12],
+    // 17 discs: the standard 18 minus a 12 (odd one out on 2/12).
+    tokens: [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11],
     portTypes: [
       'generic',
       'generic',
@@ -81,13 +82,16 @@ const LAYOUT_5_6: ScenarioLayout = {
       desert: 2,
     },
     // 27 tokens — standard 5-6p 28 minus one 3.
+    // 27 numbered hexes: the CATAN 5-6 discs minus a 2 (the odd one out on
+    // the rarest pair, per the token rule).
     tokens: [
-      2, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6,
-      8, 8, 8, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12,
+      2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6,
+      8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
     ],
     portTypes: [
+      // The 5-6 harbor set: 5 × 3:1, wool 2:1 twice, one of each other.
       'generic', 'generic', 'generic', 'generic', 'generic',
-      'wood', 'brick', 'sheep', 'wheat', 'ore', 'wheat',
+      'wood', 'brick', 'sheep', 'sheep', 'wheat', 'ore',
     ],
   },
 };

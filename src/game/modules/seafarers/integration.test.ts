@@ -139,8 +139,7 @@ describe('seafarers integration', () => {
         settings: { expansions: ['seafarers'], scenarioId: id },
       });
       expect(s.phase).toBe('setupRound1');
-      expect(s.islandChips).toBeDefined();
-      expect(s.board.pirateHex).toBeDefined();
+      expect(s.board.islandOfHex).toBeDefined();
     }
   });
 });

@@ -5,6 +5,14 @@ import { chooseAction } from '@/ai';
 import { chooseRobberMove } from '@/ai/robber';
 import { reportNeeds, RESOURCE_WEIGHT } from '@/ai/value';
 import { RESOURCES, type Action, type GameState, type HexId, type Resource } from '@/game/types';
+import { isSetupPhase } from '@/game/actions/setup';
+import { pirateStealCandidates } from '@/game/modules/seafarers/actions/movePirate';
+import {
+  epBestVictim,
+  epDefaultPirateAction,
+  epDefaultSetupShip,
+  epUnblockMove,
+} from './explorersPirates/defaults';
 import './TurnTimer.css';
 
 // Optional per-turn time limit. When set in GameSettings, runs only for
@@ -19,6 +27,7 @@ export function TurnTimer() {
   const dialog = useGameStore((s) => s.dialog);
   const closeDialog = useGameStore((s) => s.closeDialog);
   const setPendingRobberHex = useGameStore((s) => s.setPendingRobberHex);
+  const setPendingPirateHex = useGameStore((s) => s.setPendingPirateHex);
   const pendingRobberHex = useGameStore((s) => s.pendingRobberHex);
   const role = useNetworkStore((s) => s.role);
   const limitSec = game?.settings.turnTimerSec ?? 0;
@@ -46,7 +55,12 @@ export function TurnTimer() {
       key={key}
       limitSec={limitSec}
       onExpire={() =>
-        autoFinish(useGameStore.getState(), { dispatch, closeDialog, setPendingRobberHex })
+        autoFinish(useGameStore.getState(), {
+          dispatch,
+          closeDialog,
+          setPendingRobberHex,
+          setPendingPirateHex,
+        })
       }
     />
   );
@@ -101,6 +115,7 @@ function autoFinish(
     dispatch: (a: Action) => void;
     closeDialog: () => void;
     setPendingRobberHex: (h: HexId | null) => void;
+    setPendingPirateHex: (h: HexId | null) => void;
   },
 ): void {
   const initial = store.game;
@@ -152,6 +167,36 @@ function autoFinish(
     return;
   }
 
+  // Explorers & Pirates: the pirate ship's victim pick is open.
+  if (store.pendingPirateHex && initial.phase === 'epPlacePirate') {
+    const hex = store.pendingPirateHex;
+    ctx.setPendingPirateHex(null);
+    ctx.dispatch({ type: 'epPlacePirate', playerId, hex, stealFrom: epBestVictim(initial, playerId, hex) });
+    return;
+  }
+
+  // Same for the pirate: let the AI heuristic pick the victim.
+  if (store.pendingPirateHex) {
+    const hex = store.pendingPirateHex;
+    const victim = pirateStealCandidates(initial, playerId, hex)[0] ?? null;
+    ctx.setPendingPirateHex(null);
+    ctx.dispatch({ type: 'movePirate', playerId, hex, stealFrom: victim });
+    return;
+  }
+
+  // Explorers & Pirates: place the pirate ship where it robs the richest
+  // player; the setup ship goes on the first free edge if the AI can't say.
+  if (initial.phase === 'epPlacePirate') {
+    const action = epDefaultPirateAction(initial, playerId);
+    if (action) ctx.dispatch(action);
+    return;
+  }
+  if (initial.explorersPirates && initial.phase === 'setupRound3' && initial.setupState?.step === 'ship') {
+    const action = epDefaultSetupShip(initial, playerId);
+    if (action) ctx.dispatch(action);
+    return;
+  }
+
   // Pending trade where we're the proposer: walk away.
   if (initial.pendingTrade && initial.pendingTrade.proposerId === playerId) {
     ctx.dispatch({ type: 'cancelTrade', playerId });
@@ -165,19 +210,55 @@ function autoFinish(
     initial.phase === 'movePirate' ||
     initial.phase === 'chooseGoldResource' ||
     initial.phase === 'chooseRobberOrPirate' ||
-    initial.phase === 'setupRound1' ||
-    initial.phase === 'setupRound2' ||
+    initial.phase === 'placeTribePort' ||
+    initial.phase === 'stealResource' ||
+    // T&B Barbarian Attack: a card's choice, then the knight moves (the AI
+    // moves any knight that must leave the castle, then ends the turn).
+    initial.phase === 'barbarianCard' ||
+    initial.phase === 'barbarianKnightMoves' ||
+    // T&B scenario: placing a barbarian.
+    initial.phase === 'moveBarbarian' ||
+    // T&B: Merchant Trains voting round / wagon placement, Event Card answers.
+    initial.phase === 'wagonVoting' ||
+    initial.phase === 'placeWagon' ||
+    initial.phase === 'eventResolution' ||
+    // T&B Fishing on Catan: the full-hand swap choice.
+    initial.phase === 'fishSwap' ||
+    isSetupPhase(initial.phase) ||
     initial.phase === 'rollOrPlayKnight'
   ) {
     const action = chooseAction(initial, playerId);
     if (action) ctx.dispatch(action);
+    else if (initial.phase === 'barbarianKnightMoves') ctx.dispatch({ type: 'endTurn', playerId });
     return;
   }
 
-  // Main: just end the turn — the player had their chance.
-  if (initial.phase === 'main') {
+  // Main (and the T&B scenario's End of Turn wagon moves): just end the
+  // turn — the player had their chance.
+  // Explorers & Pirates: the Movement phase too (a ship stopped on an edge
+  // with 2 others sails one more edge first).
+  if (initial.phase === 'main' || initial.phase === 'wagonMoves' || initial.phase === 'epMovement') {
+    const unblock = epUnblockMove(initial, playerId);
+    if (unblock) ctx.dispatch(unblock);
     ctx.dispatch({ type: 'endTurn', playerId });
+    // Out of time in the Action phase: the wagon stays put too (no second
+    // full countdown for the End of Turn phase).
+    const after = useGameStore.getState().game;
+    if (initial.phase === 'main' && after?.phase === 'wagonMoves' && getActingPlayerId(after) === playerId) {
+      ctx.dispatch({ type: 'endTurn', playerId });
+    }
+    // Explorers & Pirates: out of time in the Action phase, the ships stay
+    // put as well.
+    if (initial.phase === 'main' && after?.phase === 'epMovement' && getActingPlayerId(after) === playerId) {
+      ctx.dispatch({ type: 'endTurn', playerId });
+    }
+    return;
   }
+
+  // Any other sub-phase (the Cities & Knights ones: pillage choice, tie
+  // draw, progress discard, Aqueduct, Wedding, Treason, …): the AI answers.
+  const action = chooseAction(initial, playerId);
+  if (action) ctx.dispatch(action);
 }
 
 // Pick up to 2 resources weighted by current shortfall vs player needs,

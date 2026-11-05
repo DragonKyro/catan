@@ -3,7 +3,6 @@ import type {
   ScenarioHexDef,
   ScenarioLayout,
   ScenarioPortDef,
-  ScenarioTribeTokenDef,
 } from '../types';
 import { fillSea } from './helpers';
 
@@ -24,13 +23,18 @@ export interface ScenarioBlueprint {
   // starting settlements go on the main island, outer islands are won by
   // expansion). Scenarios that explicitly allow multi-island starts (Four
   // Islands) override this.
-  startingPlacementZone?: 'mainIslandOnly' | 'anyIsland';
+  startingPlacementZone?: Scenario['startingPlacementZone'];
+  bonusOnEveryIsland?: boolean;
+  noPirate?: boolean;
+  noLongestRoad?: boolean;
+  noLargestArmy?: boolean;
+  setupRounds?: 3;
+  numberedHexesOnly?: boolean;
+  extras3_4?: Scenario['extras3_4'];
+  extras5_6?: Scenario['extras5_6'];
   // Optional. When true, desert hexes act as island boundaries (used by
   // Through the Desert so the far side earns an outer-island chip).
   desertIsBoundary?: boolean;
-  // Optional. Forgotten Tribe token placements.
-  tribeTokens?: ScenarioTribeTokenDef[];
-  tribeTokens5_6?: ScenarioTribeTokenDef[];
   // Optional. Fog Island hex coordinates (hidden at start, revealed on
   // adjacent build).
   fogHexes?: { q: number; r: number }[];
@@ -38,12 +42,6 @@ export interface ScenarioBlueprint {
   // Optional. Separate terrain + token pool consumed by fog cells.
   fogPools?: import('../../../../board/fogPoolInjection').FogPoolDef;
   fogPools5_6?: import('../../../../board/fogPoolInjection').FogPoolDef;
-  // Optional. Pirate Islands fleet anchor + initial strength.
-  pirateFleet?: { q: number; r: number; strength: number };
-  pirateFleet5_6?: { q: number; r: number; strength: number };
-  // Optional. Cloth for Catan: hexes that produce cloth on roll.
-  clothHexes?: { q: number; r: number }[];
-  clothHexes5_6?: { q: number; r: number }[];
   // ----- Legacy fixed layout (per-hex terrain + token). Kept for scenarios
   // that haven't migrated to the modular format yet. ----------------------
   land?: ScenarioHexDef[];
@@ -108,16 +106,18 @@ export function buildScenario(bp: ScenarioBlueprint): Scenario {
   if (ports5_6) scenario.ports5_6 = ports5_6;
   if (bp.defaultVpToWin5_6 != null) scenario.defaultVpToWin5_6 = bp.defaultVpToWin5_6;
   if (bp.desertIsBoundary) scenario.desertIsBoundary = true;
-  if (bp.tribeTokens) scenario.tribeTokens = bp.tribeTokens;
-  if (bp.tribeTokens5_6) scenario.tribeTokens5_6 = bp.tribeTokens5_6;
   if (bp.fogHexes) scenario.fogHexes = bp.fogHexes;
   if (bp.fogHexes5_6) scenario.fogHexes5_6 = bp.fogHexes5_6;
   if (bp.fogPools) scenario.fogPools = bp.fogPools;
   if (bp.fogPools5_6) scenario.fogPools5_6 = bp.fogPools5_6;
-  if (bp.pirateFleet) scenario.pirateFleet = bp.pirateFleet;
-  if (bp.pirateFleet5_6) scenario.pirateFleet5_6 = bp.pirateFleet5_6;
-  if (bp.clothHexes) scenario.clothHexes = bp.clothHexes;
-  if (bp.clothHexes5_6) scenario.clothHexes5_6 = bp.clothHexes5_6;
+  if (bp.bonusOnEveryIsland) scenario.bonusOnEveryIsland = true;
+  if (bp.noPirate) scenario.noPirate = true;
+  if (bp.noLongestRoad) scenario.noLongestRoad = true;
+  if (bp.noLargestArmy) scenario.noLargestArmy = true;
+  if (bp.setupRounds) scenario.setupRounds = bp.setupRounds;
+  if (bp.numberedHexesOnly) scenario.numberedHexesOnly = true;
+  if (bp.extras3_4) scenario.extras3_4 = bp.extras3_4;
+  if (bp.extras5_6) scenario.extras5_6 = bp.extras5_6;
   if (bp.layout3p) scenario.layout3p = bp.layout3p;
   if (bp.layout4p) scenario.layout4p = bp.layout4p;
   if (bp.layout5_6p) scenario.layout5_6p = bp.layout5_6p;

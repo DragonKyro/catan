@@ -1,0 +1,33 @@
+.eventdlg-text {
+  margin: 0 0 8px;
+  color: var(--text-soft);
+  font-size: 0.9em;
+}
+
+.eventdlg-ask {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.eventdlg-soft {
+  margin: 6px 0 0;
+  color: var(--text-soft);
+  font-size: 0.85em;
+}
+
+.eventdlg-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.eventdlg-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  vertical-align: -1px;
+}

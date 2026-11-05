@@ -1,33 +1,18 @@
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import { RESOURCES, COMMODITIES } from '@/game/types';
+import { RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
-import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { DevCardChip, DEV_LABEL } from '@/ui/shared/DevCardChip';
-import { calculateVictoryPoints, calculateIslandChipVp } from '@/game/scoring/points';
-import { calculateBarbarianDefenderVp } from '@/game/modules/traders/scoring/barbarianAttack';
+import { calculateVictoryPoints, calculateIslandBonusVp } from '@/game/scoring/points';
+import { BarbarianAttackBadges } from '@/ui/game/traders/BarbarianAttackBadges';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
-import { FISH_TOKEN_VALUE } from '@/game/modules/traders/constants';
+import { TradersHandStrip } from './TradersHandStrip';
+import { CKHandCards, CKHandFlags } from './citiesAndKnights/CKHand';
+import { SwiftJourneyChips } from '@/ui/game/traders/TradersBarbariansHand';
+import { tbHiddenCardCount } from '@/game/modules/traders/tradersBarbarians/state';
+import { EpHandStrip, MissionChips } from '@/ui/game/explorersPirates/ExplorersPiratesHand';
 import './HandPanel.css';
-
-function countDefenderVp(
-  game: ReturnType<typeof useGameStore.getState>['game'],
-  playerId: string,
-): number {
-  if (!game) return 0;
-  return calculateBarbarianDefenderVp(game, playerId);
-}
-
-function fishHandTooltip(tokens: Array<'one' | 'two' | 'three'>): string {
-  const counts = { one: 0, two: 0, three: 0 };
-  for (const t of tokens) counts[t]++;
-  const total = tokens.reduce(
-    (s, t) => s + (FISH_TOKEN_VALUE[t] ?? 0),
-    0,
-  );
-  return `Fish tokens: ${counts.one}×1 + ${counts.two}×2 + ${counts.three}×3 = ${total} fish total`;
-}
 
 export function HandPanel() {
   const { game, dispatch, openDialog, uiMode, setMode, handoffAcknowledgedForPlayer } = useGameStore();
@@ -85,10 +70,14 @@ export function HandPanel() {
   const canPlayCards =
     !player.isAI &&
     isMyTurn &&
-    (game.phase === 'main' || game.phase === 'rollOrPlayKnight') &&
+    (game.phase === 'main' ||
+      game.phase === 'rollOrPlayKnight' ||
+      // T&B scenario: a Knight may also clear the wagon's way.
+      (game.phase === 'wagonMoves' && !!game.tradersBarbarians)) &&
     !game.hasPlayedDevCardThisTurn &&
     uiMode.kind === 'idle';
   const vp = calculateVictoryPoints(game, player.id, true);
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
 
   const cardCounts: Record<string, number> = {};
   for (const c of player.devCards.unplayed) {
@@ -97,7 +86,8 @@ export function HandPanel() {
   const hasAnyCards =
     Object.keys(cardCounts).length > 0 ||
     player.devCards.boughtThisTurn.length > 0 ||
-    player.devCards.victoryPoints > 0;
+    player.devCards.victoryPoints > 0 ||
+    tbHiddenCardCount(game, player.id) > 0;
 
   const onPlay = (card: string) => {
     if (card === 'knight') {
@@ -122,127 +112,65 @@ export function HandPanel() {
           />
           {player.name}
           {player.hasLongestRoad && (
-            <span className="hand-flag" title="Longest Road (+2 VP)">🛣️</span>
+            <span
+              className="hand-flag"
+              title={`${game.settings.expansions.includes('seafarers') || game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) ? 'Longest Route' : 'Longest Road'} (+2 VP)`}
+            >
+              🛣️
+            </span>
           )}
           {player.hasLargestArmy && (
             <span className="hand-flag" title="Largest Army (+2 VP)">⚔️</span>
           )}
           {(() => {
-            const chipVp = calculateIslandChipVp(game, player.id);
+            const chipVp = calculateIslandBonusVp(game, player.id);
             return chipVp > 0 ? (
               <span
                 className="hand-flag"
-                title={`Outer-island settlement bonuses (+${chipVp} VP)`}
+                title={`Island settlement bonuses (+${chipVp} VP)`}
               >
                 🏝 +{chipVp}
               </span>
             ) : null;
           })()}
-          {player.cloth && player.cloth > 0 && (
+          {(player.cloth ?? 0) > 0 && (
             <span
               className="hand-flag"
-              title={`Cloth tokens — ${player.cloth} cloth = ${Math.floor(player.cloth / 2)} VP`}
+              title={`Cloth tokens — ${player.cloth} cloth = ${Math.floor((player.cloth ?? 0) / 2)} VP`}
             >
               🧵 {player.cloth}
             </span>
           )}
-          {(player.cityWalls ?? 0) > 0 && (
+          {(player.tribeVp ?? 0) > 0 && (
+            <span className="hand-flag" title={`Tribe VP tokens (+${player.tribeVp} VP)`}>
+              ★ {player.tribeVp}
+            </span>
+          )}
+          {(player.warships?.length ?? 0) > 0 && (
             <span
               className="hand-flag"
-              title={`City walls (+${(player.cityWalls ?? 0) * 2} to 7-roll hand limit)`}
+              title={`Warships — your strength against the pirates (${player.warships!.length})`}
             >
-              🧱 {player.cityWalls}
+              ⚔⛵ {player.warships!.length}
             </span>
           )}
-          {/* C&K improvement levels (only when nonzero) */}
-          {player.improvements?.science ? (
-            <span className="hand-flag" title={`Science level ${player.improvements.science}`}>📚 {player.improvements.science}</span>
-          ) : null}
-          {player.improvements?.trade ? (
-            <span className="hand-flag" title={`Trade level ${player.improvements.trade}`}>⚖️ {player.improvements.trade}</span>
-          ) : null}
-          {player.improvements?.politics ? (
-            <span className="hand-flag" title={`Politics level ${player.improvements.politics}`}>🤝 {player.improvements.politics}</span>
-          ) : null}
-          {(player.defenderTokens ?? 0) > 0 && (
-            <span className="hand-flag" title={`Defender of Catan tokens (+${player.defenderTokens} VP)`}>
-              🥇 {player.defenderTokens}
-            </span>
-          )}
-          {(() => {
-            const mets = game.metropolises;
-            if (!mets) return null;
-            let count = 0;
-            for (const t of ['science', 'trade', 'politics'] as const) {
-              if (mets[t]?.playerId === player.id) count++;
-            }
-            if (count === 0) return null;
-            return (
-              <span className="hand-flag" title={`Metropolises owned (+${count * 2} VP)`}>
-                🏛 {count}
-              </span>
-            );
-          })()}
-          {game.merchant?.ownerId === player.id && (
-            <span className="hand-flag" title="Merchant (+1 VP, 2:1 on hex)">
-              💰
-            </span>
-          )}
-          {(player.gold ?? 0) > 0 && (
+          {(player.heldPorts?.length ?? 0) > 0 && (
             <span
               className="hand-flag"
-              title={`Gold — ${player.gold} coins. Spend 2 gold for any resource (max 2× per turn).`}
+              title="Tribe ports waiting for a coastal settlement with room for a port"
             >
-              🪙 {player.gold}
+              ⚓ {player.heldPorts!.length}
             </span>
           )}
-          {game.wealthTiles?.wealthiest === player.id && (
-            <span className="hand-flag" title="Wealthiest Catanian (+1 VP)">
-              👑
-            </span>
-          )}
-          {game.wealthTiles?.poor.includes(player.id) && (
-            <span className="hand-flag" title="Poor Catanian (-2 VP)">
-              👜
-            </span>
-          )}
+          {hasCK && <CKHandFlags game={game} player={player} />}
           {game.strongestPorts?.holder === player.id && (
             <span className="hand-flag" title="Strongest Ports (+2 VP)">
               ⚓
             </span>
           )}
-          {(player.fishTokens?.length ?? 0) > 0 && (
-            <span
-              className="hand-flag"
-              title={fishHandTooltip(player.fishTokens ?? [])}
-            >
-              🐟 {player.fishTokens!.length}
-            </span>
-          )}
-          {game.oldBootHolder === player.id && (
-            <span
-              className="hand-flag"
-              title="Old boot — you need +1 VP to win. Pass it during your turn to anyone with ≥ your VPs."
-            >
-              👢
-            </span>
-          )}
-          {(player.defenderKnights?.length ?? 0) > 0 && (
-            <span
-              className="hand-flag"
-              title={`Defender knights — ${player.defenderKnights!.length} stationed`}
-            >
-              🛡 {player.defenderKnights!.length}
-            </span>
-          )}
-          {countDefenderVp(game, player.id) > 0 && (
-            <span
-              className="hand-flag"
-              title={`Successful castle defenses — +${countDefenderVp(game, player.id)} VP`}
-            >
-              🪖 +{countDefenderVp(game, player.id)}
-            </span>
-          )}
+          <BarbarianAttackBadges game={game} playerId={player.id} className="hand-flag" />
+          {/* Explorers & Pirates: mission track markers. */}
+          <MissionChips game={game} playerId={player.id} className="hand-flag" />
         </h3>
         <span
           className="hand-vp"
@@ -263,60 +191,58 @@ export function HandPanel() {
         ))}
       </div>
 
-      {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) &&
-        player.progressCards &&
-        player.progressCards.science.length +
-          player.progressCards.trade.length +
-          player.progressCards.politics.length >
-          0 && (
-          <div className="hand-progress-cards">
-            <span style={{ color: 'var(--text-soft)', fontSize: '0.75em', textTransform: 'uppercase' }}>
-              Progress
-            </span>
-            <span style={{ color: 'var(--text)', fontWeight: 600 }}>
-              {player.progressCards.science.length +
-                player.progressCards.trade.length +
-                player.progressCards.politics.length}{' '}
-              cards
-            </span>
-            <span style={{ fontSize: '0.85em', color: 'var(--text-soft)' }}>
-              (open via Cards button)
-            </span>
-          </div>
-        )}
+      {/* Explorers & Pirates: gold and the pieces left share one row (no
+          development cards). */}
+      {game.explorersPirates ? (
+        <EpHandStrip
+          game={game}
+          player={player}
+          ownTurn={game.playerOrder[game.currentPlayerIndex] === player.id}
+        />
+      ) : (
+        <TradersHandStrip
+          game={game}
+          player={player}
+          ownTurn={game.playerOrder[game.currentPlayerIndex] === player.id}
+        />
+      )}
 
-      {game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID) && (
-        <div className="hand-commodities">
-          {COMMODITIES.map((c) => {
-            const n = player.commodities?.[c] ?? 0;
+      {hasCK && (
+        <CKHandCards
+          player={player}
+          canPlay={!player.isAI && isMyTurn && (game.phase === 'main' || game.phase === 'rollOrPlayKnight')}
+        />
+      )}
+
+      {!hasCK && !game.explorersPirates && (
+      <div className="hand-section">
+        <div className="hand-cards">
+          {Object.entries(cardCounts).map(([card, count]) => {
+            // Before the roll only a Knight may be played.
+            const playable = canPlayCards && (card === 'knight' || game.phase === 'main');
+            const label =
+              card === 'knight' && game.pirateIslands
+                ? 'Knight (turns your ship nearest the start of your route into a warship)'
+                : DEV_LABEL[card as keyof typeof DEV_LABEL];
             return (
-              <CommodityChip
-                key={c}
-                commodity={c}
-                count={n}
-                dimmed={n === 0}
+              <DevCardChip
+                key={card}
+                card={card as never}
+                count={count}
+                onClick={playable ? () => onPlay(card) : undefined}
+                disabled={!playable}
+                title={
+                  playable
+                    ? `Play ${label}`
+                    : canPlayCards
+                      ? game.phase === 'wagonMoves'
+                        ? 'Only a Knight (or Swift Journey) may be played while your wagon moves'
+                        : 'Only a Knight may be played before you roll'
+                      : 'Cannot play right now'
+                }
               />
             );
           })}
-        </div>
-      )}
-
-      <div className="hand-section">
-        <div className="hand-cards">
-          {Object.entries(cardCounts).map(([card, count]) => (
-            <DevCardChip
-              key={card}
-              card={card as never}
-              count={count}
-              onClick={canPlayCards ? () => onPlay(card) : undefined}
-              disabled={!canPlayCards}
-              title={
-                canPlayCards
-                  ? `Play ${DEV_LABEL[card as keyof typeof DEV_LABEL]}`
-                  : 'Cannot play right now'
-              }
-            />
-          ))}
           {player.devCards.boughtThisTurn.map((c, i) => (
             <DevCardChip
               key={`bt-${i}`}
@@ -332,9 +258,11 @@ export function HandPanel() {
               title="Hidden victory point (counts at game end)"
             />
           )}
+          <SwiftJourneyChips game={game} player={player} isMyTurn={isMyTurn} />
           {!hasAnyCards && <span className="hand-empty">no dev cards</span>}
         </div>
       </div>
+      )}
     </section>
   );
 }

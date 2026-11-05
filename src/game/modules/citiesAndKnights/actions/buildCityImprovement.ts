@@ -1,28 +1,81 @@
 import type {
   BuildCityImprovementAction,
   GameState,
+  ImprovementTrack,
   MetropolisRecord,
+  PlayerId,
+  VertexId,
 } from '../../../types';
 import { currentPlayerId, getPlayer, updatePlayer } from '../../../helpers';
 import { addCommodities, subtractCommodities } from '../../../commodities';
 import { improvementCost, vertexHasMetropolis } from '../improvements/state';
-import {
-  MAX_IMPROVEMENT_LEVEL,
-  MIN_METROPOLIS_LEVEL,
-} from '../constants';
+import { MAX_IMPROVEMENT_LEVEL, MIN_METROPOLIS_LEVEL } from '../constants';
 
-// Build the next level of an improvement track. Pays the matching commodity
-// (level N → N commodities, less 1 if the Crane card is active). Requires
-// at least one city on the board (rulebook p.8 "you must have at least 1 city
-// to make city improvements").
-//
-// Level 4: gain temporary control of the track's metropolis (placed on one
-// of your cities). Level 5: control becomes permanent. If you already hold
-// the metropolis at level 4, level 5 just locks it; if another player holds
-// it, you take it (placed on one of YOUR cities).
-//
-// When the player has multiple eligible cities, the transition enters the
-// 'placeMetropolis' sub-phase so the player picks the city.
+const NO_METROPOLISES: Record<ImprovementTrack, MetropolisRecord | null> = {
+  science: null,
+  trade: null,
+  politics: null,
+};
+
+// What reaching `level` on `track` does to that track's metropolis (p.8):
+//   - 'claim': you're the first to level 4 (nobody holds it) or the first to
+//     level 5 (it isn't permanent yet and isn't yours) → it goes on one of
+//     your cities; level 5 makes it permanent.
+//   - 'lock':  you already hold it and reach level 5 → permanent.
+//   - 'none':  below level 4, or someone got there first.
+export function metropolisEffect(
+  state: GameState,
+  playerId: PlayerId,
+  track: ImprovementTrack,
+  level: number,
+): 'claim' | 'lock' | 'none' {
+  if (level < MIN_METROPOLIS_LEVEL) return 'none';
+  const holder = state.metropolises?.[track] ?? null;
+  if (holder?.playerId === playerId) return level === MAX_IMPROVEMENT_LEVEL ? 'lock' : 'none';
+  if (!holder) return 'claim';
+  if (level === MAX_IMPROVEMENT_LEVEL && !holder.permanent) return 'claim';
+  return 'none';
+}
+
+// Your cities that could take a new metropolis (one per city).
+export function metropolisSites(state: GameState, playerId: PlayerId): VertexId[] {
+  const p = state.players.find((pl) => pl.id === playerId);
+  return (p?.cities ?? []).filter((v) => !vertexHasMetropolis(state, v));
+}
+
+// Why `playerId` can't build the next improvement on `track` right now, or
+// null when they can (phase / turn aside). Shared with the UI and AI.
+export function improvementBlocker(
+  state: GameState,
+  playerId: PlayerId,
+  track: ImprovementTrack,
+): string | null {
+  const player = state.players.find((p) => p.id === playerId);
+  if (!player) return 'Unknown player';
+  if (player.cities.length === 0) return 'You need a city on the board to build improvements';
+  const level = player.improvements?.[track] ?? 0;
+  if (level >= MAX_IMPROVEMENT_LEVEL) return 'This track is complete';
+  const target = level + 1;
+  if (
+    metropolisEffect(state, playerId, track, target) === 'claim' &&
+    metropolisSites(state, playerId).length === 0
+  ) {
+    return 'This level wins the metropolis, and none of your cities is free to take it';
+  }
+  const cost = improvementCost(track, target, !!state.craneActive);
+  if ((player.commodities?.[cost.commodity] ?? 0) < cost.amount) {
+    return `Needs ${cost.amount} ${cost.commodity}`;
+  }
+  return null;
+}
+
+// Build the next city improvement (p.8): needs at least one city; costs as
+// many of the track's commodity as the level reached (Crane: 1 fewer); no
+// skipping levels. Level 3 unlocks the track's ability. The first player to
+// level 4 takes the track's metropolis (temporary); the first to level 5
+// takes it for good. Taking it needs a city without a metropolis — without
+// one you may not buy that level. With 2+ free cities the player picks
+// (placeMetropolis phase).
 export function handleBuildCityImprovement(
   state: GameState,
   action: BuildCityImprovementAction,
@@ -31,50 +84,18 @@ export function handleBuildCityImprovement(
     throw new Error(`Cannot build city improvement in phase ${state.phase}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
+  const blocker = improvementBlocker(state, action.playerId, action.track);
+  if (blocker) throw new Error(blocker);
+
   const player = getPlayer(state, action.playerId);
-  if (player.cities.length === 0) {
-    throw new Error('You need a city to build improvements');
-  }
-  const currentLevel = player.improvements?.[action.track] ?? 0;
-  if (currentLevel >= MAX_IMPROVEMENT_LEVEL) {
-    throw new Error(`Already at max level on ${action.track}`);
-  }
-  const target = currentLevel + 1;
-
-  // Level 4/5 metropolis: must have an available city. If the player already
-  // owns this track's metropolis we just upgrade level (no new placement).
-  // Otherwise the player needs at least one city without a metropolis.
-  const trackHolder = state.metropolises?.[action.track] ?? null;
-  const ownsThisMetro = trackHolder?.playerId === action.playerId;
-  if (target >= MIN_METROPOLIS_LEVEL && !ownsThisMetro) {
-    const eligibleCities = player.cities.filter(
-      (v) => !vertexHasMetropolis(state, v),
-    );
-    if (eligibleCities.length === 0) {
-      throw new Error('No available city to host the metropolis');
-    }
-  }
-
+  const target = (player.improvements?.[action.track] ?? 0) + 1;
   const cost = improvementCost(action.track, target, !!state.craneActive);
-  const playerCommodities = player.commodities ?? {
-    paper: 0,
-    cloth: 0,
-    coin: 0,
-  };
-  if (playerCommodities[cost.commodity] < cost.amount) {
-    throw new Error(`Need ${cost.amount} ${cost.commodity}`);
-  }
+  const spend = { [cost.commodity]: cost.amount };
+  const effect = metropolisEffect(state, action.playerId, action.track, target);
 
-  // Spend.
-  const spend = { [cost.commodity]: cost.amount } as Partial<
-    Record<typeof cost.commodity, number>
-  >;
   let next = updatePlayer(state, action.playerId, (p) => ({
     ...p,
-    commodities: subtractCommodities(
-      p.commodities ?? { paper: 0, cloth: 0, coin: 0 },
-      spend,
-    ),
+    commodities: subtractCommodities(p.commodities ?? { paper: 0, cloth: 0, coin: 0 }, spend),
     improvements: {
       ...(p.improvements ?? { science: 0, trade: 0, politics: 0 }),
       [action.track]: target,
@@ -82,62 +103,33 @@ export function handleBuildCityImprovement(
   }));
   next = {
     ...next,
-    commodityBank: addCommodities(
-      next.commodityBank ?? { paper: 0, cloth: 0, coin: 0 },
-      spend,
-    ),
+    commodityBank: addCommodities(next.commodityBank ?? { paper: 0, cloth: 0, coin: 0 }, spend),
     craneActive: false,
   };
 
-  // Metropolis transitions.
-  if (target >= MIN_METROPOLIS_LEVEL) {
-    if (ownsThisMetro) {
-      // Already own; just bump permanent flag on level 5.
-      if (target === MAX_IMPROVEMENT_LEVEL) {
-        next = {
-          ...next,
-          metropolises: {
-            ...(next.metropolises ?? {
-              science: null,
-              trade: null,
-              politics: null,
-            }),
-            [action.track]: { ...trackHolder!, permanent: true },
+  const metros = next.metropolises ?? NO_METROPOLISES;
+  if (effect === 'lock') {
+    return {
+      ...next,
+      metropolises: { ...metros, [action.track]: { ...metros[action.track]!, permanent: true } },
+    };
+  }
+  if (effect === 'claim') {
+    const sites = metropolisSites(next, action.playerId);
+    if (sites.length === 1) {
+      return {
+        ...next,
+        metropolises: {
+          ...metros,
+          [action.track]: {
+            playerId: action.playerId,
+            vertex: sites[0]!,
+            permanent: target === MAX_IMPROVEMENT_LEVEL,
           },
-        };
-      }
-    } else {
-      const eligibleCities = player.cities.filter(
-        (v) => !vertexHasMetropolis(next, v),
-      );
-      const permanent = target === MAX_IMPROVEMENT_LEVEL;
-      if (eligibleCities.length === 1) {
-        const newRecord: MetropolisRecord = {
-          playerId: action.playerId,
-          vertex: eligibleCities[0]!,
-          permanent,
-        };
-        next = {
-          ...next,
-          metropolises: {
-            ...(next.metropolises ?? {
-              science: null,
-              trade: null,
-              politics: null,
-            }),
-            [action.track]: newRecord,
-          },
-        };
-      } else {
-        // Multi-city: prompt for placement. Phase enters 'placeMetropolis';
-        // the player must dispatch placeMetropolis next.
-        return {
-          ...next,
-          phase: 'placeMetropolis',
-          pendingMetropolis: { track: action.track },
-        };
-      }
+        },
+      };
     }
+    return { ...next, phase: 'placeMetropolis', pendingMetropolis: { track: action.track } };
   }
   return next;
 }

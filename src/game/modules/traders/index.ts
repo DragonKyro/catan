@@ -8,11 +8,44 @@ import { handlePlaceInitialSettlementWithRiverGold } from './actions/placeInitia
 import { handlePlaceInitialRoadWithRiverGold } from './actions/placeInitialRoad';
 import { handleSpendFish } from './actions/spendFish';
 import { handlePassOldBoot } from './actions/passOldBoot';
-import { handleSubmitWagonVote, handlePlaceWagon } from './merchantTrains/voting';
+import {
+  handleSubmitWagonVote,
+  handleAssignWagonVotes,
+  handlePlaceWagon,
+} from './merchantTrains/voting';
 import { handleEndTurnTraders } from './turn';
-import { handleHireKnight } from './actions/hireKnight';
-import { validateMoveRobberFriendlyRobber } from './variants/friendlyRobber';
+import {
+  handleBuyDevCardTraders,
+  handleDiscardBarbarianAttack,
+  handleRollDiceBarbarianAttack,
+  withBarbarianLandingOnCity,
+  withBarbarianLandingOnSettlement,
+  withBarbarianSetupCity,
+} from './barbarianAttack/hooks';
+import { handleResolveBarbarianCard } from './barbarianAttack/cards';
+import { handleMoveBarbarianKnight } from './barbarianAttack/turn';
+import { handleStealResource } from '../seafarers/pirateIslands';
 import { TRADERS_EXPANSION_ID } from './constants';
+import { handleSpendGold, handleBuyGold } from './coins/actions';
+import { handleSwapFish } from './fishing/swap';
+import { withTradersTurnFlags } from './turnFlags';
+import { handlePlayKnight as baseHandlePlayKnight } from '../../actions/devcard';
+import {
+  withTbDevCards,
+  withTbDiscard,
+  withTbEndTurn,
+  withTbKnight,
+  withTbRoll,
+  withTbSetupCity,
+} from './tradersBarbarians/hooks';
+import { handleMoveTbBarbarian } from './tradersBarbarians/barbarians';
+import {
+  handleBoostWagon,
+  handleDriveOffBarbarian,
+  handleMoveWagon,
+  handlePlaySwiftJourney,
+  handleUpgradeWagon,
+} from './tradersBarbarians/wagon';
 
 // The Traders & Barbarians module. Wraps build* actions to award scenario
 // gold (Rivers of Catan) and refresh Strongest Ports / Wealthiest tile
@@ -28,25 +61,47 @@ import { TRADERS_EXPANSION_ID } from './constants';
 export const tradersModule: RuleModule = {
   id: TRADERS_EXPANSION_ID,
   name: 'Traders & Barbarians',
-  handlers: {
+  handlers: withTradersTurnFlags({
     buildBridge: handleBuildBridge as never,
     buildRoad: handleBuildRoadWithRiverGold as never,
-    buildSettlement: handleBuildSettlementWithRiverGold as never,
-    buildCity: handleBuildCityWithStrongestPortsRefresh as never,
-    placeInitialSettlement: handlePlaceInitialSettlementWithRiverGold as never,
+    buildSettlement: withBarbarianLandingOnSettlement(handleBuildSettlementWithRiverGold) as never,
+    buildCity: withBarbarianLandingOnCity(handleBuildCityWithStrongestPortsRefresh) as never,
+    placeInitialSettlement: withTbSetupCity(
+      withBarbarianSetupCity(handlePlaceInitialSettlementWithRiverGold),
+    ) as never,
     placeInitialRoad: handlePlaceInitialRoadWithRiverGold as never,
     spendFish: handleSpendFish as never,
     passOldBoot: handlePassOldBoot as never,
     submitWagonVote: handleSubmitWagonVote as never,
+    assignWagonVotes: handleAssignWagonVotes as never,
     placeWagon: handlePlaceWagon as never,
-    hireKnight: handleHireKnight as never,
-    endTurn: handleEndTurnTraders as never,
-  },
+    endTurn: withTbEndTurn(handleEndTurnTraders) as never,
+    // Barbarian Attack (each passes through to base outside the scenario).
+    rollDice: withTbRoll(handleRollDiceBarbarianAttack) as never,
+    discard: withTbDiscard(handleDiscardBarbarianAttack) as never,
+    buyDevCard: withTbDevCards(handleBuyDevCardTraders) as never,
+    stealResource: handleStealResource as never,
+    resolveBarbarianCard: handleResolveBarbarianCard as never,
+    moveBarbarianKnight: handleMoveBarbarianKnight as never,
+    // Coins (Rivers of Catan; gated on state.coinsInPlay).
+    spendGold: handleSpendGold as never,
+    buyGold: handleBuyGold as never,
+    // Fishing on Catan: the 7-token swap after a capped production.
+    swapFish: handleSwapFish as never,
+    // The Traders & Barbarians scenario (each throws / passes through
+    // outside the scenario): barbarians on edges, wagons, Swift Journey.
+    playKnight: withTbKnight(baseHandlePlayKnight) as never,
+    moveTbBarbarian: handleMoveTbBarbarian as never,
+    moveWagon: handleMoveWagon as never,
+    boostWagon: handleBoostWagon as never,
+    driveOffBarbarian: handleDriveOffBarbarian as never,
+    upgradeWagon: handleUpgradeWagon as never,
+    playSwiftJourney: handlePlaySwiftJourney as never,
+  }),
   validators: {
+    // (The Friendly Robber variant has its own module — see ./variants.)
     moveRobber: combineRobberValidators(
-      validateMoveRobberFriendlyRobber,
       validateMoveRobberFishingScenario,
-      validateMoveRobberCastle,
     ),
   },
 };
@@ -69,9 +124,8 @@ function combineRobberValidators(
 }
 
 // Fishing on Catan: the robber may sit on the lake (rulebook explicitly
-// allows this — it blocks lake production). The "no fishing grounds"
-// clause is naturally enforced because our model anchors fishing grounds
-// to vertices, not hexes — the robber never sits on a vertex.
+// allows this; it blocks all four lake numbers). The "no fishing grounds"
+// clause holds by construction: fishing grounds are frame tiles, not hexes.
 //
 // Left as a stub for now so future scenarios (Barbarian Attack's castle
 // hex, Merchant Trains' watering hole) can plug in additional bans here.
@@ -79,20 +133,5 @@ function validateMoveRobberFishingScenario(
   _state: GameState,
   _action: MoveRobberAction,
 ): string | null {
-  return null;
-}
-
-// Barbarian Attack: the robber cannot sit on a castle hex (rulebook —
-// the castle is a defended position, not a steal target). Sea-ring
-// position is already gated by the base robber validator, but this
-// makes the ban explicit.
-function validateMoveRobberCastle(
-  state: GameState,
-  action: MoveRobberAction,
-): string | null {
-  if (!state.castles?.length) return null;
-  if (state.castles.some((c) => c.hexId === action.hex)) {
-    return 'Cannot place the robber on a castle hex';
-  }
   return null;
 }

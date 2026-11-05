@@ -4,8 +4,18 @@ import type { Resource, ResourceBank } from '@/game/types';
 import { useGameStore } from '@/store/gameStore';
 import { SEAFARERS_EXPANSION_ID, SHIP_COST } from '@/game/modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
-import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
+import {
+  BARBARIAN_KNIGHT_BOOST_COST,
+  TRADERS_EXPANSION_ID,
+} from '@/game/modules/traders/constants';
+import { REPAIR_ROAD_COST } from '@/game/modules/traders/variants/eventCards/events';
 import { RESOURCE_ICON, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
+import { tradersCostNotes } from './traders/costNotes';
+import {
+  TB_BOOST_COST,
+  TB_WAGON_UPGRADE_COSTS,
+} from '@/game/modules/traders/tradersBarbarians/constants';
+import { EP_COSTS } from '@/game/modules/explorersPirates/constants';
 
 interface Row {
   icon: string;
@@ -22,12 +32,41 @@ const BASE_ROWS: Row[] = [
 
 const SHIP_ROW: Row = { icon: '⛵', label: 'Ship', cost: SHIP_COST };
 const CITY_WALL_ROW: Row = { icon: '🧱', label: 'City Wall', cost: COSTS.cityWall };
+// Cities & Knights knights (p.9).
+const CK_KNIGHT_ROWS: Row[] = [
+  { icon: '⚔', label: 'Recruit knight', cost: COSTS.knight },
+  { icon: '⬆', label: 'Promote knight', cost: COSTS.promoteKnight },
+  { icon: '⚡', label: 'Activate knight', cost: COSTS.activateKnight },
+];
 const BRIDGE_ROW: Row = { icon: '🌉', label: 'Bridge', cost: COSTS.bridge };
-const HIRE_KNIGHT_ROW: Row = {
-  icon: '🛡',
-  label: 'Knight',
-  cost: COSTS.hireKnight,
+// Barbarian Attack: the scenario's cards are played on purchase, and a
+// knight moves 4-5 edges (instead of 3) for 1 wheat.
+const BA_CARD_ROW: Row = { icon: '🃏', label: 'Dev Card (played at once)', cost: COSTS.devCard };
+const REPAIR_ROAD_ROW: Row = { icon: '🔧', label: 'Repair road', cost: REPAIR_ROAD_COST };
+const BA_KNIGHT_BOOST_ROW: Row = {
+  icon: '⚔',
+  label: 'Knight: 4-5 edges',
+  cost: BARBARIAN_KNIGHT_BOOST_COST,
 };
+
+// T&B scenario: wagon upgrades (one column right on the wagon board) and
+// the wheat boost.
+const TB_ROWS: Row[] = [
+  { icon: '🛒', label: 'Wagon L1→2 / L2→3', cost: TB_WAGON_UPGRADE_COSTS[1]! },
+  { icon: '🛒', label: 'Wagon L3→4 / L4→5', cost: TB_WAGON_UPGRADE_COSTS[3]! },
+  { icon: '🌾', label: 'Wagon +2 MP', cost: TB_BOOST_COST },
+];
+
+// Explorers & Pirates (player aid): no cities or development cards.
+const EP_ROWS: Row[] = [
+  BASE_ROWS[0]!,
+  BASE_ROWS[1]!,
+  { icon: '⚓', label: 'Harbor settlement', cost: EP_COSTS.harbor },
+  { icon: '⛵', label: 'Ship', cost: EP_COSTS.ship },
+  { icon: '🧑', label: 'Settler', cost: EP_COSTS.settler },
+  { icon: '👥', label: 'Crew', cost: EP_COSTS.crew },
+  { icon: '🐑', label: 'Ship +2 MP', cost: EP_COSTS.boost },
+];
 
 interface Props {
   onClose: () => void;
@@ -48,14 +87,21 @@ export function CostCheatsheet({ onClose }: Props) {
     rows = [BASE_ROWS[0]!, SHIP_ROW, ...BASE_ROWS.slice(1)];
   }
   if (hasTraders) {
-    // Bridge slots in just after Road — both span an edge, both cost wood + brick.
-    rows = [BASE_ROWS[0]!, BRIDGE_ROW, ...BASE_ROWS.slice(1)];
-    // Barbarian Attack: surface the knight row only when the scenario is
-    // active (the dropdown picker for T&B scenarios already gates this).
-    const castles = useGameStore.getState().game?.castles;
-    if (castles && castles.length > 0) {
-      rows = [...rows, HIRE_KNIGHT_ROW];
+    // Rivers of Catan: Bridge slots in just after Road (both span an edge).
+    if ((useGameStore.getState().game?.riverEdges?.length ?? 0) > 0) {
+      rows = [BASE_ROWS[0]!, BRIDGE_ROW, ...BASE_ROWS.slice(1)];
     }
+    if (useGameStore.getState().game?.tradersBarbarians) rows = [...rows, ...TB_ROWS];
+    if (useGameStore.getState().game?.barbarianAttack) {
+      rows = [
+        ...rows.map((r) => (r.label === 'Dev Card' ? BA_CARD_ROW : r)),
+        BA_KNIGHT_BOOST_ROW,
+      ];
+    }
+  }
+  // T&B Catan Event Cards: repairing an Earthquake-damaged road.
+  if (useGameStore.getState().game?.eventCards) {
+    rows = [...rows, REPAIR_ROAD_ROW];
   }
   if (hasCK) {
     // Cities & Knights replaces dev cards with progress cards (drawn on the
@@ -67,8 +113,11 @@ export function CostCheatsheet({ onClose }: Props) {
       ...rows.slice(0, cityIdx + 1),
       CITY_WALL_ROW,
       ...rows.slice(cityIdx + 1),
+      ...CK_KNIGHT_ROWS,
     ];
   }
+  if (useGameStore.getState().game?.explorersPirates) rows = EP_ROWS;
+  const notes = tradersCostNotes(useGameStore.getState().game);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -108,6 +157,21 @@ export function CostCheatsheet({ onClose }: Props) {
           </li>
         ))}
       </ul>
+      {notes.length > 0 && (
+        <ul className="cost-cheatsheet-list">
+          {notes.map((n) => (
+            <li key={n} className="cost-cheatsheet-row" style={{ fontSize: '0.85em' }}>
+              {n}
+            </li>
+          ))}
+        </ul>
+      )}
+      {hasCK && (
+        <div className="cost-cheatsheet-title" style={{ fontWeight: 400, fontSize: '0.8em', marginTop: 6 }}>
+          City improvement level n: n 📜 paper (science), n 🧵 cloth (trade) or n 🪙 coin
+          (politics). Needs a city. Progress cards are drawn, not bought.
+        </div>
+      )}
     </div>
   );
 }

@@ -65,6 +65,9 @@ export function assembleBoardFromDefs(
       corners,
       center: hexCenter(graph, corners),
     };
+    if (def.extraTokens && def.extraTokens.length > 0) {
+      hexes[hexId]!.extraNumbers = [...def.extraTokens];
+    }
     if (def.terrain === 'desert' && robberHex === null) robberHex = hexId;
     if (def.terrain === 'sea' && pirateHex === null) pirateHex = hexId;
   }
@@ -118,9 +121,9 @@ export function hexCenter(
   return { x: Math.round(cx * 100) / 100, y: Math.round(cy * 100) / 100 };
 }
 
-// Resolve a port anchor (q, r, direction) to an actual edge id. Direction 0
-// is the upper-right edge (between corners 0 and 1) clockwise around a
-// pointy-top hex.
+// Resolve a port anchor (q, r, direction) to an actual edge id: the edge
+// between corners `direction` and `direction + 1` (corners run clockwise
+// from north-east, so direction 0 is the east edge).
 export function resolvePorts(
   portDefs: ScenarioPortDef[],
   graph: BaseGraph,

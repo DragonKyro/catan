@@ -1,5 +1,6 @@
 import type { Commodity } from '@/game/types';
 import { COMMODITY_EMOJI, COMMODITY_LABEL } from '@/game/modules/citiesAndKnights/constants';
+import { CommodityIcon } from './CommodityIcon';
 import './CommodityChip.css';
 
 export { COMMODITY_EMOJI, COMMODITY_LABEL };
@@ -18,7 +19,7 @@ export function CommodityChip({ commodity, count, size = 'md', dimmed }: Props) 
       title={COMMODITY_LABEL[commodity]}
     >
       <span className="cchip-icon" aria-hidden>
-        {COMMODITY_EMOJI[commodity]}
+        <CommodityIcon commodity={commodity} />
       </span>
       {count !== undefined && <span className="cchip-count">{count}</span>}
     </span>

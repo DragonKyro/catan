@@ -1,18 +1,18 @@
-import type { Action, GameState, PlayerId, Resource, WonderState } from '@/game/types';
+import type { Action, GameState, PlayerId, Resource, WonderId } from '@/game/types';
 import { canAfford } from '@/game/resources';
-import { getWonder, WONDERS } from '@/game/modules/seafarers/wonders/catalogue';
+import { calculateVictoryPoints } from '@/game/scoring/points';
+import {
+  claimedWonderOf,
+  getWonder,
+  WONDER_LEVELS,
+} from '@/game/modules/seafarers/wonders/catalogue';
+import { pipsByResource } from '../value';
 
-// Build (or progress) the most attractive wonder this AI can advance. Returns
-// `null` when no wonder is reachable right now. Wonders are a Seafarers-
-// scenario-specific scoring track: each built level is +1 VP, and completing
-// a wonder is an instant win regardless of VP. The heuristic prefers:
-//   1. Completing a wonder we already started (next level = instant win).
-//   2. Continuing a wonder we already committed to (level ≥ 1).
-//   3. Starting a wonder whose prereq we already meet, where cost overlaps
-//      with our current hand.
-//
-// `instantWinOnly` runs only step (1) — used by main.ts to splice an
-// instant-win check in early, before the normal-priority pass.
+// Wonders of Catan AI. Claim a wonder as soon as we meet a requirement (the
+// claim is free and locks rivals out), preferring the one our production
+// pays for best; then build levels whenever we can afford them. A level
+// that wins on the spot — the fourth, or one that gives us the strict lead
+// while we hold the VP target — runs in the early "instant win" pass.
 export interface BuildWonderOptions {
   instantWinOnly?: boolean;
 }
@@ -26,69 +26,43 @@ export function tryBuildWonder(
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return null;
 
-  let bestId: WonderState['id'] | null = null;
+  const mine = claimedWonderOf(state, playerId);
+  if (mine) {
+    if (mine.level >= WONDER_LEVELS) return null;
+    const def = getWonder(mine.id);
+    if (!canAfford(player.resources, def.costPerLevel)) return null;
+    if (opts.instantWinOnly && !levelWins(state, playerId, mine.level + 1)) return null;
+    return { type: 'buildWonder', playerId, wonderId: mine.id };
+  }
+  if (opts.instantWinOnly) return null;
+
+  // Claim the best wonder we qualify for.
+  const pips = pipsByResource(state, playerId);
+  let best: WonderId | null = null;
   let bestScore = -Infinity;
-
   for (const w of state.wonders) {
-    if (w.builtBy !== null && w.builtBy !== playerId) continue;
+    if (w.claimedBy !== null) continue;
     const def = getWonder(w.id);
-    if (w.level >= def.maxLevel) continue;
-    if (!def.prereqMet(state, playerId)) continue;
-    if (!canAfford(player.resources, def.costPerLevel)) continue;
-
-    const isInstantWin = w.level + 1 >= def.maxLevel;
-    if (opts.instantWinOnly && !isInstantWin) continue;
-
-    // Score components:
-    //   - +1000 if next build wins immediately (always pick over anything)
-    //   - +10 per level already built (commitment / sunk-cost)
-    //   - +2 per remaining level we can already afford from current hand
-    //     (smooths the choice between two unclaimed wonders by hand fit)
-    //   - +1 if this wonder's prereq is unique to us (no opponent meets it,
-    //     so they can't race; small tiebreaker)
+    if (!def.requirementMet(state, playerId)) continue;
     let score = 0;
-    if (isInstantWin) score += 1000;
-    score += w.level * 10;
-    score += affordableLevels(player.resources, def.costPerLevel) * 2;
-    const competitors = countOtherPrereqHolders(state, w.id, playerId);
-    if (competitors === 0) score += 1;
-
+    for (const [res, n] of Object.entries(def.costPerLevel) as [Resource, number][]) {
+      score += Math.min(pips[res], 8) * n;
+    }
     if (score > bestScore) {
       bestScore = score;
-      bestId = w.id;
+      best = w.id;
     }
   }
-
-  if (!bestId) return null;
-  return { type: 'buildWonder', playerId, wonderId: bestId };
+  return best ? { type: 'claimWonder', playerId, wonderId: best } : null;
 }
 
-// How many copies of `cost` could `resources` pay back-to-back? Used as a
-// proxy for "how committed can I be to this wonder right now". A hand that
-// covers 2-3 levels in one go is strictly better than one that covers 1.
-function affordableLevels(
-  resources: Record<Resource, number>,
-  cost: Partial<Record<Resource, number>>,
-): number {
-  let min = Infinity;
-  for (const [res, n] of Object.entries(cost) as [Resource, number][]) {
-    if (n <= 0) continue;
-    min = Math.min(min, Math.floor(resources[res] / n));
+// Would reaching `level` win right now?
+function levelWins(state: GameState, playerId: PlayerId, level: number): boolean {
+  if (level >= WONDER_LEVELS) return true;
+  if (calculateVictoryPoints(state, playerId, true) < state.settings.victoryPointsToWin) {
+    return false;
   }
-  return min === Infinity ? 0 : min;
-}
-
-function countOtherPrereqHolders(
-  state: GameState,
-  wonderId: WonderState['id'],
-  playerId: PlayerId,
-): number {
-  const def = WONDERS.find((d) => d.id === wonderId);
-  if (!def) return 0;
-  let count = 0;
-  for (const p of state.players) {
-    if (p.id === playerId) continue;
-    if (def.prereqMet(state, p.id)) count++;
-  }
-  return count;
+  return (state.wonders ?? []).every(
+    (w) => w.claimedBy === null || w.claimedBy === playerId || w.level < level,
+  );
 }

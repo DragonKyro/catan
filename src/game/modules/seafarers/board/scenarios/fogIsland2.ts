@@ -115,7 +115,9 @@ const LAYOUT_3_4P: ScenarioLayout = {
 export const fogIsland2 = buildScenario({
   id: 'fogIsland2',
   name: 'Fog Island 2',
-  defaultIslandBonusVp: 3,
+  // Same rules as The Fog Islands: no island bonus, start anywhere.
+  defaultIslandBonusVp: 0,
+  startingPlacementZone: 'anyIsland',
   defaultVpToWin: 10,
   minPlayers: 3,
   maxPlayers: 4,

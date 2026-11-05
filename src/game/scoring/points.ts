@@ -2,8 +2,13 @@ import type { GameState, PlayerId } from '../types';
 import { calculateWealthTilesVp } from '../modules/traders/scoring/wealthTiles';
 import { calculateStrongestPortsVp } from '../modules/traders/scoring/strongestPorts';
 import { calculateMerchantTrainsVp } from '../modules/traders/scoring/merchantTrains';
-import { calculateBarbarianDefenderVp } from '../modules/traders/scoring/barbarianAttack';
+import { calculateBarbarianAttackVp } from '../modules/traders/barbarianAttack/scoring';
+import { calculateTradersBarbariansVp } from '../modules/traders/tradersBarbarians/state';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../modules/citiesAndKnights/constants';
+import { calculateIslandBonusVp } from '../modules/seafarers/islandBonus';
+import { calculateTribeVp } from '../modules/seafarers/tribe';
+import { calculateClothVp } from '../modules/seafarers/cloth';
+import { calculateExplorersPiratesVp } from '../modules/explorersPirates/state';
 
 // Cities & Knights — 2 VP per metropolis the player owns (1 each at level 4
 // temporary, locked at level 5 permanent — either way it's still 2 VP).
@@ -16,21 +21,11 @@ export function calculateMetropolisVp(state: GameState, playerId: PlayerId): num
   return sum;
 }
 
-// 1 VP per Printing or Constitution card in the player's hand (auto-flipped
-// face-up on draw).
-export function calculateProgressCardVp(
-  state: GameState,
-  playerId: PlayerId,
-): number {
+// 1 VP per Victory Point progress card (Printing, Constitution) the player
+// has placed face up (p.10).
+export function calculateProgressCardVp(state: GameState, playerId: PlayerId): number {
   const p = state.players.find((pl) => pl.id === playerId);
-  if (!p?.progressCards) return 0;
-  let sum = 0;
-  if (p.progressCards.science.includes('printing')) sum += 1;
-  if (p.progressCards.politics.includes('constitution')) sum += 1;
-  return sum;
-  // Note: a player can only ever hold one of each VP card; the deck has
-  // exactly one Printing and one Constitution.
-  void state;
+  return p?.progressVpCards?.length ?? 0;
 }
 
 // 1 VP for the player who currently holds the merchant piece.
@@ -51,56 +46,17 @@ export function calculateDefenderTokenVp(
 
 const LONGEST_ROAD_MIN_LENGTH = 5;
 
-// Seafarers chip VP earned by a player (sum of every outer-island chip they
-// were the first to settle). Returns 0 when no chips exist (base game).
-export function calculateIslandChipVp(state: GameState, playerId: PlayerId): number {
-  if (!state.islandChips) return 0;
-  let sum = 0;
-  for (const chip of state.islandChips) {
-    if (chip.firstSettler === playerId) sum += chip.vp;
-  }
-  return sum;
-}
-
-// Forgotten Tribe: one VP per claimed VP-type tribe token. Visible bonus
-// (not hidden like a VP dev card) — the chip is on the board for all to
-// see, same as a Longest Road bonus.
-export function calculateTribeTokenVp(state: GameState, playerId: PlayerId): number {
-  if (!state.tribeTokens) return 0;
-  let sum = 0;
-  for (const token of state.tribeTokens) {
-    if (token.claimedBy === playerId && token.type === 'victoryPoint') sum += 1;
-  }
-  return sum;
-}
-
-// Wonders of Catan: one VP per built level of any wonder this player is
-// building. Visible. Completion (level === maxLevel) ALSO triggers an
-// instant-win check in the buildWonder handler — this function just
-// accounts for partial progress.
-export function calculateWonderVp(state: GameState, playerId: PlayerId): number {
-  if (!state.wonders) return 0;
-  let sum = 0;
-  for (const w of state.wonders) {
-    if (w.builtBy === playerId) sum += w.level;
-  }
-  return sum;
-}
-
-// Pirate Islands: +2 VP for the player who landed the killing blow on the
-// pirate fleet. Visible bonus (like Longest Road / Largest Army).
-export function calculatePirateFleetVp(state: GameState, playerId: PlayerId): number {
-  if (!state.pirateFleet) return 0;
-  return state.pirateFleet.defeatedBy === playerId ? 2 : 0;
-}
-
-// Cloth for Catan: 1 VP per 2 cloth tokens (Math.floor). Visible — cloth
-// tokens are public information.
-export function calculateClothVp(state: GameState, playerId: PlayerId): number {
-  const player = state.players.find((p) => p.id === playerId);
-  if (!player || !player.cloth) return 0;
-  return Math.floor(player.cloth / 2);
-}
+// Seafarers scenario VP (see the module files for the rules):
+//   - island bonus: each player's first settlement on each island that
+//     isn't one of their home islands (calculateIslandBonusVp);
+//   - Forgotten Tribe VP tokens picked up by ships (calculateTribeVp);
+//   - Cloth for Catan: 1 VP per pair of cloth tokens (calculateClothVp).
+// Wonders of Catan levels and Pirate Islands fortresses carry no VP of their
+// own — they're win conditions (a recaptured fortress simply becomes one of
+// your settlements).
+export { calculateIslandBonusVp } from '../modules/seafarers/islandBonus';
+export { calculateTribeVp } from '../modules/seafarers/tribe';
+export { calculateClothVp } from '../modules/seafarers/cloth';
 
 // Total victory points for a player.
 // `includeHidden` controls whether held VP dev cards are counted (true at
@@ -130,15 +86,9 @@ export function calculateVictoryPoints(
     vp += calculateMerchantVp(state, playerId);
     vp += calculateDefenderTokenVp(state, playerId);
   }
-  // Seafarers: bonus VP from outer-island settlement chips.
-  vp += calculateIslandChipVp(state, playerId);
-  // Seafarers / Forgotten Tribe: visible VP tokens from settled tribe hexes.
-  vp += calculateTribeTokenVp(state, playerId);
-  // Seafarers / Wonders of Catan: 1 VP per built wonder level.
-  vp += calculateWonderVp(state, playerId);
-  // Seafarers / Pirate Islands: +2 for the player who defeated the fleet.
-  vp += calculatePirateFleetVp(state, playerId);
-  // Seafarers / Cloth for Catan: 1 VP per 2 cloth tokens.
+  // Seafarers: island bonuses, Forgotten Tribe VP tokens, cloth pairs.
+  vp += calculateIslandBonusVp(state, playerId);
+  vp += calculateTribeVp(state, playerId);
   vp += calculateClothVp(state, playerId);
   // Traders & Barbarians / Rivers of Catan: Wealthiest (+1) and Poor (-2).
   vp += calculateWealthTilesVp(state, playerId);
@@ -146,9 +96,15 @@ export function calculateVictoryPoints(
   vp += calculateStrongestPortsVp(state, playerId);
   // Traders & Barbarians / Merchant Trains: +1 per building between 2 wagons.
   vp += calculateMerchantTrainsVp(state, playerId);
-  // Traders & Barbarians / Barbarian Attack: visible +1 per knight per won
-  // defense, accumulated on `state.castles[i].defenderVp`.
-  vp += calculateBarbarianDefenderVp(state, playerId);
+  // Traders & Barbarians / Barbarian Attack: 1 VP per 2 prisoners; conquered
+  // buildings are worth nothing.
+  vp += calculateBarbarianAttackVp(state, playerId);
+  // Traders & Barbarians scenario: 1 VP per delivered commodity token, +1
+  // for a fully upgraded wagon.
+  vp += calculateTradersBarbariansVp(state, playerId);
+  // Explorers & Pirates: harbor settlements (2 VP), mission tracks and the
+  // three bonus tiles.
+  vp += calculateExplorersPiratesVp(state, playerId);
   return vp;
 }
 

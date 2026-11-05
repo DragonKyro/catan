@@ -44,6 +44,17 @@ export const VP_PROGRESS_CARDS: Set<ProgressCardKind> = new Set([
   'constitution',
 ]);
 
+const DECK_OF: Record<ProgressCardKind, ImprovementTrack> = Object.fromEntries(
+  (Object.keys(PROGRESS_DECK_DEFINITIONS) as ImprovementTrack[]).flatMap((track) =>
+    PROGRESS_DECK_DEFINITIONS[track].map(({ kind }) => [kind, track] as const),
+  ),
+) as Record<ProgressCardKind, ImprovementTrack>;
+
+// Which deck (and so which card back colour) a card belongs to.
+export function progressCardDeck(card: ProgressCardKind): ImprovementTrack {
+  return DECK_OF[card];
+}
+
 // Build the three decks, expanding the counts, then shuffle each.
 // Threads an RNG state through so callers can keep the seeded RNG
 // deterministic.
@@ -101,31 +112,45 @@ export const PROGRESS_CARD_LABEL: Record<ProgressCardKind, string> = {
   wedding: 'Wedding',
 };
 
-// Card descriptions for tooltips and the rulebook reference page.
+// Card texts (2025 rulebook p.13-16), for tooltips, the card dialog and the
+// rulebook reference page.
 export const PROGRESS_CARD_DESCRIPTION: Record<ProgressCardKind, string> = {
-  alchemy: 'Before rolling, set the two production dice to any values you want.',
-  crane: "Build your next city improvement for 1 fewer commodity.",
+  alchemy:
+    'Play before you roll: set the two production dice to the result you want, then roll the event die as normal.',
+  crane: 'Build 1 city improvement for 1 commodity less than normal (one Crane per improvement).',
   engineering: 'Build 1 city wall at no cost.',
-  invention: 'Swap two number tokens (not 2, 6, 8, or 12). Robber stays put.',
-  irrigation: 'Take 2 wheat for each wheat hex adjacent to one of your buildings.',
-  medicine: 'Upgrade one settlement to a city for 1 wheat + 2 ore.',
-  mining: 'Take 2 ore for each ore hex adjacent to one of your buildings.',
+  invention:
+    'Swap 2 number discs of your choice (not 2, 6, 8 or 12). The robber does not move with a disc.',
+  irrigation: 'Take 2 wheat for each fields hex next to at least one of your buildings.',
+  medicine: 'Upgrade one of your settlements to a city for 1 wheat and 2 ore.',
+  mining: 'Take 2 ore for each mountains hex next to at least one of your buildings.',
   progressRoadBuilding: 'Build 2 roads at no cost.',
-  smithing: 'Promote up to 2 of your knights at no cost.',
-  printing: 'Worth 1 victory point. Play immediately into your player area.',
-  commercialHarborCard: "Offer each opponent one resource for 1 commodity of their choice.",
-  guildDues: 'Take 2 cards from the hand of a player with more VPs than you.',
-  merchantCard: "Place the merchant adjacent to one of your buildings. 1 VP and 2:1 on that hex's resource.",
-  merchantFleet: 'Pick a resource or commodity. 2:1 bank trades for the rest of this turn.',
-  resourceMonopoly: 'Name a resource. Each player gives you 2 of it (or 1 if that\'s all they have).',
-  tradeMonopoly: 'Name a commodity. Each player gives you 1 of it.',
-  diplomacy: "Remove an opponent's open road, or one of your own (then build a free road).",
+  smithing: 'Promote up to 2 of your knights at no cost (each knight once per turn).',
+  printing: 'Victory Point: 1 VP, placed face up as soon as it is drawn.',
+  commercialHarborCard:
+    'This turn, offer each other player one of your resources; each must give you a commodity of their choice for it.',
+  guildDues:
+    'Look at the hand of a player with more VPs than you and take any 2 resource/commodity cards from it.',
+  merchantCard:
+    "Take the merchant and put it on a land hex next to one of your buildings: 1 VP, and 2:1 trades in that hex's resource.",
+  merchantFleet:
+    'Name a resource or commodity: for the rest of this turn you may trade it 2:1 with the supply.',
+  resourceMonopoly:
+    'Name a resource: each player gives you 2 of it (or 1 if that is all they have).',
+  tradeMonopoly: 'Name a commodity: each player gives you 1 of it if they have it.',
+  diplomacy:
+    "Remove an open road. Another player's goes back to their supply; if it was yours, build 1 road for free.",
   encouragement: 'Activate all your knights at no cost.',
-  espionage: "Look at another player's progress cards and take one (not VP).",
-  intrigue: 'Displace an opposing knight without using one of yours.',
-  sabotage: 'Every player with as many or more VPs as you discards half their hand.',
-  taxation: 'Move the robber and steal one card from EVERY player with a building on that hex.',
-  treason: "Force an opponent to remove a knight; place one of yours of equal or lower strength.",
-  constitution: 'Worth 1 victory point. Play immediately into your player area.',
-  wedding: 'Each player with more VPs than you gives you 2 cards of their choice.',
+  espionage: "Look at another player's progress cards and you may take 1 (not a VP card).",
+  intrigue:
+    'Displace an opposing knight that stands on one of your routes, without using a knight of your own.',
+  sabotage:
+    'Each player with as many or more VPs than you discards half their resource and commodity cards (rounded down).',
+  taxation:
+    'Move the robber and steal 1 random card from each player with a building on its new hex. Only after the first barbarian attack.',
+  treason:
+    'Another player removes one of their knights; you may place one of yours of the same strength or lower, with its status.',
+  constitution: 'Victory Point: 1 VP, placed face up as soon as it is drawn.',
+  wedding:
+    'Each player with more VPs than you gives you 2 resource/commodity cards of their choice.',
 };
