@@ -3,6 +3,8 @@ import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { calculateVictoryPoints } from '@/game/scoring/points';
+import { useCanAct } from '@/ui/shared/useCanAct';
+import { OldBootIcon } from '@/ui/game/traders/TradersIcons';
 
 // Pass the old boot to an opponent with ≥ your visible VPs.
 //
@@ -10,7 +12,9 @@ import { calculateVictoryPoints } from '@/game/scoring/points';
 // comparison — we pass `includeHidden=false` to `calculateVictoryPoints`.
 export function PassBootDialog() {
   const { game, dispatch, closeDialog } = useGameStore();
-  if (!game) return null;
+  const actingId = game ? getActingPlayerId(game) : null;
+  const canAct = useCanAct(game, actingId);
+  if (!game || !canAct) return null;
   const acting = getActingPlayerId(game);
   if (game.oldBootHolder !== acting) {
     // Caller should have gated on this; just close defensively.
@@ -32,9 +36,12 @@ export function PassBootDialog() {
         </>
       }
     >
-      <p style={{ marginTop: 0, color: 'var(--text-soft)' }}>
-        Pass to any player with at least your visible VPs ({myVp}). They'll
-        need +1 VP to win until they pass it on or the game ends.
+      <p style={{ marginTop: 0, color: 'var(--text-soft)', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <OldBootIcon size={28} />
+        <span>
+          Pass to any player with at least your visible VPs ({myVp}; hidden VP cards don't
+          count). They'll need 1 more VP to win until they pass it on.
+        </span>
       </p>
       {eligible.length === 0 ? (
         <p>

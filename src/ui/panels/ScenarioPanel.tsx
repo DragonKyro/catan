@@ -8,7 +8,12 @@ import {
   exhaustedVillageCount,
 } from '@/game/modules/seafarers/cloth';
 import { playerColorVar } from '@/ui/shared/playerColors';
-import type { CastleState, GameState, Player } from '@/game/types';
+import type { GameState, Player } from '@/game/types';
+import { BarbarianAttackPanel } from '@/ui/game/traders/BarbarianAttackPanel';
+import { MerchantTrainsBlock } from './MerchantTrainsBlock';
+import { TradersVariantsBlock, hasTradersVariantBlock } from './TradersVariantsBlock';
+import { RiversTracker, FishingTracker } from './traders/RiversFishingTrackers';
+import { TradersBarbariansTracker } from './traders/TradersBarbariansTracker';
 import './ScenarioPanel.css';
 
 // Scenario-specific progress tracker. Returns whether ANY scenario tracker
@@ -16,6 +21,8 @@ import './ScenarioPanel.css';
 // Scenario tab at all.
 export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getState>['game']): boolean {
   if (!state) return false;
+  // T&B variants (Strongest Ports, Event Cards, Friendly Robber) show in any game.
+  if (hasTradersVariantBlock(state)) return true;
   const hasSeafarers = state.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const hasTraders = state.settings.expansions.includes(TRADERS_EXPANSION_ID);
   if (hasSeafarers) {
@@ -32,39 +39,10 @@ export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getStat
     if (state.fishingGrounds && state.fishingGrounds.length > 0) return true;
     if (state.lakeHexId) return true;
     if (state.wateringHoleHexId) return true;
-    if (state.castles && state.castles.length > 0) return true;
+    if (state.barbarianAttack) return true;
+    if (state.tradersBarbarians) return true;
   }
   return false;
-}
-
-// Display name of the player with the most defender knights at this
-// castle. Returns null when no one has any defenders here (rendered as
-// "unclaimed" by the caller). Ties show "tied" so the row stays clean.
-function topDefenderName(
-  game: NonNullable<ReturnType<typeof useGameStore.getState>['game']>,
-  castle: CastleState,
-): string | null {
-  let topCount = 0;
-  let topPid: string | null = null;
-  let tied = false;
-  for (const p of game.players) {
-    const count =
-      p.defenderKnights?.filter((e) => {
-        const edge = game.board.edges[e];
-        return edge?.hexes.includes(castle.hexId);
-      }).length ?? 0;
-    if (count === 0) continue;
-    if (count > topCount) {
-      topCount = count;
-      topPid = p.id;
-      tied = false;
-    } else if (count === topCount) {
-      tied = true;
-    }
-  }
-  if (!topPid) return null;
-  const name = game.players.find((p) => p.id === topPid)?.name ?? '?';
-  return tied ? `${topCount}× tied` : `${topCount}× ${name}`;
 }
 
 // Total number of fog hexes this scenario started with (the live list
@@ -108,10 +86,21 @@ export function ScenarioPanel() {
   if (!game) return null;
   const hasSeafarers = game.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const hasTraders = game.settings.expansions.includes(TRADERS_EXPANSION_ID);
-  if (!hasSeafarers && !hasTraders) return null;
   // T&B path: own simpler tracker (no chip / fog / wonder machinery).
   if (hasTraders) {
     return <TradersScenarioPanel />;
+  }
+  if (!hasSeafarers) {
+    // Base game with T&B variants only.
+    if (!hasTradersVariantBlock(game)) return null;
+    return (
+      <section className="scenario-panel">
+        <header className="scenario-panel-header">
+          <span className="scenario-panel-title">Traders & Barbarians variants</span>
+        </header>
+        <TradersVariantsBlock game={game} />
+      </section>
+    );
   }
   const scenario = game.settings.scenarioId ? getScenario(game.settings.scenarioId) : null;
   const byId = (pid: string) => game.players.find((p) => p.id === pid);
@@ -362,6 +351,7 @@ export function ScenarioPanel() {
           </div>
         );
       })()}
+      <TradersVariantsBlock game={game} />
     </section>
   );
 }
@@ -375,172 +365,17 @@ function TradersScenarioPanel() {
   const isFishing = (game.fishingGrounds?.length ?? 0) > 0 || game.lakeHexId != null;
   const isRivers = (game.riverEdges?.length ?? 0) > 0;
   const isMerchantTrains = game.wateringHoleHexId != null;
-  const isBarbarianAttack = (game.castles?.length ?? 0) > 0;
   return (
     <section className="scenario-panel">
       <header className="scenario-panel-header">
         <span className="scenario-panel-title">Traders & Barbarians</span>
       </header>
-      {isBarbarianAttack && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Barbarian Attack</span>
-            <span className="scenario-panel-block-sum">
-              🛡 {game.barbarianKnightSupply ?? 0} in supply
-            </span>
-          </div>
-          <ul className="scenario-panel-chips">
-            {(game.castles ?? []).map((c, idx) => {
-              const max = c.barbarianPath.length - 1;
-              const filled = '▰'.repeat(c.barbarianPosition);
-              const open = '▱'.repeat(Math.max(0, max - c.barbarianPosition));
-              const topDefender = topDefenderName(game, c);
-              return (
-                <li key={c.id} className="scenario-panel-chip is-claimed">
-                  <span className="scenario-panel-chip-vp">{`#${idx + 1}`}</span>
-                  <span
-                    className="scenario-panel-chip-type"
-                    title={`Barbarian position ${c.barbarianPosition}/${max} · strength ${c.barbarianStrength}`}
-                  >
-                    🪓 {filled || '·'}{open} ({c.barbarianStrength})
-                  </span>
-                  {topDefender && (
-                    <span className="scenario-panel-chip-name">
-                      {topDefender}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-          <div className="scenario-panel-note">
-            Every turn the barbarians creep one hex closer. When they reach a
-            castle, defender knights at that castle fight back — winning
-            earns +1 VP per knight (half die); losing burns every knight
-            there and one defending building.
-          </div>
-        </div>
-      )}
-      {isMerchantTrains && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Wagons</span>
-            <span className="scenario-panel-block-sum">
-              {game.wagons?.length ?? 0} placed · {game.wagonSupply ?? 0} in
-              supply
-            </span>
-          </div>
-          <div className="scenario-panel-note">
-            Every build acquires a wagon at the end of your turn. All
-            players bid wool/wheat to steer where it goes. Wagons on the
-            same edge as a road count for that player's Longest Route, and
-            buildings between two wagons earn +1 VP each.
-          </div>
-        </div>
-      )}
-      {isRivers && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Gold</span>
-          </div>
-          <ul className="scenario-panel-chips">
-            {game.players.map((p) => (
-              <li key={p.id} className="scenario-panel-chip is-claimed">
-                <span className="scenario-panel-chip-vp">🪙 {p.gold ?? 0}</span>
-                <span
-                  className="scenario-panel-chip-swatch"
-                  style={{ background: playerColorVar(p.color) }}
-                  aria-hidden
-                />
-                <span className="scenario-panel-chip-name">
-                  {p.name}
-                  {game.wealthTiles?.wealthiest === p.id && ' 👑'}
-                  {game.wealthTiles?.poor.includes(p.id) && ' 👜'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {isFishing && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Fish</span>
-            <span className="scenario-panel-block-sum">
-              {(game.fishTokenPool?.length ?? 0)} in pool
-            </span>
-          </div>
-          <ul className="scenario-panel-chips">
-            {game.players.map((p) => {
-              const count = p.fishTokens?.length ?? 0;
-              const isBoot = game.oldBootHolder === p.id;
-              if (count === 0 && !isBoot) return null;
-              return (
-                <li
-                  key={p.id}
-                  className="scenario-panel-chip is-claimed"
-                >
-                  <span className="scenario-panel-chip-vp">
-                    🐟 {count}
-                  </span>
-                  <span
-                    className="scenario-panel-chip-swatch"
-                    style={{ background: playerColorVar(p.color) }}
-                    aria-hidden
-                  />
-                  <span className="scenario-panel-chip-name">
-                    {p.name}
-                    {isBoot && ' 👢 (+1 VP to win)'}
-                  </span>
-                </li>
-              );
-            })}
-            {game.players.every(
-              (p) => (p.fishTokens?.length ?? 0) === 0,
-            ) &&
-              game.oldBootHolder == null && (
-                <li className="scenario-panel-chip">
-                  <span className="scenario-panel-chip-name unclaimed">
-                    No fish caught yet
-                  </span>
-                </li>
-              )}
-          </ul>
-        </div>
-      )}
-      {game.strongestPorts && (
-        <div className="scenario-panel-block">
-          <div className="scenario-panel-block-head">
-            <span>Strongest Ports</span>
-            <span className="scenario-panel-block-sum">+2 VP</span>
-          </div>
-          {(() => {
-            const holderId = game.strongestPorts.holder;
-            if (!holderId) {
-              return (
-                <div className="scenario-panel-note">
-                  No-one has 3+ VPs in port buildings yet.
-                </div>
-              );
-            }
-            const holder = game.players.find((p) => p.id === holderId);
-            if (!holder) return null;
-            return (
-              <ul className="scenario-panel-chips">
-                <li className="scenario-panel-chip is-claimed">
-                  <span className="scenario-panel-chip-vp">⚓</span>
-                  <span
-                    className="scenario-panel-chip-swatch"
-                    style={{ background: playerColorVar(holder.color) }}
-                    aria-hidden
-                  />
-                  <span className="scenario-panel-chip-name">{holder.name}</span>
-                </li>
-              </ul>
-            );
-          })()}
-        </div>
-      )}
+      <BarbarianAttackPanel game={game} />
+      <TradersBarbariansTracker game={game} />
+      {isMerchantTrains && <MerchantTrainsBlock game={game} />}
+      {isRivers && <RiversTracker game={game} />}
+      {isFishing && <FishingTracker game={game} />}
+      <TradersVariantsBlock game={game} />
     </section>
   );
 }

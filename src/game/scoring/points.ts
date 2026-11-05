@@ -2,7 +2,8 @@ import type { GameState, PlayerId } from '../types';
 import { calculateWealthTilesVp } from '../modules/traders/scoring/wealthTiles';
 import { calculateStrongestPortsVp } from '../modules/traders/scoring/strongestPorts';
 import { calculateMerchantTrainsVp } from '../modules/traders/scoring/merchantTrains';
-import { calculateBarbarianDefenderVp } from '../modules/traders/scoring/barbarianAttack';
+import { calculateBarbarianAttackVp } from '../modules/traders/barbarianAttack/scoring';
+import { calculateTradersBarbariansVp } from '../modules/traders/tradersBarbarians/state';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../modules/citiesAndKnights/constants';
 import { calculateIslandBonusVp } from '../modules/seafarers/islandBonus';
 import { calculateTribeVp } from '../modules/seafarers/tribe';
@@ -19,21 +20,11 @@ export function calculateMetropolisVp(state: GameState, playerId: PlayerId): num
   return sum;
 }
 
-// 1 VP per Printing or Constitution card in the player's hand (auto-flipped
-// face-up on draw).
-export function calculateProgressCardVp(
-  state: GameState,
-  playerId: PlayerId,
-): number {
+// 1 VP per Victory Point progress card (Printing, Constitution) the player
+// has placed face up (p.10).
+export function calculateProgressCardVp(state: GameState, playerId: PlayerId): number {
   const p = state.players.find((pl) => pl.id === playerId);
-  if (!p?.progressCards) return 0;
-  let sum = 0;
-  if (p.progressCards.science.includes('printing')) sum += 1;
-  if (p.progressCards.politics.includes('constitution')) sum += 1;
-  return sum;
-  // Note: a player can only ever hold one of each VP card; the deck has
-  // exactly one Printing and one Constitution.
-  void state;
+  return p?.progressVpCards?.length ?? 0;
 }
 
 // 1 VP for the player who currently holds the merchant piece.
@@ -104,9 +95,12 @@ export function calculateVictoryPoints(
   vp += calculateStrongestPortsVp(state, playerId);
   // Traders & Barbarians / Merchant Trains: +1 per building between 2 wagons.
   vp += calculateMerchantTrainsVp(state, playerId);
-  // Traders & Barbarians / Barbarian Attack: visible +1 per knight per won
-  // defense, accumulated on `state.castles[i].defenderVp`.
-  vp += calculateBarbarianDefenderVp(state, playerId);
+  // Traders & Barbarians / Barbarian Attack: 1 VP per 2 prisoners; conquered
+  // buildings are worth nothing.
+  vp += calculateBarbarianAttackVp(state, playerId);
+  // Traders & Barbarians scenario: 1 VP per delivered commodity token, +1
+  // for a fully upgraded wagon.
+  vp += calculateTradersBarbariansVp(state, playerId);
   return vp;
 }
 

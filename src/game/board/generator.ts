@@ -43,9 +43,12 @@ const TERRAIN_DISTRIBUTION_5_6: Terrain[] = [
   'desert', 'desert',
 ];
 
+// The CATAN 5-6 extension's 28 number tokens (counted off the 5-6 rulebook's
+// starting set-up, p. 5): two 2s and two 12s, three of every other number.
+// (This used to have one 2, one 12 and four 4s / 10s.)
 const NUMBER_TOKENS_5_6 = [
-  2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6,
-  8, 8, 8, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12,
+  2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6,
+  8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
 ];
 
 const PORT_TYPES_5_6: PortType[] = [

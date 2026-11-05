@@ -1,6 +1,10 @@
 import type { GameState, PlayerId, VertexId, EdgeId, HexId } from './types';
 import { canStartOnIsland } from './modules/seafarers/validation/setupPlacement';
 import { pirateIslandsSettlementAllowed } from './modules/seafarers/pirateIslands';
+import {
+  edgeTouchesConqueredHex,
+  vertexTouchesConqueredHex,
+} from './modules/traders/barbarianAttack/state';
 
 // Placement predicates — shared between action handlers (for validation) and
 // the UI (for highlighting legal placements). Pure functions, no mutation.
@@ -42,6 +46,13 @@ export function canPlaceSettlement(
   if (!hasSettleableLand(state, vertexId)) return false;
   // Cities & Knights: a knight occupies a vertex like a building.
   if (state.knights?.[vertexId]) return false;
+  // T&B / Barbarian Attack: nothing is built on a conquered hex's corners.
+  if (vertexTouchesConqueredHex(state, vertexId)) return false;
+  // T&B Catan Event Cards / Earthquake: no settlement at either end of a
+  // damaged road.
+  if (state.damagedRoads?.some((e) => state.board.edges[e]?.vertices.includes(vertexId))) {
+    return false;
+  }
   for (const p of state.players) {
     if (p.settlements.includes(vertexId) || p.cities.includes(vertexId)) return false;
     for (const n of vertex.neighborVertices) {
@@ -70,6 +81,8 @@ export function canPlaceCity(
 ): boolean {
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
+  // T&B / Barbarian Attack: nothing is built on a conquered hex's corners.
+  if (vertexTouchesConqueredHex(state, vertexId)) return false;
   return player.settlements.includes(vertexId);
 }
 
@@ -85,6 +98,10 @@ export function canConnectRoad(
   // T&B / Rivers of Catan: river edges are reserved for bridges. The
   // buildBridge handler is the only entry point that may occupy them.
   if (state.riverEdges?.includes(edgeId)) return false;
+  // Edges a scenario closes to roads (T&B scenario "X" markers).
+  if (state.roadBlockedEdges?.includes(edgeId)) return false;
+  // T&B / Barbarian Attack: nothing is built on a conquered hex's edges.
+  if (edgeTouchesConqueredHex(state, edgeId)) return false;
   for (const p of state.players) {
     if (p.roads.includes(edgeId)) return false;
     if (p.ships.includes(edgeId)) return false;
@@ -92,6 +109,9 @@ export function canConnectRoad(
   }
   const player = state.players.find((p) => p.id === playerId);
   if (!player) return false;
+  // T&B Catan Event Cards / Earthquake: no new roads until every one of
+  // your damaged roads is repaired.
+  if (state.damagedRoads?.some((e) => player.roads.includes(e))) return false;
   const [v1, v2] = edge.vertices;
   for (const v of [v1, v2]) {
     let blocked = false;
@@ -196,6 +216,7 @@ export function canPlaceInitialRoad(
   // affordance — the player must anchor their starting road on a non-river
   // edge of their settlement.
   if (state.riverEdges?.includes(edgeId)) return false;
+  if (state.roadBlockedEdges?.includes(edgeId)) return false;
   if (edge.vertices[0] !== placedSettlement && edge.vertices[1] !== placedSettlement) {
     return false;
   }

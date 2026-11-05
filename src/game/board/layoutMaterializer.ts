@@ -39,9 +39,35 @@ export function materializeLayout(
   let shuffledTerrains: Terrain[];
   [shuffledTerrains, rng] = shuffle(rng, terrainPool);
 
+  // Zone terrains (Fishing on Catan's lake in the inner area): each goes on
+  // a random free land position of its zone; those positions then skip the
+  // general pool. Layouts without zones draw no extra randomness here, so
+  // their boards are unchanged.
+  const zoneAssigned = new Map<number, Terrain>();
+  if (layout.pools.zoneTerrains) {
+    for (const zone of Object.keys(layout.pools.zoneTerrains).sort()) {
+      const want: Terrain[] = [];
+      for (const [t, n] of Object.entries(layout.pools.zoneTerrains[zone]!)) {
+        for (let i = 0; i < (n ?? 0); i++) want.push(t as Terrain);
+      }
+      const slots: number[] = [];
+      layout.positions.forEach((pos, i) => {
+        if (pos.zone === zone && pos.kind === 'land' && !pos.fixedTerrain) slots.push(i);
+      });
+      if (slots.length < want.length) {
+        throw new Error(
+          `Scenario layout zone "${zone}" has ${slots.length} free positions for ${want.length} terrains`,
+        );
+      }
+      let picked: number[];
+      [picked, rng] = shuffle(rng, slots);
+      want.forEach((t, k) => zoneAssigned.set(picked[k]!, t));
+    }
+  }
+
   const hexDefs: ScenarioHexDef[] = [];
   let terrainCursor = 0;
-  for (const pos of layout.positions) {
+  layout.positions.forEach((pos, i) => {
     let terrain: Terrain;
     if (pos.kind === 'sea') {
       terrain = 'sea';
@@ -49,11 +75,13 @@ export function materializeLayout(
       terrain = 'desert';
     } else if (pos.fixedTerrain) {
       terrain = pos.fixedTerrain;
+    } else if (zoneAssigned.has(i)) {
+      terrain = zoneAssigned.get(i)!;
     } else {
       terrain = shuffledTerrains[terrainCursor++]!;
     }
     hexDefs.push({ q: pos.q, r: pos.r, terrain, token: null });
-  }
+  });
   if (terrainCursor !== shuffledTerrains.length) {
     throw new Error(
       `Scenario layout terrain pool mismatch: pool has ${shuffledTerrains.length} terrains but only ${terrainCursor} land positions need filling`,
@@ -85,6 +113,13 @@ export function materializeLayout(
     // Scenario land that never receives a number disc (Seafarers' Forgotten
     // Tribe and Cloth for Catan islands, Pirate Islands' bare hexes).
     if (pos.noToken) continue;
+    // A tile with printed numbers (Fishing on Catan's lake) takes no disc.
+    const printed = pos.printedNumbers ?? layout.pools.printedNumbers?.[h.terrain];
+    if (printed && printed.length > 0) {
+      h.token = printed[0]!;
+      if (printed.length > 1) h.extraTokens = printed.slice(1);
+      continue;
+    }
     if (pos.fixedToken != null) {
       fixedAssignments.push({ index: i, token: pos.fixedToken });
     } else {
@@ -127,20 +162,34 @@ export function materializeLayout(
   for (let i = 0; i < poolIndices.length; i++) {
     hexDefs[poolIndices[i]!]!.token = assigned[i]!;
   }
+  // Set-aside discs stacked on another number's hex (Rivers of Catan's 2 on
+  // the 12).
+  for (const { token, onto } of layout.pools.stackedTokens ?? []) {
+    const host = hexDefs.find((h) => h.token === onto);
+    if (!host) {
+      throw new Error(`Scenario layout stacks ${token} onto ${onto}, but no hex has ${onto}`);
+    }
+    host.extraTokens = [...(host.extraTokens ?? []), token];
+  }
 
   // ----- Port type assignment -----
-  if (layout.pools.portTypes.length !== layout.portAnchors.length) {
+  // Pinned anchors keep their `fixedType`; the pool fills the rest in anchor
+  // order. With no pinned anchors this is exactly the old full shuffle, so
+  // existing boards are unchanged.
+  const freeAnchors = layout.portAnchors.filter((a) => !a.fixedType).length;
+  if (layout.pools.portTypes.length !== freeAnchors) {
     throw new Error(
-      `Scenario layout port pool mismatch: ${layout.portAnchors.length} anchors but ${layout.pools.portTypes.length} types`,
+      `Scenario layout port pool mismatch: ${freeAnchors} unpinned anchors but ${layout.pools.portTypes.length} types`,
     );
   }
   let shuffledPorts: Port['type'][];
   [shuffledPorts, rng] = shuffle(rng, layout.pools.portTypes);
-  const portDefs: ScenarioPortDef[] = layout.portAnchors.map((a, i) => ({
+  let nextFree = 0;
+  const portDefs: ScenarioPortDef[] = layout.portAnchors.map((a) => ({
     q: a.q,
     r: a.r,
     direction: a.direction,
-    type: shuffledPorts[i]!,
+    type: a.fixedType ?? shuffledPorts[nextFree++]!,
   }));
 
   return { hexDefs, portDefs, rngState: rng };

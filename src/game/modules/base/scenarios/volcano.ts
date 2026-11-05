@@ -1,4 +1,5 @@
 import type { ScenarioLayout, ScenarioPosition } from '../../../board/scenarioTypes';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '../../citiesAndKnights/constants';
 import type { BaseScenario } from './types';
 import { seaPositionsInDisk } from './helpers';
 import { STANDARD_PORT_ANCHORS_3_4, standardLand3_4 } from './standardShape';
@@ -74,4 +75,6 @@ export const volcano: BaseScenario = {
   maxPlayers: 4,
   volcano: VOLCANO_COORD,
   layout3p: LAYOUT_3_4,
+  // The C&K roll has no gold pick / eruption step.
+  notWithExpansions: [CITIES_AND_KNIGHTS_EXPANSION_ID],
 };

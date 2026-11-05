@@ -38,6 +38,42 @@ const BOARD_CHANGING_ACTIONS = new Set<Action['type']>([
   'playRoadBuilding',
   'playYearOfPlenty',
   'playMonopoly',
+  // T&B Barbarian Attack: knights placed / moved, barbarians captured or
+  // moved by Treason.
+  'resolveBarbarianCard',
+  'moveBarbarianKnight',
+  // T&B Merchant Trains: a wagon lands (chooser, or the winning vote).
+  'placeWagon',
+  'assignWagonVotes',
+  // T&B Catan Event Cards / Earthquake: a road damaged or repaired.
+  'resolveEvent',
+  'repairRoad',
+  // Traders & Barbarians: Rivers of Catan bridges, Fishing on Catan fish
+  // spends (free roads, the robber leaving the board).
+  'buildBridge',
+  'spendFish',
+  // Cities & Knights pieces on the board (knights, walls, metropolises,
+  // merchant, roads removed / built by progress cards, pillaged cities).
+  'buildCityWall',
+  'recruitKnight',
+  'activateKnight',
+  'promoteKnight',
+  'moveKnight',
+  'displaceKnight',
+  'displacedKnightMove',
+  'chaseRobber',
+  'buildCityImprovement',
+  'placeMetropolis',
+  'choosePillagedCity',
+  'playProgressCard',
+  'removeRoad',
+  'placeMerchant',
+  'treasonRemoveKnight',
+  'treasonPlaceKnight',
+  // Traders & Barbarians scenario: barbarians on edges, wagons.
+  'moveTbBarbarian',
+  'moveWagon',
+  'upgradeWagon',
 ]);
 
 // Step + slider + auto-play replay. The slider/buttons step through a
@@ -265,6 +301,20 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} builds a wonder level`;
     case 'stealResource':
       return `${who} steals${action.stealFrom ? ` from ${name(action.stealFrom)}` : ' nothing'}`;
+    case 'resolveBarbarianCard':
+      return action.hex
+        ? `${who} takes a barbarian prisoner`
+        : action.edge
+          ? `${who} places a knight`
+          : `${who} moves barbarians (Treason)`;
+    case 'moveBarbarianKnight':
+      return `${who} moves a knight`;
+    case 'moveTbBarbarian':
+      return `${who} moves a barbarian`;
+    case 'moveWagon':
+      return `${who} moves their wagon`;
+    case 'upgradeWagon':
+      return `${who} upgrades their wagon`;
     default:
       return `${who} — ${(action as Action).type}`;
   }

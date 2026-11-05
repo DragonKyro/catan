@@ -1,4 +1,4 @@
-import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, TradeWagon, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, CastleState } from './types';
+import type { GameState, GameSettings, Player, DevCardType, PlayerColor, BoardState, IslandChip, TribeToken, WonderState, CommodityBank, BarbarianState, VertexId, PlayerId, EdgeId, FishTokenType, FishingGround, HexId, RiverPath, TradeWagon, WagonStartPoint, KnightSupply, ImprovementTrack, ProgressCardKind, MetropolisRecord, BarbarianAttackState } from './types';
 import { wondersForPlayerCount } from './modules/seafarers/wonders/catalogue';
 import { generateBoard } from './board/generator';
 import {
@@ -10,16 +10,26 @@ import { CLOTH_GENERAL_SUPPLY } from './modules/seafarers/cloth';
 import { getPortAtVertex } from './board/adjacency';
 import { generateBaseScenarioBoard } from './modules/base/scenarios/generator';
 import { generateTradersBoard } from './modules/traders/board/generator';
+import { resolveAllWagonStarts } from './modules/traders/merchantTrains/trains';
+import { hasTradersVariant } from './modules/traders/variants';
+import { buildEventDeck } from './modules/traders/variants/eventCards/deck';
 import { buildInitialFishPool } from './modules/traders/fishing/pool';
 import {
   TRADERS_SCENARIO_FISHING,
   TRADERS_SCENARIO_MERCHANT_TRAINS,
   TRADERS_SCENARIO_BARBARIAN_ATTACK,
+  TRADERS_SCENARIO_TRADERS_BARBARIANS,
   MERCHANT_WAGON_SUPPLY,
-  BARBARIAN_KNIGHT_SUPPLY,
+  MERCHANT_WAGON_SUPPLY_5_6,
 } from './modules/traders/constants';
+import type { BarbarianBoardSetup } from './modules/traders/barbarianAttack/board';
+import { initialBarbarianAttackState } from './modules/traders/barbarianAttack/init';
+import type { TradersBarbariansBoardSetup } from './modules/traders/tradersBarbarians/board';
+import { initialTradersBarbariansState } from './modules/traders/tradersBarbarians/init';
+import { TB_START_GOLD } from './modules/traders/tradersBarbarians/constants';
 import {
   getBaseScenario,
+  baseScenarioAllowed,
   DEFAULT_BASE_SCENARIO_ID,
 } from './modules/base/scenarios';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
@@ -27,7 +37,9 @@ import { TRADERS_EXPANSION_ID } from './modules/traders/constants';
 import {
   CITIES_AND_KNIGHTS_EXPANSION_ID,
   CITIES_AND_KNIGHTS_DEFAULT_VP,
+  CITIES_AND_KNIGHTS_MAX_PLAYERS,
   COMMODITY_BANK_SIZE,
+  COMMODITY_BANK_SIZE_5_6,
   KNIGHT_SUPPLY_PER_STRENGTH,
 } from './modules/citiesAndKnights/constants';
 import { shuffleProgressDecks } from './modules/citiesAndKnights/progress/catalogue';
@@ -190,6 +202,11 @@ export function createGame(opts: CreateGameOptions): GameState {
   // combined ruleset has its own intercept points (knights on ships, pirate
   // on barbarian track, etc.) we haven't implemented yet. Refuse the combo
   // at the engine boundary so the UI picker is the only mutex to maintain.
+  if (hasCitiesKnights && numPlayers > CITIES_AND_KNIGHTS_MAX_PLAYERS) {
+    throw new Error(
+      `Cities & Knights supports at most ${CITIES_AND_KNIGHTS_MAX_PLAYERS} players (got ${numPlayers}).`,
+    );
+  }
   if (hasCitiesKnights && expansions.includes(SEAFARERS_EXPANSION_ID)) {
     throw new Error(
       'Cities & Knights cannot be combined with Seafarers yet (Phase 1 deferral).',
@@ -197,13 +214,15 @@ export function createGame(opts: CreateGameOptions): GameState {
   }
 
   // Traders & Barbarians compatibility limits for this phase:
-  //   - 3-4 players only (no 5-6p scenario layouts yet).
+  //   - 3-6 players (T&B 5-6 boards per scenario; no 7-8 boards). A
+  //     scenario without a 5-6 board (`layout5_6p`) stays 3-4.
   //   - Cannot combine with Seafarers (no merged scenario boards).
   //   - Cannot combine with Cities & Knights (variant interactions deferred).
   if (hasTraders) {
-    if (numPlayers > 4) {
+    const sc = getTradersScenario(opts.settings?.tradersScenarioId ?? 'riversOfCatan');
+    if (numPlayers > sc.maxPlayers) {
       throw new Error(
-        `Traders & Barbarians is 3-4 players only in this build (got ${numPlayers}).`,
+        `Traders & Barbarians: ${sc.name} supports at most ${sc.maxPlayers} players (got ${numPlayers}).`,
       );
     }
     if (expansions.includes(SEAFARERS_EXPANSION_ID)) {
@@ -226,6 +245,14 @@ export function createGame(opts: CreateGameOptions): GameState {
   const baseScenarioId = opts.settings?.baseScenarioId ?? DEFAULT_BASE_SCENARIO_ID;
   const tradersScenarioId = opts.settings?.tradersScenarioId;
   const tradersVariants = opts.settings?.tradersVariants;
+  // Base-game maps tied to (or ruled out by) an expansion: the C&K first-game
+  // board needs C&K; Gold Rush / Volcano can't be played with it.
+  if (!customMap && !hasTraders && !expansions.includes(SEAFARERS_EXPANSION_ID)) {
+    const map = getBaseScenario(baseScenarioId);
+    if (!baseScenarioAllowed(map, expansions)) {
+      throw new Error(`The "${map.name}" map can't be played with these expansions.`);
+    }
+  }
   const scenarioVp = ((): number | undefined => {
     if (customMap) return customMap.defaultVpToWin;
     if (hasTraders) {
@@ -249,8 +276,12 @@ export function createGame(opts: CreateGameOptions): GameState {
   const cnkVp = hasCitiesKnights ? CITIES_AND_KNIGHTS_DEFAULT_VP : undefined;
   // Strongest Ports variant: rulebook explicitly says "increase the number
   // of VPs needed to win by 1." Stacks on top of whatever else picked the VP.
-  const strongestPortsBump =
-    hasTraders && tradersVariants?.strongestPorts ? 1 : 0;
+  // Variants combine with any rule set (rulebook p. 4-6), not only T&B.
+  const strongestPortsBump = tradersVariants?.strongestPorts ? 1 : 0;
+  if (tradersVariants?.eventCards && hasCitiesKnights) {
+    // C&K rolls the event die and red die alongside the card — not wired yet.
+    throw new Error('Catan Event Cards cannot be combined with Cities & Knights yet.');
+  }
   const settings: GameSettings = {
     numPlayers,
     victoryPointsToWin:
@@ -262,7 +293,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     scenarioId,
     baseScenarioId,
     tradersScenarioId: hasTraders ? tradersScenarioId ?? 'riversOfCatan' : undefined,
-    tradersVariants: hasTraders ? tradersVariants : undefined,
+    tradersVariants: hasTradersVariant({ tradersVariants }) ? tradersVariants : undefined,
     turnTimerSec: opts.settings?.turnTimerSec,
     aiLevel: opts.settings?.aiLevel,
     customMap,
@@ -285,10 +316,14 @@ export function createGame(opts: CreateGameOptions): GameState {
   let wonders: WonderState[] | undefined;
   let seafarers: SeafarersBoardResult | undefined;
   let riverEdges: EdgeId[] | undefined;
+  let rivers: RiverPath[] | undefined;
   let lakeHexId: HexId | undefined;
+  let lakeHexIds: HexId[] | undefined;
   let fishingGrounds: FishingGround[] | undefined;
   let wateringHoleHexId: HexId | undefined;
-  let castles: CastleState[] | undefined;
+  let wateringHoleHexIds: HexId[] | undefined;
+  let barbarianBoard: BarbarianBoardSetup | undefined;
+  let tradersBarbariansBoard: TradersBarbariansBoardSetup | undefined;
   const boardVariant: '3-4' | '5-6' | '7-8' =
     numPlayers >= 7 ? '7-8' : numPlayers >= 5 ? '5-6' : '3-4';
   if (customMap) {
@@ -311,11 +346,17 @@ export function createGame(opts: CreateGameOptions): GameState {
     board = result.board;
     rng = result.rngState;
     riverEdges = result.riverEdges.length > 0 ? result.riverEdges : undefined;
+    rivers = result.rivers.length > 0 ? result.rivers : undefined;
     lakeHexId = result.lakeHexId ?? undefined;
+    // 5-6 players: two lakes / two watering holes (lists kept only then).
+    lakeHexIds = result.lakeHexIds.length > 1 ? result.lakeHexIds : undefined;
+    wateringHoleHexIds =
+      result.wateringHoleHexIds.length > 1 ? result.wateringHoleHexIds : undefined;
     fishingGrounds =
       result.fishingGrounds.length > 0 ? result.fishingGrounds : undefined;
     wateringHoleHexId = result.wateringHoleHexId ?? undefined;
-    castles = result.castles.length > 0 ? result.castles : undefined;
+    barbarianBoard = result.barbarianAttack ?? undefined;
+    tradersBarbariansBoard = result.tradersBarbarians ?? undefined;
   } else if (settings.expansions.includes(SEAFARERS_EXPANSION_ID)) {
     const result = generateSeafarersBoard(settings.scenarioId, rng, numPlayers);
     seafarers = result;
@@ -397,16 +438,13 @@ export function createGame(opts: CreateGameOptions): GameState {
           cityWalls: 0,
           improvements: { science: 0, trade: 0, politics: 0 },
           progressCards: { science: [], trade: [], politics: [] },
+          progressVpCards: [],
           defenderTokens: 0,
         }
       : {}),
     ...(hasTraders ? { gold: 0, bridges: [] } : {}),
     ...(hasTraders && settings.tradersScenarioId === TRADERS_SCENARIO_FISHING
       ? { fishTokens: [] as Array<'one' | 'two' | 'three'> }
-      : {}),
-    ...(hasTraders &&
-    settings.tradersScenarioId === TRADERS_SCENARIO_BARBARIAN_ATTACK
-      ? { defenderKnights: [] as EdgeId[] }
       : {}),
   }));
 
@@ -464,7 +502,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let metropolises: Record<ImprovementTrack, MetropolisRecord | null> | undefined;
   let progressDecks: Record<ImprovementTrack, ProgressCardKind[]> | undefined;
   if (hasCitiesKnights) {
-    commodityBank = commoditiesFull(COMMODITY_BANK_SIZE);
+    commodityBank = commoditiesFull(numPlayers >= 5 ? COMMODITY_BANK_SIZE_5_6 : COMMODITY_BANK_SIZE);
     barbarian = { position: 0, attacksResolved: 0 };
     // Robber starts "offshore" in C&K — represented by a flag rather than a
     // sentinel hex. board.robberHex still points at the desert so the existing
@@ -486,15 +524,26 @@ export function createGame(opts: CreateGameOptions): GameState {
     rng = shuffled.rng;
   }
 
-  // T&B initial wealth/Strongest Ports state. Players start at 0 gold so
-  // wealthTiles encodes to { wealthiest: null, poor: [] }.
-  const wealthTilesInit = hasTraders
+  // T&B coins and wealth tiles, for the scenarios that use them (Rivers of
+  // Catan). Everyone starts at 0 gold, tied for least: each player takes a
+  // Poor Catanian tile at the start (rulebook setup).
+  const tradersScenario = hasTraders
+    ? getTradersScenario(settings.tradersScenarioId ?? 'riversOfCatan')
+    : undefined;
+  const coinsInPlay = tradersScenario?.coins ? true : undefined;
+  const wealthTilesInit = tradersScenario?.wealthTiles
     ? recalcWealthTiles({ players })
     : undefined;
-  const strongestPortsInit =
-    hasTraders && tradersVariants?.strongestPorts
-      ? { holder: null }
-      : undefined;
+  const strongestPortsInit = tradersVariants?.strongestPorts
+    ? { holder: null }
+    : undefined;
+  // Catan Event Cards: the event deck replaces the dice.
+  let eventCards: GameState['eventCards'];
+  if (tradersVariants?.eventCards) {
+    let deck;
+    [deck, rng] = buildEventDeck(rng);
+    eventCards = { deck, current: null };
+  }
 
   // Fishing on Catan seeding. The robber starts off-board (rulebook: "It
   // will enter the game when you Resolve a 7 or play a Knight card"), the
@@ -506,7 +555,7 @@ export function createGame(opts: CreateGameOptions): GameState {
   let fishTokenDiscard: FishTokenType[] | undefined;
   let oldBootHolder: PlayerId | null | undefined;
   if (isFishing) {
-    [fishTokenPool, rng] = shuffle(rng, buildInitialFishPool());
+    [fishTokenPool, rng] = shuffle(rng, buildInitialFishPool(numPlayers));
     fishTokenDiscard = [];
     oldBootHolder = null;
     // Robber off-board until activated. Use the existing robberActive flag
@@ -522,22 +571,51 @@ export function createGame(opts: CreateGameOptions): GameState {
     settings.tradersScenarioId === TRADERS_SCENARIO_MERCHANT_TRAINS;
   let wagons: TradeWagon[] | undefined;
   let wagonSupply: number | undefined;
+  let wagonStarts: WagonStartPoint[] | undefined;
   if (isMerchantTrains) {
     wagons = [];
-    wagonSupply = MERCHANT_WAGON_SUPPLY;
+    // T&B 5-6 adds 11 wagons.
+    wagonSupply = numPlayers >= 5 ? MERCHANT_WAGON_SUPPLY_5_6 : MERCHANT_WAGON_SUPPLY;
+    wagonStarts = wateringHoleHexId
+      ? resolveAllWagonStarts(board, wateringHoleHexIds ?? [wateringHoleHexId])
+      : undefined;
     robberActive = false;
   }
 
-  // Barbarian Attack seeding. Castle states already come from the generator;
-  // initialize the shared knight supply. Each castle's `defenderVp` map is
-  // empty until a successful defense lands. Resolved-state-only scenario —
-  // no off-board robber tweak; the regular desert robber rule applies.
+  // Barbarian Attack seeding: barbarians on the 2 and the 12, the
+  // scenario's own 26-card deck (the base development cards, the Largest
+  // Army tile and the robber stay in the box), and coins in play.
   const isBarbarianAttack =
     hasTraders &&
     settings.tradersScenarioId === TRADERS_SCENARIO_BARBARIAN_ATTACK;
-  let barbarianKnightSupply: number | undefined;
-  if (isBarbarianAttack) {
-    barbarianKnightSupply = BARBARIAN_KNIGHT_SUPPLY;
+  let barbarianAttack: BarbarianAttackState | undefined;
+  if (isBarbarianAttack && barbarianBoard) {
+    [barbarianAttack, rng] = initialBarbarianAttackState(
+      barbarianBoard,
+      players.map((p) => p.id),
+      rng,
+    );
+    devCardDeck = [];
+    robberActive = false;
+  }
+
+  // Traders & Barbarians scenario: barbarians on edges, the commodity
+  // stacks, the scenario's 25-card deck (no base cards, robber or Longest
+  // Road), 5 gold each, coins in play. Wagons arrive with the setup cities.
+  let tradersBarbarians: GameState['tradersBarbarians'];
+  if (
+    hasTraders &&
+    settings.tradersScenarioId === TRADERS_SCENARIO_TRADERS_BARBARIANS &&
+    tradersBarbariansBoard
+  ) {
+    [tradersBarbarians, rng] = initialTradersBarbariansState(
+      tradersBarbariansBoard,
+      players.map((p) => p.id),
+      rng,
+    );
+    devCardDeck = [];
+    robberActive = false;
+    for (let i = 0; i < players.length; i++) players[i] = { ...players[i]!, gold: TB_START_GOLD };
   }
 
   // Pirate Islands has no robber at all.
@@ -590,17 +668,34 @@ export function createGame(opts: CreateGameOptions): GameState {
     metropolises,
     progressDecks,
     riverEdges,
+    rivers,
+    coinsInPlay,
     wealthTiles: wealthTilesInit,
     strongestPorts: strongestPortsInit,
+    eventCards,
     lakeHexId,
+    ...(lakeHexIds ? { lakeHexIds } : {}),
     fishingGrounds,
     fishTokenPool,
     fishTokenDiscard,
     oldBootHolder,
     wateringHoleHexId,
+    ...(wateringHoleHexIds ? { wateringHoleHexIds } : {}),
     wagons,
     wagonSupply,
-    castles,
-    barbarianKnightSupply,
+    wagonStarts,
+    merchantTrains: isMerchantTrains ? [] : undefined,
+    ...(barbarianAttack
+      ? { barbarianAttack, coinsInPlay: true, noLargestArmy: true }
+      : {}),
+    ...(tradersBarbarians
+      ? {
+          tradersBarbarians,
+          coinsInPlay: true,
+          noLongestRoad: true,
+          roadBlockedEdges: tradersBarbarians.locations.flatMap((l) => l.xEdges),
+          setupBlockedVertices: tradersBarbariansBoard?.setupBlocked,
+        }
+      : {}),
   };
 }

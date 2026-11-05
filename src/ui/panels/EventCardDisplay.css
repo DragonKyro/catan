@@ -1,0 +1,65 @@
+.evcard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #fbf3dc, #efe0b7);
+  color: #2b2214;
+  border: 1px solid #8a6d3b;
+  border-radius: var(--radius);
+  padding: 5px 8px 5px 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  max-width: 240px;
+}
+
+.evcard-empty {
+  opacity: 0.85;
+}
+
+.evcard-icon {
+  font-size: 1.35em;
+  line-height: 1;
+}
+
+.evcard-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.evcard-name {
+  font-weight: 700;
+  font-size: 0.92em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.evcard-left {
+  font-size: 0.72em;
+  color: #6b5a3a;
+  white-space: nowrap;
+}
+
+.evcard-disc {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f7ecd0;
+  border: 2px solid #5b4320;
+  font-weight: 800;
+  font-size: 1.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.evcard-disc.is-hot {
+  color: #b3261e;
+}
+
+.evcard-disc.is-seven {
+  background: #3a2b1a;
+  color: #f7ecd0;
+}

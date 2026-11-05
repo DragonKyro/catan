@@ -185,18 +185,44 @@ function autoFinish(
     initial.phase === 'chooseRobberOrPirate' ||
     initial.phase === 'placeTribePort' ||
     initial.phase === 'stealResource' ||
+    // T&B Barbarian Attack: a card's choice, then the knight moves (the AI
+    // moves any knight that must leave the castle, then ends the turn).
+    initial.phase === 'barbarianCard' ||
+    initial.phase === 'barbarianKnightMoves' ||
+    // T&B scenario: placing a barbarian.
+    initial.phase === 'moveBarbarian' ||
+    // T&B: Merchant Trains voting round / wagon placement, Event Card answers.
+    initial.phase === 'wagonVoting' ||
+    initial.phase === 'placeWagon' ||
+    initial.phase === 'eventResolution' ||
+    // T&B Fishing on Catan: the full-hand swap choice.
+    initial.phase === 'fishSwap' ||
     isSetupPhase(initial.phase) ||
     initial.phase === 'rollOrPlayKnight'
   ) {
     const action = chooseAction(initial, playerId);
     if (action) ctx.dispatch(action);
+    else if (initial.phase === 'barbarianKnightMoves') ctx.dispatch({ type: 'endTurn', playerId });
     return;
   }
 
-  // Main: just end the turn — the player had their chance.
-  if (initial.phase === 'main') {
+  // Main (and the T&B scenario's End of Turn wagon moves): just end the
+  // turn — the player had their chance.
+  if (initial.phase === 'main' || initial.phase === 'wagonMoves') {
     ctx.dispatch({ type: 'endTurn', playerId });
+    // Out of time in the Action phase: the wagon stays put too (no second
+    // full countdown for the End of Turn phase).
+    const after = useGameStore.getState().game;
+    if (initial.phase === 'main' && after?.phase === 'wagonMoves' && getActingPlayerId(after) === playerId) {
+      ctx.dispatch({ type: 'endTurn', playerId });
+    }
+    return;
   }
+
+  // Any other sub-phase (the Cities & Knights ones: pillage choice, tie
+  // draw, progress discard, Aqueduct, Wedding, Treason, …): the AI answers.
+  const action = chooseAction(initial, playerId);
+  if (action) ctx.dispatch(action);
 }
 
 // Pick up to 2 resources weighted by current shortfall vs player needs,

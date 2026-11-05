@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Action, EdgeId, HexId, PlayerId, VertexId } from '@/game/types';
+import type { Action, BarbarianTreasonMove, EdgeId, HexId, KnightStrength, PlayerId, VertexId } from '@/game/types';
 import { applyAction } from '@/game/engine';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
@@ -54,12 +54,22 @@ export type UIMode =
   | { kind: 'placeTribePort' }
   // Traders & Barbarians — picking a river edge to span with a bridge.
   | { kind: 'buildBridge' }
+  // Fishing on Catan — picking the edge for a road paid with these fish.
+  | { kind: 'fishRoad'; tokens: Array<'one' | 'two' | 'three'> }
   // Traders & Barbarians / Merchant Trains — placing a trade wagon after a
   // vote resolution that named a placer (no clear vote-winner edge).
   | { kind: 'placeWagon' }
-  // Traders & Barbarians / Barbarian Attack — picking a castle-adjacent
-  // edge to hire a defender knight on.
-  | { kind: 'hireKnight' }
+  // Traders & Barbarians / Barbarian Attack — the choice for a card just
+  // bought (Capture hex / knight edge), Treason's barbarian moves (picked
+  // one hex at a time: `from` set = choosing where it goes; null = from the
+  // supply), and the end-of-turn knight moves (`from` = the picked knight).
+  | { kind: 'baCard' }
+  | { kind: 'baTreason'; moves: BarbarianTreasonMove[]; from?: HexId | null }
+  | { kind: 'baKnightMove'; from?: EdgeId }
+  // Traders & Barbarians scenario — the End of Turn wagon moves, and placing
+  // a barbarian (`pick` = the barbarian chosen, before its edge).
+  | { kind: 'tbWagon' }
+  | { kind: 'tbBarbarian'; pick?: number }
   // Cities & Knights — picking which of your own cities to put a wall under.
   | { kind: 'buildCityWall' }
   // Cities & Knights knight build/action modes.
@@ -81,6 +91,19 @@ export type UIMode =
   | { kind: 'removeRoad' }
   // Cities & Knights / Invention — pick two number-token hexes to swap.
   | { kind: 'swapTokens'; firstHex?: HexId }
+  // Cities & Knights — barbarians won: pick which of your cities is pillaged.
+  | { kind: 'choosePillage' }
+  // Cities & Knights / Treason — the target removes a knight; the attacker
+  // places one (strength picked in the dialog first).
+  | { kind: 'treasonRemoveKnight' }
+  | { kind: 'treasonPlaceKnight'; strength?: KnightStrength }
+  // Cities & Knights progress cards played by clicking the board: the card
+  // is only played (with its payload) once the picks are complete.
+  | { kind: 'progressRoadBuilding'; first?: EdgeId }
+  | { kind: 'smithing'; selected: VertexId[] }
+  | { kind: 'intrigue' }
+  | { kind: 'engineering' }
+  | { kind: 'medicine' }
   | { kind: 'placeSetupSettlement' }
   | { kind: 'placeSetupRoad' }
   | { kind: 'moveRobber' }
@@ -102,23 +125,15 @@ export type DialogName =
   // Traders & Barbarians / Fishing on Catan
   | 'spendFish'
   | 'passBoot'
-  // Cities & Knights dialogs.
+  // Traders & Barbarians coins (spend / buy gold)
+  | 'coins'
+  // Cities & Knights dialogs opened from the ActionBar (sub-phase prompts
+  // follow game.phase instead — see ui/dialogs/citiesAndKnights/CKDialogs).
   | 'cityImprovements'
   | 'progressCards'
   | 'alchemy'
-  | 'smithing'
-  | 'merchantFleet'
-  | 'tradeMonopoly'
-  | 'resourceMonopolyCK'
-  | 'metropolisPlace'
-  | 'progressCardPick'
-  | 'treasonRemove'
-  | 'treasonPlace'
-  | 'commercialHarborOffer'
-  | 'weddingGive'
-  | 'progressCardDiscard'
-  | 'defenderTieDraw'
-  | 'aqueductPick';
+  | 'knights'
+  | 'commercialHarbor';
 
 interface AppStore {
   game: GameState | null;
@@ -176,8 +191,15 @@ const UNDOABLE_ACTION_TYPES = new Set<Action['type']>([
   'buildCity',
   'buyDevCard',
   'bankTrade',
+  'bankTradeCK',
   'buildShip',
   'moveShip',
+  // Traders & Barbarians: bridges and coin trades reveal nothing.
+  'buildBridge',
+  'spendGold',
+  'buyGold',
+  // Traders & Barbarians scenario: a wagon upgrade reveals nothing.
+  'upgradeWagon',
 ]);
 
 // An otherwise-undoable action that uncovered something can't be taken back
@@ -193,6 +215,8 @@ function revealedSomething(before: GameState, next: GameState): boolean {
   const partners = (s: GameState) =>
     (s.clothVillages ?? []).reduce((n, v) => n + v.partners.length, 0);
   if (partners(before) !== partners(next)) return true;
+  // Anything that rolled dice (T&B Barbarian Attack landings after a build).
+  if (before.rngState !== next.rngState) return true;
   return next.phase !== before.phase;
 }
 
@@ -211,10 +235,28 @@ const phaseToMode = (state: GameState): UIMode => {
   if (state.phase === 'placeTribePort') return { kind: 'placeTribePort' };
   // T&B Merchant Trains: the placer picks an edge.
   if (state.phase === 'placeWagon') return { kind: 'placeWagon' };
+  // T&B Barbarian Attack: card choices and the end-of-turn knight moves.
+  if (state.phase === 'barbarianCard') {
+    return state.barbarianAttack?.pendingCard?.card === 'treason'
+      ? { kind: 'baTreason', moves: [] }
+      : { kind: 'baCard' };
+  }
+  if (state.phase === 'barbarianKnightMoves') return { kind: 'baKnightMove' };
+  // T&B scenario: placing a barbarian (a drive-off fixes which one), and
+  // the End of Turn wagon moves.
+  if (state.phase === 'moveBarbarian') {
+    const pick = state.tradersBarbarians?.pendingBarbarian?.barbarian;
+    return pick !== undefined ? { kind: 'tbBarbarian', pick } : { kind: 'tbBarbarian' };
+  }
+  if (state.phase === 'wagonMoves') return { kind: 'tbWagon' };
   // Cities & Knights sub-phases that drive board interactions.
   if (state.phase === 'displacedKnightMove') return { kind: 'displacedKnightMove' };
   if (state.phase === 'placeMerchant') return { kind: 'placeMerchant' };
   if (state.phase === 'removeRoad') return { kind: 'removeRoad' };
+  if (state.phase === 'placeMetropolis') return { kind: 'placeMetropolis' };
+  if (state.phase === 'choosePillage') return { kind: 'choosePillage' };
+  if (state.phase === 'treasonRemoveKnight') return { kind: 'treasonRemoveKnight' };
+  if (state.phase === 'treasonPlaceKnight') return { kind: 'treasonPlaceKnight' };
   return { kind: 'idle' };
 };
 
@@ -241,23 +283,34 @@ function applyTransition(
     next.phase === 'gameOver' ? beforeActor : getActingPlayerId(next);
   const nextActorPlayer = next.players.find((p) => p.id === nextActor);
   const online = isOnlinePredicate();
-  // Pass-device handoff is for hot-seat only. AI never needs handoff.
-  // Online sessions never use it — each player has their own device.
+  // Pass-device handoff is for hot-seat only: it needs two or more humans
+  // sharing this device. AI never needs handoff, and a lone human playing
+  // against AIs never passes the device (they used to get a "Pass the
+  // device" screen at the start of every turn). Online sessions never use
+  // it — each player has their own device.
+  const humanSeats = next.players.filter((p) => !p.isAI).length;
   const handoff =
     !online &&
+    humanSeats >= 2 &&
     next.phase !== 'gameOver' &&
     beforeActor !== nextActor &&
     !nextActorPlayer?.isAI &&
     nextActor !== get().handoffAcknowledgedForPlayer;
+  // The acknowledged seat tracks the last HUMAN at the device; AI moves in
+  // between don't reset it (so hot-seat players only see the handoff when
+  // the device really changes hands). All-AI games keep following the actor.
+  const acknowledged = handoff
+    ? get().handoffAcknowledgedForPlayer
+    : nextActorPlayer?.isAI && humanSeats > 0
+      ? get().handoffAcknowledgedForPlayer
+      : nextActor;
   set({
     game: next,
     uiMode: phaseToMode(next),
     dialog: null,
     error: null,
     handoffPending: handoff,
-    handoffAcknowledgedForPlayer: handoff
-      ? get().handoffAcknowledgedForPlayer
-      : nextActor,
+    handoffAcknowledgedForPlayer: acknowledged,
     pendingRobberHex: null,
     pendingPirateHex: null,
   });
@@ -324,8 +377,10 @@ export const useGameStore = create<AppStore>((set, get) => ({
       applyTransition(set, get, before, next);
       // Production-pulse highlight: only on real production rolls (not 7).
       // Cleared by the BoardSVG effect ~1.5s later.
-      if (action.type === 'rollDice') {
-        const total = action.dice[0] + action.dice[1];
+      // A new roll (or, with Catan Event Cards, the production after the
+      // flipped card's event) pulses the hexes of its number.
+      if (next.lastRoll && next.lastRoll !== before.lastRoll) {
+        const total = next.lastRoll.total;
         set({ lastRolledHighlight: total !== 7 ? total : null });
       }
       // Broadcast only after the local apply succeeds.
@@ -349,8 +404,10 @@ export const useGameStore = create<AppStore>((set, get) => ({
       const next = applyAction(before, action);
       useLogStore.getState().record(before, action, next, at);
       applyTransition(set, get, before, next);
-      if (action.type === 'rollDice') {
-        const total = action.dice[0] + action.dice[1];
+      // A new roll (or, with Catan Event Cards, the production after the
+      // flipped card's event) pulses the hexes of its number.
+      if (next.lastRoll && next.lastRoll !== before.lastRoll) {
+        const total = next.lastRoll.total;
         set({ lastRolledHighlight: total !== 7 ? total : null });
       }
       // Remote actions never produce an undo snapshot — clear any stale one.

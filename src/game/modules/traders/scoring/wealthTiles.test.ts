@@ -6,20 +6,23 @@ function players(...golds: Array<{ id: string; gold: number }>) {
 }
 
 describe('recalcWealthTiles', () => {
-  it('returns null/empty when everyone is at 0 gold', () => {
+  // Rulebook: "The player(s) with the least gold immediately receives a
+  // Poor Catanian tile" — at the start everyone is level on 0 and each
+  // player takes one.
+  it('makes everyone Poor when everyone is at 0 gold', () => {
     expect(
       recalcWealthTiles(
         players({ id: 'p0', gold: 0 }, { id: 'p1', gold: 0 }),
       ),
-    ).toEqual({ wealthiest: null, poor: [] });
+    ).toEqual({ wealthiest: null, poor: ['p0', 'p1'] });
   });
 
-  it('returns null/empty when everyone is tied above 0', () => {
+  it('makes everyone Poor (and nobody Wealthiest) when all are tied above 0', () => {
     expect(
       recalcWealthTiles(
         players({ id: 'p0', gold: 3 }, { id: 'p1', gold: 3 }),
       ),
-    ).toEqual({ wealthiest: null, poor: [] });
+    ).toEqual({ wealthiest: null, poor: ['p0', 'p1'] });
   });
 
   it('awards Wealthiest to the unique max-gold player and Poor to the unique min', () => {

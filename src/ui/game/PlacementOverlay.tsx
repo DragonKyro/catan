@@ -8,8 +8,8 @@ import {
   canPlaceInitialSettlement,
   canPlaceInitialRoad,
   canPlaceBridge,
-  canMoveRobberTo,
 } from '@/game/placement';
+import { robberHexAllowed, robberStealCandidates } from '@/game/engine';
 import {
   canBuildShip,
   canPlaceInitialShip,
@@ -23,10 +23,19 @@ import {
 } from '@/game/modules/seafarers/actions/movePirate';
 import { validTribePortEdges } from '@/game/modules/seafarers/tribe';
 import { totalResources } from '@/game/resources';
-import { canPlaceWagon as canPlaceWagonHelper } from '@/game/modules/traders/merchantTrains/placement';
-import { canPlaceKnight } from '@/game/modules/traders/barbarianAttack/placement';
+import {
+  placementFront,
+  placementKey,
+  placementTags,
+} from '@/game/modules/traders/merchantTrains/trains';
+import { Wagon } from './traders/Wagon';
+import { BarbarianAttackOverlay, isBarbarianAttackMode } from './traders/BarbarianAttackOverlay';
+import { TradersBarbariansOverlay, isTradersBarbariansMode } from './traders/TradersBarbariansOverlay';
+import { setupPlacementIsCity } from '@/game/modules/traders/tradersBarbarians/state';
 import type { EdgeId, GameState, PlayerColor, PlayerId, VertexId } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
+import { citiesKnightsOverlay } from './citiesAndKnights/CKPlacementOverlay';
+import { setupPlacesCity } from '@/game/modules/citiesAndKnights/actions/buildWrappers';
 
 export function PlacementOverlay() {
   const { game, uiMode, dispatch, setMode } = useGameStore();
@@ -53,6 +62,9 @@ export function PlacementOverlay() {
 
   if (uiMode.kind === 'buildSettlement' || uiMode.kind === 'placeSetupSettlement') {
     const isSetup = uiMode.kind === 'placeSetupSettlement';
+    // T&B Barbarian Attack / Traders & Barbarians: the second starting
+    // placement is a city.
+    const ghost = isSetup && setupPlacementIsCity(game) ? 'city' : 'settlement';
     return (
       <g className="overlay overlay-vertices">
         {game.board.vertexIds.map((vid) => {
@@ -64,7 +76,7 @@ export function PlacementOverlay() {
             <VertexGhost
               key={vid}
               vid={vid}
-              variant="settlement"
+              variant={isSetup && setupPlacesCity(game) ? 'city' : ghost}
               previewColor={previewColor}
               isHovered={hoveredVid === vid}
               onHoverChange={(h) => setHoveredVid(h ? vid : null)}
@@ -105,285 +117,20 @@ export function PlacementOverlay() {
     );
   }
 
-  if (uiMode.kind === 'buildCityWall') {
-    // City wall ghosts: light up only the player's own cities that don't
-    // already have a wall.
-    const me = game.players.find((p) => p.id === acting);
-    const walls = game.cityWalls ?? {};
-    return (
-      <g className="overlay overlay-vertices">
-        {(me?.cities ?? [])
-          .filter((vid) => !walls[vid])
-          .map((vid) => (
-            <VertexGhost
-              key={vid}
-              vid={vid}
-              variant="city"
-              previewColor={previewColor}
-              isHovered={hoveredVid === vid}
-              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
-              onClick={() =>
-                dispatch({ type: 'buildCityWall', playerId: acting, vertex: vid })
-              }
-            />
-          ))}
-      </g>
-    );
-  }
-
-  if (uiMode.kind === 'recruitKnight') {
-    // Empty vertex connected to the actor's road network.
-    return (
-      <g className="overlay overlay-vertices">
-        {game.board.vertexIds
-          .filter((vid) => canRecruitKnightAt(game, acting, vid))
-          .map((vid) => (
-            <VertexGhost
-              key={vid}
-              vid={vid}
-              variant="settlement"
-              previewColor={previewColor}
-              isHovered={hoveredVid === vid}
-              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
-              onClick={() =>
-                dispatch({
-                  type: 'recruitKnight',
-                  playerId: acting,
-                  vertex: vid,
-                })
-              }
-            />
-          ))}
-      </g>
-    );
-  }
-
-  if (uiMode.kind === 'activateKnight' || uiMode.kind === 'promoteKnight') {
-    const isActivate = uiMode.kind === 'activateKnight';
-    const matches = Object.entries(game.knights ?? {}).filter(([, k]) => {
-      if (k.playerId !== acting) return false;
-      if (isActivate) return !k.active;
-      return k.strength < 3;
-    });
-    return (
-      <g className="overlay overlay-vertices">
-        {matches.map(([vid]) => (
-          <VertexGhost
-            key={vid}
-            vid={vid}
-            variant="city"
-            previewColor={previewColor}
-            isHovered={hoveredVid === vid}
-            onHoverChange={(h) => setHoveredVid(h ? vid : null)}
-            onClick={() =>
-              dispatch(
-                isActivate
-                  ? { type: 'activateKnight', playerId: acting, vertex: vid }
-                  : { type: 'promoteKnight', playerId: acting, vertex: vid },
-              )
-            }
-          />
-        ))}
-      </g>
-    );
-  }
-
-  if (uiMode.kind === 'chaseRobber') {
-    const robberHex = game.board.robberHex;
-    const candidates = Object.entries(game.knights ?? {}).filter(([vid, k]) => {
-      if (k.playerId !== acting || !k.active) return false;
-      const v = game.board.vertices[vid];
-      return !!v && v.hexes.includes(robberHex);
-    });
-    return (
-      <g className="overlay overlay-vertices">
-        {candidates.map(([vid]) => (
-          <VertexGhost
-            key={vid}
-            vid={vid}
-            variant="city"
-            previewColor={previewColor}
-            isHovered={hoveredVid === vid}
-            onHoverChange={(h) => setHoveredVid(h ? vid : null)}
-            onClick={() =>
-              dispatch({ type: 'chaseRobber', playerId: acting, vertex: vid })
-            }
-          />
-        ))}
-      </g>
-    );
-  }
-
-  if (uiMode.kind === 'moveKnight' || uiMode.kind === 'displaceKnight') {
-    const src = uiMode.sourceVertex;
-    if (!src) {
-      const candidates = Object.entries(game.knights ?? {}).filter(
-        ([vid, k]) =>
-          k.playerId === acting &&
-          k.active &&
-          !(game.activatedKnightsThisTurn ?? []).includes(vid),
-      );
-      return (
-        <g className="overlay overlay-vertices">
-          {candidates.map(([vid]) => (
-            <VertexGhost
-              key={vid}
-              vid={vid}
-              variant="city"
-              previewColor={previewColor}
-              isHovered={hoveredVid === vid}
-              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
-              onClick={() => setMode({ ...uiMode, sourceVertex: vid })}
-            />
-          ))}
-        </g>
-      );
-    }
-    return (
-      <g className="overlay overlay-vertices">
-        {game.board.vertexIds
-          .filter((vid) => {
-            if (vid === src) return false;
-            if (uiMode.kind === 'moveKnight') {
-              if (game.knights?.[vid]) return false;
-              return vertexConnectedToOwnRoadNetwork(game, acting, vid);
-            }
-            const k = game.knights?.[vid];
-            const srcK = game.knights?.[src];
-            if (!k || !srcK) return false;
-            if (k.playerId === acting) return false;
-            return k.strength < srcK.strength;
-          })
-          .map((vid) => (
-            <VertexGhost
-              key={vid}
-              vid={vid}
-              variant="settlement"
-              previewColor={previewColor}
-              isHovered={hoveredVid === vid}
-              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
-              onClick={() => {
-                if (uiMode.kind === 'moveKnight') {
-                  dispatch({
-                    type: 'moveKnight',
-                    playerId: acting,
-                    from: src,
-                    to: vid,
-                  });
-                } else {
-                  dispatch({
-                    type: 'displaceKnight',
-                    playerId: acting,
-                    from: src,
-                    to: vid,
-                  });
-                }
-                setMode({ kind: 'idle' });
-              }}
-            />
-          ))}
-      </g>
-    );
-  }
-
-  if (uiMode.kind === 'displacedKnightMove') {
-    const ctx = game.pendingKnightMove;
-    if (!ctx || ctx.playerId !== acting) return null;
-    return (
-      <g className="overlay overlay-vertices">
-        {game.board.vertexIds
-          .filter((vid) => {
-            if (vid === ctx.sourceVertex) return false;
-            if (game.knights?.[vid]) return false;
-            return vertexConnectedToOwnRoadNetwork(game, acting, vid);
-          })
-          .map((vid) => (
-            <VertexGhost
-              key={vid}
-              vid={vid}
-              variant="settlement"
-              previewColor={previewColor}
-              isHovered={hoveredVid === vid}
-              onHoverChange={(h) => setHoveredVid(h ? vid : null)}
-              onClick={() =>
-                dispatch({
-                  type: 'displacedKnightMove',
-                  playerId: acting,
-                  to: vid,
-                })
-              }
-            />
-          ))}
-      </g>
-    );
-  }
-
-  if (uiMode.kind === 'placeMerchant') {
-    const player = game.players.find((p) => p.id === acting);
-    if (!player) return null;
-    const eligible = game.board.hexIds.filter((hid) => {
-      const h = game.board.hexes[hid]!;
-      if (h.terrain === 'sea' || h.terrain === 'desert' || h.terrain === 'gold') {
-        return false;
-      }
-      for (const v of Object.values(game.board.vertices)) {
-        if (!v.hexes.includes(hid)) continue;
-        if (player.settlements.includes(v.id) || player.cities.includes(v.id)) {
-          return true;
-        }
-      }
-      return false;
-    });
-    return (
-      <g className="overlay overlay-hexes">
-        {eligible.map((hid) => {
-          const h = game.board.hexes[hid]!;
-          return (
-            <circle
-              key={hid}
-              cx={h.center.x}
-              cy={h.center.y}
-              r={26}
-              fill="#000"
-              fillOpacity={0.15}
-              stroke="#fff"
-              strokeOpacity={0.7}
-              strokeDasharray="4 3"
-              strokeWidth={2}
-              style={{ cursor: 'pointer' }}
-              onClick={() =>
-                dispatch({ type: 'placeMerchant', playerId: acting, hex: hid })
-              }
-            />
-          );
-        })}
-      </g>
-    );
-  }
-
-  if (uiMode.kind === 'removeRoad') {
-    return (
-      <g className="overlay overlay-edges">
-        {game.board.edgeIds
-          .filter((eid) =>
-            game.players.some((p) => p.roads.includes(eid)),
-          )
-          .map((eid) => (
-            <EdgeGhost
-              key={eid}
-              eid={eid}
-              variant="road"
-              previewColor={previewColor}
-              isHovered={hoveredEid === eid}
-              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
-              onClick={() =>
-                dispatch({ type: 'removeRoad', playerId: acting, edge: eid })
-              }
-            />
-          ))}
-      </g>
-    );
-  }
+  // Cities & Knights modes (knights, walls, metropolis, progress cards…).
+  const ck = citiesKnightsOverlay({
+    game,
+    uiMode,
+    acting,
+    previewColor,
+    hoveredVid,
+    setHoveredVid,
+    hoveredEid,
+    setHoveredEid,
+    dispatch,
+    setMode,
+  });
+  if (ck !== undefined) return ck;
 
   if (
     uiMode.kind === 'buildRoad' ||
@@ -601,14 +348,13 @@ export function PlacementOverlay() {
     );
   }
 
-  if (uiMode.kind === 'placeWagon') {
-    // Only the placer chosen by the vote may click. Other players see nothing.
-    const placerId = game.pendingWagonPlacement?.placerId;
-    if (!placerId || placerId !== acting) return null;
+  // Fishing on Catan: a free road paid with fish (5). Same edges as a road.
+  if (uiMode.kind === 'fishRoad') {
+    const tokens = uiMode.tokens;
     return (
       <g className="overlay overlay-edges">
         {game.board.edgeIds.map((eid) => {
-          if (!canPlaceWagonHelper(game, eid)) return null;
+          if (!canConnectRoad(game, acting, eid)) return null;
           return (
             <EdgeGhost
               key={eid}
@@ -618,7 +364,12 @@ export function PlacementOverlay() {
               isHovered={hoveredEid === eid}
               onHoverChange={(h) => setHoveredEid(h ? eid : null)}
               onClick={() =>
-                dispatch({ type: 'placeWagon', playerId: acting, edge: eid })
+                dispatch({
+                  type: 'spendFish',
+                  playerId: acting,
+                  tokens,
+                  effect: { kind: 'buildRoad', edge: eid },
+                })
               }
             />
           );
@@ -627,37 +378,118 @@ export function PlacementOverlay() {
     );
   }
 
-  if (uiMode.kind === 'hireKnight') {
-    // Highlight every edge that bounds a castle hex and is currently
-    // empty — see canPlaceKnight.
+  // T&B Merchant Trains: the chosen player places the wagon, or (no
+  // majority) a bidder gives their votes to a spot. The lettered spots are
+  // drawn for everyone by BoardSVG (WagonSpots); these are the click
+  // targets for the seat whose turn it is.
+  const wagonPick =
+    (game.phase === 'placeWagon' && game.pendingWagonPlacement?.placerId === acting) ||
+    (game.phase === 'wagonVoting' && game.wagonVote?.stage === 'assign');
+  if (wagonPick) {
+    const tags = placementTags(game);
+    const perEdge = new Map<string, number>();
+    for (const t of tags) perEdge.set(t.placement.edge, (perEdge.get(t.placement.edge) ?? 0) + 1);
     return (
       <g className="overlay overlay-edges">
-        {game.board.edgeIds.map((eid) => {
-          if (!canPlaceKnight(game, eid, acting)) return null;
+        {tags.map(({ placement, tag }) => {
+          const key = placementKey(placement);
+          const front = placementFront(game, placement) ?? undefined;
+          const shared = (perEdge.get(placement.edge) ?? 1) > 1;
+          const e = game.board.edges[placement.edge]!;
+          const tail = front === e.vertices[0] ? e.vertices[1] : e.vertices[0];
+          const head = front ?? e.vertices[1];
+          const a = game.board.vertices[shared ? tail : e.vertices[0]]!.position;
+          const b = game.board.vertices[shared ? head : e.vertices[1]]!.position;
+          // Two spots on one edge split it: each owns the half by its front.
+          const from = shared ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : a;
           return (
-            <EdgeGhost
-              key={eid}
-              eid={eid}
-              variant="knight"
-              previewColor={previewColor}
-              isHovered={hoveredEid === eid}
-              onHoverChange={(h) => setHoveredEid(h ? eid : null)}
+            <g
+              key={key}
+              style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setHoveredEid(key)}
+              onMouseLeave={() => setHoveredEid(null)}
               onClick={() =>
-                dispatch({ type: 'hireKnight', playerId: acting, edge: eid })
+                dispatch(
+                  game.phase === 'placeWagon'
+                    ? { type: 'placeWagon', playerId: acting, edge: placement.edge, train: placement.train }
+                    : { type: 'assignWagonVotes', playerId: acting, location: placement },
+                )
               }
-            />
+            >
+              <line x1={from.x} y1={from.y} x2={b.x} y2={b.y} stroke="transparent" strokeWidth={22} />
+              {hoveredEid === key && (
+                <Wagon
+                  board={game.board}
+                  edge={placement.edge}
+                  front={front}
+                  ghost
+                  active
+                  tag={tag}
+                  at={shared ? 0.7 : 0.5}
+                />
+              )}
+            </g>
           );
         })}
       </g>
     );
+  }
+
+  // T&B Catan Event Cards / Earthquake: pick one of your roads to damage.
+  const eventChoice = game.phase === 'eventResolution' ? game.eventCards?.pending?.choices[0] : undefined;
+  if (eventChoice?.kind === 'damageRoad' && eventChoice.playerId === acting) {
+    const damaged = new Set(game.damagedRoads ?? []);
+    return (
+      <g className="overlay overlay-edges">
+        {(actingPlayer?.roads ?? [])
+          .filter((eid) => !damaged.has(eid))
+          .map((eid) => {
+            const e = game.board.edges[eid]!;
+            const p1 = game.board.vertices[e.vertices[0]]!.position;
+            const p2 = game.board.vertices[e.vertices[1]]!.position;
+            return (
+              <g
+                key={eid}
+                style={{ cursor: 'pointer' }}
+                onMouseEnter={() => setHoveredEid(eid)}
+                onMouseLeave={() => setHoveredEid(null)}
+                onClick={() => dispatch({ type: 'resolveEvent', playerId: acting, edge: eid })}
+              >
+                <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="transparent" strokeWidth={20} />
+                <line
+                  x1={p1.x}
+                  y1={p1.y}
+                  x2={p2.x}
+                  y2={p2.y}
+                  stroke="#f2b705"
+                  strokeOpacity={hoveredEid === eid ? 0.95 : 0.6}
+                  strokeWidth={hoveredEid === eid ? 11 : 9}
+                  strokeDasharray="5 3"
+                  strokeLinecap="round"
+                />
+              </g>
+            );
+          })}
+      </g>
+    );
+  }
+
+  // T&B Barbarian Attack: card choices, Treason, end-of-turn knight moves.
+  if (isBarbarianAttackMode(uiMode)) {
+    return <BarbarianAttackOverlay game={game} acting={acting} mode={uiMode} color={previewColor} />;
+  }
+  // T&B scenario: wagon moves / drive-offs, placing a barbarian.
+  if (isTradersBarbariansMode(uiMode)) {
+    return <TradersBarbariansOverlay game={game} acting={acting} mode={uiMode} color={previewColor} />;
   }
 
   if (uiMode.kind === 'moveRobber') {
     return (
       <g className="overlay overlay-hexes">
         {game.board.hexIds.map((hid) => {
-          // Land hexes on the table that the scenario allows.
-          if (!canMoveRobberTo(game, hid)) return null;
+          // Land hexes on the table that the rules allow (scenario bans,
+          // T&B Friendly Robber, ...).
+          if (!robberHexAllowed(game, hid, acting)) return null;
           const hex = game.board.hexes[hid]!;
           return (
             <circle
@@ -673,8 +505,9 @@ export function PlacementOverlay() {
               strokeWidth={2}
               style={{ cursor: 'pointer' }}
               onClick={() => {
-                const candidates = stealCandidatesOnHex(game, acting, hid);
-                if (candidates.length === 0) {
+                const candidates = robberStealCandidates(game, acting, hid);
+                // Taxation steals from everyone there: no victim to pick.
+                if (candidates.length === 0 || game.pendingRobberMove?.reason === 'taxation') {
                   dispatch({
                     type: 'moveRobber',
                     playerId: acting,
@@ -758,7 +591,7 @@ export function PlacementOverlay() {
 const SETTLEMENT_PATH_D = 'M-7,5 L-7,-2 L0,-7 L7,-2 L7,5 Z';
 const CITY_PATH_D = 'M-10,8 L-10,-4 L-3,-4 L-3,-9 L4,-9 L4,-4 L10,-4 L10,8 Z';
 
-function VertexGhost({
+export function VertexGhost({
   vid,
   variant,
   previewColor,
@@ -811,7 +644,7 @@ function VertexGhost({
   );
 }
 
-function EdgeGhost({
+export function EdgeGhost({
   eid,
   variant,
   previewColor,
@@ -820,7 +653,7 @@ function EdgeGhost({
   onClick,
 }: {
   eid: EdgeId;
-  variant: 'road' | 'ship' | 'bridge' | 'knight';
+  variant: 'road' | 'ship' | 'bridge';
   previewColor: PlayerColor;
   isHovered: boolean;
   onHoverChange: (hovered: boolean) => void;
@@ -871,9 +704,7 @@ function EdgeGhost({
               ? 6
               : variant === 'ship'
                 ? 4
-                : variant === 'knight'
-                  ? 7
-                  : 5
+                : 5
           }
           strokeLinecap="round"
         />
@@ -948,7 +779,7 @@ function ShipChoiceGhost({
 
 // First piece of a Road Building card (or the ship being moved) — drawn in
 // the actor's color so the user sees what they already picked.
-function FirstRoadPreview({
+export function FirstRoadPreview({
   eid,
   color,
   ship,
@@ -982,64 +813,6 @@ function FirstRoadPreview({
       strokeLinecap="round"
     />
   );
-}
-
-// Cities & Knights — helper: is this vertex empty (no building, no knight)
-// and connected by at least one edge to one of the player's roads/ships/
-// bridges? Used by recruitKnight overlay and by displacement-target picks.
-function canRecruitKnightAt(
-  game: import('@/game/types').GameState,
-  pid: string,
-  vid: import('@/game/types').VertexId,
-): boolean {
-  if (game.knights?.[vid]) return false;
-  for (const p of game.players) {
-    if (p.settlements.includes(vid) || p.cities.includes(vid)) return false;
-  }
-  return vertexConnectedToOwnRoadNetwork(game, pid, vid);
-}
-
-function vertexConnectedToOwnRoadNetwork(
-  game: import('@/game/types').GameState,
-  pid: string,
-  vid: import('@/game/types').VertexId,
-): boolean {
-  const v = game.board.vertices[vid];
-  if (!v) return false;
-  const p = game.players.find((x) => x.id === pid);
-  if (!p) return false;
-  for (const eid of v.edges) {
-    if (p.roads.includes(eid)) return true;
-    if (p.ships.includes(eid)) return true;
-    if (p.bridges?.includes(eid)) return true;
-  }
-  return false;
-}
-
-// Returns IDs of opponent players with a settlement/city on the given hex
-// who still have at least one resource card. Mirrors engine logic.
-function stealCandidatesOnHex(
-  game: import('@/game/types').GameState,
-  actorId: string,
-  hexId: string,
-): string[] {
-  const out: string[] = [];
-  for (const v of Object.values(game.board.vertices)) {
-    if (!v.hexes.includes(hexId)) continue;
-    for (const p of game.players) {
-      if (p.id === actorId) continue;
-      if (p.settlements.includes(v.id) || p.cities.includes(v.id)) {
-        const total =
-          p.resources.wood +
-          p.resources.brick +
-          p.resources.sheep +
-          p.resources.wheat +
-          p.resources.ore;
-        if (total > 0 && !out.includes(p.id)) out.push(p.id);
-      }
-    }
-  }
-  return out;
 }
 
 // Seafarers ship moves: legal destinations (Pirate Islands line rules

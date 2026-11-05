@@ -68,5 +68,70 @@ export function getActingPlayerId(state: GameState): PlayerId {
       if (pending[id] !== undefined) return id;
     }
   }
+  // T&B Merchant Trains voting round: whoever's turn it is to bid (or, with
+  // no majority, to assign their votes), then the player placing the wagon.
+  if (state.phase === 'wagonVoting' && state.wagonVote) {
+    const v = state.wagonVote;
+    const list =
+      v.stage === 'bid'
+        ? v.order
+        : v.order.filter((id) => {
+            const b = v.bids[id];
+            return !!b && b.sheep + b.wheat > 0;
+          });
+    const id = list[v.turn];
+    if (id) return id;
+  }
+  if (state.phase === 'placeWagon' && state.pendingWagonPlacement) {
+    return state.pendingWagonPlacement.placerId;
+  }
+  // T&B Catan Event Cards: the player whose answer the event waits on.
+  if (state.phase === 'eventResolution') {
+    const choice = state.eventCards?.pending?.choices[0];
+    if (choice) return choice.playerId;
+  }
+  // T&B Fishing on Catan 'fishSwap' phase: the head of the swap queue.
+  if (state.phase === 'fishSwap' && state.fishSwap?.queue.length) {
+    return state.fishSwap.queue[0]!;
+  }
+  // Cities & Knights sub-phases answered by someone other than the active
+  // player (or by a queue of players). Phase-keyed: these phases only exist
+  // under C&K, so no expansion check is needed.
+  const ck = citiesKnightsDecider(state);
+  if (ck) return ck;
   return state.playerOrder[state.currentPlayerIndex]!;
+}
+
+// Who answers the current Cities & Knights sub-phase, or null when it's the
+// active player (or the phase isn't a C&K one).
+function citiesKnightsDecider(state: GameState): PlayerId | null {
+  switch (state.phase) {
+    case 'displacedKnightMove':
+      return state.pendingKnightMove?.playerId ?? null;
+    case 'progressCardDiscard': {
+      const required = state.progressCardDiscardRequired ?? {};
+      const n = state.playerOrder.length;
+      for (let i = 0; i < n; i++) {
+        const id = state.playerOrder[(state.currentPlayerIndex + i) % n]!;
+        if ((required[id] ?? 0) > 0) return id;
+      }
+      return null;
+    }
+    case 'treasonRemoveKnight':
+      return state.pendingTreason?.targetId ?? null;
+    case 'treasonPlaceKnight':
+      return state.pendingTreason?.attackerId ?? null;
+    case 'commercialHarborOffer':
+      return state.pendingCommercialHarbor?.targetId ?? null;
+    case 'weddingGive':
+      return state.pendingWedding?.remaining[0] ?? null;
+    case 'aqueductPick':
+      return state.pendingAqueduct?.[0] ?? null;
+    case 'defenderTieDraw':
+      return state.pendingDefenderTieDraw?.[0] ?? null;
+    case 'choosePillage':
+      return state.pendingPillage?.[0] ?? null;
+    default:
+      return null;
+  }
 }

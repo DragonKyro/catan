@@ -1,8 +1,8 @@
 import type { GameState, PlayerId, HexId, Resource } from '@/game/types';
-import { probabilityDots } from './value';
+import { hexPips } from '@/game/board/hexNumbers';
 import { totalResources } from '@/game/resources';
 import { assessThreats, isRival, type PlayerThreat } from './threats';
-import { canMoveRobberTo } from '@/game/placement';
+import { robberHexAllowed, robberStealCandidates } from '@/game/engine';
 
 export interface RobberChoice {
   hex: HexId;
@@ -41,10 +41,10 @@ export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberCh
   let bestStealTarget: PlayerId | null = null;
   for (const hexId of state.board.hexIds) {
     // Land hexes on the table that the scenario allows (no sea, no fog,
-    // Forgotten Tribe: numbered hexes only, ...).
-    if (!canMoveRobberTo(state, hexId)) continue;
+    // Forgotten Tribe: numbered hexes only, T&B Friendly Robber, ...).
+    if (!robberHexAllowed(state, hexId, playerId)) continue;
     const hex = state.board.hexes[hexId]!;
-    const pips = probabilityDots(hex.numberToken);
+    const pips = hexPips(hex);
     const hexResource = hex.terrain as Resource;
     let score = 0;
     let touchesOwn = false;
@@ -101,7 +101,7 @@ export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberCh
   if (!bestHex) {
     // Pick the first legal hex as fallback
     bestHex =
-      state.board.hexIds.find((h) => canMoveRobberTo(state, h)) ??
+      state.board.hexIds.find((h) => robberHexAllowed(state, h, playerId)) ??
       state.board.hexIds.find((h) => h !== state.board.robberHex)!;
     bestStealTarget = pickStealTarget(state, playerId, bestHex, threats);
     bestScore = 0;
@@ -120,7 +120,7 @@ function computePipsByResourceByPlayer(
   for (const hexId of state.board.hexIds) {
     const hex = state.board.hexes[hexId]!;
     if (hex.numberToken === undefined) continue;
-    const pips = probabilityDots(hex.numberToken);
+    const pips = hexPips(hex);
     if (pips === 0) continue;
     const res = hex.terrain;
     if (res === 'desert' || res === 'sea') continue;
@@ -185,6 +185,11 @@ function pickStealTarget(
         if (!candidates.includes(p.id)) candidates.push(p.id);
       }
     }
+  }
+  // A variant may rule some neighbours out (T&B Friendly Robber).
+  const allowed = new Set(robberStealCandidates(state, playerId, hexId));
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    if (!allowed.has(candidates[i]!)) candidates.splice(i, 1);
   }
   if (candidates.length === 0) return null;
   // Score: closeToWin >> direct rival of ours >> closeToLA/LR >> largest hand.

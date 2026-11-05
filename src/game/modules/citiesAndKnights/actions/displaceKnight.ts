@@ -1,22 +1,15 @@
-import type { GameState, DisplaceKnightAction } from '../../../types';
+import type { GameState, DisplaceKnightAction, KnightRecord, VertexId } from '../../../types';
 import { currentPlayerId } from '../../../helpers';
 import { knightAt } from '../knights/state';
-import {
-  displacedHasDestination,
-  enemyKnightDisplacementTargets,
-} from '../knights/graph';
+import { displacedHasDestination } from '../knights/graph';
+import { knightCanAct, legalDisplaceTargets } from '../knights/legal';
+import { adjustSupply } from './recruitKnight';
 
-// Displace an opposing knight: move a stronger active knight onto a weaker
-// enemy knight along your continuous network. The attacker becomes inactive
-// at the target vertex; the displaced victim's knight is removed and the
-// owner must move it to an adjacent empty vertex along their own network.
-//
-// If the victim has no legal destination, the displaced knight goes back to
-// the victim's supply (rulebook p.10).
-export function handleDisplaceKnight(
-  state: GameState,
-  action: DisplaceKnightAction,
-): GameState {
+// Displace a knight (p.10): an acting knight moves along your routes onto a
+// strictly weaker opposing knight and is laid down there. The displaced
+// knight's owner must then move it as in "Move a Knight" (its status
+// unchanged); if it can't go anywhere it returns to their supply.
+export function handleDisplaceKnight(state: GameState, action: DisplaceKnightAction): GameState {
   if (state.phase !== 'main') {
     throw new Error(`Cannot displace knight in phase ${state.phase}`);
   }
@@ -25,61 +18,40 @@ export function handleDisplaceKnight(
   if (!attacker) throw new Error('No knight at the source vertex');
   if (attacker.playerId !== action.playerId) throw new Error('Not your knight');
   if (!attacker.active) throw new Error('Knight is not active');
-  if (state.activatedKnightsThisTurn?.includes(action.from)) {
+  if (!knightCanAct(state, action.from)) {
     throw new Error("Knight was activated this turn — it can't act yet");
   }
   const victim = knightAt(state, action.to);
   if (!victim) throw new Error('No knight at the target vertex');
-  if (victim.playerId === action.playerId) {
-    throw new Error('Cannot displace your own knight');
-  }
-  if (victim.strength >= attacker.strength) {
-    throw new Error('Attacker must be strictly stronger');
-  }
-
-  const targets = enemyKnightDisplacementTargets(
-    state,
-    action.playerId,
-    action.from,
-    attacker.strength,
-  );
-  if (!targets.has(action.to)) {
+  if (victim.playerId === action.playerId) throw new Error('Cannot displace your own knight');
+  if (victim.strength >= attacker.strength) throw new Error('Attacker must be strictly stronger');
+  if (!legalDisplaceTargets(state, action.from).includes(action.to)) {
     throw new Error('Target knight is not reachable for displacement');
   }
 
-  // The attacker takes the target vertex (inactive). Source is cleared.
-  const next: GameState = {
-    ...state,
-    knights: {
-      ...(state.knights ?? {}),
-      [action.to]: { ...attacker, active: false },
-    },
-  };
-  delete next.knights![action.from];
+  const knights = { ...(state.knights ?? {}) };
+  delete knights[action.from];
+  knights[action.to] = { ...attacker, active: false };
+  return startDisplacedMove({ ...state, knights }, victim, action.to);
+}
 
-  if (!displacedHasDestination(next, victim.playerId, action.to)) {
-    // No legal destination: knight returns to victim's supply.
-    return {
-      ...next,
-      knightSupply: {
-        ...(next.knightSupply ?? {}),
-        [victim.playerId]: {
-          ...(next.knightSupply?.[victim.playerId] ?? { 1: 0, 2: 0, 3: 0 }),
-          [victim.strength]:
-            (next.knightSupply?.[victim.playerId]?.[victim.strength] ?? 0) + 1,
-        },
-      },
-    };
+// The knight `victim` was knocked off `from` (which may now hold the
+// attacker, or be empty after Intrigue). Its owner moves it, or it goes
+// back to their supply when it has nowhere to go.
+export function startDisplacedMove(
+  state: GameState,
+  victim: KnightRecord,
+  from: VertexId,
+): GameState {
+  if (!displacedHasDestination(state, victim.playerId, from)) {
+    return adjustSupply(state, victim.playerId, victim.strength, +1);
   }
-
-  // Otherwise transition into the displaced-knight-move sub-phase. The
-  // victim must dispatch a `displacedKnightMove` action next.
   return {
-    ...next,
+    ...state,
     phase: 'displacedKnightMove',
     pendingKnightMove: {
       playerId: victim.playerId,
-      sourceVertex: action.to,
+      sourceVertex: from,
       knightStrength: victim.strength,
       knightActive: victim.active,
       returnTo: 'main',

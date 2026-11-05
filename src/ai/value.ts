@@ -12,6 +12,11 @@ import { getPortAtVertex } from '@/game/board/adjacency';
 import { islandBonusAt } from '@/game/modules/seafarers/islandBonus';
 import { canPlaceSettlement } from '@/game/placement';
 import { hasShipGoal } from './seafarers/ships';
+import { barbarianVertexPenalty } from './traders/barbarianAttack';
+import { hexPips } from '@/game/board/hexNumbers';
+import { tradersVertexBonus } from './traders/value';
+import { ckReportNeeds, ckVertexBonus } from './citiesAndKnights/value';
+import { isCitiesAndKnights } from './citiesAndKnights/common';
 
 // Resource weights tuned for typical Catan economy. Ore/wheat slightly
 // scarce; sheep slightly abundant.
@@ -35,7 +40,8 @@ export function terrainWeight(t: Terrain): number {
     t === 'swamp' ||
     t === 'lake' ||
     t === 'wateringHole' ||
-    t === 'castle'
+    t === 'castle' ||
+    t === 'commodity'
   )
     return 0;
   // Gold hexes pay any resource on roll — the player chooses, so they
@@ -73,8 +79,9 @@ export function pipsByResource(state: GameState, playerId: PlayerId): Record<Res
     if (!vertex) continue;
     for (const hexId of vertex.hexes) {
       const hex = state.board.hexes[hexId]!;
-      if (hex.terrain === 'desert') continue;
-      const pips = probabilityDots(hex.numberToken);
+      // Only resource hexes (not desert / sea / swamp / lake / ...).
+      if (!(RESOURCES as readonly string[]).includes(hex.terrain)) continue;
+      const pips = hexPips(hex);
       out[hex.terrain as Resource] += pips * mult;
     }
   }
@@ -130,7 +137,15 @@ export function vertexScore(
       shoreline += 1;
       continue;
     }
-    const pips = probabilityDots(hex.numberToken);
+    // Non-producing scenario hexes (T&B swamp, lake, watering hole,
+    // castle) count like the desert. Without this their missing resource
+    // weight made the whole score NaN. Fish / gold value is added below.
+    if (hex.terrain !== 'gold' && !(RESOURCES as readonly string[]).includes(hex.terrain)) {
+      shoreline += 0.5;
+      continue;
+    }
+    // Every number the hex carries (T&B Rivers' 2 + 12 hex).
+    const pips = hexPips(hex);
     // Gold pays the player's choice on roll. Bump it further with a small
     // flat bonus on top of pips*weight because the optionality also smooths
     // out cards-stuck-without-the-right-resource scenarios.
@@ -138,6 +153,9 @@ export function vertexScore(
       totalPips += pips * terrainWeight('gold') + 1.0;
       continue;
     }
+    // Swamp / lake / watering hole / castle (T&B) produce no resource; their
+    // own bonuses are scored below. (Reading them as a resource gave NaN.)
+    if (!(RESOURCES as readonly string[]).includes(hex.terrain)) continue;
     const weight = RESOURCE_WEIGHT[hex.terrain as Resource];
     // Diminishing returns: pips count less if we already have this resource.
     const existingPips = existing[hex.terrain as Resource];
@@ -229,60 +247,30 @@ export function vertexScore(
     volcanoPenalty = 3.5;
   }
 
-  // Traders & Barbarians / Rivers of Catan: each adjacent swamp hex grants
-  // +1 gold on build (and gold drives Wealthiest Catanian / spending). A
-  // small flat bonus is the right scale — it's a one-shot +1 gold worth
-  // roughly +1 VP toward the wealth tile race.
-  let riverGoldBonus = 0;
-  for (const hexId of vertex.hexes) {
-    if (state.board.hexes[hexId]?.terrain === 'swamp') riverGoldBonus += 0.4;
-  }
+  // Traders & Barbarians / Rivers of Catan + Fishing on Catan: gold for
+  // building on a river tile, fish from the lake and fishing grounds.
+  const tradersBonus = tradersVertexBonus(state, vertexId, playerId);
 
-  // Traders & Barbarians / Barbarian Attack: a small bonus for settling
-  // adjacent to a castle. The defender-VP upside isn't tied to the
-  // building, but castle-adjacent vertices put us in the area where
-  // hire knights matter and they're also relatively safer (no enemy
-  // settles in the sea ring).
-  let castleBonus = 0;
-  if (state.castles?.length) {
-    const castleHexes = new Set(state.castles.map((c) => c.hexId));
-    for (const hexId of vertex.hexes) {
-      if (castleHexes.has(hexId)) castleBonus += 0.5;
-    }
-  }
+  // Traders & Barbarians / Barbarian Attack: coastal hexes lose production
+  // to landing barbarians, and a building touching no inner hex can be
+  // conquered.
+  const barbarianPenalty = barbarianVertexPenalty(state, vertexId);
 
-  // Traders & Barbarians / Fishing on Catan:
-  //   - The lake produces fish tokens on its number. Settlements adjacent
-  //     to the lake catch 1 token per production, cities 2. Worth pips ×
-  //     0.5 (rough average value of a fish token, which is ~2 fish).
-  //   - A fishing ground's anchor vertex earns the same. They're per-
-  //     vertex rather than per-hex, so the bonus is concentrated and
-  //     significant — boost it more aggressively.
-  let fishBonus = 0;
-  if (state.lakeHexId && vertex.hexes.includes(state.lakeHexId)) {
-    const lake = state.board.hexes[state.lakeHexId];
-    if (lake) fishBonus += probabilityDots(lake.numberToken) * 0.5;
-  }
-  if (state.fishingGrounds) {
-    for (const fg of state.fishingGrounds) {
-      if (fg.vertex !== vertexId) continue;
-      // Fishing grounds are EXCLUSIVE to one vertex — extra strong (no
-      // neighbour competition like a regular hex with 6 corners).
-      fishBonus += probabilityDots(fg.token) * 0.9;
-    }
-  }
+  // Cities & Knights: commodity hexes (forest / pasture / mountains) pay
+  // paper / cloth / coin to cities; the round-2 setup city wants them.
+  const ckBonus = ckVertexBonus(state, vertexId, playerId);
 
   return (
     totalPips +
+    ckBonus +
     diversityBonus +
     portBonus +
     missingBonus +
     chipBonus +
     fogBonus +
     clothBonus +
-    riverGoldBonus +
-    fishBonus +
-    castleBonus -
+    tradersBonus -
+    barbarianPenalty -
     shoreline -
     volcanoPenalty -
     fleetPenalty
@@ -296,10 +284,14 @@ export interface NeedReport {
   byResource: Record<Resource, number>;
   // Suggested goal. 'ship' = Seafarers, when a worthwhile ship is the way
   // forward (no settlement spot open on land).
-  goal: 'city' | 'settlement' | 'ship' | 'road' | 'devCard' | 'none';
+  // 'knight' = Cities & Knights (recruit / activate), which has no dev cards.
+  goal: 'city' | 'settlement' | 'ship' | 'road' | 'devCard' | 'knight' | 'none';
 }
 
 export function reportNeeds(state: GameState, playerId: PlayerId): NeedReport {
+  // Cities & Knights has its own build menu (no dev cards; knights, city
+  // improvements) — its needs drive the shared trade / discard logic.
+  if (isCitiesAndKnights(state)) return ckReportNeeds(state, playerId);
   const player = state.players.find((p) => p.id === playerId)!;
   const r = player.resources;
   const byResource: Record<Resource, number> = {

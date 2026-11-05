@@ -1,10 +1,35 @@
 import type { Topic } from '../topics';
+import type { ImprovementTrack } from '@/game/types';
+import { IMPROVEMENT_TRACKS } from '@/game/types';
+import {
+  PROGRESS_CARD_DESCRIPTION,
+  PROGRESS_CARD_LABEL,
+  PROGRESS_DECK_DEFINITIONS,
+} from '@/game/modules/citiesAndKnights/progress/catalogue';
+import {
+  IMPROVEMENT_NAMES,
+  LEVEL3_ABILITY_TEXT,
+  TRACK_LABEL,
+} from '@/game/modules/citiesAndKnights/constants';
+import { maxRedDieForLevel } from '@/game/modules/citiesAndKnights/progress/draw';
 
-// Cities & Knights — Phase 1 rulebook topics. These cover the framework
-// pieces that are wired up in Phase 1: commodities, the third event die,
-// the barbarian track, city walls, and the new 13-VP target. The deeper
-// expansion mechanics (knights, city improvements, progress cards) land
-// in later phases and will get their own topics.
+// Cities & Knights (2025 rulebook) — what this build plays, topic by topic.
+// The card lists and improvement tables are generated from the engine's
+// catalogue so the reference can't drift from the rules in play.
+
+// Plain function (not a component) so the rulebook search sees the text.
+function cardList(track: ImprovementTrack) {
+  return (
+    <ul>
+      {PROGRESS_DECK_DEFINITIONS[track].map(({ kind, n }) => (
+        <li key={kind}>
+          <strong>{PROGRESS_CARD_LABEL[kind].replace(' (VP)', '')}</strong> (×{n}) —{' '}
+          {PROGRESS_CARD_DESCRIPTION[kind]}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export const CITIES_AND_KNIGHTS_TOPICS: Topic[] = [
   {
@@ -13,134 +38,141 @@ export const CITIES_AND_KNIGHTS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          Cities & Knights is the largest expansion to Catan. It introduces
-          commodities, city improvements, knights, and the looming threat of
-          barbarian invaders that arrive periodically and pillage the
-          island's cities if they aren't defended.
+          Your settlements grow into cities, your cities trade in commodities and build city
+          improvements, and every so often the barbarians sail in and pillage the island unless
+          enough knights stand ready. The first player with <strong>13 VP</strong> on their own
+          turn wins.
         </p>
+        <ul>
+          <li>Development cards and the Largest Army tile are not used; progress cards replace them.</li>
+          <li>
+            <strong>Setup:</strong> round 1 places a settlement and a road; round 2 (in reverse
+            order) places a <strong>city</strong> and a road. The city collects 1 resource per
+            adjacent hex.
+          </li>
+          <li>
+            <strong>Maps:</strong> the rulebook's fixed first-game board (pick "C&K first game" as
+            the base map) or a random board. Gold Rush and Volcano aren't available with C&K.
+          </li>
+          <li>
+            <strong>Longest Route</strong> works like Longest Road, but knights break other players'
+            routes.
+          </li>
+          <li>
+            <strong>5-6 players:</strong> the 5-6 board, 6 more of each commodity, and paired turns
+            (Player 2 takes an Action phase after Player 1 but may not trade with other players).
+          </li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 'ck-turn',
+    title: 'The turn: roll, produce, act',
+    body: (
+      <>
         <p>
-          Most base rules still apply, but you'll notice these big changes:
+          <strong>Roll Dice phase.</strong> Before rolling you may play <em>Alchemy</em>. Then roll
+          the red and yellow production dice and the event die. The <strong>event die</strong>{' '}
+          resolves first:
         </p>
         <ul>
           <li>
-            <strong>13 victory points</strong> to win, instead of 10.
+            A <strong>ship</strong> (3 faces) moves the barbarians one space; on the last space
+            they attack.
           </li>
           <li>
-            Three new <strong>commodities</strong> — paper, cloth, and coin —
-            produced by cities adjacent to wood, sheep, and ore hexes.
-          </li>
-          <li>
-            A third <strong>event die</strong> is rolled with the two
-            production dice. Half its faces advance the barbarian ship.
-          </li>
-          <li>
-            <strong>City walls</strong> protect against the 7-roll discard.
-          </li>
-          <li>
-            The classic <strong>dev cards</strong> and the{' '}
-            <strong>Largest Army</strong> tile are out — progress cards
-            replace them (and arrive in a later phase of this build).
+            A <strong>city gate</strong> in science, trade or politics: everyone whose level on that
+            track covers the red die draws that deck's top card, in turn order from the active
+            player. Level 1 draws on a red 1-2, level 2 on 1-3, … level 5 on 1-6.
           </li>
         </ul>
-        <p className="rb-muted">
-          Phase 1 of the implementation ships the framework: commodities,
-          barbarian track, city walls, and the 13-VP target. Knights, city
-          improvements, and the 54-card progress deck are still on the way.
+        <p>
+          <strong>Production phase.</strong> Hexes produce, or Resolve a 7. Cities produce:
+          forest 1 wood + 1 paper, pasture 1 wool + 1 cloth, mountains 1 ore + 1 coin, fields 2
+          wheat, hills 2 brick.
+        </p>
+        <p>
+          <strong>Action phase.</strong> In any order: trade, build, recruit / promote / activate
+          knights, take knight actions, play progress cards.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 'ck-seven',
+    title: 'A 7 and the robber',
+    body: (
+      <>
+        <p>
+          On a 7 nothing produces. Everyone holding more than 7 cards (resources + commodities)
+          returns half, rounded down; each city wall raises that limit by 2.
+        </p>
+        <p>
+          The robber starts <strong>off the board</strong>, waiting beside the barbarian track. Until
+          the first barbarian attack it doesn't move and nobody steals. The first attack puts it on
+          the desert; from then on a 7 moves it and steals 1 random resource or commodity card.
         </p>
       </>
     ),
   },
   {
     id: 'ck-commodities',
-    title: 'Commodities',
+    title: 'Commodities and trading',
     body: (
       <>
         <p>
-          A <strong>commodity</strong> is a special resource produced by{' '}
-          <em>cities</em> on certain terrains:
+          Paper (forest cities), cloth (pasture cities) and coin (mountain cities) pay for city
+          improvements. They count toward your hand on a 7, can be stolen, and can be traded:
         </p>
         <ul>
-          <li>City on a wood hex → 1 wood <strong>+ 1 paper 📜</strong></li>
-          <li>City on a sheep hex → 1 wool <strong>+ 1 cloth 🧵</strong></li>
-          <li>City on an ore hex → 1 ore <strong>+ 1 coin 🪙</strong></li>
-          <li>City on a wheat hex → 2 wheat (no commodity)</li>
-          <li>City on a brick hex → 2 brick (no commodity)</li>
-          <li>Settlements always yield 1 resource as in the base game.</li>
-        </ul>
-        <p>
-          Commodities count toward your hand size for the 7-roll discard
-          and can be stolen by the robber, but they aren't spent on any
-          builds in Phase 1 — they will be used to buy{' '}
-          <em>city improvements</em> when those land.
-        </p>
-        <p className="rb-muted">
-          The commodity bank starts with 12 of each. Like resources, if more
-          than one player would draw the last of a commodity the bank goes
-          empty and no one gets it.
-        </p>
-      </>
-    ),
-  },
-  {
-    id: 'ck-event-die',
-    title: 'The event die',
-    body: (
-      <>
-        <p>
-          Cities & Knights adds a third die. Roll it with the two production
-          dice every turn. Resolve the event die <em>first</em>, before
-          production.
-        </p>
-        <ul>
+          <li>With other players: any mix of resources and commodities.</li>
           <li>
-            <strong>🚢 Barbarian ship</strong> (3 sides): the ship advances
-            one space along the barbarian track. When it reaches the end the
-            barbarians attack.
+            With the supply: 4:1, or 3:1 with a generic harbor, for any resource or commodity; a 2:1
+            harbor only trades its own resource.
           </li>
           <li>
-            <strong>📚 Science</strong> / <strong>⚖️ Trade</strong> /{' '}
-            <strong>🤝 Politics</strong> (1 side each): when these land, you
-            may draw a matching progress card if your city-improvement track
-            allows it. Phase 1 doesn't yet ship city improvements, so these
-            faces simply pass for now.
+            <strong>Merchant Guild</strong> (trade level 3): commodities 2:1 for resources or
+            commodities.
           </li>
+          <li>
+            <strong>The merchant</strong> (Merchant card): 1 VP, and its hex's resource 2:1.
+          </li>
+          <li>Progress cards can never be traded.</li>
         </ul>
-        <p>
-          The two production dice are also distinct now — the{' '}
-          <strong>red die</strong> alone (not the sum) determines whether
-          you draw a progress card.
-        </p>
       </>
     ),
   },
   {
     id: 'ck-barbarians',
-    title: 'Barbarians',
+    title: 'The barbarians attack',
     body: (
       <>
         <p>
-          The barbarian ship sails closer to Catan one space at a time, once
-          per barbarian die roll. When it reaches the final space all islands
-          are attacked at once.
+          The ship starts on the first space of the track and attacks when it reaches the eighth
+          (7 ship rolls). Then:
         </p>
-        <p>
-          The barbarians' strength equals the total number of cities on the
-          board. The defenders' strength equals the sum of all{' '}
-          <em>active knights</em>. Knights aren't yet implemented (Phase 1),
-          so for now every attack ends with the barbarians winning. Each
-          player with at least one city loses one (chosen at random, walls
-          first).
-        </p>
-        <p>
-          The first time the barbarians attack, the robber arrives on the
-          desert. Until then, rolling a 7 still forces hand discards but
-          the robber doesn't move.
-        </p>
-        <p className="rb-muted">
-          Once knights ship in Phase 8e, defenders may win the attack — the
-          top contributor gets a victory-point token, and ties draw a
-          progress card each.
-        </p>
+        <ul>
+          <li>
+            <strong>Barbarian strength</strong> = the number of cities on the board (a city with a
+            metropolis counts once). <strong>Defense</strong> = the strength of all active knights
+            (basic 1, strong 2, mighty 3).
+          </li>
+          <li>
+            <strong>Defense ≥ barbarians:</strong> the player who contributed the most takes a{' '}
+            <em>Defender of Catan</em> VP token. If several tie, each instead draws a progress card
+            from the deck of their choice, starting with the active player.
+          </li>
+          <li>
+            <strong>Barbarians stronger:</strong> the player(s) who contributed least — no active
+            knight counts as least — each lose a city (it becomes a settlement and loses its wall;
+            you choose which if you have several). Metropolises can't be pillaged; if the weakest
+            can't lose a city, the next weakest do.
+          </li>
+          <li>
+            The ship returns to the start and <strong>every knight is laid down</strong> (inactive).
+          </li>
+        </ul>
       </>
     ),
   },
@@ -150,14 +182,8 @@ export const CITIES_AND_KNIGHTS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          A <strong>city wall</strong> sits under one of your cities and
-          raises your 7-roll hand-size threshold by 2. Build up to 3 walls
-          (max threshold = 13 cards before you discard).
-        </p>
-        <p>
-          Cost: <strong>2 brick</strong>. The wall is destroyed if a
-          barbarian attack pillages that city (along with the city itself,
-          which reverts to a settlement).
+          A wall (2 brick) goes under one of your cities, one per city, at most 3. Each wall lets
+          you hold 2 more cards on a 7. A pillaged city loses its wall, which you may build again.
         </p>
       </>
     ),
@@ -167,59 +193,41 @@ export const CITIES_AND_KNIGHTS_TOPICS: Topic[] = [
     title: 'Knights',
     body: (
       <>
-        <p>
-          Knights are your defence against the barbarians. Each player has 2
-          basic (level 1), 2 strong (level 2), and 2 mighty (level 3)
-          knights in supply.
-        </p>
+        <p>You have 2 basic, 2 strong and 2 mighty knights.</p>
         <ul>
           <li>
-            <strong>Recruit</strong> (1🐑 1🪨) — place a basic knight on an
-            empty intersection connected to one of your roads. Knights don't
-            obey the distance rule. New knights start inactive.
+            <strong>Recruit</strong> (1 wool + 1 ore): a basic knight, lying down (inactive), on an
+            empty intersection next to one of your roads. No distance rule.
           </li>
           <li>
-            <strong>Activate</strong> (1🌾) — stand up a knight so it can
-            take an action next turn. A knight may not act on the turn it
-            was activated.
+            <strong>Activate</strong> (1 wheat): stand it up. A knight activated this turn can't act
+            this turn.
           </li>
           <li>
-            <strong>Promote</strong> (1🐑 1🪨) — upgrade strength. Once per
-            turn. Strong → Mighty requires politics level 3 (Fortress).
+            <strong>Promote</strong> (1 wool + 1 ore): the next stronger piece replaces it, same
+            status. Each knight once per turn; strong → mighty needs politics level 3 (Fortress).
+          </li>
+          <li>
+            Knights block other players' roads and settlement sites and break their Longest Route.
           </li>
         </ul>
         <p>
-          Knights act like buildings: opposing knights break opposing roads
-          for Longest Route, block enemy settlement placement, and stop a
-          road from being extended through them.
-        </p>
-      </>
-    ),
-  },
-  {
-    id: 'ck-knight-actions',
-    title: 'Knight actions',
-    body: (
-      <>
-        <p>
-          An active knight may take one of three actions; after acting it
-          becomes inactive (laid down).
+          <strong>Knight actions</strong> — by a knight active since the start of your turn, which
+          then lies down:
         </p>
         <ul>
           <li>
-            <strong>Move</strong> — move along your continuous routes to an
-            empty intersection. You may pass over your own pieces but not
-            opposing pieces.
+            <strong>Move</strong> along your own roads, past your own pieces but not others', to an
+            empty intersection.
           </li>
           <li>
-            <strong>Displace</strong> — push a weaker opposing knight off
-            its intersection. Your knight takes its place; the displaced
-            piece's owner must move it along their own network to a free
-            intersection, or it returns to their supply.
+            <strong>Displace</strong> a weaker opposing knight on your roads: you take its place and
+            its owner moves it (status unchanged) — if it has nowhere to go, it returns to their
+            supply.
           </li>
           <li>
-            <strong>Chase the Robber</strong> — a knight adjacent to the
-            robber may move and steal as if a knight card had been played.
+            <strong>Chase away the robber</strong> from a corner of its hex: move the robber and
+            steal as on a 7.
           </li>
         </ul>
       </>
@@ -231,32 +239,37 @@ export const CITIES_AND_KNIGHTS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          Three commodity-fed tracks let your cities specialise. Each track
-          has 5 levels. To buy level N, discard N commodities of the
-          matching kind:
+          You need at least one city. Each level costs as many of its track's commodity as the
+          level number (science: paper, trade: cloth, politics: coin); no skipping levels. You keep
+          your levels if you lose your last city, but can't build more until you have a city again.
         </p>
+        <table className="rb-table">
+          <thead>
+            <tr>
+              <th>Level</th>
+              {IMPROVEMENT_TRACKS.map((t) => (
+                <th key={t}>{TRACK_LABEL[t]}</th>
+              ))}
+              <th>Draws on red</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[1, 2, 3, 4, 5].map((lv) => (
+              <tr key={lv}>
+                <td>{lv}</td>
+                {IMPROVEMENT_TRACKS.map((t) => (
+                  <td key={t}>{IMPROVEMENT_NAMES[t][lv]}</td>
+                ))}
+                <td>1-{maxRedDieForLevel(lv)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p>Level 3 gives a permanent ability:</p>
         <ul>
-          <li>📚 <strong>Science</strong> — pay paper.</li>
-          <li>⚖️ <strong>Trade</strong> — pay cloth.</li>
-          <li>🤝 <strong>Politics</strong> — pay coin.</li>
-        </ul>
-        <p>You need at least one city on the board to buy improvements.</p>
-        <p>
-          <strong>Level 3 abilities</strong>:
-        </p>
-        <ul>
-          <li>
-            <em>Aqueduct</em> (science 3) — if a roll gives you no
-            production, take 1 resource of your choice.
-          </li>
-          <li>
-            <em>Merchant Guild</em> (trade 3) — trade commodities 2:1 with
-            the bank.
-          </li>
-          <li>
-            <em>Fortress</em> (politics 3) — you may promote knights to
-            mighty.
-          </li>
+          {IMPROVEMENT_TRACKS.map((t) => (
+            <li key={t}>{LEVEL3_ABILITY_TEXT[t]}</li>
+          ))}
         </ul>
       </>
     ),
@@ -267,53 +280,11 @@ export const CITIES_AND_KNIGHTS_TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          The first player to reach <strong>level 4</strong> on a track
-          claims that track's metropolis (a piece placed on one of their
-          cities) and earns <strong>+2 VP</strong>. A second player
-          reaching level 4 on the same track does NOT take it — only level
-          5 can steal a metropolis.
-        </p>
-        <p>
-          Reaching <strong>level 5</strong> locks the metropolis: it
-          becomes <em>permanent</em> and can no longer change hands.
-        </p>
-        <p>
-          Each metropolis on the board also contributes <strong>+1 to
-          barbarian strength</strong>. Metropolis cities cannot be pillaged
-          when the barbarians win.
-        </p>
-      </>
-    ),
-  },
-  {
-    id: 'ck-barbarian-defence',
-    title: 'Barbarian defence',
-    body: (
-      <>
-        <p>
-          When the barbarian ship reaches Catan, the barbarians' strength
-          equals the number of cities on the board (plus +1 per
-          metropolis). The defenders' strength is the sum of all{' '}
-          <em>active</em> knights.
-        </p>
-        <ul>
-          <li>
-            <strong>Defenders win</strong> (ties go to defenders) — the top
-            contributor receives a Defender of Catan token (+1 VP). If
-            multiple players tied for the top, each draws a progress card
-            of their chosen deck.
-          </li>
-          <li>
-            <strong>Barbarians win</strong> — each player tied for the
-            lowest defender contribution loses one city to a pillage
-            (walls drop first; the city becomes a settlement). Metropolis
-            cities are immune.
-          </li>
-        </ul>
-        <p>
-          After every attack the ship resets, all knights are laid down
-          (inactive), and — on the very first attack — the robber arrives
-          on the desert.
+          The first player to reach level 4 on a track takes its metropolis and puts it on one of
+          their cities (temporary). The first to reach level 5 takes it for good — from whoever
+          held it — and it can't be taken any more. A metropolis is worth 2 VP (4 with its city),
+          one per city; if none of your cities is free, you may not buy the level that would win
+          it. Metropolises can't be pillaged.
         </p>
       </>
     ),
@@ -323,152 +294,41 @@ export const CITIES_AND_KNIGHTS_TOPICS: Topic[] = [
     title: 'Progress cards',
     body: (
       <>
-        <p>
-          Progress cards replace the base-game dev cards entirely. Three
-          decks of 18 cards each (science, trade, politics) sit face-down
-          beside the board. You draw on the event die's improvement faces:
-          if the red production die's value is ≤ your level on the
-          matching track, you draw the top card of that deck.
-        </p>
-        <p>
-          Hand limit: <strong>4</strong> progress cards (VP cards don't
-          count). If a draw puts you over the cap, you must discard down
-          immediately. The current player has until end-of-turn to
-          discard.
-        </p>
-        <p>
-          You may play any number of progress cards per turn, in any
-          order, except <em>Alchemy</em>, which must be played before
-          rolling. Victory Point cards (Printing / Constitution) flip
-          face-up the moment they're drawn.
-        </p>
+        <ul>
+          <li>Play any number in your Action phase — even the turn you draw them — except Alchemy (before rolling).</li>
+          <li>
+            <strong>Hand limit 4.</strong> A player over the limit when it isn't their turn
+            discards at once; on your own turn you have until the end of the turn.
+          </li>
+          <li>
+            Victory Point cards (Printing, Constitution) are placed face up at once: 1 VP each, never
+            in your hand, safe from Espionage.
+          </li>
+          <li>Played and discarded cards go face down under their deck. A card with no effect still counts as played.</li>
+        </ul>
       </>
     ),
   },
   {
     id: 'ck-cards-science',
     title: 'Card reference — Science',
-    body: (
-      <>
-        <ul>
-          <li>
-            <strong>Alchemy</strong> (×2) — set both production dice before
-            rolling.
-          </li>
-          <li>
-            <strong>Crane</strong> (×2) — next city improvement costs 1
-            fewer commodity.
-          </li>
-          <li>
-            <strong>Engineering</strong> (×1) — build a city wall at no
-            cost.
-          </li>
-          <li>
-            <strong>Invention</strong> (×2) — swap two number tokens
-            (except 2, 6, 8, 12).
-          </li>
-          <li>
-            <strong>Irrigation</strong> (×2) — take 2 wheat for each wheat
-            hex adjacent to one of your buildings.
-          </li>
-          <li>
-            <strong>Medicine</strong> (×2) — your next city upgrade costs
-            1 wheat + 2 ore.
-          </li>
-          <li>
-            <strong>Mining</strong> (×2) — take 2 ore for each ore hex
-            adjacent to one of your buildings.
-          </li>
-          <li>
-            <strong>Road Building</strong> (×2) — build 2 roads at no cost.
-          </li>
-          <li>
-            <strong>Smithing</strong> (×2) — promote up to 2 of your
-            knights for free.
-          </li>
-          <li>
-            <strong>Printing</strong> (×1) — +1 VP (face-up).
-          </li>
-        </ul>
-      </>
-    ),
+    body: cardList('science'),
   },
   {
     id: 'ck-cards-trade',
     title: 'Card reference — Trade',
-    body: (
-      <>
-        <ul>
-          <li>
-            <strong>Commercial Harbor</strong> (×2) — offer each opponent
-            one of your resources for one commodity of their choice.
-          </li>
-          <li>
-            <strong>Guild Dues</strong> (×2) — take 2 cards (resource or
-            commodity) from a player with more VPs than you.
-          </li>
-          <li>
-            <strong>Merchant</strong> (×6) — place the merchant adjacent
-            to one of your buildings. +1 VP and 2:1 on that hex.
-          </li>
-          <li>
-            <strong>Merchant Fleet</strong> (×2) — pick a resource or
-            commodity; trade it 2:1 with the bank this turn.
-          </li>
-          <li>
-            <strong>Resource Monopoly</strong> (×4) — take 2 of a named
-            resource from each player (1 if they only have 1).
-          </li>
-          <li>
-            <strong>Trade Monopoly</strong> (×2) — take 1 of a named
-            commodity from each player.
-          </li>
-        </ul>
-      </>
-    ),
+    body: cardList('trade'),
   },
   {
     id: 'ck-cards-politics',
     title: 'Card reference — Politics',
     body: (
       <>
-        <ul>
-          <li>
-            <strong>Diplomacy</strong> (×2) — remove an "open" road. If
-            you removed your own, build a free road immediately.
-          </li>
-          <li>
-            <strong>Encouragement</strong> (×2) — activate all your
-            knights at no cost.
-          </li>
-          <li>
-            <strong>Espionage</strong> (×3) — look at another player's
-            progress cards and take one (not VP).
-          </li>
-          <li>
-            <strong>Intrigue</strong> (×2) — displace an opposing knight
-            without using one of your own.
-          </li>
-          <li>
-            <strong>Sabotage</strong> (×2) — every player with as many or
-            more VPs as you discards half their hand.
-          </li>
-          <li>
-            <strong>Taxation</strong> (×2) — move the robber, steal 1 card
-            from EVERY player adjacent to the hex.
-          </li>
-          <li>
-            <strong>Treason</strong> (×2) — force an opponent to remove a
-            knight; place one of yours of the same strength or lower.
-          </li>
-          <li>
-            <strong>Constitution</strong> (×1) — +1 VP (face-up).
-          </li>
-          <li>
-            <strong>Wedding</strong> (×2) — every player with more VPs
-            than you gives you 2 cards (their choice).
-          </li>
-        </ul>
+        {cardList('politics')}
+        <p className="rb-muted">
+          Diplomacy: a road is open if one of its ends touches none of its owner's roads or
+          buildings and it doesn't link two of the owner's buildings or knights.
+        </p>
       </>
     ),
   },

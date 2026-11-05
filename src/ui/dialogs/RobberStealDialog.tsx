@@ -7,6 +7,7 @@ import { playerColorVar } from '@/ui/shared/playerColors';
 import { pirateStealCandidates } from '@/game/modules/seafarers/actions/movePirate';
 import { stealResourceCandidates } from '@/game/modules/seafarers/pirateIslands';
 import { useCanAct } from '@/ui/shared/useCanAct';
+import { robberStealCandidates } from '@/game/engine';
 
 // "Steal from whom?" after the robber or pirate lands on a hex with several
 // victims, and on a 7 in Pirate Islands (no robber: rob anyone, or no one).
@@ -26,14 +27,7 @@ export function RobberStealDialog() {
 
   let candidates: PlayerId[] = [];
   if (mode === 'robber') {
-    for (const v of game.board.hexes[pendingRobberHex!]!.corners) {
-      for (const p of game.players) {
-        if (p.id === acting || candidates.includes(p.id)) continue;
-        if ((p.settlements.includes(v) || p.cities.includes(v)) && totalResources(p.resources) > 0) {
-          candidates.push(p.id);
-        }
-      }
-    }
+    candidates = robberStealCandidates(game, acting, pendingRobberHex!);
   } else if (mode === 'pirate') {
     candidates = pirateStealCandidates(game, acting, pendingPirateHex!);
   } else {
@@ -73,7 +67,7 @@ export function RobberStealDialog() {
     >
       <p style={{ marginTop: 0, color: 'var(--text-soft)' }}>
         {mode === 'any'
-          ? 'There is no robber in the Pirate Islands: you may steal one random resource card from any player.'
+          ? 'There is no robber in this scenario: you may steal one random resource card from any player.'
           : cloth
             ? 'Take one random resource card — or one cloth token — from a player with a ship here.'
             : 'Pick a player to steal one resource card from at random.'}
@@ -81,7 +75,9 @@ export function RobberStealDialog() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {candidates.map((pid) => {
           const p = game.players.find((x) => x.id === pid)!;
-          const cards = totalResources(p.resources);
+          const cards =
+            totalResources(p.resources) +
+            (p.commodities ? p.commodities.paper + p.commodities.cloth + p.commodities.coin : 0);
           const swatch = (
             <span
               style={{

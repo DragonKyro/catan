@@ -1,21 +1,12 @@
-import type {
-  GameState,
-  MetropolisRecord,
-  PlaceMetropolisAction,
-} from '../../../types';
+import type { GameState, PlaceMetropolisAction } from '../../../types';
 import { currentPlayerId, getPlayer } from '../../../helpers';
-import {
-  MAX_IMPROVEMENT_LEVEL,
-} from '../constants';
-import { vertexHasMetropolis } from '../improvements/state';
+import { MAX_IMPROVEMENT_LEVEL } from '../constants';
+import { metropolisSites } from './buildCityImprovement';
+import { resumeFlow } from '../flow';
 
-// Place a freshly-claimed metropolis on one of your eligible cities. Only
-// legal in the 'placeMetropolis' sub-phase entered by buildCityImprovement
-// when the player has 2+ cities to choose from.
-export function handlePlaceMetropolis(
-  state: GameState,
-  action: PlaceMetropolisAction,
-): GameState {
+// Put a just-won metropolis on one of your cities without one (p.8). Only
+// in the `placeMetropolis` phase, entered when 2+ cities could take it.
+export function handlePlaceMetropolis(state: GameState, action: PlaceMetropolisAction): GameState {
   if (state.phase !== 'placeMetropolis') {
     throw new Error(`Cannot place metropolis in phase ${state.phase}`);
   }
@@ -24,31 +15,20 @@ export function handlePlaceMetropolis(
     throw new Error(`Wrong track — expected ${state.pendingMetropolis.track}`);
   }
   if (action.playerId !== currentPlayerId(state)) throw new Error('Not your turn');
-
-  const player = getPlayer(state, action.playerId);
-  if (!player.cities.includes(action.vertex)) {
-    throw new Error('That vertex is not one of your cities');
+  if (!metropolisSites(state, action.playerId).includes(action.vertex)) {
+    throw new Error('Pick one of your cities without a metropolis');
   }
-  if (vertexHasMetropolis(state, action.vertex)) {
-    throw new Error('That city already hosts a metropolis');
-  }
-
-  // Permanence is determined by the player's track level after the build:
-  // if they just reached level 5 the metropolis is permanent.
-  const level = player.improvements?.[action.track] ?? 0;
-  const permanent = level === MAX_IMPROVEMENT_LEVEL;
-  const record: MetropolisRecord = {
-    playerId: action.playerId,
-    vertex: action.vertex,
-    permanent,
-  };
-  return {
+  const level = getPlayer(state, action.playerId).improvements?.[action.track] ?? 0;
+  return resumeFlow({
     ...state,
-    phase: 'main',
     pendingMetropolis: undefined,
     metropolises: {
       ...(state.metropolises ?? { science: null, trade: null, politics: null }),
-      [action.track]: record,
+      [action.track]: {
+        playerId: action.playerId,
+        vertex: action.vertex,
+        permanent: level === MAX_IMPROVEMENT_LEVEL,
+      },
     },
-  };
+  });
 }

@@ -59,20 +59,24 @@ export function NewGame({ onBack }: Props = {}) {
   const newGame = useGameStore((s) => s.newGame);
 
   const scenario = activeScenario(expansions);
-  const isFunMap = scenario.kind === 'base' && expansions.baseScenarioId !== 'standard';
+  // Fun Maps and Cities & Knights bring their own seat limits.
+  const isFunMap =
+    scenario.kind === 'base' &&
+    (expansions.baseScenarioId !== 'standard' || expansions.citiesKnights);
   // Custom map (when loaded) overrides the scenario for player-count + VP.
   const minPlayers = customMap
     ? customMap.minPlayers
     : isFunMap
       ? scenario.minPlayers
-      : scenario.kind === 'seafarers'
+      : scenario.kind === 'seafarers' || scenario.kind === 'traders'
         ? scenario.minPlayers
         : 3;
+  // T&B scenarios: 3-6 (the T&B 5-6 boards; no 7-8).
   const maxPlayers = customMap
     ? customMap.maxPlayers
     : isFunMap
       ? scenario.maxPlayers
-      : scenario.kind === 'seafarers'
+      : scenario.kind === 'seafarers' || scenario.kind === 'traders'
         ? scenario.maxPlayers
         : 8;
   const recommendedVpValue = customMap?.defaultVpToWin ?? recommendedVp(numPlayers, expansions);
@@ -80,6 +84,7 @@ export function NewGame({ onBack }: Props = {}) {
   const neuralAi = !customMap && supportsNeuralAi({
     expansions: expansionListFrom(expansions),
     baseScenarioId: expansions.seafarers || expansions.traders ? undefined : expansions.baseScenarioId,
+    tradersVariants: expansions.tradersVariants,
   });
   const hasAiSeat = types.slice(0, numPlayers).includes('ai');
   const vp = vpOverride ?? recommendedVpValue;
@@ -116,8 +121,13 @@ export function NewGame({ onBack }: Props = {}) {
             : undefined,
         tradersScenarioId:
           !customMap && expansions.traders ? expansions.tradersScenarioId : undefined,
-        tradersVariants:
-          !customMap && expansions.traders ? expansions.tradersVariants : undefined,
+        // T&B variants work with any rule set; C&K can't take Event Cards yet.
+        tradersVariants: !customMap
+          ? {
+              ...expansions.tradersVariants,
+              eventCards: expansions.tradersVariants.eventCards && !expansions.citiesKnights,
+            }
+          : undefined,
         turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
         aiLevel: neuralAi ? aiLevel : undefined,
         customMap: customMap ?? undefined,

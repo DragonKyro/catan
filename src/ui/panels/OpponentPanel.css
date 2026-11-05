@@ -135,3 +135,13 @@
     margin-left: 0;
   }
 }
+
+/* Inline SVG stat icons (T&B coins, wealth tiles, fish, boot). */
+.opp-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.opp-icon svg {
+  vertical-align: middle;
+}

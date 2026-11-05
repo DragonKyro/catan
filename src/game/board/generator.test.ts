@@ -119,6 +119,15 @@ describe('generateBoard', () => {
       expect(nonDesertTokens).toBe(28);
     });
 
+    it('uses the CATAN 5-6 token set: two 2s and two 12s, three of every other number', () => {
+      const { board } = generateBoard(42, '5-6');
+      const counts: Record<number, number> = {};
+      for (const h of Object.values(board.hexes)) {
+        if (h.numberToken != null) counts[h.numberToken] = (counts[h.numberToken] ?? 0) + 1;
+      }
+      expect(counts).toEqual({ 2: 2, 3: 3, 4: 3, 5: 3, 6: 3, 8: 3, 9: 3, 10: 3, 11: 3, 12: 2 });
+    });
+
     it('places 11 ports', () => {
       const { board } = generateBoard(42, '5-6');
       expect(board.ports).toHaveLength(11);

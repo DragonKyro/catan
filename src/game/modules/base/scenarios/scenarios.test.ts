@@ -32,7 +32,11 @@ describe('base-game Fun Maps', () => {
         const game = createGame({
           playerNames: Array.from({ length: n }, (_, i) => `P${i + 1}`),
           seed: 42,
-          settings: { baseScenarioId: id, expansions: [] },
+          // A map tied to an expansion (the C&K first-game board) needs it.
+          settings: {
+            baseScenarioId: id,
+            expansions: scenario.onlyWithExpansion ? [scenario.onlyWithExpansion] : [],
+          },
           randomizeTurnOrder: false,
         });
         expect(game.board).toBeDefined();

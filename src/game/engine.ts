@@ -1,4 +1,4 @@
-import type { GameState, Action, PlayerId, MoveRobberAction } from './types';
+import type { GameState, Action, PlayerId, MoveRobberAction, HexId } from './types';
 import type { RuleModule } from './modules/types';
 import { baseModule } from './modules/base';
 import { seafarersModule } from './modules/seafarers';
@@ -7,6 +7,9 @@ import { tradersModule } from './modules/traders';
 import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from './modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from './modules/traders/constants';
+import { tradersVariantModules } from './modules/traders/variants';
+import { canMoveRobberTo } from './placement';
+import { totalResources } from './resources';
 import { calculateLongestRoad } from './scoring/longestRoad';
 import { isSetupPhase } from './actions/setup';
 import { calculateLargestArmy } from './scoring/largestArmy';
@@ -21,7 +24,10 @@ import {
 // the T&B build wrappers that grant river-gold, and Cities & Knights'
 // full overrides of rollDice / discard / etc.).
 export function getActiveModules(state: GameState): RuleModule[] {
-  const out: RuleModule[] = [];
+  // Traders & Barbarians variants (Friendly Robber, Strongest Ports, Catan
+  // Event Cards) layer on top of any rule set, so they go first; a variant
+  // that wraps an action hands it on with `applyNextModuleHandler`.
+  const out: RuleModule[] = tradersVariantModules(state.settings);
   if (state.settings.expansions.includes(TRADERS_EXPANSION_ID)) {
     out.push(tradersModule);
   }
@@ -61,6 +67,61 @@ export function applyAction(state: GameState, action: Action): GameState {
   throw new Error(`No handler for action type: ${action.type}`);
 }
 
+// Run `action` through the first module AFTER `moduleId` that handles it —
+// for a variant module that wraps an action (Event Cards wraps the roll) and
+// then lets whichever rule set is in play do the rest. Returns the raw next
+// state; the outer applyAction recomputes derived state.
+export function applyNextModuleHandler(
+  state: GameState,
+  action: Action,
+  moduleId: string,
+): GameState {
+  const mods = getActiveModules(state);
+  const from = mods.findIndex((m) => m.id === moduleId);
+  for (const mod of mods.slice(from + 1)) {
+    const handler = mod.handlers[action.type];
+    if (handler) return handler(state, action);
+  }
+  throw new Error(`No handler for action type: ${action.type}`);
+}
+
+// May `moverId` put the robber on `hexId`? The board rule (`canMoveRobberTo`)
+// plus every active module's moveRobber validator (Friendly Robber, …).
+// Shared by the robber handler's callers, the board highlights and the AI.
+export function robberHexAllowed(
+  state: GameState,
+  hexId: HexId,
+  moverId: PlayerId,
+): boolean {
+  if (!canMoveRobberTo(state, hexId)) return false;
+  const probe: MoveRobberAction = { type: 'moveRobber', playerId: moverId, hex: hexId, stealFrom: null };
+  return getActiveModules(state).every((m) => !m.validators?.moveRobber?.(state, probe));
+}
+
+// Players `moverId` may rob after moving the robber to `hexId`: opponents
+// with a building on the hex and at least one card, minus anyone a module
+// rules out (Friendly Robber: 2 VPs or fewer).
+export function robberStealCandidates(
+  state: GameState,
+  moverId: PlayerId,
+  hexId: HexId,
+): PlayerId[] {
+  const corners = new Set(state.board.hexes[hexId]?.corners ?? []);
+  const mods = getActiveModules(state);
+  return state.players
+    .filter(
+      (p) =>
+        p.id !== moverId &&
+        (p.settlements.some((v) => corners.has(v)) || p.cities.some((v) => corners.has(v))) &&
+        // Cities & Knights: commodity cards can be stolen too.
+        totalResources(p.resources) +
+          (p.commodities ? p.commodities.paper + p.commodities.cloth + p.commodities.coin : 0) >
+          0 &&
+        mods.every((m) => !m.validators?.robberVictim?.(state, hexId, p.id)),
+    )
+    .map((p) => p.id);
+}
+
 // Longest Road / Route length for a player under the active rules.
 export function calculateRouteLength(state: GameState, playerId: PlayerId): number {
   for (const mod of getActiveModules(state)) {
@@ -98,6 +159,9 @@ function recomputeDerived(state: GameState): GameState {
   }));
 
   let next: GameState = { ...state, players, longestRoad, largestArmy };
+  for (const mod of getActiveModules(next)) {
+    if (mod.derive) next = mod.derive(next);
+  }
 
   // Win check — only mid-game / main phases, and only the acting seat can win.
   // For 5+ player paired-player rules the acting seat is whichever of

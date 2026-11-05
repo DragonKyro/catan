@@ -1,116 +1,112 @@
-import type { GameState, PlayerId, VertexId } from '../../../types';
+import type { GameState, PlayerId } from '../../../types';
 import { updatePlayer } from '../../../helpers';
+import { hexRollsOn } from '../../../board/hexNumbers';
 import { FISH_TOKEN_CAP } from '../constants';
 import { drawFish } from './pool';
+import { lakeHexes } from './lakes';
 
-// Maybe distribute fish tokens for this dice roll. Called from the base
-// `handleRollDice` after resource production. Iterates the lake (if present)
-// and each fishing ground; if their tokens match `rolled`, grants fish to
-// the relevant settlements / cities (1 per settle, 2 per city).
+// Fishing on Catan production (rulebook p. 10). Called from the base
+// `handleRollDice` after resource production. The lake (printed 2 / 3 / 11
+// / 12, blocked by the robber) and each fishing ground whose number was
+// rolled pay every settlement on one of their corners 1 fish token and
+// every city 2. Players draw one token at a time, starting with the active
+// player and going clockwise; the old boot is revealed (to
+// `state.oldBootHolder`) the moment it is drawn.
 //
-// Distribution order: active player first, then clockwise — so when a
-// boot draw collides with multiple eligible players, the active player has
-// the chance to receive it first. Boot doesn't count against the 7-fish
-// cap; once drawn it lives in `state.oldBootHolder`.
+// The 7-token cap (boot excluded): a draw that would go past it stops that
+// player's drawing. Once per turn such a player may discard 1 token and
+// draw a replacement — production is the only time fish arrive, so the
+// offer is the 'fishSwap' phase that follows this roll (players decide in
+// turn order, after everyone's normal draws).
 export function maybeDistributeFish(state: GameState, rolled: number): GameState {
-  if (!state.fishingGrounds && state.lakeHexId == null) return state;
-  // Build (playerId → fish count) for this roll.
+  const lakes = lakeHexes(state);
+  if (!state.fishingGrounds && lakes.length === 0) return state;
   const counts = new Map<PlayerId, number>();
   const bump = (pid: PlayerId, by: number) =>
     counts.set(pid, (counts.get(pid) ?? 0) + by);
+  const payCorner = (vid: string) => {
+    for (const p of state.players) {
+      if (p.settlements.includes(vid)) bump(p.id, 1);
+      else if (p.cities.includes(vid)) bump(p.id, 2);
+    }
+  };
 
-  // Lake hex production. Blocked when the robber sits on the lake (rulebook
-  // explicitly allows that placement) — and also blocked when robber is
-  // off-board on a lake-id, defensively.
-  if (state.lakeHexId != null) {
-    const lake = state.board.hexes[state.lakeHexId];
-    if (lake && lake.numberToken === rolled) {
-      const robberBlocked =
-        state.board.robberHex === state.lakeHexId &&
-        (state.robberActive ?? true);
-      if (!robberBlocked) {
-        for (const v of Object.values(state.board.vertices)) {
-          if (!v.hexes.includes(state.lakeHexId)) continue;
-          for (const p of state.players) {
-            if (p.settlements.includes(v.id)) bump(p.id, 1);
-            else if (p.cities.includes(v.id)) bump(p.id, 2);
-          }
-        }
-      }
+  // 5-6 players: two lakes (2/3/11/12 and 4/10); each pays its own corners.
+  for (const lakeId of lakes) {
+    const lake = state.board.hexes[lakeId];
+    const robbed = state.board.robberHex === lakeId && (state.robberActive ?? true);
+    if (lake && !robbed && hexRollsOn(lake, rolled)) {
+      for (const vid of lake.corners) payCorner(vid);
     }
   }
-
-  // Fishing ground tiles. Each is anchored to one vertex; only the
-  // occupant of that vertex (if any) collects fish. Robber doesn't apply
-  // — fishing grounds are off-board frame pieces.
+  // Fishing grounds are frame pieces: the robber can't reach them.
   for (const fg of state.fishingGrounds ?? []) {
     if (fg.token !== rolled) continue;
-    awardFishingGround(state, fg.vertex, bump);
+    for (const vid of fg.vertices) payCorner(vid);
   }
 
   if (counts.size === 0) return state;
-  // Iterate players in turn order so the active player gets first crack at
-  // the boot.
-  const order = orderedPlayerIds(state);
   let next = state;
-  for (const pid of order) {
+  const capped: PlayerId[] = [];
+  for (const pid of turnOrderFromActive(state)) {
     const n = counts.get(pid);
     if (!n) continue;
-    next = grantFish(next, pid, n);
+    const res = grantFish(next, pid, n);
+    next = res.state;
+    if (res.capped && hasFish(next, pid)) capped.push(pid);
+  }
+  if (capped.length > 0) {
+    return { ...next, phase: 'fishSwap', fishSwap: { queue: capped, returnTo: next.phase } };
   }
   return next;
 }
 
-function awardFishingGround(
-  state: GameState,
-  anchor: VertexId,
-  bump: (pid: PlayerId, by: number) => void,
-): void {
-  for (const p of state.players) {
-    if (p.settlements.includes(anchor)) bump(p.id, 1);
-    else if (p.cities.includes(anchor)) bump(p.id, 2);
-  }
-}
-
-// Grant up to `count` fish tokens to a player, drawing from the pool one
-// at a time. Stops early when the player hits FISH_TOKEN_CAP or the pool
-// is empty. The old boot lands on `state.oldBootHolder` without consuming
-// a fish slot (the boot is not a fish token by the rulebook).
+// Draw up to `count` fish tokens for a player, one at a time. Stops at the
+// 7-token cap (`capped` = a draw was cut off) or when the supply and the
+// discard pile are both empty. The old boot goes to `state.oldBootHolder`
+// and doesn't take a fish slot.
 export function grantFish(
   state: GameState,
   playerId: PlayerId,
   count: number,
-): GameState {
+): { state: GameState; capped: boolean } {
   let next = state;
   for (let i = 0; i < count; i++) {
     const player = next.players.find((p) => p.id === playerId);
     if (!player) break;
-    const currentTokens = player.fishTokens?.length ?? 0;
-    if (currentTokens >= FISH_TOKEN_CAP) break;
+    if ((player.fishTokens?.length ?? 0) >= FISH_TOKEN_CAP) {
+      return { state: next, capped: true };
+    }
     const draw = drawFish(next);
     next = draw.state;
     if (draw.token === null) break;
-    if (draw.token === 'oldBoot') {
-      next = { ...next, oldBootHolder: playerId };
-      continue;
-    }
-    next = updatePlayer(next, playerId, (p) => ({
-      ...p,
-      fishTokens: [...(p.fishTokens ?? []), draw.token as 'one' | 'two' | 'three'],
-    }));
+    next = takeToken(next, playerId, draw.token);
   }
-  return next;
+  return { state: next, capped: false };
 }
 
-// Active player first, then clockwise. Falls back to seat order when the
-// playerOrder isn't populated (very old snapshots).
-function orderedPlayerIds(state: GameState): PlayerId[] {
+// Give a drawn token to a player: a fish into their hand, the boot face up.
+export function takeToken(
+  state: GameState,
+  playerId: PlayerId,
+  token: 'one' | 'two' | 'three' | 'oldBoot',
+): GameState {
+  if (token === 'oldBoot') return { ...state, oldBootHolder: playerId };
+  return updatePlayer(state, playerId, (p) => ({
+    ...p,
+    fishTokens: [...(p.fishTokens ?? []), token],
+  }));
+}
+
+function hasFish(state: GameState, pid: PlayerId): boolean {
+  return (state.players.find((p) => p.id === pid)?.fishTokens?.length ?? 0) > 0;
+}
+
+// Active player first, then clockwise.
+function turnOrderFromActive(state: GameState): PlayerId[] {
   const order = state.playerOrder.length > 0
     ? state.playerOrder
     : state.players.map((p) => p.id);
   const start = state.currentPlayerIndex % order.length;
-  return [
-    ...order.slice(start),
-    ...order.slice(0, start),
-  ];
+  return [...order.slice(start), ...order.slice(0, start)];
 }

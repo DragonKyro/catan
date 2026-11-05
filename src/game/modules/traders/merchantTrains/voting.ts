@@ -1,167 +1,217 @@
 import type {
   GameState,
   PlayerId,
-  EdgeId,
   SubmitWagonVoteAction,
+  AssignWagonVotesAction,
   PlaceWagonAction,
-  TradeWagon,
+  WagonPlacement,
   WagonVoteBid,
-  ResourceBank,
+  WagonVoteState,
+  WagonVoteResult,
+  PendingWagonPlacement,
 } from '../../../types';
 import { RESOURCES } from '../../../types';
 import { updatePlayer } from '../../../helpers';
-import {
-  addResources,
-  subtractResources,
-  totalResources,
-} from '../../../resources';
-import { canPlaceWagon } from './placement';
+import { addResources } from '../../../resources';
 import { handleEndTurn } from '../../../actions/turn';
+import { hasPlayerWon } from '../../../engine';
+import {
+  applyWagonPlacement,
+  isLegalWagonPlacement,
+  legalWagonPlacements,
+  placementKey,
+} from './trains';
 
-// --- Submit a vote (each player exactly once per round) -------------------
+// Merchant Trains voting round (2025 rulebook p. 13). At the end of a turn
+// in which the active player built a building, starting with the active
+// player and going clockwise, each player may lay any number of wool and/or
+// wheat face up (1 card = 1 vote; later bidders see earlier bids). A player
+// with the majority of all votes chooses where the wagon goes. Otherwise
+// every bidder gives all of their votes to one location: (1) a location
+// with the most votes gets the wagon; else (2) the player with the most
+// votes chooses; else (3) the active player chooses, even with no bid. All
+// bids go to the supply.
+//
+// "Majority" is read as an absolute majority (more than half of all votes):
+// a plurality is what step 2 is for.
+
+export function votesOf(bid: WagonVoteBid | undefined): number {
+  return bid ? bid.sheep + bid.wheat : 0;
+}
+
+// Players who bid at least one card, in voting order.
+export function voteBidders(vote: WagonVoteState): PlayerId[] {
+  return vote.order.filter((pid) => votesOf(vote.bids[pid]) > 0);
+}
+
+// Whose turn it is in the voting round (bid or assign stage).
+export function wagonVoteActor(vote: WagonVoteState): PlayerId | null {
+  if (vote.stage === 'bid') return vote.order[vote.turn] ?? null;
+  return voteBidders(vote)[vote.turn] ?? null;
+}
+
+// Open the voting round for the wagon the active player just earned.
+export function openWagonVote(state: GameState, acquirerId: PlayerId): GameState {
+  const start = state.playerOrder.indexOf(acquirerId);
+  const order = state.playerOrder.map(
+    (_, i) => state.playerOrder[(start + i) % state.playerOrder.length]!,
+  );
+  return {
+    ...state,
+    phase: 'wagonVoting',
+    wagonVote: {
+      acquirerId,
+      order,
+      stage: 'bid',
+      turn: 0,
+      bids: {},
+      assignments: {},
+    },
+  };
+}
+
+// --- Bid stage --------------------------------------------------------------
 
 export function handleSubmitWagonVote(
   state: GameState,
   action: SubmitWagonVoteAction,
 ): GameState {
-  if (state.phase !== 'wagonVoting' || !state.wagonVote) {
-    throw new Error(`Cannot submit a wagon vote in phase ${state.phase}`);
+  const vote = state.wagonVote;
+  if (state.phase !== 'wagonVoting' || !vote) {
+    throw new Error(`Cannot bid for a wagon in phase ${state.phase}`);
   }
-  if (state.wagonVote.bids[action.playerId]) {
-    throw new Error('You have already submitted a vote this round');
+  if (vote.stage !== 'bid') throw new Error('Bidding is over — assign your votes');
+  if (wagonVoteActor(vote) !== action.playerId) {
+    throw new Error('It is not your turn to bid');
   }
-  // Bid resources must be a subset of {sheep, wheat}, and the player must
-  // actually have them. Abstain = no cards + null target.
-  const cardsTotal = sumResources(action.cards);
-  if (cardsTotal > 0) {
-    for (const r of RESOURCES) {
-      const n = action.cards[r] ?? 0;
-      if (n > 0 && r !== 'sheep' && r !== 'wheat') {
-        throw new Error('Wagon votes may only spend wool or wheat');
-      }
+  for (const r of RESOURCES) {
+    const n = action.cards[r] ?? 0;
+    if (!Number.isInteger(n) || n < 0) throw new Error('Invalid bid');
+    if (n > 0 && r !== 'sheep' && r !== 'wheat') {
+      throw new Error('Wagon bids may only use wool and wheat');
     }
-    const player = state.players.find((p) => p.id === action.playerId);
-    if (!player) throw new Error('Unknown player');
-    for (const r of RESOURCES) {
-      const need = action.cards[r] ?? 0;
-      if (need > 0 && player.resources[r] < need) {
-        throw new Error(`Not enough ${r} to bid ${need}`);
-      }
-    }
-    if (action.target === null) {
-      throw new Error('Bids of ≥1 card must name a target edge');
-    }
-    if (!canPlaceWagon(state, action.target)) {
-      throw new Error('Target edge is not a legal merchant-train extension');
-    }
-  }
-
-  // Hold the bid in escrow — cards leave the player's hand to a temporary
-  // "escrow" tracked on the bid itself. We refund / consume at resolution.
-  let next = state;
-  if (cardsTotal > 0) {
-    next = updatePlayer(next, action.playerId, (p) => ({
-      ...p,
-      resources: subtractResources(p.resources, action.cards),
-    }));
   }
   const bid: WagonVoteBid = {
-    cards: { ...action.cards },
-    target: action.target,
+    sheep: action.cards.sheep ?? 0,
+    wheat: action.cards.wheat ?? 0,
   };
-  next = {
-    ...next,
-    wagonVote: {
-      ...state.wagonVote,
-      bids: { ...state.wagonVote.bids, [action.playerId]: bid },
+  const player = state.players.find((p) => p.id === action.playerId);
+  if (!player) throw new Error('Unknown player');
+  if (player.resources.sheep < bid.sheep || player.resources.wheat < bid.wheat) {
+    throw new Error('You do not have those cards to bid');
+  }
+  // The cards are laid face up in front of the player: out of the hand now,
+  // to the supply when the round ends.
+  let next = updatePlayer(state, action.playerId, (p) => ({
+    ...p,
+    resources: {
+      ...p.resources,
+      sheep: p.resources.sheep - bid.sheep,
+      wheat: p.resources.wheat - bid.wheat,
     },
+  }));
+  const nextVote: WagonVoteState = {
+    ...vote,
+    bids: { ...vote.bids, [action.playerId]: bid },
+    turn: vote.turn + 1,
   };
-
-  // All players have spoken? Resolve.
-  if (Object.keys(next.wagonVote!.bids).length === state.players.length) {
-    return resolveWagonVote(next);
-  }
-  return next;
+  next = { ...next, wagonVote: nextVote };
+  if (nextVote.turn < nextVote.order.length) return next;
+  return resolveBids(next, nextVote);
 }
 
-// --- Resolve once everyone has bid -----------------------------------------
+function resolveBids(state: GameState, vote: WagonVoteState): GameState {
+  const total = vote.order.reduce((n, pid) => n + votesOf(vote.bids[pid]), 0);
+  if (total === 0) {
+    return toPlacement(state, vote, { placerId: vote.acquirerId, reason: 'noVotes' });
+  }
+  const majority = vote.order.find((pid) => 2 * votesOf(vote.bids[pid]) > total);
+  if (majority) {
+    return toPlacement(state, vote, { placerId: majority, reason: 'majority' });
+  }
+  return { ...state, wagonVote: { ...vote, stage: 'assign', turn: 0 } };
+}
 
-function resolveWagonVote(state: GameState): GameState {
+// --- Assign stage -------------------------------------------------------------
+
+export function handleAssignWagonVotes(
+  state: GameState,
+  action: AssignWagonVotesAction,
+): GameState {
   const vote = state.wagonVote;
-  if (!vote) return state;
-
-  // Refund all bids to the bank — bids are NOT kept by the supply per the
-  // rulebook ("Return all bids to the supply"). Each card is gone from
-  // the player's hand and from the game.
-  const bankReturn: Partial<ResourceBank> = {};
-  for (const bid of Object.values(vote.bids)) {
-    for (const r of RESOURCES) {
-      const n = bid.cards[r] ?? 0;
-      if (n > 0) bankReturn[r] = (bankReturn[r] ?? 0) + n;
-    }
+  if (state.phase !== 'wagonVoting' || !vote || vote.stage !== 'assign') {
+    throw new Error('Votes are not being assigned now');
   }
-  let next: GameState = {
-    ...state,
-    bank: addResources(state.bank, bankReturn),
+  if (wagonVoteActor(vote) !== action.playerId) {
+    throw new Error('It is not your turn to assign votes');
+  }
+  if (!isLegalWagonPlacement(state, action.location)) {
+    throw new Error('A wagon cannot go there');
+  }
+  const nextVote: WagonVoteState = {
+    ...vote,
+    assignments: { ...vote.assignments, [action.playerId]: action.location },
+    turn: vote.turn + 1,
   };
+  const next: GameState = { ...state, wagonVote: nextVote };
+  const bidders = voteBidders(nextVote);
+  if (nextVote.turn < bidders.length) return next;
 
-  // Tally votes per location and per player.
-  const locationVotes = new Map<EdgeId, number>();
-  const playerVotes = new Map<PlayerId, number>();
-  for (const [pid, bid] of Object.entries(vote.bids)) {
-    const n = sumResources(bid.cards);
-    if (n === 0 || !bid.target) continue;
-    locationVotes.set(bid.target, (locationVotes.get(bid.target) ?? 0) + n);
-    playerVotes.set(pid, (playerVotes.get(pid) ?? 0) + n);
+  // (1) A location with the most votes.
+  const byLocation = new Map<string, { placement: WagonPlacement; votes: number }>();
+  for (const pid of bidders) {
+    const loc = nextVote.assignments[pid]!;
+    const key = placementKey(loc);
+    const cur = byLocation.get(key) ?? { placement: loc, votes: 0 };
+    cur.votes += votesOf(nextVote.bids[pid]);
+    byLocation.set(key, cur);
   }
-
-  // (1) Unique location winner → place there immediately.
-  const topLocation = uniqueMax(locationVotes);
+  const topLocation = uniqueMax([...byLocation.values()], (x) => x.votes);
   if (topLocation) {
-    next = placeWagonAndAdvance(next, topLocation);
-    return next;
+    return placeAndFinish(next, topLocation.placement, 'location', null);
   }
-
-  // (2) Unique player winner → that player chooses an edge.
-  const topPlayer = uniqueMax(playerVotes);
-  if (topPlayer) {
-    return {
-      ...next,
-      phase: 'placeWagon',
-      pendingWagonPlacement: { placerId: topPlayer },
-      wagonVote: undefined,
-    };
+  // (2) The player with the most votes chooses; (3) else the active player.
+  const topBidder = uniqueMax(bidders, (pid) => votesOf(nextVote.bids[pid]));
+  if (topBidder) {
+    return toPlacement(next, nextVote, { placerId: topBidder, reason: 'mostVotes' });
   }
-
-  // (3) Fallback: acquirer (active builder) picks. They may have bid 0.
-  return {
-    ...next,
-    phase: 'placeWagon',
-    pendingWagonPlacement: { placerId: vote.acquirerId },
-    wagonVote: undefined,
-  };
+  return toPlacement(next, nextVote, {
+    placerId: nextVote.acquirerId,
+    reason: 'activePlayer',
+  });
 }
 
-// Return the key with strictly the highest value (no ties). Empty maps and
-// ties both return null.
-function uniqueMax<K>(m: Map<K, number>): K | null {
-  let bestKey: K | null = null;
-  let bestVal = -Infinity;
+function uniqueMax<T>(items: T[], score: (t: T) => number): T | null {
+  let best: T | null = null;
+  let bestScore = -Infinity;
   let tied = false;
-  for (const [k, v] of m) {
-    if (v > bestVal) {
-      bestKey = k;
-      bestVal = v;
+  for (const it of items) {
+    const s = score(it);
+    if (s > bestScore) {
+      best = it;
+      bestScore = s;
       tied = false;
-    } else if (v === bestVal) {
+    } else if (s === bestScore) {
       tied = true;
     }
   }
-  if (tied) return null;
-  return bestKey;
+  return tied ? null : best;
 }
 
-// --- placeWagon — both the auto-place path and the player-pick path --------
+// --- Placement ------------------------------------------------------------------
+
+function toPlacement(
+  state: GameState,
+  vote: WagonVoteState,
+  pending: PendingWagonPlacement,
+): GameState {
+  return {
+    ...state,
+    phase: 'placeWagon',
+    wagonVote: vote,
+    pendingWagonPlacement: pending,
+  };
+}
 
 export function handlePlaceWagon(
   state: GameState,
@@ -171,84 +221,63 @@ export function handlePlaceWagon(
     throw new Error(`Cannot place a wagon in phase ${state.phase}`);
   }
   if (action.playerId !== state.pendingWagonPlacement.placerId) {
-    throw new Error('You are not the wagon placer');
+    throw new Error('You are not the one placing the wagon');
   }
-  if (!canPlaceWagon(state, action.edge)) {
-    throw new Error('Invalid wagon placement');
-  }
-  return placeWagonAndAdvance(state, action.edge);
+  const options = legalWagonPlacements(state).filter((p) => p.edge === action.edge);
+  const placement =
+    action.train === undefined
+      ? options[0]
+      : options.find((p) => p.train === action.train);
+  if (!placement) throw new Error('A wagon cannot go there');
+  const reason = state.pendingWagonPlacement.reason ?? 'activePlayer';
+  return placeAndFinish(
+    state,
+    placement,
+    reason === 'majority' || reason === 'mostVotes' || reason === 'noVotes'
+      ? reason
+      : 'activePlayer',
+    action.playerId,
+  );
 }
 
-// Place the wagon on the named edge, decrement supply, clear the voting
-// state, then advance to the next turn by invoking the base `handleEndTurn`.
-// Shared between the auto-placement (clear vote winner) and the manual
-// placement (placer picks) paths.
-function placeWagonAndAdvance(state: GameState, edge: EdgeId): GameState {
-  const wagons: TradeWagon[] = [...(state.wagons ?? []), { edge }];
-  // Temporarily flip back to 'main' so the base endTurn handler's phase
-  // guard passes. The voting/placement state is cleared in the same shape.
-  const interim: GameState = {
-    ...state,
-    wagons,
-    wagonSupply: Math.max(0, (state.wagonSupply ?? 0) - 1),
-    phase: 'main',
-    pendingWagonPlacement: undefined,
-    wagonVote: undefined,
-    builtThisTurn: false,
-  };
-  // The acquirer (acting player who built + ended) is still the current
-  // player by index — they sat through voting/placement without the turn
-  // advancing. handleEndTurn validates against playerOrder[currentPlayerIndex].
-  const acquirerId = state.playerOrder[state.currentPlayerIndex]!;
-  return handleEndTurn(interim, { type: 'endTurn', playerId: acquirerId });
-}
-
-// --- Shared helper ---------------------------------------------------------
-
-function sumResources(cards: Partial<ResourceBank>): number {
-  let n = 0;
-  for (const r of RESOURCES) n += cards[r] ?? 0;
-  return n;
-}
-
-// Force-resolve the vote even if not all players have bid yet. Used by the
-// endTurn wrapper when the active player chooses to skip voting entirely
-// (no human/AI submitted), and by force-finish in tests. Treats missing
-// players as 0-card abstains.
-export function forceResolveVoting(state: GameState): GameState {
-  if (state.phase !== 'wagonVoting' || !state.wagonVote) return state;
-  let next = state;
-  for (const p of state.players) {
-    if (!next.wagonVote!.bids[p.id]) {
-      next = {
-        ...next,
-        wagonVote: {
-          ...next.wagonVote!,
-          bids: {
-            ...next.wagonVote!.bids,
-            [p.id]: { cards: {}, target: null },
-          },
-        },
-      };
+// Place the wagon, return every bid to the supply, record the result, then
+// end the turn. The acquirer can win right here: the voting round is part
+// of their turn ("12 or more VPs at any point during your turn").
+export function placeAndFinish(
+  state: GameState,
+  placement: WagonPlacement,
+  decidedBy: WagonVoteResult['decidedBy'],
+  chooser: PlayerId | null,
+): GameState {
+  const vote = state.wagonVote;
+  const acquirerId = vote?.acquirerId ?? state.playerOrder[state.currentPlayerIndex]!;
+  let next = applyWagonPlacement(state, placement);
+  if (vote) {
+    let sheep = 0;
+    let wheat = 0;
+    for (const bid of Object.values(vote.bids)) {
+      sheep += bid.sheep;
+      wheat += bid.wheat;
     }
+    next = { ...next, bank: addResources(next.bank, { sheep, wheat }) };
   }
-  return resolveWagonVote(next);
-}
-
-// Whether the vote-tally has settled to a unique location. Useful for UI
-// to enable a "finish voting now" affordance even before every seat has
-// dispatched.
-export function votingHasUniqueLocationWinner(state: GameState): boolean {
-  if (state.phase !== 'wagonVoting' || !state.wagonVote) return false;
-  if (totalResources(state.bank) === 0) {
-    /* unrelated — placeholder for future bank-empty guard */
+  next = {
+    ...next,
+    phase: 'main',
+    wagonVote: undefined,
+    pendingWagonPlacement: undefined,
+    builtThisTurn: false,
+    lastWagonVote: {
+      acquirerId,
+      bids: vote?.bids ?? {},
+      assignments: vote?.assignments ?? {},
+      decidedBy,
+      chooser,
+      placement,
+    },
+  };
+  if (hasPlayerWon(next, acquirerId)) {
+    return { ...next, winner: acquirerId, phase: 'gameOver' };
   }
-  const tally = new Map<EdgeId, number>();
-  for (const bid of Object.values(state.wagonVote.bids)) {
-    if (!bid.target) continue;
-    const n = sumResources(bid.cards);
-    if (n === 0) continue;
-    tally.set(bid.target, (tally.get(bid.target) ?? 0) + n);
-  }
-  return uniqueMax(tally) !== null;
+  return handleEndTurn(next, { type: 'endTurn', playerId: acquirerId });
 }

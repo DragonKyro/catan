@@ -1,26 +1,43 @@
 import { useState } from 'react';
-import type { Resource } from '@/game/types';
-import { RESOURCES } from '@/game/types';
+import type { Commodity, Resource, TradeGood } from '@/game/types';
+import { COMMODITIES, RESOURCES } from '@/game/types';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { getBankTradeRate } from '@/game/actions/trade';
 import { DialogShell } from '@/ui/shared/DialogShell';
 import { Button } from '@/ui/shared/Button';
-import { ResourceChip, RESOURCE_LABEL } from '@/ui/shared/ResourceChip';
+import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
+import { ckBankTradeRate, isCommodity } from '@/game/modules/citiesAndKnights/trade';
+import { GoodChip, goodLabel } from '@/ui/dialogs/citiesAndKnights/common';
 
 export function BankTradeDialog() {
   const { game, dispatch, closeDialog } = useGameStore();
-  const [give, setGive] = useState<Resource>('wood');
-  const [receive, setReceive] = useState<Resource>('brick');
+  const [give, setGive] = useState<TradeGood>('wood');
+  const [receive, setReceive] = useState<TradeGood>('brick');
   const [count, setCount] = useState(1);
   if (!game) return null;
   const acting = getActingPlayerId(game);
   const player = game.players.find((p) => p.id === acting)!;
-  const rate = getBankTradeRate(game, acting, give);
+  // Cities & Knights: commodities trade with the supply too (p.7).
+  const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
+  const goods: readonly TradeGood[] = hasCK ? [...RESOURCES, ...COMMODITIES] : RESOURCES;
+  const held = (g: TradeGood) =>
+    isCommodity(g) ? (player.commodities?.[g as Commodity] ?? 0) : player.resources[g as Resource];
+  const inSupply = (g: TradeGood) =>
+    isCommodity(g) ? (game.commodityBank?.[g as Commodity] ?? 0) : game.bank[g as Resource];
+  const rateOf = (g: TradeGood) =>
+    hasCK ? ckBankTradeRate(game, acting, g) : getBankTradeRate(game, acting, g as Resource);
+  const rate = rateOf(give);
   const totalGive = rate * count;
-  const maxByPlayer = Math.floor(player.resources[give] / rate);
-  const maxByBank = game.bank[receive];
+  const maxByPlayer = Math.floor(held(give) / rate);
+  const maxByBank = inSupply(receive);
   const maxCount = Math.max(0, Math.min(maxByPlayer, maxByBank));
   const canSubmit = give !== receive && count >= 1 && count <= maxCount;
+  const submit = () =>
+    dispatch(
+      isCommodity(give) || isCommodity(receive)
+        ? { type: 'bankTradeCK', playerId: acting, give, receive, count }
+        : { type: 'bankTrade', playerId: acting, give: give as Resource, receive: receive as Resource, count },
+    );
 
   return (
     <DialogShell
@@ -29,13 +46,7 @@ export function BankTradeDialog() {
       footer={
         <>
           <Button onClick={closeDialog}>Cancel</Button>
-          <Button
-            variant="primary"
-            disabled={!canSubmit}
-            onClick={() =>
-              dispatch({ type: 'bankTrade', playerId: acting, give, receive, count })
-            }
-          >
+          <Button variant="primary" disabled={!canSubmit} onClick={submit}>
             Trade
           </Button>
         </>
@@ -45,14 +56,15 @@ export function BankTradeDialog() {
         <div>
           <div style={{ fontSize: '0.85em', color: 'var(--text-soft)', marginBottom: 4 }}>Give</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {RESOURCES.map((r) => (
+            {goods.map((g) => (
               <Button
-                key={r}
-                variant={give === r ? 'primary' : 'secondary'}
+                key={g}
+                variant={give === g ? 'primary' : 'secondary'}
                 size="sm"
-                onClick={() => setGive(r)}
+                onClick={() => setGive(g)}
+                title={`${goodLabel(g)} at ${rateOf(g)}:1`}
               >
-                <ResourceChip resource={r} count={player.resources[r]} size="sm" />
+                <GoodChip good={g} count={held(g)} size="sm" />
               </Button>
             ))}
           </div>
@@ -63,15 +75,15 @@ export function BankTradeDialog() {
         <div>
           <div style={{ fontSize: '0.85em', color: 'var(--text-soft)', marginBottom: 4 }}>Receive</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {RESOURCES.map((r) => (
+            {goods.map((g) => (
               <Button
-                key={r}
-                variant={receive === r ? 'primary' : 'secondary'}
+                key={g}
+                variant={receive === g ? 'primary' : 'secondary'}
                 size="sm"
-                disabled={r === give}
-                onClick={() => setReceive(r)}
+                disabled={g === give}
+                onClick={() => setReceive(g)}
               >
-                <ResourceChip resource={r} count={game.bank[r]} size="sm" dimmed={game.bank[r] === 0} />
+                <GoodChip good={g} count={inSupply(g)} size="sm" />
               </Button>
             ))}
           </div>
@@ -98,18 +110,18 @@ export function BankTradeDialog() {
             +
           </button>
           <span className="bank-count-summary">
-            give {totalGive} <ResourceChip resource={give} size="sm" />, get {count}{' '}
-            <ResourceChip resource={receive} size="sm" dimmed={give === receive} />
+            give {totalGive} <GoodChip good={give} size="sm" />, get {count}{' '}
+            <GoodChip good={receive} size="sm" />
           </span>
         </div>
         {!canSubmit && (
           <div style={{ color: 'var(--danger)', fontSize: '0.9em' }}>
             {give === receive
-              ? 'Pick a different resource to receive.'
+              ? 'Pick a different card to receive.'
               : maxCount === 0
-                ? player.resources[give] < rate
-                  ? `Need at least ${rate} ${RESOURCE_LABEL[give]} to trade.`
-                  : 'Bank is out of that resource.'
+                ? held(give) < rate
+                  ? `Need at least ${rate} ${goodLabel(give)} to trade.`
+                  : 'The supply is out of that card.'
                 : `Choose 1–${maxCount}.`}
           </div>
         )}

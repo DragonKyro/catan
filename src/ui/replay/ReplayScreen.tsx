@@ -33,6 +33,8 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'buildWonder',
   'stealResource',
   'buyDevCard',
+  'resolveBarbarianCard',
+  'moveBarbarianKnight',
   'playKnight',
   'playRoadBuilding',
   'playYearOfPlenty',
@@ -44,6 +46,40 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'acceptTrade',
   'endTurn',
   'chooseGoldResource',
+  // Traders & Barbarians: Rivers of Catan bridges, Fishing on Catan fish
+  // spends (free roads, the robber leaving the board).
+  'buildBridge',
+  'spendFish',
+  // Cities & Knights.
+  'discardCK',
+  'buildCityWall',
+  'recruitKnight',
+  'activateKnight',
+  'promoteKnight',
+  'moveKnight',
+  'displaceKnight',
+  'displacedKnightMove',
+  'chaseRobber',
+  'buildCityImprovement',
+  'placeMetropolis',
+  'aqueductPick',
+  'defenderTieDraw',
+  'choosePillagedCity',
+  'playProgressCard',
+  'chooseProgressCardPick',
+  'discardProgressCard',
+  'removeRoad',
+  'placeMerchant',
+  'treasonRemoveKnight',
+  'treasonPlaceKnight',
+  'commercialHarborPropose',
+  'commercialHarborOffer',
+  'weddingGive',
+  'bankTradeCK',
+  // Traders & Barbarians scenario: barbarians on edges, wagons.
+  'moveTbBarbarian',
+  'moveWagon',
+  'upgradeWagon',
 ]);
 
 const SPEED_PRESETS: Array<{ label: string; ms: number }> = [
@@ -519,6 +555,20 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} builds a wonder level`;
     case 'stealResource':
       return `${who} steals${action.stealFrom ? ` from ${name(action.stealFrom)}` : ' nothing'}`;
+    case 'resolveBarbarianCard':
+      return action.hex
+        ? `${who} takes a barbarian prisoner`
+        : action.edge
+          ? `${who} places a knight`
+          : `${who} moves barbarians (Treason)`;
+    case 'moveBarbarianKnight':
+      return `${who} moves a knight`;
+    case 'moveTbBarbarian':
+      return `${who} moves a barbarian`;
+    case 'moveWagon':
+      return `${who} moves their wagon`;
+    case 'upgradeWagon':
+      return `${who} upgrades their wagon`;
     default:
       return `${who} — ${(action as Action).type}`;
   }

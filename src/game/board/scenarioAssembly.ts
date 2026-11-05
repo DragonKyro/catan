@@ -65,6 +65,9 @@ export function assembleBoardFromDefs(
       corners,
       center: hexCenter(graph, corners),
     };
+    if (def.extraTokens && def.extraTokens.length > 0) {
+      hexes[hexId]!.extraNumbers = [...def.extraTokens];
+    }
     if (def.terrain === 'desert' && robberHex === null) robberHex = hexId;
     if (def.terrain === 'sea' && pirateHex === null) pirateHex = hexId;
   }
