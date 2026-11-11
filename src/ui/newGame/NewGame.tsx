@@ -17,6 +17,7 @@ import {
   type ExpansionPickerValue,
 } from './ExpansionPicker';
 import { ScenarioPreview } from './ScenarioPreview';
+import { ScreenTitle } from '@/ui/menu/ScreenTitle';
 import './NewGame.css';
 
 const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3', 'AI 4', 'AI 5', 'AI 6', 'AI 7'];
@@ -190,12 +191,11 @@ export function NewGame({ onBack }: Props = {}) {
     <div className="newgame-wrap">
       <div className="newgame-card">
         {onBack && (
-          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+          <div className="newgame-back">
             <Button variant="ghost" size="sm" onClick={onBack}>← Back</Button>
           </div>
         )}
-        <h1 className="newgame-title">Local hot-seat</h1>
-        <p className="newgame-subtitle">All players on one device</p>
+        <ScreenTitle badge="local" title="Play on this device" subtitle="Hot-seat with friends, or take on the AI" />
 
         <label className="newgame-field">
           <span>Players</span>

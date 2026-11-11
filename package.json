@@ -14,6 +14,8 @@
     "deploy:rules": "npx -y firebase-tools@latest deploy --only database"
   },
   "dependencies": {
+    "@fontsource/alegreya": "^5.3.0",
+    "@fontsource/alegreya-sc": "^5.3.0",
     "firebase": "^12.19.0",
     "honeycomb-grid": "^4.1.5",
     "react": "^19.0.0",

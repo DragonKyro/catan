@@ -1,11 +1,15 @@
-import { useRef, useState } from 'react';
-import { Button } from '@/ui/shared/Button';
+import { useRef, useState, type CSSProperties } from 'react';
 import { NewGame } from './NewGame';
 import { OnlineMenu } from './OnlineMenu';
 import { Rulebook } from '@/rulebook/Rulebook';
 import { MapBuilderScreen } from '@/ui/mapBuilder/MapBuilderScreen';
 import { useReplayStore, parseReplay } from '@/store/replayStore';
 import { roomCodeFromUrl } from '@/net';
+import { MenuBadge, type MenuBadgeKind } from '@/ui/menu/MenuBadge';
+import { RULE_SETS } from '@/ui/menu/ruleSets';
+import { ScreenTitle } from '@/ui/menu/ScreenTitle';
+import { HomeIsland } from './home/HomeIsland';
+import { Wordmark } from './home/Wordmark';
 import './HomeMenu.css';
 
 type Mode = 'choose' | 'local' | 'online' | 'rules' | 'builder';
@@ -40,33 +44,70 @@ export function HomeMenu() {
     return <OnlineMenu onBack={() => setMode('choose')} />;
   }
   if (mode === 'rules') {
-    return <Rulebook onClose={() => setMode('choose')} />;
+    return <Rulebook onClose={() => setMode('choose')} heading={<ScreenTitle badge="rules" title="Rulebook" />} />;
   }
   if (mode === 'builder') {
     return <MapBuilderScreen onBack={() => setMode('choose')} />;
   }
 
   return (
-    <div className="home-wrap">
-      <div className="home-card">
-        <h1 className="home-title">Catan</h1>
-        <p className="home-subtitle">Settle. Build. Trade. Conquer.</p>
-        <div className="home-buttons">
-          <Button variant="primary" size="lg" fullWidth onClick={() => setMode('local')}>
-            🏠 Local hot-seat
-          </Button>
-          <Button size="lg" fullWidth onClick={() => setMode('online')}>
-            🌐 Play online
-          </Button>
-          <Button size="lg" fullWidth onClick={() => setMode('rules')}>
-            📖 Rulebook
-          </Button>
-          <Button size="lg" fullWidth onClick={() => setMode('builder')}>
-            🗺 Map builder
-          </Button>
-          <Button size="lg" fullWidth onClick={() => fileInputRef.current?.click()}>
-            🎞 Load replay…
-          </Button>
+    <div className="home-root">
+      <div className="home-layout">
+        <header className="home-brand">
+          <h1 className="home-title">
+            <Wordmark />
+          </h1>
+          <p className="home-tagline">Settle the island, trade with friends, and build your way to victory.</p>
+          <ul className="home-sets" aria-label="Rule sets">
+            {RULE_SETS.map((s, i) => (
+              <li key={s.name} style={{ '--c': s.color, '--d': `${0.5 + i * 0.05}s` } as CSSProperties}>
+                {s.name}
+              </li>
+            ))}
+          </ul>
+        </header>
+
+        <div className="home-hero">
+          <HomeIsland />
+        </div>
+
+        <nav className="home-menu" aria-label="Main menu">
+          <MenuButton
+            primary
+            badge="local"
+            title="Play on this device"
+            sub="Hot-seat with friends, or take on the AI"
+            index={0}
+            onClick={() => setMode('local')}
+          />
+          <MenuButton
+            badge="online"
+            title="Play online"
+            sub="Host a room, or join one with a code"
+            index={1}
+            onClick={() => setMode('online')}
+          />
+          <MenuButton
+            badge="rules"
+            title="Rulebook"
+            sub="Every rule set, with diagrams"
+            index={2}
+            onClick={() => setMode('rules')}
+          />
+          <MenuButton
+            badge="builder"
+            title="Map builder"
+            sub="Design an island and preview the scenarios"
+            index={3}
+            onClick={() => setMode('builder')}
+          />
+          <MenuButton
+            badge="replay"
+            title="Load replay…"
+            sub="Watch a saved game play out"
+            index={4}
+            onClick={() => fileInputRef.current?.click()}
+          />
           <input
             ref={fileInputRef}
             type="file"
@@ -79,8 +120,48 @@ export function HomeMenu() {
               {replayError}
             </div>
           )}
-        </div>
+        </nav>
+
+        <footer className="home-foot">
+          A fan-made table for playing CATAN (by Klaus Teuber) with friends. All art drawn for this project.
+        </footer>
       </div>
     </div>
+  );
+}
+
+function MenuButton({
+  badge,
+  title,
+  sub,
+  index,
+  primary,
+  onClick,
+}: {
+  badge: MenuBadgeKind;
+  title: string;
+  sub: string;
+  index: number;
+  primary?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`home-btn${primary ? ' home-btn-primary' : ''}`}
+      style={{ '--d': `${0.3 + index * 0.07}s` } as CSSProperties}
+      onClick={onClick}
+    >
+      <span className="home-btn-badge">
+        <MenuBadge kind={badge} />
+      </span>
+      <span className="home-btn-text">
+        <span className="home-btn-title">{title}</span>
+        <span className="home-btn-sub">{sub}</span>
+      </span>
+      <span className="home-btn-arrow" aria-hidden>
+        ›
+      </span>
+    </button>
   );
 }

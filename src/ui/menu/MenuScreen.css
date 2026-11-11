@@ -1,0 +1,483 @@
+/* The menu theme: the sea behind every screen outside a game, and a
+   parchment palette for what sits on it. The app's theme variables
+   (theme.css) are redefined for this subtree only, so shared pieces (Button,
+   ChatPanel, ColorPicker, the rulebook) turn parchment here and stay dark in
+   the game view. Components whose styles are shared with the game get their
+   menu look below, scoped under .menu-screen; menu-only screens style
+   themselves in their own CSS files using these variables. */
+
+.menu-screen {
+  --bg: #f3e6c4;
+  --panel: #fcf5e3;
+  --panel-soft: #f3e6c6;
+  --panel-border: #dcc391;
+  --text: #3a260f;
+  --text-soft: #7a5c36;
+  --accent: #f2a91f;
+  /* Accent for text and thin lines (gold doesn't read on parchment). */
+  --accent-ink: #a5421a;
+  --danger: #c0392b;
+  --success: #2e8b57;
+  --radius: 10px;
+  /* The 3D bottom edge of cards and buttons, as on the home buttons. */
+  --paper-edge: #c9a96a;
+  --field: #fffbf1;
+  --field-border: #cfb27c;
+  --display-font: 'Alegreya SC', Georgia, 'Times New Roman', serif;
+  --story-font: 'Alegreya', Georgia, serif;
+
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: var(--text);
+  color-scheme: light;
+}
+
+/* ---- Sea ---------------------------------------------------------------- */
+
+.menu-sea {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 60% at 32% 52%, rgba(150, 236, 242, 0.5), transparent 70%),
+    radial-gradient(ellipse 120% 100% at 45% 35%, #48b9e0 0%, #2a8bcb 42%, #1b62a4 75%, #143f7a 100%);
+}
+
+.menu-waves {
+  position: absolute;
+  inset: -240px;
+  background-repeat: repeat;
+  will-change: transform;
+}
+
+.menu-waves-a {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='80'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-opacity='0.3'%3E%3Cpath d='M14 22q7-6 14 0t14 0'/%3E%3Cpath d='M96 62q7-6 14 0t14 0'/%3E%3C/g%3E%3C/svg%3E");
+  animation: menu-waves-a 26s linear infinite;
+}
+
+.menu-waves-b {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='120'%3E%3Cg fill='none' stroke='%23e6fbff' stroke-width='1.5' stroke-linecap='round' stroke-opacity='0.22'%3E%3Cpath d='M60 30q6-5 12 0t12 0t12 0'/%3E%3Cpath d='M170 92q6-5 12 0t12 0'/%3E%3C/g%3E%3C/svg%3E");
+  animation: menu-waves-b 44s linear infinite;
+}
+
+@keyframes menu-waves-a {
+  to {
+    transform: translate3d(160px, 0, 0);
+  }
+}
+
+@keyframes menu-waves-b {
+  to {
+    transform: translate3d(-240px, 120px, 0);
+  }
+}
+
+.menu-sparkle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
+  clip-path: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  opacity: 0;
+  animation: menu-twinkle 5.2s ease-in-out infinite;
+  animation-delay: var(--d);
+}
+
+@keyframes menu-twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  12% {
+    opacity: 0.9;
+    transform: scale(1) rotate(20deg);
+  }
+  26% {
+    opacity: 0;
+    transform: scale(0.3) rotate(40deg);
+  }
+}
+
+.menu-cloud {
+  position: absolute;
+  left: 0;
+  width: 280px;
+  will-change: transform;
+  animation: menu-cloud linear infinite;
+}
+
+.menu-cloud-1 {
+  top: 4%;
+  width: 320px;
+  animation-duration: 95s;
+  animation-delay: -38s;
+}
+
+.menu-cloud-2 {
+  top: 62%;
+  width: 240px;
+  opacity: 0.85;
+  animation-duration: 125s;
+  animation-delay: -96s;
+}
+
+.menu-cloud-3 {
+  top: 30%;
+  width: 190px;
+  opacity: 0.7;
+  animation-duration: 160s;
+  animation-delay: -20s;
+}
+
+@keyframes menu-cloud {
+  from {
+    transform: translate3d(-45vw, 0, 0);
+  }
+  to {
+    transform: translate3d(135vw, 0, 0);
+  }
+}
+
+/* ---- Cards ---------------------------------------------------------------- */
+
+/* Every menu card: parchment with a soft highlight, a darker bottom edge and a
+   shadow on the sea. */
+.menu-screen
+  :is(
+    .newgame-card,
+    .newgame-preview-pane,
+    .online-card,
+    .lobby-card,
+    .chat,
+    .rb-toc,
+    .rb-article,
+    .rb-page-head,
+    .map-builder-header,
+    .mb-panel,
+    .mb-toolbar,
+    .scenario-preview-header
+  ) {
+  background:
+    radial-gradient(ellipse 90% 50% at 15% 0%, rgba(255, 255, 255, 0.75), transparent 70%),
+    var(--panel);
+  border: 1px solid #e6d3a6;
+  border-radius: 18px;
+  color: var(--text);
+  box-shadow:
+    0 5px 0 var(--paper-edge),
+    0 18px 38px rgba(3, 30, 60, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+/* Cards rise into place as a screen opens. */
+@keyframes menu-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+/* ---- Titles ----------------------------------------------------------------- */
+
+.screen-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.screen-title-badge {
+  flex: none;
+  width: 52px;
+  height: 56px;
+  animation: menu-badge-in 520ms cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+}
+
+.screen-title-badge svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.screen-title:hover .screen-title-badge {
+  animation: menu-badge-hop 560ms ease;
+}
+
+.screen-title-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.screen-title-heading {
+  margin: 0;
+  font-family: var(--display-font);
+  font-weight: 900;
+  font-size: 2em;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.screen-title-sub {
+  margin-top: 2px;
+  font-family: var(--story-font);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.05em;
+  color: var(--text-soft);
+}
+
+@keyframes menu-badge-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) rotate(-20deg) scale(0.6);
+  }
+}
+
+@keyframes menu-badge-hop {
+  0%,
+  100% {
+    transform: none;
+  }
+  35% {
+    transform: translateY(-5px) rotate(-7deg);
+  }
+  70% {
+    transform: translateY(1px) rotate(3deg);
+  }
+}
+
+/* Small-caps section labels inside cards. */
+.menu-screen :is(.lobby-seats h3, .lobby-settings h3, .mb-panel h3, .newgame-preview-heading) {
+  font-family: var(--display-font);
+  font-weight: 700;
+  font-size: 1.12em;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text);
+}
+
+/* ---- Buttons ------------------------------------------------------------------ */
+
+.menu-screen .btn {
+  background: linear-gradient(180deg, #fffaea 0%, #f4e4bd 100%);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow:
+    0 2px 0 var(--paper-edge),
+    0 3px 8px rgba(60, 40, 10, 0.12);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
+}
+
+.menu-screen .btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fffdf5 0%, #f8eac8 100%);
+  border-color: #cfae72;
+  transform: translateY(-1px);
+  box-shadow:
+    0 3px 0 var(--paper-edge),
+    0 6px 12px rgba(60, 40, 10, 0.16);
+}
+
+.menu-screen .btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 var(--paper-edge);
+}
+
+.menu-screen .btn:focus-visible {
+  outline: 3px solid #2f8fd0;
+  outline-offset: 2px;
+}
+
+.menu-screen .btn:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.menu-screen .btn-primary {
+  background: linear-gradient(180deg, #ffe892 0%, #ffc642 52%, #f6a11d 100%);
+  border-color: #d98e1a;
+  color: #3a1f05;
+  box-shadow:
+    0 3px 0 #b2620e,
+    0 6px 14px rgba(120, 60, 0, 0.22);
+}
+
+.menu-screen .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fff0a8 0%, #ffd25a 52%, #f8ad2c 100%);
+  border-color: #d98e1a;
+  box-shadow:
+    0 4px 0 #b2620e,
+    0 9px 18px rgba(120, 60, 0, 0.26);
+}
+
+.menu-screen .btn-primary:active:not(:disabled) {
+  box-shadow: 0 1px 0 #b2620e;
+}
+
+.menu-screen .btn-lg {
+  padding: 11px 18px;
+}
+
+.menu-screen .btn-primary.btn-lg {
+  font-family: var(--display-font);
+  font-weight: 700;
+  font-size: 1.3em;
+  letter-spacing: 0.02em;
+}
+
+.menu-screen .btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-soft);
+}
+
+.menu-screen .btn-ghost:hover:not(:disabled) {
+  background: rgba(122, 92, 54, 0.1);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text);
+  transform: none;
+}
+
+.menu-screen .btn-danger {
+  background: linear-gradient(180deg, #ec6e61 0%, #c0392b 100%);
+  border-color: #a5281c;
+  color: #fff;
+  box-shadow: 0 2px 0 #7e1d13;
+}
+
+/* ---- Fields --------------------------------------------------------------------- */
+
+.menu-screen
+  :is(input:not([type]), input[type='text'], input[type='number'], input[type='search'], select, textarea) {
+  background: var(--field);
+  border: 1px solid var(--field-border);
+  color: var(--text);
+  box-shadow: inset 0 1px 2px rgba(80, 50, 10, 0.12);
+}
+
+.menu-screen
+  :is(input:not([type]), input[type='text'], input[type='number'], input[type='search'], select, textarea):focus {
+  outline: none;
+  border-color: #e0a020;
+  box-shadow:
+    0 0 0 3px rgba(242, 169, 31, 0.32),
+    inset 0 1px 2px rgba(80, 50, 10, 0.12);
+}
+
+.menu-screen ::placeholder {
+  color: #a88b62;
+  opacity: 1;
+}
+
+.menu-screen input[type='checkbox'] {
+  accent-color: #d98e1a;
+}
+
+/* ---- Map previews sit on the sea ------------------------------------------------ */
+
+/* Flat ocean, the colour the board draws its own sea in, so they meet seamlessly. */
+.menu-screen .scenario-preview-frame {
+  background: var(--ocean);
+  border: 4px solid #f3e2b8;
+  border-radius: 14px;
+  box-shadow: inset 0 2px 8px rgba(0, 25, 55, 0.35);
+}
+
+/* ---- Chat (lobby) ------------------------------------------------------------------ */
+
+.menu-screen .chat-input {
+  border-top-color: var(--panel-border);
+}
+
+.menu-screen .chat-input button {
+  background: linear-gradient(180deg, #ffe892 0%, #ffc642 52%, #f6a11d 100%);
+  color: #3a1f05;
+  box-shadow: 0 2px 0 #b2620e;
+}
+
+/* ---- Colour picker ------------------------------------------------------------------- */
+
+.menu-screen .color-picker {
+  box-shadow:
+    0 3px 0 var(--paper-edge),
+    0 12px 26px rgba(3, 30, 60, 0.32);
+}
+
+.menu-screen .color-picker-opt.is-mine {
+  box-shadow: 0 0 0 3px var(--accent-ink);
+}
+
+/* ---- Rulebook (full screen from the menu) ------------------------------------------- */
+
+.menu-screen .rb-page {
+  padding-top: 14px;
+}
+
+.menu-screen .rb-page-head {
+  padding: 8px 14px;
+  margin-bottom: 14px;
+}
+
+.menu-screen .rb-page-head .screen-title-heading {
+  font-size: 1.7em;
+}
+
+.menu-screen .rb-page-head .screen-title-badge {
+  width: 44px;
+  height: 48px;
+}
+
+.menu-screen .rb-article-title {
+  font-family: var(--display-font);
+  font-weight: 900;
+  font-size: 1.65em;
+  letter-spacing: 0.01em;
+}
+
+.menu-screen .rb-article-body {
+  color: var(--text);
+}
+
+.menu-screen .rb-article-body em {
+  color: var(--accent-ink);
+}
+
+.menu-screen .rb-article-body h4 {
+  font-family: var(--display-font);
+  font-weight: 700;
+  font-size: 1.12em;
+}
+
+.menu-screen .rb-toc-item.is-active {
+  background: #fff4d2;
+  border-left-color: var(--accent);
+}
+
+.menu-screen :is(.rb-toc-num, .rb-toc-section-count) {
+  background: #ead9b0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-screen *,
+  .menu-screen *::before,
+  .menu-screen *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -26,6 +26,7 @@ import {
   EXPLORERS_PIRATES_EXPANSION_ID,
 } from '@/game/modules/explorersPirates/constants';
 import './ExpansionPicker.css';
+import { RULE_SET_COLORS } from '@/ui/menu/ruleSets';
 
 export interface ExpansionPickerValue {
   seafarers: boolean;
@@ -193,6 +194,7 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
           onChange={(e) => onChange({ ...value, seafarers: e.target.checked })}
         />
         <span>Seafarers</span>
+        <SetMark color={RULE_SET_COLORS.seafarers} />
       </label>
       {value.seafarers && (
         <label className="expansion-picker-scenario">
@@ -230,6 +232,7 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
           }
         />
         <span>Cities &amp; Knights</span>
+        <SetMark color={RULE_SET_COLORS.citiesKnights} />
       </label>
 
       <label
@@ -247,6 +250,7 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
           onChange={(e) => onChange({ ...value, traders: e.target.checked })}
         />
         <span>Traders &amp; Barbarians</span>
+        <SetMark color={RULE_SET_COLORS.traders} />
       </label>
       {value.traders && (
         <>
@@ -283,6 +287,7 @@ export function ExpansionPicker({ value, onChange: rawOnChange }: Props) {
           onChange={(e) => onChange({ ...value, explorersPirates: e.target.checked })}
         />
         <span>Explorers &amp; Pirates</span>
+        <SetMark color={RULE_SET_COLORS.explorersPirates} />
       </label>
 
       {/* T&B variants combine with any game (rulebook p. 4-6) except
@@ -359,6 +364,11 @@ function VariantToggle({
       <span>{label}</span>
     </label>
   );
+}
+
+/** The rule set's colour (as on the home screen's chips). */
+function SetMark({ color }: { color: string }) {
+  return <span className="expansion-picker-mark" style={{ background: color }} aria-hidden />;
 }
 
 export function expansionListFrom(v: ExpansionPickerValue): string[] {

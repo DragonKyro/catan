@@ -3,6 +3,7 @@ import { type DialogName, type UIMode, useGameStore } from '@/store/gameStore';
 import { useNetworkStore } from '@/store/networkStore';
 import { useReplayStore } from '@/store/replayStore';
 import { HomeMenu } from '@/ui/newGame/HomeMenu';
+import { MenuScreen } from '@/ui/menu/MenuScreen';
 import { LobbyScreen } from '@/ui/lobby/LobbyScreen';
 import { GameView } from '@/ui/game/GameView';
 import { ReplayScreen } from '@/ui/replay/ReplayScreen';
@@ -72,22 +73,14 @@ export default function App() {
       </div>
     );
   }
-  // In a network session before game starts → lobby (or "connecting"/"error"
-  // placeholder; the lobby screen knows how to render each).
-  if (
-    connection === 'lobby' ||
-    connection === 'connecting' ||
-    connection === 'error'
-  ) {
-    return (
-      <div className="app-root">
-        <LobbyScreen />
-      </div>
-    );
-  }
+  // Everything outside a game shares one MenuScreen (the sea + parchment
+  // theme); it stays mounted from home to lobby, so the sea doesn't restart.
+  // In a network session before the game starts → lobby (or its
+  // "connecting" / "error" card).
+  const inLobby = connection === 'lobby' || connection === 'connecting' || connection === 'error';
   return (
     <div className="app-root">
-      <HomeMenu />
+      <MenuScreen>{inLobby ? <LobbyScreen /> : <HomeMenu />}</MenuScreen>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { TOPICS } from './topics';
 import type { Topic } from './topics';
@@ -10,6 +10,9 @@ interface Props {
   // 'embedded' renders without the outer chrome — caller wraps in a dialog.
   variant?: 'page' | 'embedded';
   onClose?: () => void;
+  // Page variant: replaces the plain "Rulebook" heading (the menu passes its
+  // badge title), so the rulebook itself needn't know about the menu's art.
+  heading?: ReactNode;
 }
 
 // Section label for topics with no explicit `section` field — the leading
@@ -36,7 +39,7 @@ function buildSections(topics: Topic[]): Section[] {
   return sections;
 }
 
-export function Rulebook({ variant = 'page', onClose }: Props) {
+export function Rulebook({ variant = 'page', onClose, heading }: Props) {
   const [index, setIndex] = useState(0);
   const [query, setQuery] = useState('');
   const sections = useMemo(() => buildSections(TOPICS), []);
@@ -200,7 +203,7 @@ export function Rulebook({ variant = 'page', onClose }: Props) {
             ← Back
           </Button>
         )}
-        <h1 className="rb-page-title">Rulebook</h1>
+        {heading ?? <h1 className="rb-page-title">Rulebook</h1>}
         <div style={{ width: 60 }} />
       </header>
       {body}

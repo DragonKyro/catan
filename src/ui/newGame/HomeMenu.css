@@ -1,52 +1,942 @@
-.home-wrap {
+/* Home screen: a sunny tabletop sea, the island hero, the hex-tile wordmark
+   and parchment menu buttons. Entrance animations use fill-mode `backwards`
+   (their end state is the element's normal style), so hover / active
+   transforms still apply once they've played. Looping animations touch only
+   transform and opacity. */
+
+.home-root {
+  --home-ink: #2a170a;
+  --home-cream: #fff8e6;
+  position: relative;
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: var(--home-cream);
+  isolation: isolate;
+  overflow-x: hidden;
 }
 
-.home-card {
-  width: 100%;
-  max-width: 420px;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  padding: 32px;
+/* ---- Layout -------------------------------------------------------------- */
+
+.home-layout {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(330px, 440px);
+  grid-template-areas:
+    'hero brand'
+    'hero menu'
+    'hero foot';
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  column-gap: clamp(16px, 4vw, 56px);
+  row-gap: 16px;
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(16px, 3vw, 40px);
+}
+
+.home-brand {
+  grid-area: brand;
+  align-self: end;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  align-items: center;
+  text-align: center;
 }
+
+.home-hero {
+  grid-area: hero;
+  align-self: center;
+  min-width: 0;
+}
+
+.home-menu {
+  grid-area: menu;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.home-foot {
+  grid-area: foot;
+  margin: 6px 0 0;
+  font-size: 0.78em;
+  line-height: 1.45;
+  text-align: center;
+  color: rgba(255, 248, 230, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 30, 60, 0.7);
+}
+
+/* ---- Brand --------------------------------------------------------------- */
 
 .home-title {
   margin: 0;
-  font-size: 2.6em;
-  letter-spacing: 0.04em;
-  text-align: center;
+  width: min(430px, 100%);
+  line-height: 0;
 }
 
-.home-subtitle {
-  margin: -14px 0 8px;
-  text-align: center;
-  color: var(--text-soft);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+.home-wordmark {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 7px 10px rgba(0, 28, 60, 0.4));
+}
+
+.home-wordmark .home-wm-letter {
+  font-family: 'Alegreya SC', Georgia, 'Times New Roman', serif;
+  font-weight: 900;
+  font-size: 46px;
+  fill: url(#home-wm-letter);
+  stroke: var(--home-ink);
+  stroke-width: 6px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+
+.home-wm-drop {
+  animation: home-wm-drop 620ms cubic-bezier(0.25, 0.9, 0.35, 1.35) backwards;
+  animation-delay: var(--d);
+}
+
+@keyframes home-wm-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-70px) rotate(-24deg) scale(1.15);
+  }
+  45% {
+    opacity: 1;
+  }
+}
+
+.home-wordmark:hover .home-wm-bounce {
+  animation: home-wm-bounce 640ms ease;
+  animation-delay: var(--b);
+}
+
+@keyframes home-wm-bounce {
+  0%,
+  100% {
+    transform: none;
+  }
+  35% {
+    transform: translateY(-9px) rotate(-4deg);
+  }
+  65% {
+    transform: translateY(1px) rotate(2deg);
+  }
+}
+
+.home-tagline {
+  margin: 10px 0 0;
+  font-family: 'Alegreya', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.22em;
+  line-height: 1.35;
+  color: var(--home-cream);
+  /* A dark rim all round, so it stays legible when a cloud drifts behind it. */
+  text-shadow:
+    0 1px 0 #0d3a66,
+    1px 0 0 #0d3a66,
+    -1px 0 0 #0d3a66,
+    0 -1px 0 #0d3a66,
+    0 2px 4px rgba(4, 30, 60, 0.8),
+    0 0 16px rgba(4, 34, 70, 0.55);
+  animation: home-rise 600ms ease backwards;
+  animation-delay: 0.45s;
+}
+
+.home-sets {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 12px 0 2px;
+  padding: 0;
+}
+
+.home-sets li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
   font-size: 0.78em;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--home-cream);
+  background: rgba(7, 34, 66, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  animation: home-pop-in 420ms cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+  animation-delay: var(--d);
 }
 
-.home-buttons {
+.home-sets li::before {
+  content: '';
+  flex: none;
+  width: 9px;
+  height: 10px;
+  background: var(--c);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+@keyframes home-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes home-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+/* ---- Menu buttons ---------------------------------------------------------- */
+
+.home-btn {
+  --edge: #c3a063;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 14px 8px 9px;
+  border: none;
+  border-radius: 15px;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #3a260f;
+  background: linear-gradient(180deg, #fffaea 0%, #f7e8c3 100%);
+  box-shadow:
+    0 4px 0 var(--edge),
+    0 9px 18px rgba(4, 30, 60, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  transition:
+    transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1.4),
+    box-shadow 160ms ease;
+  animation: home-rise 520ms cubic-bezier(0.2, 0.8, 0.3, 1.2) backwards;
+  animation-delay: var(--d);
+}
+
+.home-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  transform: translateX(-130%) skewX(-18deg);
+  pointer-events: none;
+}
+
+.home-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 0 var(--edge),
+    0 14px 24px rgba(4, 30, 60, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.home-btn:hover::after {
+  animation: home-sheen 720ms ease;
+}
+
+.home-btn:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 var(--edge),
+    0 4px 10px rgba(4, 30, 60, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.home-btn:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+@keyframes home-sheen {
+  to {
+    transform: translateX(330%) skewX(-18deg);
+  }
+}
+
+.home-btn-primary {
+  --edge: #b2620e;
+  padding: 12px 16px 12px 11px;
+  color: #3a1f05;
+  background: linear-gradient(180deg, #ffe892 0%, #ffc642 52%, #f6a11d 100%);
+}
+
+.home-btn-badge {
+  flex: none;
+  width: 46px;
+  height: 50px;
+  display: block;
+}
+
+.home-btn-primary .home-btn-badge {
+  width: 52px;
+  height: 56px;
+}
+
+.home-btn-badge svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: block;
+}
+
+.home-btn:hover .home-btn-badge {
+  animation: home-badge-hop 560ms ease;
+}
+
+@keyframes home-badge-hop {
+  0%,
+  100% {
+    transform: none;
+  }
+  35% {
+    transform: translateY(-5px) rotate(-7deg);
+  }
+  70% {
+    transform: translateY(1px) rotate(3deg);
+  }
+}
+
+.home-btn-text {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 1px;
+  min-width: 0;
+}
+
+.home-btn-title {
+  font-family: 'Alegreya SC', Georgia, serif;
+  font-weight: 700;
+  font-size: 1.32em;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+
+.home-btn-primary .home-btn-title {
+  font-size: 1.5em;
+}
+
+.home-btn-sub {
+  font-size: 0.88em;
+  line-height: 1.3;
+  opacity: 0.78;
+}
+
+.home-btn-arrow {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 1.8em;
+  line-height: 1;
+  opacity: 0.45;
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease;
+}
+
+.home-btn:hover .home-btn-arrow {
+  transform: translateX(3px);
+  opacity: 0.8;
 }
 
 .home-replay-error {
-  background: rgba(220, 80, 80, 0.12);
-  border: 1px solid rgba(220, 80, 80, 0.5);
-  color: #e88;
+  background: #fff1ee;
+  border: 1px solid #e07a6a;
+  color: #8f2418;
   padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 0.85em;
-  margin-top: 4px;
+  border-radius: 8px;
+  font-size: 0.88em;
+}
+
+/* ---- Island scene ------------------------------------------------------------ */
+
+.home-scene {
+  position: relative;
+  width: 100%;
+}
+
+.home-island {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: min(88vh, 760px);
+  max-height: min(88dvh, 760px);
+  overflow: visible;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.home-token-num {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.home-foam {
+  stroke-dasharray: 7 10;
+  animation: home-foam 7s linear infinite;
+}
+
+@keyframes home-foam {
+  to {
+    stroke-dashoffset: -34;
+  }
+}
+
+.home-tile-drop {
+  animation: home-tile-drop 560ms cubic-bezier(0.25, 0.9, 0.35, 1.3) backwards;
+  animation-delay: var(--d);
+}
+
+@keyframes home-tile-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-48px) scale(1.08);
+  }
+  55% {
+    opacity: 1;
+  }
+}
+
+.home-tile {
+  transition: transform 220ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.home-tile:hover {
+  transform: translateY(-3px);
+}
+
+.home-token-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: home-pop-in 380ms cubic-bezier(0.3, 1.7, 0.5, 1) backwards;
+  animation-delay: var(--d);
+}
+
+.home-piece {
+  animation: home-piece-drop 440ms cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+  animation-delay: var(--d);
+}
+
+@keyframes home-piece-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+.home-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: home-sway 3.6s ease-in-out infinite alternate;
+  animation-delay: calc(var(--d) * -1);
+}
+
+@keyframes home-sway {
+  from {
+    transform: rotate(-6deg);
+  }
+  to {
+    transform: rotate(6deg);
+  }
+}
+
+.home-hop {
+  animation: home-hop 6s ease-in-out infinite;
+  animation-delay: calc(var(--d) * -1);
+}
+
+@keyframes home-hop {
+  0%,
+  80%,
+  100% {
+    transform: none;
+  }
+  84% {
+    transform: translateY(-2.8px);
+  }
+  88% {
+    transform: none;
+  }
+  91% {
+    transform: translateY(-1.5px);
+  }
+  94% {
+    transform: none;
+  }
+}
+
+.home-smoke {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: home-smoke 3.9s ease-out infinite;
+  animation-delay: var(--d);
+}
+
+@keyframes home-smoke {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.5);
+  }
+  20% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(5px, -17px) scale(1.8);
+  }
+}
+
+.home-ship {
+  animation: home-bob 3.2s ease-in-out infinite alternate;
+}
+
+@keyframes home-bob {
+  from {
+    transform: rotate(-4deg);
+  }
+  to {
+    transform: rotate(4deg);
+  }
+}
+
+.home-robber {
+  transition: transform 700ms cubic-bezier(0.4, 1.45, 0.5, 1);
+}
+
+.home-robber-hop {
+  animation: home-robber-hop 700ms ease;
+}
+
+@keyframes home-robber-hop {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: translateY(-14px) rotate(-8deg);
+  }
+  70% {
+    transform: translateY(1px) rotate(4deg);
+  }
+}
+
+.home-collect {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: home-collect 720ms ease;
+}
+
+@keyframes home-collect {
+  0%,
+  100% {
+    transform: none;
+  }
+  30% {
+    transform: translateY(-7px) scale(1.14);
+  }
+  60% {
+    transform: translateY(0) scale(0.95);
+  }
+}
+
+.home-glow {
+  fill: rgba(255, 250, 205, 0.45);
+  stroke: #fff6a8;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  opacity: 0;
+  animation: home-glow 1.9s ease-out forwards;
+}
+
+@keyframes home-glow {
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.home-card {
+  animation: home-card 1.9s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+@keyframes home-card {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.4);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.12);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-34px) scale(1);
+  }
+}
+
+/* ---- Dice ------------------------------------------------------------------- */
+
+.home-dice {
+  position: absolute;
+  right: 1%;
+  bottom: 2%;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border: none;
+  border-radius: 14px;
+  background: none;
+  cursor: pointer;
+  filter: drop-shadow(0 6px 6px rgba(3, 30, 60, 0.4));
+}
+
+.home-dice:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.home-die {
+  display: block;
+  width: clamp(36px, 4.4vw, 50px);
+  height: auto;
+  transition: transform 160ms ease;
+}
+
+.home-die:nth-child(2) {
+  transform: rotate(9deg);
+}
+
+.home-dice:hover .home-die {
+  transform: translateY(-3px) rotate(-6deg);
+}
+
+.home-dice:hover .home-die:nth-child(2) {
+  transform: translateY(-3px) rotate(14deg);
+}
+
+.home-dice:not(.was-rolled) {
+  animation: home-dice-nudge 5s ease-in-out 3.2s infinite;
+}
+
+@keyframes home-dice-nudge {
+  0%,
+  86%,
+  100% {
+    transform: none;
+  }
+  90% {
+    transform: translateY(-6px) rotate(-6deg);
+  }
+  95% {
+    transform: translateY(0) rotate(4deg);
+  }
+}
+
+.home-dice.is-rolling .home-die {
+  animation: home-tumble 720ms cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+
+.home-dice.is-rolling .home-die:nth-child(2) {
+  animation-name: home-tumble-b;
+  animation-duration: 700ms;
+}
+
+@keyframes home-tumble {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  35% {
+    transform: translateY(-30px) rotate(220deg);
+  }
+  70% {
+    transform: translateY(0) rotate(340deg);
+  }
+  84% {
+    transform: translateY(-6px) rotate(352deg);
+  }
+  100% {
+    transform: translateY(0) rotate(360deg);
+  }
+}
+
+@keyframes home-tumble-b {
+  0% {
+    transform: translateY(0) rotate(9deg);
+  }
+  35% {
+    transform: translateY(-38px) rotate(-200deg);
+  }
+  70% {
+    transform: translateY(0) rotate(-340deg);
+  }
+  84% {
+    transform: translateY(-5px) rotate(-345deg);
+  }
+  100% {
+    transform: translateY(0) rotate(-351deg);
+  }
+}
+
+.home-dice-hint {
+  position: absolute;
+  right: 3%;
+  bottom: calc(2% + clamp(48px, 5.6vw, 64px));
+  padding: 3px 10px;
+  border-radius: 10px 10px 2px 10px;
+  font-family: 'Alegreya', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.98em;
+  color: var(--home-ink);
+  background: var(--home-cream);
+  box-shadow: 0 3px 8px rgba(3, 30, 60, 0.35);
+  pointer-events: none;
+  animation: home-pop-in 420ms cubic-bezier(0.3, 1.5, 0.5, 1) 2.6s backwards;
+}
+
+.home-roll-note {
+  position: absolute;
+  right: 3%;
+  bottom: calc(2% + clamp(50px, 5.8vw, 66px));
+  margin: 0;
+  pointer-events: none;
+}
+
+.home-roll-note span {
+  display: block;
+  padding: 4px 12px;
+  border-radius: 12px 12px 3px 12px;
+  font-family: 'Alegreya SC', Georgia, serif;
+  font-weight: 700;
+  font-size: 1.05em;
+  white-space: nowrap;
+  color: var(--home-ink);
+  background: var(--home-cream);
+  box-shadow: 0 4px 10px rgba(3, 30, 60, 0.35);
+  animation: home-note 2.8s ease forwards;
+}
+
+@keyframes home-note {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.8);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* ---- Compact screens (same breakpoint as the game view) ------------------------- */
+
+@media (max-width: 900px) {
+  .home-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'brand'
+      'hero'
+      'menu'
+      'foot';
+    align-content: start;
+    max-width: 560px;
+    row-gap: 8px;
+    padding-top: max(14px, env(safe-area-inset-top));
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+
+  .home-title {
+    width: min(330px, 86%);
+  }
+
+  .home-tagline {
+    font-size: 1.05em;
+    margin-top: 6px;
+  }
+
+  .home-sets {
+    margin-top: 8px;
+  }
+
+  .home-sets li {
+    font-size: 0.72em;
+    padding: 2px 8px 2px 6px;
+  }
+
+  .home-island {
+    max-height: 36vh;
+    max-height: 36dvh;
+    margin: 0 auto;
+  }
+
+  .home-menu {
+    gap: 9px;
+  }
+
+  .home-btn {
+    padding: 6px 12px 6px 8px;
+  }
+
+  .home-btn-primary {
+    padding: 9px 14px 9px 9px;
+  }
+
+  .home-btn-badge {
+    width: 40px;
+    height: 44px;
+  }
+
+  .home-btn-primary .home-btn-badge {
+    width: 46px;
+    height: 50px;
+  }
+
+  .home-btn-title {
+    font-size: 1.2em;
+  }
+
+  .home-btn-primary .home-btn-title {
+    font-size: 1.35em;
+  }
+
+  .home-btn-sub {
+    font-size: 0.82em;
+  }
+}
+
+/* Phones in portrait with little height: drop the rule-set chips and tighten,
+   so the first buttons sit above the fold. */
+@media (max-width: 900px) and (max-height: 820px) {
+  .home-title {
+    width: min(280px, 78%);
+  }
+
+  .home-sets {
+    display: none;
+  }
+
+  .home-island {
+    max-height: 33vh;
+    max-height: 33dvh;
+  }
+
+  .home-btn {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  .home-btn-primary {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+}
+
+/* Short landscape windows (phones on their side): side by side again, trimmed. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .home-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    grid-template-areas:
+      'hero brand'
+      'hero menu'
+      'hero foot';
+    align-content: center;
+    max-width: none;
+    row-gap: 6px;
+    padding: 10px max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+  }
+
+  .home-title {
+    width: min(250px, 100%);
+  }
+
+  .home-tagline,
+  .home-sets,
+  .home-btn-sub {
+    display: none;
+  }
+
+  .home-island {
+    max-height: 94vh;
+    max-height: 94dvh;
+  }
+
+  .home-menu {
+    gap: 7px;
+  }
+
+  .home-btn,
+  .home-btn-primary {
+    padding: 3px 12px 3px 8px;
+  }
+
+  .home-btn-badge,
+  .home-btn-primary .home-btn-badge {
+    width: 32px;
+    height: 35px;
+  }
+
+  .home-btn-title,
+  .home-btn-primary .home-btn-title {
+    font-size: 1.12em;
+  }
+
+  .home-foot {
+    font-size: 0.7em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-root *,
+  .home-root *::before,
+  .home-root *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Shown as a still highlight instead of a fading pulse. */
+  .home-glow {
+    opacity: 0.9;
+  }
+}
+
+/* Big screens: everything a size up. */
+@media (min-width: 1500px) and (min-height: 900px) {
+  .home-root {
+    font-size: 16px;
+  }
+
+  .home-layout {
+    grid-template-columns: minmax(0, 1.25fr) minmax(380px, 520px);
+    max-width: 1560px;
+  }
+
+  .home-title {
+    width: min(520px, 100%);
+  }
+
+  .home-island {
+    max-height: min(84dvh, 900px);
+  }
 }

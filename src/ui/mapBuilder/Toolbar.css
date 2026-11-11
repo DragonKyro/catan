@@ -2,42 +2,65 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 8px 12px;
-  background: var(--bg-elev0, #15181f);
-  border-top: 1px solid #ffffff14;
+  padding: 8px 14px;
 }
 
 .mb-tool-group {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 2px 0;
   flex-wrap: wrap;
 }
 
 .mb-tool-group h4 {
   margin: 0 6px 0 0;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #ffffff80;
-  font-weight: 600;
+  min-width: 84px;
+  font-family: var(--display-font);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-soft);
   white-space: nowrap;
 }
 
+/* A small parchment tile; the chosen tool is a raised gold one. */
 .mb-tool {
-  background: #1f242c;
-  color: #e8edf2;
-  border: 1px solid #ffffff14;
-  border-radius: 4px;
-  padding: 3px 8px;
+  background: linear-gradient(180deg, #fffaea 0%, #f4e4bd 100%);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  padding: 3px 9px;
   font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
   text-align: center;
   white-space: nowrap;
+  box-shadow: 0 2px 0 var(--paper-edge);
+  transition:
+    transform 100ms ease,
+    box-shadow 100ms ease;
 }
-.mb-tool:hover { background: #2a313c; }
-.mb-tool-active { background: #2f6fdb; color: #fff; border-color: #2f6fdb; }
-.mb-tool-active:hover { background: #3478e9; }
-.mb-tool-danger { color: #ffa39a; }
+
+.mb-tool:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 var(--paper-edge);
+}
+
+.mb-tool:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 var(--paper-edge);
+}
+
+.mb-tool-active,
+.mb-tool-active:hover {
+  background: linear-gradient(180deg, #ffe892 0%, #ffc642 55%, #f6a11d 100%);
+  color: #3a1f05;
+  border-color: #d98e1a;
+  box-shadow: 0 2px 0 #b2620e;
+}
+
+.mb-tool-danger {
+  color: var(--danger);
+}

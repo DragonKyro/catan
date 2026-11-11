@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Button } from '@/ui/shared/Button';
+import { ScreenTitle } from '@/ui/menu/ScreenTitle';
 import { parseCustomMap } from '@/game/customMap/parse';
 import { serializeCustomMap } from '@/game/customMap/serialize';
 import type { Terrain } from '@/game/types';
@@ -111,7 +112,7 @@ export function MapBuilderScreen({ onBack }: Props) {
   return (
     <div className="map-builder">
       <header className="map-builder-header">
-        <h2>Map builder</h2>
+        <ScreenTitle badge="builder" title="Map builder" subtitle="Paint an island, tune its pools, export it" as="h2" />
         <div className="map-builder-actions">
           <Button size="sm" onClick={() => fileInputRef.current?.click()}>
             📂 Load

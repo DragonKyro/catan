@@ -1,7 +1,12 @@
+/* The New Game map preview. Child rules are scoped under .scenario-preview:
+   the map builder's preview screens use the same child class names
+   (mapBuilder/ScenarioPreview.css). The frame's sea look comes from
+   MenuScreen.css. */
+
 .scenario-preview {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   align-items: stretch;
 }
 
@@ -22,7 +27,7 @@
 
 /* BoardSVG draws into a `.board-wrap` div by default; override its wrapper
    to fit the preview slot. */
-.scenario-preview-board {
+.scenario-preview .scenario-preview-board {
   width: 100%;
   height: 100%;
   display: flex;
@@ -30,21 +35,21 @@
   justify-content: center;
 }
 
-.scenario-preview-board svg.board-svg {
+.scenario-preview .scenario-preview-board svg.board-svg {
   width: 100%;
   height: 100%;
   display: block;
 }
 
-.scenario-preview-caption {
-  font-size: 0.78em;
+.scenario-preview .scenario-preview-caption {
+  font-family: var(--display-font, inherit);
+  font-weight: 700;
+  font-size: 1.05em;
   color: var(--text-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   text-align: center;
 }
 
-.scenario-preview-error {
+.scenario-preview .scenario-preview-error {
   color: var(--text-soft);
   font-size: 0.85em;
   padding: 12px;

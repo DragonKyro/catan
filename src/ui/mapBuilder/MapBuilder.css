@@ -1,52 +1,78 @@
+/* Map builder: header bar, sea canvas, side panels and tool bar as parchment
+   cards on the menu sea (card look, buttons and fields from MenuScreen.css). */
+
 .map-builder {
   display: flex;
   flex-direction: column;
+  gap: 12px;
   height: 100vh;
-  background: var(--bg, #0b0d12);
-  color: #e8edf2;
+  height: 100dvh;
+  padding: 12px;
+  color: var(--text);
+  box-sizing: border-box;
 }
 
 .map-builder-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
-  background: #0d1016;
-  border-bottom: 1px solid #ffffff14;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 6px 14px 6px 10px;
 }
-.map-builder-header h2 {
-  margin: 0;
-  font-size: 16px;
+
+.map-builder-header .screen-title {
+  justify-content: flex-start;
+  gap: 10px;
 }
+
+.map-builder-header .screen-title-badge {
+  width: 40px;
+  height: 44px;
+}
+
+.map-builder-header .screen-title-heading {
+  font-size: 1.5em;
+}
+
+.map-builder-header .screen-title-sub {
+  font-size: 0.92em;
+}
+
 .map-builder-actions {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .map-builder-load-error {
-  padding: 6px 12px;
-  background: rgba(140, 30, 30, 0.6);
-  color: #fff;
-  font-size: 12px;
+  padding: 8px 12px;
+  background: #fde6e2;
+  border: 1px solid #e07a6a;
+  border-radius: 10px;
+  color: #8f2418;
+  font-size: 13px;
 }
 
 .map-builder-body {
   flex: 1;
   display: flex;
+  gap: 12px;
   min-height: 0;
 }
 
 .map-builder-canvas-wrap {
   flex: 1;
-  padding: 12px;
   min-width: 0;
   display: flex;
+  padding-bottom: 6px;
 }
 
+/* Transparent column; each panel in it is a card. Padding leaves room for
+   the cards' bottom edges and shadows inside the scroll area. */
 .map-builder-side {
   width: 320px;
-  padding: 12px;
+  flex: none;
   overflow-y: auto;
-  background: #0d1016;
-  border-left: 1px solid #ffffff14;
+  padding: 0 6px 10px 2px;
 }
