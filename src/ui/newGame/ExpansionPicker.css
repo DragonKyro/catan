@@ -6,28 +6,64 @@
   color: var(--text-soft);
 }
 
+/* "Expansions", "Traders & Barbarians variants": the same field names as the
+   rest of the New Game card. */
 .expansion-picker-label {
   display: block;
+  margin-top: 2px;
+  font-family: var(--display-font);
+  font-weight: 700;
+  font-size: 1.2em;
+  color: var(--text);
 }
 
 .expansion-picker-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   background: var(--panel-soft);
   border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 10px;
+  padding: 8px 11px;
   cursor: pointer;
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.expansion-picker-row:hover {
+  background: #fbf0d6;
+}
+
+/* Ticked: a brighter tile with a gold rim. */
+.expansion-picker-row:has(input:checked) {
+  background: #fff4d2;
+  border-color: #e3a52c;
+  box-shadow: 0 2px 0 #d9a33e;
+}
+
+.expansion-picker-row:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .expansion-picker-row input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   cursor: pointer;
-  accent-color: var(--accent);
+  accent-color: #d98e1a;
+}
+
+/* The rule set's colour, a little hex at the end of the row. */
+.expansion-picker-mark {
+  flex: none;
+  margin-left: auto;
+  width: 13px;
+  height: 15px;
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
 }
 
 .expansion-picker-scenario {
@@ -35,20 +71,13 @@
   flex-direction: column;
   gap: 6px;
   padding-left: 26px;
-  font-size: 0.85em;
+  font-size: 0.92em;
 }
 
 .expansion-picker-scenario select {
-  background: var(--panel-soft);
-  border: 1px solid var(--panel-border);
-  color: var(--text);
-  border-radius: 8px;
+  border-radius: 9px;
   padding: 7px 10px;
   font-size: 1em;
   font-family: inherit;
-}
-
-.expansion-picker-scenario select:focus {
-  outline: none;
-  border-color: var(--accent);
+  font-weight: 600;
 }

@@ -1,3 +1,6 @@
+/* Play online: name, then create or join. Shown inside MenuScreen (card,
+   buttons and fields styled there). */
+
 .online-wrap {
   flex: 1;
   display: flex;
@@ -8,50 +11,41 @@
 
 .online-card {
   width: 100%;
-  max-width: 440px;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  padding: 24px 28px;
+  max-width: 450px;
+  padding: 16px 28px 24px;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  animation: menu-card-in 420ms cubic-bezier(0.2, 0.8, 0.3, 1.15) backwards;
 }
 
 .online-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.online-title {
-  margin: 0;
-  flex: 1;
-  text-align: center;
+  margin: 0 0 -10px -8px;
 }
 
 .online-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   font-size: 0.9em;
   color: var(--text-soft);
 }
 
-.online-field input {
-  background: var(--panel-soft);
-  border: 1px solid var(--panel-border);
+.online-field > span:first-child {
+  font-family: var(--display-font);
+  font-weight: 700;
+  font-size: 1.2em;
   color: var(--text);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 1em;
-  font-family: inherit;
 }
 
-.online-field input:focus {
-  outline: none;
-  border-color: var(--accent);
+.online-field input {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 1.05em;
+  font-family: inherit;
+  font-weight: 600;
 }
 
 .online-buttons {
@@ -64,10 +58,10 @@
   position: relative;
   text-align: center;
   color: var(--text-soft);
-  font-size: 0.8em;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin: 4px 0;
+  font-family: var(--story-font);
+  font-style: italic;
+  font-size: 1em;
+  margin: 2px 0;
 }
 
 .online-divider::before,
@@ -89,16 +83,15 @@
 }
 
 .online-divider span {
-  background: var(--panel);
   padding: 0 8px;
   position: relative;
 }
 
 .online-testnote {
   margin: 4px 0 0;
-  font-size: 0.78em;
+  font-size: 0.8em;
   color: var(--text-soft);
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .online-testnote code {
@@ -107,4 +100,5 @@
   border-radius: 4px;
   padding: 1px 4px;
   font-size: 0.95em;
+  color: var(--accent-ink);
 }

@@ -5,6 +5,7 @@ import { Button } from '@/ui/shared/Button';
 import { ChatPanel } from '@/ui/chat/ChatPanel';
 import { PLAYER_COLOR_LABEL, playerColorVar } from '@/ui/shared/playerColors';
 import { ColorPicker } from '@/ui/shared/ColorPicker';
+import { MenuBadge } from '@/ui/menu/MenuBadge';
 import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL } from '@/ai/nn';
 import {
   LOBBY_RULES,
@@ -39,7 +40,9 @@ function JoiningCard() {
             <span className="lobby-roomcode-label">{creating ? 'Creating a room' : 'Joining room'}</span>
             {roomCode && <div className="lobby-roomcode lobby-roomcode-static">{roomCode}</div>}
           </div>
-          <div style={{ width: 60 }} />
+          <span className="lobby-badge">
+            <MenuBadge kind="online" />
+          </span>
         </header>
         <div className="lobby-status">Connecting to the game server…</div>
       </div>
@@ -57,7 +60,9 @@ function ErrorCard() {
             ← Back
           </Button>
           <div className="lobby-roomcode-wrap" />
-          <div style={{ width: 60 }} />
+          <span className="lobby-badge">
+            <MenuBadge kind="online" />
+          </span>
         </header>
         {joinFailure && (
           <h3 className="lobby-error-title">
@@ -317,7 +322,9 @@ export function LobbyScreen() {
               <span className="lobby-roomcode-copy">{copied === 'code' ? '✓ copied' : 'click to copy'}</span>
             </button>
           </div>
-          <div style={{ width: 60 }} />
+          <span className="lobby-badge">
+            <MenuBadge kind="online" />
+          </span>
         </header>
         <div className="lobby-share">
           <Button size="sm" variant="ghost" onClick={shareLink}>

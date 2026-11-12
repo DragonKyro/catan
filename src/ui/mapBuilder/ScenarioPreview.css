@@ -1,3 +1,8 @@
+/* Scenario previews: the bare `?preview=` page (screenshot tooling, look kept
+   as is) and the map builder's "Preview scenarios" screen (inside
+   MenuScreen). Rules are scoped to those two roots: the New Game map preview
+   uses the same child class names (newGame/ScenarioPreview.css). */
+
 .scenario-preview-page {
   position: fixed;
   inset: 0;
@@ -5,24 +10,29 @@
   flex-direction: column;
   background: var(--ocean, #1d4f73);
 }
+
 .scenario-preview-page .scenario-preview-board {
   flex: 1;
   min-height: 0;
 }
-.scenario-preview-board {
+
+:is(.scenario-preview-page, .scenario-preview-screen) .scenario-preview-board {
   display: flex;
   justify-content: center;
   align-items: center;
 }
+
 .scenario-preview-svg {
   width: 100%;
   height: 100%;
 }
+
 .scenario-preview-svg .board-svg {
   width: 100%;
   height: 100%;
 }
-.scenario-preview-caption {
+
+.scenario-preview-page .scenario-preview-caption {
   position: absolute;
   left: 8px;
   bottom: 6px;
@@ -30,35 +40,77 @@
   color: #fff;
   text-shadow: 0 1px 2px #000;
 }
-.scenario-preview-error {
+
+:is(.scenario-preview-page, .scenario-preview-screen) .scenario-preview-error {
   padding: 24px;
   color: #fff;
   font: 14px system-ui, sans-serif;
 }
+
+/* ---- The map builder's preview screen ---- */
+
 .scenario-preview-screen {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  height: 100vh;
   height: 100dvh;
+  padding: 12px;
+  box-sizing: border-box;
 }
+
+/* The board on the sea, framed like the map builder's canvas. */
 .scenario-preview-screen .scenario-preview-board {
   flex: 1;
   min-height: 0;
+  background: var(--ocean, #3b7ab8);
+  border: 5px solid #f3e2b8;
+  border-radius: 18px;
+  box-shadow:
+    0 5px 0 var(--paper-edge, #c9a96a),
+    0 18px 38px rgba(3, 30, 60, 0.32);
+  overflow: hidden;
 }
+
 .scenario-preview-header {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px 14px;
   align-items: center;
-  padding: 8px 12px;
-  background: var(--panel-bg, #20252b);
+  padding: 8px 14px;
   color: var(--text, #eee);
-  font: 14px system-ui, sans-serif;
+  font: 600 14px system-ui, sans-serif;
 }
+
 .scenario-preview-header label {
   display: flex;
   gap: 6px;
   align-items: center;
+  color: var(--text-soft, #ccc);
 }
+
+.scenario-preview-header :is(select, input[type='number']) {
+  border-radius: 7px;
+  padding: 4px 6px;
+  font: 600 13px system-ui, sans-serif;
+}
+
 .scenario-preview-header input[type='number'] {
   width: 70px;
+}
+
+.scenario-preview-header button {
+  background: linear-gradient(180deg, #fffaea 0%, #f4e4bd 100%);
+  color: var(--text, #222);
+  border: 1px solid var(--panel-border, #ccc);
+  border-radius: 8px;
+  padding: 4px 11px;
+  font: 600 13px system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--paper-edge, #aaa);
+}
+
+.scenario-preview-header button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 var(--paper-edge, #aaa);
 }

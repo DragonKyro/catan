@@ -2,8 +2,14 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: var(--bg-elev1, #0f1218);
-  border-radius: 6px;
+  /* The sea the map is painted on (the SVG draws the same colour), in a
+     parchment frame like a board in its box. */
+  background: var(--ocean, #3b7ab8);
+  border: 5px solid #f3e2b8;
+  border-radius: 18px;
+  box-shadow:
+    0 5px 0 var(--paper-edge, #c9a96a),
+    0 18px 38px rgba(3, 30, 60, 0.32);
   overflow: hidden;
 }
 
@@ -42,13 +48,15 @@
 
 .map-canvas-error {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
-  right: 8px;
-  background: rgba(140, 30, 30, 0.85);
-  color: #fff;
+  bottom: 10px;
+  left: 10px;
+  right: 10px;
+  background: #fde6e2;
+  border: 1px solid #e07a6a;
+  color: #8f2418;
   padding: 6px 10px;
-  font-size: 12px;
-  border-radius: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 9px;
   pointer-events: none;
 }

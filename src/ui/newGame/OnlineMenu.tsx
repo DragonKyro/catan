@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/ui/shared/Button';
+import { ScreenTitle } from '@/ui/menu/ScreenTitle';
 import { useNetworkStore, warmUpNetwork } from '@/store/networkStore';
 import { roomCodeFromUrl } from '@/net';
 import './OnlineMenu.css';
@@ -33,8 +34,8 @@ export function OnlineMenu({ onBack }: Props) {
       <div className="online-card">
         <header className="online-header">
           <Button variant="ghost" size="sm" onClick={onBack}>← Back</Button>
-          <h2 className="online-title">Play online</h2>
         </header>
+        <ScreenTitle badge="online" title="Play online" subtitle="Host a room, or join one with a code" />
 
         <label className="online-field">
           <span>Your name</span>
