@@ -32,6 +32,7 @@ import {
 import { TRADERS_EXPANSION_ID } from '@/game/modules/traders/constants';
 import { tryBuildWonder } from './seafarers/wonders';
 import { SEAFARERS_EXPANSION_ID } from '@/game/modules/seafarers/constants';
+import { activePersona, canBuildNow, playStyleActive, routeLengthWith } from './persona';
 
 const ROAD_TARGET_THRESHOLD = 4.5; // min vertexScore to justify building a road for expansion
 // Threshold dropped sharply when we're chasing Longest Road OR have nowhere
@@ -91,6 +92,14 @@ export function chooseMainPhaseAction(
     if (win) return win;
   }
 
+  // 0.9) Expansion style (persona.ts): a settlement ahead of a city while
+  //      it's still spreading out.
+  const style = playStyleActive(state, playerId);
+  if (style === 'expansion') {
+    const settle = trySettlement(state, playerId);
+    if (settle) return settle;
+  }
+
   // 1) BUILD CITY
   if (canAfford(player.resources, COSTS.city) && player.cities.length < 4) {
     let bestVid: VertexId | null = null;
@@ -108,21 +117,17 @@ export function chooseMainPhaseAction(
   }
 
   // 2) BUILD SETTLEMENT
+  const settle = trySettlement(state, playerId);
+  if (settle) return settle;
+
+  // 2.05) Largest Army style: a dev card ahead of roads while the army
+  //       isn't secure (cards are where knights come from).
   if (
-    canAfford(player.resources, COSTS.settlement) &&
-    player.settlements.length < 5
+    style === 'largestArmy' &&
+    canAfford(player.resources, COSTS.devCard) &&
+    state.devCardDeck.length > 0
   ) {
-    let bestVid: VertexId | null = null;
-    let bestScore = -Infinity;
-    for (const vid of state.board.vertexIds) {
-      if (!canPlaceSettlement(state, playerId, vid)) continue;
-      const s = vertexScore(state, vid, playerId);
-      if (s > bestScore) {
-        bestScore = s;
-        bestVid = vid;
-      }
-    }
-    if (bestVid) return { type: 'buildSettlement', playerId, vertex: bestVid };
+    return { type: 'buyDevCard', playerId };
   }
 
   // 2.5) BUILD SHIP (Seafarers only). Ships sit between settlement and road
@@ -233,7 +238,13 @@ export function chooseMainPhaseAction(
       handSize <= 8;
     const placedSettlesAndCities = player.settlements.length + player.cities.length;
     const earlyGame = placedSettlesAndCities < 2;
-    if (!saveForCity && !earlyGame) {
+    // Play styles (persona.ts): the cities and expansion styles keep their
+    // wheat / ore (sheep / wheat) for their own builds unless the hand is
+    // about to be cut by a 7.
+    const styleHolds =
+      (style === 'citiesFirst' && player.settlements.length > 0 && handSize < 8) ||
+      (style === 'expansion' && handSize < 8);
+    if (!saveForCity && !earlyGame && !styleHolds) {
       return { type: 'buyDevCard', playerId };
     }
   }
@@ -261,6 +272,29 @@ export function chooseMainPhaseAction(
   return null;
 }
 
+
+/** The best settlement this player can build now, if they can afford one. */
+function trySettlement(state: GameState, playerId: PlayerId): Action | null {
+  const player = state.players.find((p) => p.id === playerId)!;
+  if (!canAfford(player.resources, COSTS.settlement) || player.settlements.length >= 5) return null;
+  let bestVid: VertexId | null = null;
+  let bestScore = -Infinity;
+  for (const vid of state.board.vertexIds) {
+    if (!canPlaceSettlement(state, playerId, vid)) continue;
+    const s = vertexScore(state, vid, playerId);
+    if (s > bestScore) {
+      bestScore = s;
+      bestVid = vid;
+    }
+  }
+  return bestVid ? { type: 'buildSettlement', playerId, vertex: bestVid } : null;
+}
+
+/** How much a road on `eid` would lengthen `playerId`'s longest route. */
+function routeGain(state: GameState, playerId: PlayerId, eid: EdgeId, current: number): number {
+  return routeLengthWith(state, playerId, [eid]) - current;
+}
+
 // Base road step (also used by the Cities & Knights tree): the best road
 // toward a settlement spot / Longest Road, or null when none clears the bar.
 export function tryBuildRoad(state: GameState, playerId: PlayerId): Action | null {
@@ -275,14 +309,18 @@ export function tryBuildRoad(state: GameState, playerId: PlayerId): Action | nul
   if (state.noLongestRoad) lrClaimTarget = 0;
   else if (lrHolder === null) lrClaimTarget = LR_CLAIM_LENGTH;
   else if (lrHolder !== playerId) lrClaimTarget = lrLength + 1;
-  const pursuingLR = lrClaimTarget > 0 && myRoadLen + 2 >= lrClaimTarget;
+  // Longest Road style (persona.ts): always chasing (and padding) the
+  // route until it holds it by a clear margin.
+  const style = playStyleActive(state, playerId);
+  const lrStyle = style === 'longestRoad';
+  const pursuingLR = lrStyle || (lrClaimTarget > 0 && myRoadLen + 2 >= lrClaimTarget);
   // Station roads (toward an unsettle-able vertex) are only allowed
   // when LR claim is imminent — within 1 of the target length. At 2+
   // away, a station road doesn't reliably extend our chain to claim,
   // so it's likely a useless build. (Earlier rule allowed stations
   // throughout LR pursuit; that produced the dead-end roads we kept
   // seeing in screenshots.)
-  const stationAllowed = lrClaimTarget > 0 && myRoadLen + 1 >= lrClaimTarget;
+  const stationAllowed = lrStyle || (lrClaimTarget > 0 && myRoadLen + 1 >= lrClaimTarget);
 
   // Consult the win plan: if it says we need more settlements, we're
   // willing to accept a lower-quality unlock.
@@ -335,6 +373,17 @@ export function tryBuildRoad(state: GameState, playerId: PlayerId): Action | nul
   if (fallingBehind) threshold = Math.max(2.0, threshold - 1.0);
   if (burnHand) threshold = Math.max(1.5, threshold - 1.5);
   if (vpLockedOut) threshold = Math.min(threshold, 1.0);
+  // Play / placement styles (persona.ts): the expansion style roads out to
+  // new spots more readily, the cities style keeps its cards for cities,
+  // and the port stacker / griefer road toward their harbor / a rival's
+  // next spot (their pull is in vertexScore) on a lower bar.
+  const persona = activePersona();
+  // (with nothing to build on — the pivot — any road toward a free spot)
+  if (style === 'expansion') threshold = Math.min(threshold, canBuildNow(state, playerId) ? 3.0 : 1.0);
+  if (style === 'citiesFirst') threshold += 1.0;
+  if ((persona.placement === 'portStack' || persona.placement === 'grief') && myVp < 7) {
+    threshold = Math.min(threshold, 3.0);
+  }
 
   let bestEid: EdgeId | null = null;
   let bestScore = -Infinity;
@@ -417,9 +466,11 @@ export function tryBuildRoad(state: GameState, playerId: PlayerId): Action | nul
 
     const base = vertexScore(state, newVid, playerId);
     const contestedPenalty = pursuingLR ? 0 : 2 * enemyRoadsAtNew;
-    const finalScore = pursuingLR
+    let finalScore = pursuingLR
       ? Math.max(base - (blockedAdjacent ? 2.5 : 0), ROAD_TARGET_THRESHOLD_LR + 0.5)
       : base - contestedPenalty;
+    // Longest Road style: the road that lengthens the route most.
+    if (lrStyle) finalScore += 2.5 * routeGain(state, playerId, eid, myRoadLen);
     if (finalScore > bestScore) {
       bestScore = finalScore;
       bestEid = eid;
@@ -558,7 +609,16 @@ export function tryBankTrade(state: GameState, playerId: PlayerId): Action | nul
   // 8-pip wheat for sheep just because we technically can. Trailing
   // players bypass this guard — the cost of stalling at 3 VP is far
   // worse than the cost of one bad bank conversion.
-  if (!discardImminent && !fallingBehind) {
+  // Play styles (persona.ts) pay the bank's price for their own build's
+  // resources (a city's wheat / ore, a road's wood / brick, …).
+  const STYLE_WANTS: Partial<Record<string, readonly Resource[]>> = {
+    citiesFirst: ['ore', 'wheat'],
+    longestRoad: ['wood', 'brick'],
+    expansion: ['wood', 'brick', 'sheep', 'wheat'],
+    largestArmy: ['sheep', 'wheat', 'ore'],
+  };
+  const styleWants = STYLE_WANTS[playStyleActive(state, playerId)]?.includes(wantRes) ?? false;
+  if (!discardImminent && !fallingBehind && !styleWants) {
     const delta = RESOURCE_WEIGHT[wantRes] - RESOURCE_WEIGHT[bestGive] * bestRate;
     if (delta + (needs.byResource[wantRes] ?? 0) * 0.7 < -1.5) return null;
   }

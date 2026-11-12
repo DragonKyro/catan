@@ -23,6 +23,7 @@ import { chooseFishSwap } from './traders/fish';
 import { chooseCitiesAndKnightsAction, isCitiesAndKnights } from './citiesAndKnights';
 import { chooseTradersBarbariansAction } from './traders/tradersBarbarians';
 import { chooseExplorersPiratesAction } from './explorersPirates';
+import { withPersona, type HeuristicPersona, type PersonaId } from './persona';
 
 function randomDice(): [number, number] {
   return [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)];
@@ -31,8 +32,17 @@ function randomDice(): [number, number] {
 // Entry point: given a state where the acting player is AI, return one
 // action to take next. Returns null only when "end turn" is correct.
 // The caller (React driver) dispatches the action and re-invokes after
-// the new state arrives.
-export function chooseAction(state: GameState, playerId: PlayerId): Action | null {
+// the new state arrives. `persona` picks a playing style (persona.ts; the
+// training env's varied opponents); without one it's the all-rounder.
+export function chooseAction(
+  state: GameState,
+  playerId: PlayerId,
+  persona?: HeuristicPersona | PersonaId,
+): Action | null {
+  return withPersona(persona, () => chooseActionAs(state, playerId));
+}
+
+function chooseActionAs(state: GameState, playerId: PlayerId): Action | null {
   // Explorers & Pirates plays its own setup, turn and Movement phase (ships,
   // settlers, crews, missions, the pirate ship).
   if (state.explorersPirates) {
@@ -179,3 +189,4 @@ export function chooseAction(state: GameState, playerId: PlayerId): Action | nul
 }
 
 export { shouldAcceptTrade } from './trade';
+export { PERSONAS, PERSONA_IDS, isPersonaId, type HeuristicPersona, type PersonaId } from './persona';

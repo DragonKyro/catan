@@ -57,6 +57,7 @@ import { actWithPolicy } from '@/ai/nn/agent';
 import type { CatanPolicyNet } from '@/ai/nn/runtime';
 import { DEFAULT_REWARD_WEIGHTS, finalStandings, terminalRewards, type RewardWeights } from '@/ai/nn/reward';
 import { heuristicAction, teacherSlot } from './teacher';
+import { PERSONA_IDS, isPersonaId, type PersonaId } from '@/ai/persona';
 
 export type SeatRole = 'learner' | 'opponent' | 'heuristic';
 const ROLE_CODE: Record<SeatRole, number> = { learner: 0, opponent: 1, heuristic: 2 };
@@ -80,6 +81,9 @@ export interface VecEnvOptions {
   teacher: boolean;
   /** Charged to a seat whenever an offer of theirs is rejected by everyone. */
   refusedOfferPenalty: number;
+  /** Heuristic personas (src/ai/persona.ts) heuristic seats are drawn from, one
+   *  per seat per match from the match seed; `['all']` = every persona. */
+  personas: string[];
 }
 
 export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
@@ -95,6 +99,7 @@ export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
   quota: 0,
   teacher: false,
   refusedOfferPenalty: 0,
+  personas: ['allRounder'],
 };
 
 export interface Episode {
@@ -111,6 +116,8 @@ export interface Episode {
   truncated: boolean;
   /** Heuristic moves the engine rejected, replaced by a random legal move. */
   fallbacks: number;
+  /** The persona each heuristic seat played (null for network seats). */
+  personas: (PersonaId | null)[];
   /** The match was abandoned after an error (no terminal reward). */
   aborted: boolean;
   /** Per seat, how often each action type was played, plus `tradeDone`
@@ -143,6 +150,8 @@ interface EnvSlot {
   seed: number;
   episode: number;
   roles: SeatRole[];
+  /** The persona of each heuristic seat this match (null for network seats). */
+  personas: (PersonaId | null)[];
   /** Every seat's knowledge (heuristic seats need theirs for a fallback move). */
   knowledge: CatanKnowledge[];
   dice: number;
@@ -193,6 +202,7 @@ export class CatanVecEnv {
     const { numEnvs: n, players, seats } = this.opts;
     if (!(Number.isInteger(n) && n >= 1)) throw new Error('numEnvs must be a positive integer');
     validateSeats(seats, players);
+    this.opts.personas = resolvePersonas(this.opts.personas);
     this.shape = boardShape(players);
     const sh = this.shape;
     this.batch = {
@@ -210,8 +220,9 @@ export class CatanVecEnv {
     };
   }
 
-  /** Change the seat roles for matches that start from now on, and/or turn teacher labels on or off. */
-  configure(update: { seats?: SeatRole[]; teacher?: boolean }): void {
+  /** Change the seat roles / heuristic personas for matches that start from now on, and/or turn teacher labels on or off. */
+  configure(update: { seats?: SeatRole[]; teacher?: boolean; personas?: string[] }): void {
+    if (update.personas) this.opts.personas = resolvePersonas(update.personas);
     if (update.seats) {
       validateSeats(update.seats, this.opts.players);
       this.opts.seats = update.seats.slice();
@@ -287,11 +298,21 @@ export class CatanVecEnv {
     });
     const shift = (i + episode) % players;
     const roles = state.players.map((_, k) => seats[(k + shift) % players]!);
+    // A persona per heuristic seat, drawn from the match seed (reproducible).
+    const pool = this.opts.personas as PersonaId[];
+    let draw = (seed ^ 0x27d4eb2f) >>> 0;
+    const personas = roles.map((role) => {
+      if (role !== 'heuristic') return null;
+      const [u, next] = nextRng(draw);
+      draw = next;
+      return pool[Math.floor(u * pool.length)]!;
+    });
     return {
       state,
       seed,
       episode,
       roles,
+      personas,
       knowledge: state.players.map((p) => initialKnowledge(state, p.id)),
       dice: (seed ^ 0x9e3779b9) >>> 0,
       rng: (seed ^ 0x85ebca6b) >>> 0,
@@ -355,7 +376,7 @@ export class CatanVecEnv {
   /** A heuristic seat's move; one the engine rejects is replaced by a random legal move. */
   private heuristicMove(i: number, seat: number, id: PlayerId): void {
     const env = this.envs[i]!;
-    const action = heuristicAction(env.state, id);
+    const action = heuristicAction(env.state, id, env.personas[seat] ?? undefined);
     try {
       this.apply(i, action);
       return;
@@ -425,6 +446,7 @@ export class CatanVecEnv {
       steps: env.steps,
       truncated,
       fallbacks: env.fallbacks,
+      personas: env.personas.slice(),
       aborted,
       actions: env.actions,
     });
@@ -478,6 +500,16 @@ export class CatanVecEnv {
     b.global.set(f.global, i * GLOBAL_DIM);
     b.mask.set(mask, i * sh.slots);
   }
+}
+
+/** `['all']` → every persona; otherwise each id must be a persona (src/ai/persona.ts). */
+function resolvePersonas(ids: string[]): PersonaId[] {
+  const list = ids.length === 1 && ids[0] === 'all' ? [...PERSONA_IDS] : ids;
+  if (list.length === 0) throw new Error('personas must list at least one persona');
+  for (const id of list) {
+    if (!isPersonaId(id)) throw new Error(`unknown persona ${JSON.stringify(id)} (personas: ${PERSONA_IDS.join(', ')}, or all)`);
+  }
+  return list as PersonaId[];
 }
 
 function validateSeats(seats: SeatRole[], players: number): void {
