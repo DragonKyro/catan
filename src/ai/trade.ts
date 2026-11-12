@@ -12,6 +12,7 @@ import { handValue, partialValue, reportNeeds, pipsByResource } from './value';
 import { assessThreats, isRival } from './threats';
 import { goldValue } from './traders/gold';
 import { ckShouldAcceptTrade, tradeHasCommodities } from './citiesAndKnights/trade';
+import { withPersona, type HeuristicPersona, type PersonaId } from './persona';
 
 // Threshold for accepting a trade as-is. Lower than before so AI doesn't
 // stonewall reasonable swaps — colonist.io's AI accepts pretty liberally.
@@ -173,7 +174,15 @@ function threatPenaltyForGiving(
   return penalty;
 }
 
-export function shouldAcceptTrade(state: GameState, playerId: PlayerId): boolean {
+export function shouldAcceptTrade(
+  state: GameState,
+  playerId: PlayerId,
+  persona?: HeuristicPersona | PersonaId,
+): boolean {
+  return withPersona(persona, () => shouldAcceptTradeAs(state, playerId));
+}
+
+function shouldAcceptTradeAs(state: GameState, playerId: PlayerId): boolean {
   const trade = state.pendingTrade;
   if (!trade) return false;
   if (trade.proposerId === playerId) return false;
@@ -297,6 +306,14 @@ export function tryExtractCounter(
 // would still be plausibly acceptable to the original proposer. Returns null
 // if no improving tweak exists.
 export function tryCounterTrade(
+  state: GameState,
+  playerId: PlayerId,
+  persona?: HeuristicPersona | PersonaId,
+): CounterTradeAction | null {
+  return withPersona(persona, () => tryCounterTradeAs(state, playerId));
+}
+
+function tryCounterTradeAs(
   state: GameState,
   playerId: PlayerId,
 ): CounterTradeAction | null {

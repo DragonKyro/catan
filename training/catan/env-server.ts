@@ -13,7 +13,7 @@
 //      ["teacher",bytes]]}
 //     followed by those raw bytes, in that order: f32 little-endian features, u8 mask,
 //     i16 teacher slot per row (−1 = none)
-//   → {"cmd":"configure","options":{seats?, teacher?}}  ← {"ok":true}
+//   → {"cmd":"configure","options":{seats?, teacher?, personas?}}  ← {"ok":true}
 //   → {"cmd":"policyLogits","path":"<policy.json>"}
 //   ← {"ok":true,"logits":[[…], …]}   (the TS runtime on every env's pending row — parity checks)
 //   → {"cmd":"close"}

@@ -18,6 +18,7 @@ import { tradersVertexBonus } from './traders/value';
 import { ckReportNeeds, ckVertexBonus } from './citiesAndKnights/value';
 import { isCitiesAndKnights } from './citiesAndKnights/common';
 import { epNeeds } from './explorersPirates/needs';
+import { personaVertexBonus, playStyleActive, vpSources } from './persona';
 
 // Resource weights tuned for typical Catan economy. Ore/wheat slightly
 // scarce; sheep slightly abundant.
@@ -262,7 +263,12 @@ export function vertexScore(
   // paper / cloth / coin to cities; the round-2 setup city wants them.
   const ckBonus = ckVertexBonus(state, vertexId, playerId);
 
+  // Persona follow-through after setup (persona.ts): the port stacker's
+  // harbor, the griefer's rival spots. 0 for the all-rounder.
+  const persona = personaVertexBonus(state, vertexId, playerId);
+
   return (
+    persona +
     totalPips +
     ckBonus +
     diversityBonus +
@@ -311,75 +317,127 @@ export function reportNeeds(state: GameState, playerId: PlayerId): NeedReport {
     ore: 0,
   };
 
-  // Pick the goal we're closest to / would benefit from most
+  // Pick the goal we're closest to / would benefit from most. Each step
+  // claims the goal when it's within reach (`slack` = missing cards it
+  // accepts); the order is the all-rounder's unless a play style is steering
+  // (persona.ts), which puts its own build first and reaches further for it.
   let goal: NeedReport['goal'] = 'none';
+  const style = playStyleActive(state, playerId);
+  // A style that's steering (or a pivot away from building) skips the
+  // builds it can't make, so trades don't chase cards for them.
+  const open = style === 'balanced' ? null : vpSources(state, playerId);
 
-  // City: 2W 3O — high priority if we have settlements
-  if (player.settlements.length > 0) {
+  const city = (slack: number) => {
+    if (goal !== 'none' || player.settlements.length === 0 || (open && !open.cityNow)) return;
     const wheatShort = Math.max(0, 2 - r.wheat);
     const oreShort = Math.max(0, 3 - r.ore);
-    if (wheatShort + oreShort <= 3) {
+    if (wheatShort + oreShort <= slack) {
       goal = 'city';
       byResource.wheat = Math.max(byResource.wheat, wheatShort);
       byResource.ore = Math.max(byResource.ore, oreShort);
     }
-  }
-
+  };
   // Ship: 1 wood 1 wool — Seafarers, when no settlement spot is open now
   // and a ship leads somewhere worth going (an island, a scenario target).
-  if (
-    goal === 'none' &&
-    state.settings.expansions.includes('seafarers') &&
-    !state.board.vertexIds.some((v) => canPlaceSettlement(state, playerId, v)) &&
-    hasShipGoal(state, playerId)
-  ) {
-    const woodShort = Math.max(0, 1 - r.wood);
-    const sheepShort = Math.max(0, 1 - r.sheep);
-    if (woodShort + sheepShort <= 2) {
-      goal = 'ship';
-      byResource.wood = Math.max(byResource.wood, woodShort);
-      byResource.sheep = Math.max(byResource.sheep, sheepShort);
+  const ship = () => {
+    if (
+      goal === 'none' &&
+      state.settings.expansions.includes('seafarers') &&
+      !state.board.vertexIds.some((v) => canPlaceSettlement(state, playerId, v)) &&
+      hasShipGoal(state, playerId)
+    ) {
+      const woodShort = Math.max(0, 1 - r.wood);
+      const sheepShort = Math.max(0, 1 - r.sheep);
+      if (woodShort + sheepShort <= 2) {
+        goal = 'ship';
+        byResource.wood = Math.max(byResource.wood, woodShort);
+        byResource.sheep = Math.max(byResource.sheep, sheepShort);
+      }
     }
-  }
-
+  };
   // Settlement: 1W 1B 1Sh 1Wh
-  if (goal === 'none') {
+  const settlement = (slack: number) => {
+    if (goal !== 'none' || (open && !open.settlement)) return;
     const woodShort = Math.max(0, 1 - r.wood);
     const brickShort = Math.max(0, 1 - r.brick);
     const sheepShort = Math.max(0, 1 - r.sheep);
     const wheatShort = Math.max(0, 1 - r.wheat);
-    const total = woodShort + brickShort + sheepShort + wheatShort;
-    if (total <= 2) {
+    if (woodShort + brickShort + sheepShort + wheatShort <= slack) {
       goal = 'settlement';
       byResource.wood = Math.max(byResource.wood, woodShort);
       byResource.brick = Math.max(byResource.brick, brickShort);
       byResource.sheep = Math.max(byResource.sheep, sheepShort);
       byResource.wheat = Math.max(byResource.wheat, wheatShort);
     }
-  }
-
-  if (goal === 'none') {
-    // Dev card: 1Sh 1Wh 1O
+  };
+  // Dev card: 1Sh 1Wh 1O
+  const devCard = (slack: number) => {
+    if (goal !== 'none') return;
     const sheepShort = Math.max(0, 1 - r.sheep);
     const wheatShort = Math.max(0, 1 - r.wheat);
     const oreShort = Math.max(0, 1 - r.ore);
-    if (sheepShort + wheatShort + oreShort <= 1) {
+    if (sheepShort + wheatShort + oreShort <= slack) {
       goal = 'devCard';
       byResource.sheep = Math.max(byResource.sheep, sheepShort);
       byResource.wheat = Math.max(byResource.wheat, wheatShort);
       byResource.ore = Math.max(byResource.ore, oreShort);
     }
-  }
-
-  if (goal === 'none') {
-    // Road: 1W 1B
+  };
+  // Road: 1W 1B
+  const road = (slack: number) => {
+    if (goal !== 'none') return;
     const woodShort = Math.max(0, 1 - r.wood);
     const brickShort = Math.max(0, 1 - r.brick);
-    if (woodShort + brickShort <= 1) {
+    if (woodShort + brickShort <= slack) {
       goal = 'road';
       byResource.wood = Math.max(byResource.wood, woodShort);
       byResource.brick = Math.max(byResource.brick, brickShort);
     }
+  };
+
+  switch (style) {
+    case 'citiesFirst': // a city whatever it takes
+      city(5);
+      ship();
+      settlement(2);
+      devCard(1);
+      road(1);
+      break;
+    case 'expansion':
+      // Settlements first while a spot is open on its network; otherwise a
+      // city (so its ore isn't traded away for settlement cards it can't
+      // place), then roads out to the next spot ahead of dev cards.
+      if (state.board.vertexIds.some((v) => canPlaceSettlement(state, playerId, v))) {
+        settlement(3);
+        city(3);
+      } else {
+        city(3);
+        settlement(2);
+      }
+      ship();
+      road(2);
+      devCard(1);
+      break;
+    case 'largestArmy': // dev cards ahead of settlements and roads
+      city(2);
+      devCard(2);
+      ship();
+      settlement(2);
+      road(1);
+      break;
+    case 'longestRoad': // roads ahead of dev cards
+      city(3);
+      ship();
+      settlement(2);
+      road(2);
+      devCard(1);
+      break;
+    default: // the all-rounder
+      city(3);
+      ship();
+      settlement(2);
+      devCard(1);
+      road(1);
   }
 
   return { byResource, goal };

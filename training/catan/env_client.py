@@ -141,11 +141,14 @@ class CatanEnv:
         reward: dict | None = None,
         teacher: bool = False,
         refused_offer_penalty: float = 0.0,
+        personas: list[str] | None = None,
     ) -> Batch:
         """seats: a role per seat, 'learner' | 'opponent' | 'heuristic' (rotated one
         seat per match). quota: matches per env before it idles (0 = forever).
         teacher: label learner rows with the heuristic's slot (Batch.teacher).
-        refused_offer_penalty: charged to a seat whose offer everyone rejects."""
+        refused_offer_penalty: charged to a seat whose offer everyone rejects.
+        personas: heuristic personas heuristic seats are drawn from (src/ai/persona.ts;
+        ['all'] = every one; default the all-rounder)."""
         options = {
             "numEnvs": num_envs,
             "seed": seed,
@@ -159,6 +162,8 @@ class CatanEnv:
             "teacher": teacher,
             "refusedOfferPenalty": refused_offer_penalty,
         }
+        if personas:
+            options["personas"] = personas
         if reward is not None:
             options["reward"] = reward
         return self._batch(self._call({"cmd": "reset", "options": options}))
@@ -173,13 +178,16 @@ class CatanEnv:
     def recv_batch(self) -> Batch:
         return self._batch(self._recv())
 
-    def configure(self, seats: list[str] | None = None, teacher: bool | None = None) -> None:
-        """New seat roles for matches that start from now on; teacher labels on / off."""
+    def configure(self, seats: list[str] | None = None, teacher: bool | None = None,
+                  personas: list[str] | None = None) -> None:
+        """New seat roles / heuristic personas for matches that start from now on; teacher labels on / off."""
         options: dict = {}
         if seats is not None:
             options["seats"] = seats
         if teacher is not None:
             options["teacher"] = teacher
+        if personas:
+            options["personas"] = personas
         self._call({"cmd": "configure", "options": options})
 
     def close(self) -> None:

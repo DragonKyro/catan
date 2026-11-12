@@ -45,6 +45,21 @@ describe('CatanVecEnv', () => {
     console.log(`self-play random: ${decisions} decisions in ${ms.toFixed(0)} ms (${(decisions / ms * 1000).toFixed(0)}/s)`);
   }, 120_000);
 
+  it('heuristic seats play personas drawn from the pool, recorded per episode', () => {
+    const { done } = run(['learner', 'heuristic', 'heuristic', 'heuristic'], 8, { personas: ['all'], maxTurns: 60 });
+    const seen = new Set<string>();
+    for (const e of done) {
+      e.roles.forEach((role, k) => {
+        if (role === 'learner') expect(e.personas[k]).toBeNull();
+        else seen.add(e.personas[k]!);
+      });
+    }
+    expect(seen.size).toBeGreaterThan(3); // 24+ heuristic seats over 11 personas
+    const defaults = run(['learner', 'heuristic', 'heuristic', 'heuristic'], 2, { maxTurns: 30 }).done;
+    for (const e of defaults) for (const p of e.personas) expect(p === null || p === 'allRounder').toBe(true);
+    expect(() => new CatanVecEnv({ seats: ['learner', 'heuristic', 'heuristic', 'heuristic'], personas: ['nope'] })).toThrow(/unknown persona/);
+  }, 120_000);
+
   it('a lone learner vs heuristics visits every seat, and heuristic seats never ask for a decision', () => {
     const { env, done, decisions, ms } = run(['learner', 'heuristic', 'heuristic', 'heuristic'], 8);
     const seatsSeen = new Set<number>();

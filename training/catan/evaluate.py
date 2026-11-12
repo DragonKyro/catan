@@ -92,7 +92,7 @@ def _greedy(net: CatanNet, parts: list[np.ndarray], mask: np.ndarray, rows: np.n
 
 def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, players: int = 4,
              seed: int = EVAL_SEED, max_turns: int = 200, device: str | None = None,
-             lineup: str | None = None) -> dict:
+             lineup: str | None = None, personas: list[str] | None = None) -> dict:
     """`games` fresh deals at the `lineup` table (default A in one seat, B in every other)."""
     lineup = (lineup or "A" + "B" * (players - 1)).upper()
     if len(lineup) != players or set(lineup) - set("ABH") or "A" not in lineup:
@@ -117,7 +117,8 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         net_b = None if path_b == HEURISTIC or "B" not in lineup else net(path_b)
         role_of = {"A": "learner", "B": "opponent" if net_b is not None else HEURISTIC, "H": HEURISTIC}
         seats = [role_of[c] for c in lineup]
-        batches = [env.reset(num_envs=n, seed=seed + 1_000_003 * w, seats=seats, max_turns=max_turns, quota=1)
+        batches = [env.reset(num_envs=n, seed=seed + 1_000_003 * w, seats=seats, max_turns=max_turns, quota=1,
+                             personas=personas)
                    for w, (env, n) in enumerate(zip(envs, per))]
         episodes: list = []
         t0 = time.perf_counter()
@@ -199,6 +200,9 @@ def main(argv: list[str] | None = None) -> None:
         q.add_argument("--max-turns", type=int, default=200)
         q.add_argument("--seed", type=int, default=EVAL_SEED)
         q.add_argument("--device", default=None)
+        q.add_argument("--personas", default=None,
+                       help="heuristic seats play personas drawn from this list (src/ai/persona.ts): "
+                            "'all' or a comma list; default the all-rounder")
 
     m = sub.add_parser("match", help="A in one seat vs B in the others")
     m.add_argument("a")
@@ -213,8 +217,9 @@ def main(argv: list[str] | None = None) -> None:
     common(pr)
     args = p.parse_args(argv)
 
+    personas = [x.strip() for x in args.personas.split(",") if x.strip()] if args.personas else None
     kw = dict(games=args.games, workers=args.workers, players=args.players, seed=args.seed,
-              max_turns=args.max_turns, device=args.device)
+              max_turns=args.max_turns, device=args.device, personas=personas)
     if args.cmd == "match":
         s = evaluate(args.a, args.b, lineup=args.lineup, **kw)
         print(json.dumps(s) if args.json else report(s), flush=True)

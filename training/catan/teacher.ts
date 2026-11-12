@@ -12,18 +12,20 @@ import type { Action, EdgeId, GameState, PlayerId } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { canConnectRoad } from '@/game/placement';
 import { chooseAction, shouldAcceptTrade } from '@/ai/index';
+import type { PersonaId } from '@/ai/persona';
 import { slotForAction } from '@/ai/nn/actions';
 import type { CatanObservation } from '@/ai/nn/observation';
 
-export function heuristicAction(s: GameState, id: PlayerId): Action {
+/** A heuristic seat's move; `persona` picks its style (src/ai/persona.ts; default the all-rounder). */
+export function heuristicAction(s: GameState, id: PlayerId, persona?: PersonaId): Action {
   const pt = s.pendingTrade;
   if (pt) {
     const me = s.players.find((p) => p.id === id)!;
     const canPay = RESOURCES.every((r) => me.resources[r] >= (pt.receive[r] ?? 0));
-    if (canPay && shouldAcceptTrade(s, id)) return { type: 'acceptTrade', playerId: id };
+    if (canPay && shouldAcceptTrade(s, id, persona)) return { type: 'acceptTrade', playerId: id };
     return pt.proposerId !== s.playerOrder[s.currentPlayerIndex] ? { type: 'cancelTrade', playerId: id } : { type: 'rejectTrade', playerId: id };
   }
-  return chooseAction(s, id) ?? { type: 'endTurn', playerId: id };
+  return chooseAction(s, id, persona) ?? { type: 'endTurn', playerId: id };
 }
 
 /** The heuristic's Road Building roads: the first two that fit (src/ai/devcard.ts). */

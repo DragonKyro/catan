@@ -14,6 +14,7 @@ import {
   shipToConvert,
 } from '@/game/modules/seafarers/pirateIslands';
 import { reportNeeds } from './value';
+import { playStyleActive, routeLengthWith } from './persona';
 
 // Choose which dev card (if any) to play. Returns null if we shouldn't
 // play a card right now.
@@ -50,6 +51,18 @@ export function chooseDevCardPlay(state: GameState, playerId: PlayerId): Action 
     if (robberHurtsUs) {
       return { type: 'playKnight', playerId };
     }
+  }
+
+  // 1.5) Largest Army style (persona.ts): a knight every turn it can until
+  //      the army is secure.
+  if (
+    cards.includes('knight') &&
+    !state.noLargestArmy &&
+    !state.pirateIslands &&
+    (state.robberActive ?? true) &&
+    playStyleActive(state, playerId) === 'largestArmy'
+  ) {
+    return { type: 'playKnight', playerId };
   }
 
   // 2) Knight if we're 1 away from largest army (or holding it)
@@ -113,13 +126,10 @@ export function chooseDevCardPlay(state: GameState, playerId: PlayerId): Action 
 
   // 5) Road Building if we have at least one productive road to place
   if (cards.includes('roadBuilding') && player.roads.length < 14) {
-    const legalEdges: EdgeId[] = [];
-    for (const eid of state.board.edgeIds) {
-      if (canConnectRoad(state, playerId, eid)) {
-        legalEdges.push(eid);
-        if (legalEdges.length >= 2) break;
-      }
-    }
+    const legalEdges: EdgeId[] =
+      playStyleActive(state, playerId) === 'longestRoad'
+        ? longestRouteEdges(state, playerId)
+        : firstLegalEdges(state, playerId);
     // Seafarers: the card builds ships too — top up with a ship when
     // there's no second road to place.
     const shipEdges: EdgeId[] = [];
@@ -142,6 +152,41 @@ export function chooseDevCardPlay(state: GameState, playerId: PlayerId): Action 
   }
 
   return null;
+}
+
+/** The all-rounder's Road Building roads: the first two that fit. */
+function firstLegalEdges(state: GameState, playerId: PlayerId): EdgeId[] {
+  const out: EdgeId[] = [];
+  for (const eid of state.board.edgeIds) {
+    if (canConnectRoad(state, playerId, eid)) {
+      out.push(eid);
+      if (out.length >= 2) break;
+    }
+  }
+  return out;
+}
+
+/** Longest Road style: two roads, each the one that lengthens the route most. */
+function longestRouteEdges(state: GameState, playerId: PlayerId): EdgeId[] {
+  const out: EdgeId[] = [];
+  let s = state;
+  for (let k = 0; k < 2; k++) {
+    let best: EdgeId | null = null;
+    let bestLen = -1;
+    for (const eid of s.board.edgeIds) {
+      if (!canConnectRoad(s, playerId, eid)) continue;
+      const len = routeLengthWith(s, playerId, [eid]);
+      if (len > bestLen) {
+        bestLen = len;
+        best = eid;
+      }
+    }
+    if (!best) break;
+    out.push(best);
+    const placed = best;
+    s = { ...s, players: s.players.map((p) => (p.id === playerId ? { ...p, roads: [...p.roads, placed] } : p)) };
+  }
+  return out;
 }
 
 // Helper so main.ts can ask for a candidate resource basket worth taking with YoP

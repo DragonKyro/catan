@@ -128,6 +128,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     game.add_argument("--max-turns", type=int, default=200, help="dice rolls before a match is cut off")
     game.add_argument("--vp-shaping", type=float, default=0.5,
                       help="potential-based shaping: this × ΔVP / target per VP change (sums to zero per match)")
+    game.add_argument("--heuristic-personas", default="allRounder",
+                      help="heuristic personas (src/ai/persona.ts) every heuristic seat is drawn from, one per "
+                           "seat per match: 'all', or a comma list such as allRounder,longestRoad,griefer")
     game.add_argument("--refused-offer-penalty", type=float, default=0.002,
                       help="charged when everyone rejects an offer (a VP of shaping is 0.05, a place 0.17)")
 
@@ -459,7 +462,8 @@ class Trainer:
             worker.batch = env.reset(num_envs=a.envs_per_worker, seed=seed,
                                      seats=seats_for(role, a.players, fixed is not None),
                                      max_turns=a.max_turns, vp_shaping=a.vp_shaping, teacher=self.teacher_on,
-                                     refused_offer_penalty=a.refused_offer_penalty)
+                                     refused_offer_penalty=a.refused_offer_penalty,
+                                     personas=[x.strip() for x in a.heuristic_personas.split(",") if x.strip()])
             self.workers.append(worker)
         # After the workers: --mix decides how many there are.
         with open(os.path.join(self.run_dir, "config.json"), "w", encoding="utf-8") as f:
