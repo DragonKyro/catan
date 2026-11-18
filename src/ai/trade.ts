@@ -1,4 +1,5 @@
 import type {
+  Action,
   GameState,
   PlayerId,
   Resource,
@@ -6,6 +7,9 @@ import type {
   ProposeTradeAction,
   CounterTradeAction,
 } from '@/game/types';
+import { isCounterOffer } from '@/game/actions/trade';
+import { currentPlayerId } from '@/game/helpers';
+import { calculateVictoryPoints } from '@/game/scoring/points';
 import { RESOURCES, COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import { handValue, partialValue, reportNeeds, pipsByResource } from './value';
@@ -172,6 +176,78 @@ function threatPenaltyForGiving(
     penalty += totalGiven * 1.5;
   }
   return penalty;
+}
+
+/**
+ * Which of the players who accepted `proposerId`'s pending offer to trade
+ * with, or null to walk away. Never someone the offer would help toward a
+ * win (close to winning, or the runaway leader, and the offer hands them a
+ * resource that extends their lead); among the rest, the one furthest from
+ * winning (fewest public VP, then the smallest hand), so the trade helps the
+ * table's leaders least.
+ */
+export function chooseTradePartner(state: GameState, proposerId: PlayerId): PlayerId | null {
+  const trade = state.pendingTrade;
+  if (!trade || trade.proposerId !== proposerId) return null;
+  const threats = assessThreats(state);
+  const gives = RESOURCES.filter((r) => (trade.give[r] ?? 0) > 0);
+  const candidates = (trade.acceptedBy ?? []).filter((id) => {
+    const p = state.players.find((x) => x.id === id);
+    if (!p || !RESOURCES.every((r) => p.resources[r] >= (trade.receive[r] ?? 0))) return false;
+    if ((p.gold ?? 0) < (trade.receiveGold ?? 0)) return false;
+    const t = threats[id];
+    if (t && (t.closeToWin || t.isLeader) && (gives.some((r) => t.dangerousResources.has(r)) || t.closeToWin)) return false;
+    return true;
+  });
+  if (candidates.length === 0) return null;
+  const vp = (id: PlayerId) => calculateVictoryPoints(state, id, false);
+  const hand = (id: PlayerId) => {
+    const p = state.players.find((x) => x.id === id)!;
+    return RESOURCES.reduce((s, r) => s + p.resources[r], 0);
+  };
+  return [...candidates].sort((a, b) => vp(a) - vp(b) || hand(a) - hand(b))[0]!;
+}
+
+/**
+ * The next move on a pending player trade, for games with no clock or UI
+ * (sims, diagnostics, the training env): each opponent who hasn't answered
+ * the active player's offer, in turn order after the proposer, accepts (when
+ * `accepts(id)` and they can pay) or rejects; once everyone has answered the
+ * proposer trades with its pick of the acceptors (`chooseTradePartner`) or
+ * cancels. A counter-offer is answered by the active player: accept, or
+ * cancel. (When every opponent rejects, the engine closes the offer itself.)
+ */
+export function pendingTradeStep(state: GameState, accepts: (id: PlayerId) => boolean): Action {
+  const trade = state.pendingTrade!;
+  const canPay = (id: PlayerId) => {
+    const p = state.players.find((x) => x.id === id)!;
+    return RESOURCES.every((r) => p.resources[r] >= (trade.receive[r] ?? 0)) && (p.gold ?? 0) >= (trade.receiveGold ?? 0);
+  };
+  if (isCounterOffer(state)) {
+    const active = currentPlayerId(state);
+    return canPay(active) && accepts(active) ? { type: 'acceptTrade', playerId: active } : { type: 'cancelTrade', playerId: active };
+  }
+  const answer = nextTradeResponder(state);
+  if (answer) {
+    return canPay(answer) && accepts(answer) ? { type: 'acceptTrade', playerId: answer } : { type: 'rejectTrade', playerId: answer };
+  }
+  const partner = chooseTradePartner(state, trade.proposerId);
+  return partner
+    ? { type: 'confirmTrade', playerId: trade.proposerId, with: partner }
+    : { type: 'cancelTrade', playerId: trade.proposerId };
+}
+
+/** The next opponent (turn order after the proposer) yet to answer the active player's offer, or null. */
+export function nextTradeResponder(state: GameState): PlayerId | null {
+  const trade = state.pendingTrade;
+  if (!trade || isCounterOffer(state)) return null;
+  const n = state.playerOrder.length;
+  const at = state.playerOrder.indexOf(trade.proposerId);
+  for (let k = 1; k < n; k++) {
+    const id = state.playerOrder[(at + k) % n]!;
+    if (!trade.rejectedBy.includes(id) && !(trade.acceptedBy ?? []).includes(id)) return id;
+  }
+  return null;
 }
 
 export function shouldAcceptTrade(

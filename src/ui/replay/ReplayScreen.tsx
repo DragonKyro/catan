@@ -45,6 +45,7 @@ const MEANINGFUL_ACTIONS = new Set<Action['type']>([
   'discard',
   'bankTrade',
   'acceptTrade',
+  'confirmTrade',
   'endTurn',
   'chooseGoldResource',
   // Traders & Barbarians: Rivers of Catan bridges, Fishing on Catan fish
@@ -548,6 +549,8 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} places initial road`;
     case 'acceptTrade':
       return `${who} accepts the trade`;
+    case 'confirmTrade':
+      return `${who} trades with ${players.find((p) => p.id === action.with)?.name ?? action.with}`;
     case 'chooseGoldResource':
       return `${who} picks gold resources`;
     case 'moveShip':

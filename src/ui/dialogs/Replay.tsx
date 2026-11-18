@@ -284,6 +284,8 @@ function actionDescription(action: Action, players: Player[]): string {
       return `${who} proposes a trade`;
     case 'acceptTrade':
       return `${who} accepts the trade`;
+    case 'confirmTrade':
+      return `${who} trades with ${players.find((p) => p.id === action.with)?.name ?? action.with}`;
     case 'cancelTrade':
       return `${who} cancels the trade`;
     case 'rejectTrade':

@@ -61,14 +61,16 @@ export function riversFishingLogLines(before: GameState, action: Action, after: 
         text: action.token ? 'swapped a fish token for a new one' : 'kept a full fish hand',
       });
       break;
-    case 'acceptTrade': {
-      // Coins changing hands in a player trade (the cards are in the
-      // regular trade line).
+    case 'acceptTrade':
+    case 'confirmTrade': {
+      // Coins changing hands in a player trade that went through (the cards
+      // are in the regular trade line).
       const t = before.pendingTrade;
       const net = (t?.giveGold ?? 0) - (t?.receiveGold ?? 0);
-      if (t && net !== 0) {
-        const payer = net > 0 ? t.proposerId : me;
-        const payee = net > 0 ? me : t.proposerId;
+      const partner = action.type === 'confirmTrade' ? action.with : me;
+      if (t && !after.pendingTrade && net !== 0) {
+        const payer = net > 0 ? t.proposerId : partner;
+        const payee = net > 0 ? partner : t.proposerId;
         out.push({ player: payer, text: `paid ${Math.abs(net)} gold to ${name(after, payee)} in the trade` });
       }
       break;

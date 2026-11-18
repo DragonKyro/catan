@@ -182,3 +182,55 @@ def test_typescript_runtime_matches_pytorch(tmp_path):
             legal_ts = np.where(batch.mask, ts, -np.inf).argmax(1)
             legal_ref = np.where(batch.mask, ref, -np.inf).argmax(1)
             assert (legal_ts == legal_ref).all()
+
+
+def test_upgrade_policy_appends_slots_and_keeps_every_old_one(tmp_path):
+    """Action space v2 appended offers: a v1-sized head grows, old logits stay bit-identical."""
+    import upgrade_policy as up
+
+    dims, n_globals, shape, topo, versions, batch = _spec()
+    slots = CatanEnv().global_slots
+    n_old = slots.index("reject") + 1
+    assert n_old == 119 and n_globals == len(slots) == 199
+    old = CatanNet(dims, n_old, width=16, rounds=1)
+    path = os.path.join(tmp_path, "v1.json")
+    export_policy(old, path, {**versions, "actionSpaceVersion": 1})
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    g = torch.randn(8, 16)
+    with torch.no_grad():
+        before = old.global_head(g)
+    for mode in ("frozen", "warm"):
+        new_doc = up.upgrade_doc(doc, slots, versions["actionSpaceVersion"], mode)
+        assert new_doc["arch"]["num_globals"] == 199 and new_doc["actionSpaceVersion"] == versions["actionSpaceVersion"]
+        out = os.path.join(tmp_path, f"{mode}.json")
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump(new_doc, f)
+        net = load_policy(out, versions)
+        with torch.no_grad():
+            after = net.global_head(g)
+        assert torch.equal(after[:, :n_old], before)
+        if mode == "frozen":
+            assert torch.all(after[:, n_old:] == up.FROZEN_BIAS)
+        else:
+            k = slots.index("offer:3wood>1brick")
+            src = slots.index("offer:2wood>1brick")
+            assert torch.allclose(after[:, k], before[:, src] - 2.0, atol=1e-5)
+
+
+def test_persona_tables_benchmark_and_lopsided_evals(tmp_path):
+    """Weighted distinct personas aimed at the learner, lopsided openings, and the benchmark evals end to end."""
+    common = ["--runs-dir", str(tmp_path), "--run", "b", "--envs-per-worker", "2", "--rollout", "4",
+              "--save-every", "1", "--no-build", "--width", "16", "--rounds", "1", "--minibatch", "64",
+              "--device", "cpu", "--bc-updates", "0", "--bc-anchor", "0", "--max-turns", "30",
+              "--heuristic-personas", "longestRoad:3,largestArmy:3,griefer:3,citiesFirst", "--distinct-personas",
+              "--target-personas", "griefer", "--learner-setup-share", "0.5"]
+    run_dir = train.main(["--updates", "1", "--eval-every", "0", "--mix", "heuristic=1,self=1,mixed=1", *common])
+    train.main(["--updates", "2", "--resume", "--eval-every", "1", "--eval-games", "2", "--eval-workers", "1",
+                "--benchmark", f"{run_dir}@1", "--mix", "heuristic=1,self=1,mixed=1", *common])
+    with open(os.path.join(run_dir, "evals.jsonl"), encoding="utf-8") as f:
+        tags = {(r["update"], r["vs"]) for r in map(json.loads, f)}
+    assert {(2, "heuristic"), (2, "bench"), (2, "skew")} <= tags
+    with open(os.path.join(run_dir, "progress.md"), encoding="utf-8") as f:
+        doc = f.read()
+    assert "vs personas" in doc and "vs 3× u1" in doc and "lopsided opening" in doc and "targeting it: griefer" in doc

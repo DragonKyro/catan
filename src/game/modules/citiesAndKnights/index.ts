@@ -43,6 +43,7 @@ import { handleEndTurnCK } from './actions/endTurn';
 import {
   handleAcceptTradeCK,
   handleBankTradeCK,
+  handleConfirmTradeCK,
   handleCounterTradeCK,
   handleProposeTradeCK,
 } from './trade';
@@ -102,5 +103,6 @@ export const citiesAndKnightsModule: RuleModule = {
     proposeTrade: handleProposeTradeCK as never,
     counterTrade: handleCounterTradeCK as never,
     acceptTrade: handleAcceptTradeCK as never,
+    confirmTrade: handleConfirmTradeCK as never,
   },
 };

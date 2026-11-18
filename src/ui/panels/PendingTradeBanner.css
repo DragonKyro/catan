@@ -77,6 +77,27 @@
   text-decoration: none;
 }
 
+.ptbanner-responder.is-accepted {
+  border-color: color-mix(in srgb, var(--success) 60%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, var(--field));
+}
+
+.ptbanner-responder-yes {
+  color: var(--success);
+  font-weight: 800;
+}
+
+.ptbanner-note {
+  color: var(--text-soft);
+  font-size: 0.95em;
+  font-style: italic;
+}
+
+.ptbanner-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .ptbanner-responder-name {
   font-size: 0.95em;
 }

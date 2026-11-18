@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { nextTradeResponder } from '../trade';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createGame } from '@/game/createGame';
@@ -28,12 +29,8 @@ function decidingSeat(s: GameState): PlayerId {
   if (pt) {
     const acting = s.playerOrder[s.currentPlayerIndex]!;
     if (pt.proposerId !== acting) return acting;
-    const n = s.playerOrder.length;
-    const at = s.playerOrder.indexOf(pt.proposerId);
-    for (let k = 1; k < n; k++) {
-      const id = s.playerOrder[(at + k) % n]!;
-      if (!pt.rejectedBy.includes(id)) return id;
-    }
+    // Each opponent answers in turn; then the proposer picks a partner.
+    return nextTradeResponder(s) ?? pt.proposerId;
   }
   return getActingPlayerId(s);
 }
@@ -67,8 +64,8 @@ function playLevelGame(players: number, seed: number, level: AiLevel, network: (
       const known = session.sync(initial, actions, s, netSeats);
       expect(known, session.problem ?? '').not.toBeNull();
       action = chooseNeuralAction(s, id, known![id]!, loadedAiLevel(level)!);
-      // Its own offer on the table: the network waits; the app's driver cancels.
-      if (!action && s.pendingTrade?.proposerId === id) action = { type: 'cancelTrade', playerId: id };
+      // Its own offer, everyone has answered: the heuristic picks a partner (as the app's driver does).
+      if (!action && s.pendingTrade?.proposerId === id) action = chooseAction(s, id);
       expect(action, `network ${id} had no move in ${s.phase}`).not.toBeNull();
       networkMoves++;
     } else if (s.pendingTrade && s.pendingTrade.proposerId !== id) {

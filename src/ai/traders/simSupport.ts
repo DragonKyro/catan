@@ -6,6 +6,7 @@ import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
 import { rollDice } from '@/game/rng';
 import { chooseAction, shouldAcceptTrade } from '@/ai';
+import { pendingTradeStep } from '@/ai/trade';
 
 export interface SimResult {
   final: GameState;
@@ -44,14 +45,8 @@ export function simulate(
   let steps = 0;
   while (s.phase !== 'gameOver' && steps < maxSteps) {
     steps++;
-    const pt = s.pendingTrade;
-    if (pt) {
-      const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id));
-      step(
-        acceptor
-          ? { type: 'acceptTrade', playerId: acceptor.id }
-          : { type: 'cancelTrade', playerId: pt.proposerId },
-      );
+    if (s.pendingTrade) {
+      step(pendingTradeStep(s, (id) => shouldAcceptTrade(s, id)));
       continue;
     }
     const acting = getActingPlayerId(s);

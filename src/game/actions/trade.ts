@@ -3,6 +3,7 @@ import type {
   BankTradeAction,
   ProposeTradeAction,
   AcceptTradeAction,
+  ConfirmTradeAction,
   CancelTradeAction,
   CounterTradeAction,
   RejectTradeAction,
@@ -196,12 +197,23 @@ export function handleProposeTrade(
   };
 }
 
+/** Is the pending trade a counter-offer (its proposer isn't the active player)? */
+export function isCounterOffer(state: GameState): boolean {
+  return !!state.pendingTrade && state.pendingTrade.proposerId !== currentPlayerId(state);
+}
+
+/**
+ * Accept the pending trade. On the active player's offer this is a yes: the
+ * acceptor joins `acceptedBy` and nothing moves until the proposer picks a
+ * partner (`confirmTrade`). On a counter-offer it completes the trade.
+ */
 export function handleAcceptTrade(
   state: GameState,
   action: AcceptTradeAction,
 ): GameState {
-  if (!state.pendingTrade) throw new Error('No trade to accept');
-  if (action.playerId === state.pendingTrade.proposerId) {
+  const trade = state.pendingTrade;
+  if (!trade) throw new Error('No trade to accept');
+  if (action.playerId === trade.proposerId) {
     throw new Error("You can't accept your own trade");
   }
   // 5+ player paired-player rule: Player 2 may only trade with the supply.
@@ -212,17 +224,65 @@ export function handleAcceptTrade(
     throw new Error('Player 2 may only trade with the supply, not other players');
   }
   const acceptor = getPlayer(state, action.playerId);
-  const proposer = getPlayer(state, state.pendingTrade.proposerId);
-  if (!hasAll(acceptor.resources, state.pendingTrade.receive)) {
+  const proposer = getPlayer(state, trade.proposerId);
+  if (!hasAll(acceptor.resources, trade.receive)) {
     throw new Error("You don't have the resources the proposer wants");
   }
-  if (!hasAll(proposer.resources, state.pendingTrade.give)) {
+  if (!hasAll(proposer.resources, trade.give)) {
     throw new Error('The proposer no longer has the offered resources');
   }
-  const giveGold = state.pendingTrade.giveGold ?? 0;
-  const receiveGold = state.pendingTrade.receiveGold ?? 0;
-  if ((acceptor.gold ?? 0) < receiveGold) {
+  if ((acceptor.gold ?? 0) < (trade.receiveGold ?? 0)) {
     throw new Error("You don't have the gold the proposer wants");
+  }
+  if ((proposer.gold ?? 0) < (trade.giveGold ?? 0)) {
+    throw new Error('The proposer no longer has the offered gold');
+  }
+  if (isCounterOffer(state)) return completeTrade(state, action.playerId);
+  const accepted = trade.acceptedBy ?? [];
+  if (accepted.includes(action.playerId)) return state;
+  return {
+    ...state,
+    pendingTrade: {
+      ...trade,
+      acceptedBy: [...accepted, action.playerId],
+      rejectedBy: trade.rejectedBy.filter((id) => id !== action.playerId),
+    },
+  };
+}
+
+/** The proposer trades with one of the players who accepted their offer. */
+export function handleConfirmTrade(state: GameState, action: ConfirmTradeAction): GameState {
+  const trade = state.pendingTrade;
+  if (!trade) throw new Error('No trade to confirm');
+  if (action.playerId !== trade.proposerId) {
+    throw new Error('Only the proposer picks who to trade with');
+  }
+  if (!(trade.acceptedBy ?? []).includes(action.with)) {
+    throw new Error("That player hasn't accepted this trade");
+  }
+  return completeTrade(state, action.with);
+}
+
+/**
+ * Swap the pending trade's cards (and gold) between its proposer and
+ * `partnerId`, and clear it. Every base check runs again here, since the
+ * proposer may have built since their offer went out.
+ */
+export function completeTrade(state: GameState, partnerId: PlayerId): GameState {
+  const trade = state.pendingTrade;
+  if (!trade) throw new Error('No trade to complete');
+  const acceptor = getPlayer(state, partnerId);
+  const proposer = getPlayer(state, trade.proposerId);
+  if (!hasAll(acceptor.resources, trade.receive)) {
+    throw new Error(`${acceptor.name} no longer has the resources the trade asks for`);
+  }
+  if (!hasAll(proposer.resources, trade.give)) {
+    throw new Error('The proposer no longer has the offered resources');
+  }
+  const giveGold = trade.giveGold ?? 0;
+  const receiveGold = trade.receiveGold ?? 0;
+  if ((acceptor.gold ?? 0) < receiveGold) {
+    throw new Error(`${acceptor.name} no longer has the gold the trade asks for`);
   }
   if ((proposer.gold ?? 0) < giveGold) {
     throw new Error('The proposer no longer has the offered gold');
@@ -243,7 +303,6 @@ export function handleAcceptTrade(
   }));
   // Record resources moved for both sides so the AI can detect (and avoid)
   // reverse / roundabout trades on its next move.
-  const trade = state.pendingTrade;
   const proposerGave = (Object.keys(trade.give) as Resource[]).filter(
     (r) => (trade.give[r] ?? 0) > 0,
   );
@@ -295,9 +354,15 @@ export function handleRejectTrade(
   if (others.every((p) => newRejected.includes(p.id))) {
     return { ...state, pendingTrade: undefined };
   }
+  // A rejection after a yes takes the yes back.
+  const accepted = state.pendingTrade.acceptedBy?.filter((id) => id !== action.playerId);
   return {
     ...state,
-    pendingTrade: { ...state.pendingTrade, rejectedBy: newRejected },
+    pendingTrade: {
+      ...state.pendingTrade,
+      rejectedBy: newRejected,
+      ...(accepted ? { acceptedBy: accepted } : {}),
+    },
   };
 }
 

@@ -27,7 +27,7 @@ export function PendingTradeBanner() {
     for (const p of game.players) {
       if (p.id === t.proposerId) continue;
       if (p.isAI) continue; // AIs handle themselves
-      if (t.rejectedBy.includes(p.id)) continue;
+      if (t.rejectedBy.includes(p.id) || t.acceptedBy?.includes(p.id)) continue;
       // T&B coins: the gold asked for counts like a card.
       let canAccept = (t.receiveGold ?? 0) <= (p.gold ?? 0);
       for (const r of RESOURCES) {
@@ -94,6 +94,15 @@ export function PendingTradeBanner() {
   const viewerHasRejected = viewerId
     ? trade.rejectedBy.includes(viewerId)
     : false;
+  // Who said yes to the active player's offer: the proposer picks one of them.
+  const accepted = trade.acceptedBy ?? [];
+  const viewerHasAccepted = !!viewerId && accepted.includes(viewerId);
+  const acceptors = accepted
+    .map((id) => game.players.find((p) => p.id === id))
+    .filter((p): p is Player => !!p);
+  const waitingOn = game.players.filter(
+    (p) => p.id !== trade.proposerId && !trade.rejectedBy.includes(p.id) && !accepted.includes(p.id),
+  );
 
   // List of opponents to display as "responder dots" — everyone except the
   // proposer.
@@ -137,17 +146,20 @@ export function PendingTradeBanner() {
         <div className="ptbanner-row ptbanner-responders">
           {responders.map((p) => {
             const rejected = trade.rejectedBy.includes(p.id);
+            const yes = accepted.includes(p.id);
             const can = hasResources(p, trade.receive);
             return (
               <span
                 key={p.id}
-                className={`ptbanner-responder ${rejected ? 'is-rejected' : ''}`}
+                className={`ptbanner-responder ${rejected ? 'is-rejected' : ''} ${yes ? 'is-accepted' : ''}`}
                 title={
                   rejected
                     ? `${p.name} rejected`
-                    : can
-                      ? `${p.name} could accept`
-                      : `${p.name} can't (insufficient resources)`
+                    : yes
+                      ? `${p.name} accepted`
+                      : can
+                        ? `${p.name} could accept`
+                        : `${p.name} can't (insufficient resources)`
                 }
               >
                 <span
@@ -156,6 +168,7 @@ export function PendingTradeBanner() {
                 />
                 <span className="ptbanner-responder-name">{p.name}</span>
                 {rejected && <span className="ptbanner-responder-mark">✗</span>}
+                {yes && <span className="ptbanner-responder-yes">✓</span>}
               </span>
             );
           })}
@@ -163,6 +176,30 @@ export function PendingTradeBanner() {
       )}
 
       <div className="ptbanner-row ptbanner-actions">
+        {isProposer && !isCounter && (
+          <>
+            {acceptors.map((p) => (
+              <Button
+                key={p.id}
+                size="sm"
+                variant="primary"
+                onClick={() => dispatch({ type: 'confirmTrade', playerId: proposer.id, with: p.id })}
+                title={`Trade with ${p.name}`}
+              >
+                <span className="ptbanner-responder-dot" style={{ background: playerColorVar(p.color) }} />
+                Trade with {p.name}
+              </Button>
+            ))}
+            {acceptors.length === 0 && (
+              <span className="ptbanner-note">Waiting for answers…</span>
+            )}
+            {acceptors.length > 0 && waitingOn.length > 0 && (
+              <span className="ptbanner-note">
+                {waitingOn.length === 1 ? `${waitingOn[0]!.name} hasn't answered` : `${waitingOn.length} haven't answered`}
+              </span>
+            )}
+          </>
+        )}
         {isProposer && (
           <Button
             size="sm"
@@ -172,14 +209,33 @@ export function PendingTradeBanner() {
             Cancel
           </Button>
         )}
-        {!isProposer && viewer && !viewer.isAI && (
+        {!isProposer && viewer && !viewer.isAI && viewerHasAccepted && (
+          <>
+            <span className="ptbanner-note">You accepted — {proposer.name} picks who to trade with</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => dispatch({ type: 'rejectTrade', playerId: viewer.id })}
+              title="Take your yes back"
+            >
+              Take back
+            </Button>
+          </>
+        )}
+        {!isProposer && viewer && !viewer.isAI && !viewerHasAccepted && (
           <>
             <Button
               size="sm"
               variant={canViewerAccept ? 'primary' : 'secondary'}
               disabled={!canViewerAccept}
               onClick={() => dispatch({ type: 'acceptTrade', playerId: viewer.id })}
-              title={canViewerAccept ? 'Accept this offer' : "You don't have the resources"}
+              title={
+                !canViewerAccept
+                  ? "You don't have the resources"
+                  : isCounter
+                    ? 'Accept this counter-offer'
+                    : `Accept — ${proposer.name} then picks who to trade with`
+              }
             >
               Accept
             </Button>

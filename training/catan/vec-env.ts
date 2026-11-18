@@ -57,7 +57,10 @@ import { actWithPolicy } from '@/ai/nn/agent';
 import type { CatanPolicyNet } from '@/ai/nn/runtime';
 import { DEFAULT_REWARD_WEIGHTS, finalStandings, terminalRewards, type RewardWeights } from '@/ai/nn/reward';
 import { heuristicAction, teacherSlot } from './teacher';
-import { PERSONA_IDS, isPersonaId, type PersonaId } from '@/ai/persona';
+import { PERSONAS, PERSONA_IDS, isPersonaId, type HeuristicPersona, type PersonaId } from '@/ai/persona';
+import { isSetupPhase } from '@/game/actions/setup';
+import { isCounterOffer } from '@/game/actions/trade';
+import { nextTradeResponder } from '@/ai/trade';
 
 export type SeatRole = 'learner' | 'opponent' | 'heuristic';
 const ROLE_CODE: Record<SeatRole, number> = { learner: 0, opponent: 1, heuristic: 2 };
@@ -82,8 +85,20 @@ export interface VecEnvOptions {
   /** Charged to a seat whenever an offer of theirs is rejected by everyone. */
   refusedOfferPenalty: number;
   /** Heuristic personas (src/ai/persona.ts) heuristic seats are drawn from, one
-   *  per seat per match from the match seed; `['all']` = every persona. */
+   *  per seat per match from the match seed; `['all']` = every persona. An
+   *  entry `name:weight` draws that persona `weight` times as often (default 1). */
   personas: string[];
+  /** Draw a table's heuristic personas without repeats (while the pool lasts). */
+  distinctPersonas: boolean;
+  /** Personas whose heuristic seats aim their harm at a learner seat (the
+   *  persona `target`: the griefer's crowding / cut-offs, and the robber) —
+   *  the table's learner, or one drawn per match when it has several. */
+  targetPersonas: string[];
+  /** Share of learner seats whose opening (both settlements and roads) is
+   *  played by a persona from `learnerSetupPersonas`; the network takes over
+   *  at the first roll, so it learns to play from a lopsided start. */
+  learnerSetupShare: number;
+  learnerSetupPersonas: string[];
 }
 
 export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
@@ -100,6 +115,10 @@ export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
   teacher: false,
   refusedOfferPenalty: 0,
   personas: ['allRounder'],
+  distinctPersonas: false,
+  targetPersonas: [],
+  learnerSetupShare: 0,
+  learnerSetupPersonas: ['woodBrick', 'oreWheatSheep', 'portStack'],
 };
 
 export interface Episode {
@@ -118,6 +137,10 @@ export interface Episode {
   fallbacks: number;
   /** The persona each heuristic seat played (null for network seats). */
   personas: (PersonaId | null)[];
+  /** The seat each heuristic seat aimed at (persona target), else null. */
+  targets: (number | null)[];
+  /** The persona that played each learner seat's opening, else null. */
+  setupBy: (PersonaId | null)[];
   /** The match was abandoned after an error (no terminal reward). */
   aborted: boolean;
   /** Per seat, how often each action type was played, plus `tradeDone`
@@ -152,6 +175,10 @@ interface EnvSlot {
   roles: SeatRole[];
   /** The persona of each heuristic seat this match (null for network seats). */
   personas: (PersonaId | null)[];
+  /** The persona each heuristic seat plays, with its target filled in. */
+  specs: (HeuristicPersona | null)[];
+  targets: (number | null)[];
+  setupBy: (PersonaId | null)[];
   /** Every seat's knowledge (heuristic seats need theirs for a fallback move). */
   knowledge: CatanKnowledge[];
   dice: number;
@@ -196,13 +223,16 @@ export class CatanVecEnv {
   readonly shape: BoardShape;
   private readonly envs: EnvSlot[] = [];
   private batch: VecBatch;
+  private pool: WeightedPersona[];
 
   constructor(options: Partial<VecEnvOptions> = {}) {
     this.opts = { ...DEFAULT_VEC_ENV_OPTIONS, ...options };
     const { numEnvs: n, players, seats } = this.opts;
     if (!(Number.isInteger(n) && n >= 1)) throw new Error('numEnvs must be a positive integer');
     validateSeats(seats, players);
-    this.opts.personas = resolvePersonas(this.opts.personas);
+    this.pool = resolvePersonas(this.opts.personas);
+    resolvePersonas(this.opts.targetPersonas, true);
+    resolvePersonas(this.opts.learnerSetupPersonas);
     this.shape = boardShape(players);
     const sh = this.shape;
     this.batch = {
@@ -222,7 +252,10 @@ export class CatanVecEnv {
 
   /** Change the seat roles / heuristic personas for matches that start from now on, and/or turn teacher labels on or off. */
   configure(update: { seats?: SeatRole[]; teacher?: boolean; personas?: string[] }): void {
-    if (update.personas) this.opts.personas = resolvePersonas(update.personas);
+    if (update.personas) {
+      this.pool = resolvePersonas(update.personas);
+      this.opts.personas = update.personas.slice();
+    }
     if (update.seats) {
       validateSeats(update.seats, this.opts.players);
       this.opts.seats = update.seats.slice();
@@ -299,13 +332,34 @@ export class CatanVecEnv {
     const shift = (i + episode) % players;
     const roles = state.players.map((_, k) => seats[(k + shift) % players]!);
     // A persona per heuristic seat, drawn from the match seed (reproducible).
-    const pool = this.opts.personas as PersonaId[];
+    let left = this.pool.slice();
     let draw = (seed ^ 0x27d4eb2f) >>> 0;
     const personas = roles.map((role) => {
       if (role !== 'heuristic') return null;
       const [u, next] = nextRng(draw);
       draw = next;
-      return pool[Math.floor(u * pool.length)]!;
+      const k = pickWeighted(left, u);
+      const id = left[k]!.id;
+      if (this.opts.distinctPersonas && left.length > 1) left = left.filter((_, j) => j !== k);
+      return id;
+    });
+    // Who the targeting personas aim at, and which learner openings a persona plays.
+    let extra = (seed ^ 0x165667b1) >>> 0;
+    const roll = () => {
+      const [u, next] = nextRng(extra);
+      extra = next;
+      return u;
+    };
+    const learners = roles.flatMap((r, k) => (r === 'learner' ? [k] : []));
+    const aim = learners.length ? learners[Math.floor(roll() * learners.length)]! : null;
+    const targets = personas.map((p) => (p && aim !== null && this.opts.targetPersonas.includes(p) ? aim : null));
+    const specs = personas.map((p, k) => (p ? { ...PERSONAS[p], target: targets[k] !== null ? state.players[targets[k]!]!.id : undefined } : null));
+    const setupPool = this.opts.learnerSetupPersonas as PersonaId[];
+    const setupBy = roles.map((r) => {
+      if (r !== 'learner' || this.opts.learnerSetupShare <= 0) return null;
+      const hit = roll() < this.opts.learnerSetupShare;
+      const which = setupPool[Math.floor(roll() * setupPool.length)]!;
+      return hit ? which : null;
     });
     return {
       state,
@@ -313,6 +367,9 @@ export class CatanVecEnv {
       episode,
       roles,
       personas,
+      specs,
+      targets,
+      setupBy,
       knowledge: state.players.map((p) => initialKnowledge(state, p.id)),
       dice: (seed ^ 0x9e3779b9) >>> 0,
       rng: (seed ^ 0x85ebca6b) >>> 0,
@@ -373,10 +430,10 @@ export class CatanVecEnv {
     env.steps++;
   }
 
-  /** A heuristic seat's move; one the engine rejects is replaced by a random legal move. */
-  private heuristicMove(i: number, seat: number, id: PlayerId): void {
+  /** A heuristic seat's move (or a learner opening played by a persona); one the engine rejects is replaced by a random legal move. */
+  private heuristicMove(i: number, seat: number, id: PlayerId, persona?: HeuristicPersona): void {
     const env = this.envs[i]!;
-    const action = heuristicAction(env.state, id, env.personas[seat] ?? undefined);
+    const action = heuristicAction(env.state, id, persona);
     try {
       this.apply(i, action);
       return;
@@ -414,11 +471,22 @@ export class CatanVecEnv {
       }
       const id = decidingSeat(s);
       const seat = s.players.findIndex((p) => p.id === id);
+      if (s.pendingTrade?.proposerId === id && !isCounterOffer(s)) {
+        // Everyone has answered the offer. The action space has no
+        // pick-a-partner move, so the heuristic picks for every seat.
+        this.heuristicMove(i, seat, id);
+        continue;
+      }
       if (env.roles[seat] !== 'heuristic') {
+        const opening = env.setupBy[seat];
+        if (opening && isSetupPhase(s.phase)) {
+          this.heuristicMove(i, seat, id, PERSONAS[opening]);
+          continue;
+        }
         env.seat = seat;
         return;
       }
-      this.heuristicMove(i, seat, id);
+      this.heuristicMove(i, seat, id, env.specs[seat] ?? undefined);
     }
   }
 
@@ -447,6 +515,8 @@ export class CatanVecEnv {
       truncated,
       fallbacks: env.fallbacks,
       personas: env.personas.slice(),
+      targets: env.targets.slice(),
+      setupBy: env.setupBy.slice(),
       aborted,
       actions: env.actions,
     });
@@ -502,14 +572,33 @@ export class CatanVecEnv {
   }
 }
 
-/** `['all']` → every persona; otherwise each id must be a persona (src/ai/persona.ts). */
-function resolvePersonas(ids: string[]): PersonaId[] {
-  const list = ids.length === 1 && ids[0] === 'all' ? [...PERSONA_IDS] : ids;
-  if (list.length === 0) throw new Error('personas must list at least one persona');
-  for (const id of list) {
-    if (!isPersonaId(id)) throw new Error(`unknown persona ${JSON.stringify(id)} (personas: ${PERSONA_IDS.join(', ')}, or all)`);
+interface WeightedPersona {
+  id: PersonaId;
+  weight: number;
+}
+
+/** `['all']` → every persona; otherwise `name` or `name:weight` entries, each a persona (src/ai/persona.ts). */
+function resolvePersonas(entries: string[], allowEmpty = false): WeightedPersona[] {
+  const list = entries.length === 1 && entries[0] === 'all' ? [...PERSONA_IDS] : entries;
+  if (list.length === 0 && !allowEmpty) throw new Error('personas must list at least one persona');
+  return list.map((entry) => {
+    const [id, w] = entry.split(':');
+    if (!isPersonaId(id!)) throw new Error(`unknown persona ${JSON.stringify(id)} (personas: ${PERSONA_IDS.join(', ')}, or all)`);
+    const weight = w === undefined ? 1 : Number(w);
+    if (!(weight > 0)) throw new Error(`persona ${entry}: the weight must be a positive number`);
+    return { id, weight };
+  });
+}
+
+/** Index drawn from `u` ∈ [0, 1) by weight (equal weights: floor(u × n), as before weights existed). */
+function pickWeighted(pool: WeightedPersona[], u: number): number {
+  const total = pool.reduce((s, p) => s + p.weight, 0);
+  let x = u * total;
+  for (let k = 0; k < pool.length; k++) {
+    x -= pool[k]!.weight;
+    if (x < 0) return k;
   }
-  return list as PersonaId[];
+  return pool.length - 1;
 }
 
 function validateSeats(seats: SeatRole[], players: number): void {
@@ -522,14 +611,9 @@ function validateSeats(seats: SeatRole[], players: number): void {
 function decidingSeat(s: GameState): PlayerId {
   const pt = s.pendingTrade;
   if (pt) {
-    const acting = s.playerOrder[s.currentPlayerIndex]!;
-    if (pt.proposerId !== acting) return acting; // a counter-offer: the turn player answers
-    const n = s.playerOrder.length;
-    const at = s.playerOrder.indexOf(pt.proposerId);
-    for (let k = 1; k < n; k++) {
-      const id = s.playerOrder[(at + k) % n]!;
-      if (!pt.rejectedBy.includes(id)) return id;
-    }
+    if (isCounterOffer(s)) return s.playerOrder[s.currentPlayerIndex]!; // the turn player answers
+    // Each opponent answers in turn; then the proposer picks a partner.
+    return nextTradeResponder(s) ?? pt.proposerId;
   }
   return getActingPlayerId(s);
 }

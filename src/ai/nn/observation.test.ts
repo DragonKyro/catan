@@ -95,7 +95,9 @@ describe('observe() hides what a real player cannot see', () => {
           expect(d?.type ?? null).toBe(state.discardState!.required[p.id] !== undefined ? 'discard' : null);
         } else if (state.pendingTrade) {
           const pt = state.pendingTrade;
-          const answers = p.id !== pt.proposerId && (pt.proposerId === acting ? !pt.rejectedBy.includes(p.id) : p.id === acting);
+          // Each opponent answers the active player's offer once (a yes or a no); a counter, the turn player.
+          const answered = pt.rejectedBy.includes(p.id) || (pt.acceptedBy ?? []).includes(p.id);
+          const answers = p.id !== pt.proposerId && (pt.proposerId === acting ? !answered : p.id === acting);
           expect(d?.type ?? null).toBe(answers ? 'tradeResponse' : null);
         } else {
           expect(d).toBeNull();

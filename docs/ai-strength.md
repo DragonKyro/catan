@@ -132,4 +132,13 @@ DIAG=1 DIAG_TABLES=3000 npx vitest run src/ai/personas.diag.test.ts -t "tourname
 DIAG=1 DIAG_LEVEL=hard DIAG_GAMES=300 npx vitest run src/ai/nn/behaviour.diag.test.ts -t "3 heuristic"
 ```
 
-All three are seeded, so a rerun on unchanged code gives the same numbers.
+1 and 2 are seeded (they replace `Math.random` with a seeded generator), so a
+rerun on unchanged code gives the same numbers. 3 is not: the network's and
+the heuristic's roll actions carry `Math.random` dice, so a rerun lands
+elsewhere inside the interval. Training and `evaluate.py` aren't affected:
+the training env always rolls its own seeded dice.
+
+Network levels are measured on action space v1. Action space v2 (2026-11-18)
+added 3:1 / 1:3 / 3:2 / 2:3 offers and stops offers the bank or a harbor
+beats; the shipped levels were upgraded with the new offers frozen, so the
+only change to their play is that rule.

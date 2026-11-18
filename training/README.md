@@ -67,6 +67,40 @@ rotates round the table match by match. Networks always run in this Python
 process (GPU-batched); heuristic seats play inside node. Workers run in two
 interleaved groups so env time and GPU time overlap.
 
+**Opponents that play their position against you.** Heuristic seats can be
+any of the personas in `src/ai/persona.ts` (results in `docs/ai-strength.md`):
+
+- `--heuristic-personas longestRoad:3,largestArmy:3,griefer:3,citiesFirst,highPips`
+  draws each heuristic seat from the list, `name:weight` making one more
+  likely; `--distinct-personas` keeps a table's personas different, so
+  Longest Road, Largest Army and a griefer often share one table.
+- `--target-personas griefer` aims those seats at the learner: the griefer
+  crowds its starting spots, takes its next settlement spots and puts the
+  robber on its best hex (stealing from it). The game never sets a target.
+- `--learner-setup-share 0.25` has a lopsided persona
+  (`--learner-setup-personas`, default `woodBrick,oreWheatSheep,portStack`)
+  place a quarter of the learner's openings; the network takes over at the
+  first roll, short of some resource, and has to trade or build its way out.
+
+**Trades take a pick.** Opponents answer an offer one by one (a yes doesn't
+move cards); then the proposer trades with one of the acceptors or walks
+away. The network answers offers, but it has no pick-a-partner move: when
+its own offer has been answered the heuristic's `chooseTradePartner` picks
+(the acceptor furthest from winning, never one the trade would help win).
+
+**Benchmark.** `--benchmark POLICY` (a policy .json, `RUN@N`, …) adds eval
+tables vs three copies of that policy every `--eval-every` — and, with a
+learner-setup share, the same from a lopsided opening every match — in place
+of the "vs 500 updates earlier" column. Training seats don't change. The
+"heuristic" eval uses the training personas and targets ("vs personas").
+
+**Upgrading a policy to a newer action space.** When an action space only
+appends slots (v2 appended the 3:1 / 1:3 / 3:2 / 2:3 offers),
+`python training/catan/upgrade_policy.py IN.json OUT.json --new-offers warm`
+grows the global head: old slots copied exactly, each new offer starting from
+its nearest old offer (`frozen` instead never picks them — what the shipped
+levels got). Then `--init-from OUT.json`.
+
 **Guard.** Self-play can drift toward habits that only beat copies of itself
 (the first run did: it stopped accepting trades and lost ground to the
 heuristic). When an eval vs the heuristic lands with its whole 95% interval

@@ -142,13 +142,21 @@ class CatanEnv:
         teacher: bool = False,
         refused_offer_penalty: float = 0.0,
         personas: list[str] | None = None,
+        distinct_personas: bool = False,
+        target_personas: list[str] | None = None,
+        learner_setup_share: float = 0.0,
+        learner_setup_personas: list[str] | None = None,
     ) -> Batch:
         """seats: a role per seat, 'learner' | 'opponent' | 'heuristic' (rotated one
         seat per match). quota: matches per env before it idles (0 = forever).
         teacher: label learner rows with the heuristic's slot (Batch.teacher).
         refused_offer_penalty: charged to a seat whose offer everyone rejects.
         personas: heuristic personas heuristic seats are drawn from (src/ai/persona.ts;
-        ['all'] = every one; default the all-rounder)."""
+        ['all'] = every one; 'name:weight' draws one more often; default the all-rounder).
+        distinct_personas: no persona twice at a table (while the pool lasts).
+        target_personas: personas whose seats aim the robber / cut-offs at a learner seat.
+        learner_setup_share: share of learner seats whose opening a persona from
+        learner_setup_personas plays (the network takes over at the first roll)."""
         options = {
             "numEnvs": num_envs,
             "seed": seed,
@@ -164,6 +172,14 @@ class CatanEnv:
         }
         if personas:
             options["personas"] = personas
+        if distinct_personas:
+            options["distinctPersonas"] = True
+        if target_personas:
+            options["targetPersonas"] = target_personas
+        if learner_setup_share > 0:
+            options["learnerSetupShare"] = learner_setup_share
+        if learner_setup_personas:
+            options["learnerSetupPersonas"] = learner_setup_personas
         if reward is not None:
             options["reward"] = reward
         return self._batch(self._call({"cmd": "reset", "options": options}))

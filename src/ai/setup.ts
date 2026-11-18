@@ -9,7 +9,7 @@ import { pipsByResource, vertexScore } from './value';
 import { canPlaceInitialShip } from '@/game/modules/seafarers/validation/shipPlacement';
 import { pirateIslandsShipViolation } from '@/game/modules/seafarers/pirateIslands';
 import { shipEdgeBonus } from './seafarers/scenarios';
-import { activePersona, cornerDistance, cornerPips, harborCorners, portFocus } from './persona';
+import { activePersona, cornerDistance, cornerPips, harborCorners, harmTargets, portFocus } from './persona';
 
 // ---- placement styles (persona.ts) -----------------------------------------
 //
@@ -48,7 +48,8 @@ function harborBonus(state: GameState, v: VertexId, wanted: readonly Resource[],
 
 /** Opponent buildings two corners away (as close as the distance rule allows) and hexes shared with them. */
 function crowding(state: GameState, v: VertexId, id: PlayerId): { near: number; sharedHexes: number } {
-  const rivals = state.players.filter((p) => p.id !== id).flatMap((p) => [...p.settlements, ...p.cities]);
+  // Every rival's buildings, or only the target's when the persona has one.
+  const rivals = harmTargets(state, id).flatMap((p) => [...p.settlements, ...p.cities]);
   let near = 0;
   for (const b of rivals) if (cornerDistance(state, v, [b], 2) === 2) near++;
   const theirHexes = new Set(rivals.flatMap((b) => state.board.vertices[b]!.hexes));

@@ -202,6 +202,15 @@ export function observeTransition(
       if (want > 0) constraints.push({ seat: actor, resource: r, atLeast: want });
     });
   }
+  // A yes to an offer (the trade still pending: nothing moved) shows the
+  // acceptor holds what it asks for.
+  if (action.type === 'acceptTrade' && before.pendingTrade && after.pendingTrade) {
+    const ask = before.pendingTrade.receive;
+    RESOURCES.forEach((res, r) => {
+      const want = ask[res] ?? 0;
+      if (want > 0) constraints.push({ seat: actor, resource: r, atLeast: want });
+    });
+  }
   if (!changed && constraints.length === 0) return next;
   return withHypotheses(edit(), publicChange(k.hypotheses, delta, constraints), k.hypotheses, delta, totals, viewer, ownHand);
 }

@@ -48,8 +48,55 @@ describe('catan action space', () => {
   it('has the versioned slot list (bump ACTION_SPACE_VERSION when it changes)', () => {
     const obs = observe(SAMPLES[0]!.state, 'p0', SAMPLES[0]!.knowledge.p0!);
     expect({ version: ACTION_SPACE_VERSION, globals: GLOBAL_SLOTS.length, total: slotLayout(obs).total })
-      .toEqual({ version: 1, globals: 119, total: 264 });
-    expect(new Set(slotNames(obs)).size).toBe(264);
+      .toEqual({ version: 2, globals: 199, total: 344 });
+    expect(new Set(slotNames(obs)).size).toBe(344);
+  });
+
+  it('v2 only appended slots: every v1 global keeps its index (upgrade_policy.py relies on it)', () => {
+    // v1's 119 globals end at `reject`; the v2 offers follow, in shape order.
+    expect(GLOBAL_SLOTS.indexOf('reject')).toBe(118);
+    expect(GLOBAL_SLOTS.slice(0, 5)).toEqual(['roll', 'endTurn', 'buyDev', 'playKnight', 'playRoadBuilding']);
+    expect(GLOBAL_SLOTS[45]).toBe('offer:1wood>1brick');
+    expect(GLOBAL_SLOTS[104]).toBe('offer:1ore>2wheat');
+    expect(GLOBAL_SLOTS[119]).toBe('offer:3wood>1brick');
+    expect(GLOBAL_SLOTS.slice(119).every((n) => /^offer:[1-3][a-z]+>[1-3][a-z]+$/.test(n))).toBe(true);
+    expect(GLOBAL_SLOTS.slice(119).map((n) => n.replace(/(\d)[a-z]+/g, '$1'))).toEqual(
+      ['offer:3>1', 'offer:1>3', 'offer:3>2', 'offer:2>3'].flatMap((s) => Array(20).fill(s)),
+    );
+  });
+
+  it('offers no player trade the bank or a harbor gives at the same or a better rate', () => {
+    let checked = 0;
+    for (const s of SAMPLES) {
+      const state = s.state;
+      if (state.phase !== 'main' || state.pendingTrade || !state.hasRolledThisTurn) continue;
+      const id = getActingPlayerId(state);
+      const obs = observe(state, id, s.knowledge[id]!);
+      if (!obs.decision || obs.decision.type !== 'main' || !obs.decision.playerTrades) continue;
+      // Every opponent might hold anything; give the viewer plenty, a 2:1 wood
+      // harbor and the generic 3:1 one, so only the bank rule can mask offers.
+      const me = obs.players[0]!;
+      me.hand = { wood: 4, brick: 4, sheep: 4, wheat: 4, ore: 4 };
+      me.ports = ['wood', 'generic'];
+      for (const p of obs.players.slice(1)) p.estimate = { ...p.estimate, atLeast1: [1, 1, 1, 1, 1], atLeast2: [1, 1, 1, 1, 1] };
+      obs.bank = { wood: 19, brick: 19, sheep: 19, wheat: 19, ore: 19 };
+      obs.tradesProposedThisTurn = 0;
+      obs.offeredThisTurn = [];
+      const mask = legalMask(obs);
+      const G0 = slotLayout(obs).total - GLOBAL_SLOTS.length;
+      const on = (name: string) => mask[G0 + GLOBAL_SLOTS.indexOf(name)];
+      expect(on('offer:1wood>1brick')).toBe(1);
+      expect(on('offer:2wood>1brick')).toBe(0); // the wood harbor does 2:1
+      expect(on('offer:3wood>1brick')).toBe(0);
+      expect(on('offer:3wood>2brick')).toBe(1); // the harbor would want 4 wood for 2 brick
+      expect(on('offer:2brick>1wood')).toBe(1); // brick goes at 3:1
+      expect(on('offer:3brick>1wood')).toBe(0); // ... which the 3:1 harbor does
+      expect(on('offer:1brick>3wood')).toBe(1);
+      expect(on('offer:2brick>3wood')).toBe(1);
+      checked++;
+      if (checked >= 5) break;
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it('every legal slot decodes to something the engine accepts', () => {

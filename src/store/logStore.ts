@@ -722,14 +722,17 @@ export const useLogStore = create<LogStore>((set, get) => ({
         // Offers themselves aren't logged — only trades that actually go
         // through. The pending-trade UI carries the live offer.
         break;
-      case 'acceptTrade': {
+      case 'acceptTrade':
+      case 'confirmTrade': {
+        // Only a trade that went through: a yes to the active player's
+        // offer moves nothing (the proposer then picks a partner).
         const trade = before.pendingTrade;
-        if (trade) {
+        if (trade && !after.pendingTrade) {
           append.push({
             id: stamp(),
             kind: 'tradeAccepted',
             proposer: trade.proposerId,
-            acceptor: action.playerId,
+            acceptor: action.type === 'confirmTrade' ? action.with : action.playerId,
             give: trade.give,
             receive: trade.receive,
           });
@@ -856,7 +859,7 @@ export const useLogStore = create<LogStore>((set, get) => ({
         newTradeStats[p.id] = { tradesCount: 0, tradesGiven: 0, tradesReceived: 0 };
       }
     }
-    if (action.type === 'bankTrade' || action.type === 'acceptTrade') {
+    if (action.type === 'bankTrade' || action.type === 'acceptTrade' || action.type === 'confirmTrade') {
       // Trades involve players whose resource counts changed. Identify
       // them via the diff (production-on-roll wouldn't be running on these
       // action types, so changes ARE the trade move).

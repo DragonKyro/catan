@@ -4,6 +4,7 @@ import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from '@/game/modules/citiesAndKnights/constants';
 import { chooseAction, shouldAcceptTrade } from '../index';
+import { pendingTradeStep } from '../trade';
 
 // All-AI Cities & Knights games for tests and tuning. Seeded end to end:
 // the board / decks from `createGame`, dice from a mulberry32 stream. Every
@@ -47,11 +48,7 @@ export function simulateCK(
   for (; steps < maxSteps && s.phase !== 'gameOver'; steps++) {
     let action: Action | null;
     if (s.pendingTrade && s.phase === 'main') {
-      const pt = s.pendingTrade;
-      const taker = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id));
-      action = taker
-        ? { type: 'acceptTrade', playerId: taker.id }
-        : { type: 'cancelTrade', playerId: pt.proposerId };
+      action = pendingTradeStep(s, (id) => shouldAcceptTrade(s, id));
     } else {
       const acting = getActingPlayerId(s);
       action = chooseAction(s, acting);

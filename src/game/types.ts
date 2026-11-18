@@ -1041,6 +1041,12 @@ export interface PendingTrade {
   // a rejection does not cancel the trade; the proposer can still wait for
   // another player to accept or for the timer/end-turn auto-cancel.
   rejectedBy: PlayerId[];
+  // Players who said yes to the active player's offer. A yes moves nothing:
+  // the proposer then picks one of them (`confirmTrade`) or walks away, so
+  // they choose when several accept, and can refuse to deal with, say, the
+  // leader. (A counter-offer, whose proposer isn't the active player, is
+  // still completed by its accept.)
+  acceptedBy?: PlayerId[];
 }
 
 export interface GameState {
@@ -1613,6 +1619,12 @@ export interface ProposeTradeAction extends ActionBase {
 
 export interface AcceptTradeAction extends ActionBase {
   type: 'acceptTrade';
+}
+
+/** The proposer completes their pending offer with one of the players who accepted it. */
+export interface ConfirmTradeAction extends ActionBase {
+  type: 'confirmTrade';
+  with: PlayerId;
 }
 
 export interface CancelTradeAction extends ActionBase {
@@ -2203,6 +2215,7 @@ export type Action =
   | BankTradeAction
   | ProposeTradeAction
   | AcceptTradeAction
+  | ConfirmTradeAction
   | CancelTradeAction
   | RejectTradeAction
   | CounterTradeAction

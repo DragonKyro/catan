@@ -352,7 +352,7 @@ describe('playing online', () => {
     expectInStep([reloaded, devices[1]!]);
   });
 
-  it('two players answering the same trade at once: the first in wins, the other is taken back', async () => {
+  it('two players accepting the same offer at once: both yeses stand, then the proposer picks one', async () => {
     const { host, devices } = await startGame([['b-uuid', 'Bo'], ['c-uuid', 'Cy']], 0);
     const roll = diceRng(4);
     // Play through setup to someone's main phase.
@@ -377,18 +377,23 @@ describe('playing online', () => {
     const others = rich.players.map((p) => p.id).filter((id) => id !== proposer);
     fakeServer().holdWrites = true;
     for (const id of others) owner(id).game().dispatch({ type: 'acceptTrade', playerId: id });
-    // Each device shows its own accept straight away…
+    // Each device shows its own yes straight away (nothing moves yet)…
     for (const id of others) {
-      expect(owner(id).game().game!.players.find((p) => p.id === id)!.resources.wood).toBe(4);
+      expect(owner(id).game().game!.pendingTrade?.acceptedBy).toEqual([id]);
     }
     releaseWrites();
     await flush();
-    // …but only the first one into the log stands.
+    // …and the yes that lost the race for its log slot is replayed on top: both stand.
     expectInStep(devices);
-    const woods = others.map((id) => host.game().game!.players.find((p) => p.id === id)!.resources.wood);
-    expect(woods.sort()).toEqual([3, 4]);
-    const loser = others.find((id) => host.game().game!.players.find((p) => p.id === id)!.resources.wood === 3)!;
-    expect(owner(loser).game().error).toMatch(/went through first/);
+    expect([...host.game().game!.pendingTrade!.acceptedBy!].sort()).toEqual([...others].sort());
+    for (const id of others) expect(owner(id).game().error).toBeFalsy();
+    // The proposer picks one; only that player's cards change.
+    const pick = others[1]!;
+    owner(proposer).game().dispatch({ type: 'confirmTrade', playerId: proposer, with: pick });
+    await flush();
+    expectInStep(devices);
+    const woods = Object.fromEntries(others.map((id) => [id, host.game().game!.players.find((p) => p.id === id)!.resources.wood]));
+    expect(woods).toEqual({ [others[0]!]: 3, [pick]: 4 });
     expect(host.game().game!.pendingTrade).toBeUndefined();
   });
 

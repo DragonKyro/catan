@@ -41,6 +41,14 @@ export interface HeuristicPersona {
   label: string;
   placement: PlacementStyle;
   play: PlayStyle;
+  /**
+   * The one seat this AI aims its harm at — the griefer's crowding and
+   * cut-offs, and the robber (hex and victim) for any persona. Unset: every
+   * rival, as the hand-written AI always played. Training sets it to the
+   * network's seat (`--target-personas`), so the network learns to play
+   * through being singled out; the game never sets it.
+   */
+  target?: PlayerId;
 }
 
 export const PERSONA_IDS = [
@@ -84,6 +92,18 @@ let active: HeuristicPersona = ALL_ROUNDER;
 /** The persona deciding right now (the all-rounder outside `withPersona`). */
 export function activePersona(): HeuristicPersona {
   return active;
+}
+
+/** The persona's target if it is a rival still at the table, else null. */
+export function activeTarget(state: GameState, id: PlayerId): PlayerId | null {
+  const t = active.target;
+  return t && t !== id && state.players.some((p) => p.id === t) ? t : null;
+}
+
+/** The rivals `id` aims at: its target alone if it has one, else every opponent. */
+export function harmTargets(state: GameState, id: PlayerId): GameState['players'] {
+  const t = activeTarget(state, id);
+  return state.players.filter((p) => (t ? p.id === t : p.id !== id));
 }
 
 /**
@@ -386,12 +406,12 @@ export function ownsHarbor(state: GameState, id: PlayerId, r: Resource): boolean
 /**
  * Corners where an opponent could settle next: free by the distance rule and
  * on, or one road beyond, the edge of their network. Taking one (or a corner
- * next to it) shuts it for them — what the griefer goes for.
+ * next to it) shuts it for them — what the griefer goes for. Only the
+ * target's when the persona has one.
  */
 export function rivalTargets(state: GameState, id: PlayerId): Set<VertexId> {
   const out = new Set<VertexId>();
-  for (const op of state.players) {
-    if (op.id === id) continue;
+  for (const op of harmTargets(state, id)) {
     const frontier = new Set<VertexId>([...op.settlements, ...op.cities]);
     for (const e of op.roads) for (const v of state.board.edges[e]!.vertices) frontier.add(v);
     for (const v of frontier) {

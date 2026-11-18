@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { pendingTradeStep } from '@/ai/trade';
 import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
@@ -19,10 +20,8 @@ function lines(scenario: string, seed: number): string[] {
   const out: string[] = [];
   for (let n = 0; n < 4000 && s.phase !== 'gameOver'; n++) {
     let action: Action;
-    const pt = s.pendingTrade;
-    if (pt) {
-      const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id));
-      action = acceptor ? { type: 'acceptTrade', playerId: acceptor.id } : { type: 'cancelTrade', playerId: pt.proposerId };
+    if (s.pendingTrade) {
+      action = pendingTradeStep(s, (id) => shouldAcceptTrade(s, id));
     } else {
       const acting = getActingPlayerId(s);
       action = chooseAction(s, acting) ?? { type: 'endTurn', playerId: acting };

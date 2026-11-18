@@ -13,6 +13,7 @@
 //
 //   DIAG=1 [DIAG_GAMES=100] npx vitest run src/ai/personas.diag.test.ts -t "three all-rounders"
 //   DIAG=1 [DIAG_TABLES=3000] npx vitest run src/ai/personas.diag.test.ts -t "tournament"
+import { pendingTradeStep } from './trade';
 import { describe, it, vi } from 'vitest';
 import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
@@ -86,8 +87,7 @@ function play(seed: number, personaSeat: number, persona: PersonaId, tallies: { 
     const pt = s.pendingTrade;
     let action: Action;
     if (pt) {
-      const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id, personaOf(p.id)));
-      action = acceptor ? { type: 'acceptTrade', playerId: acceptor.id } : { type: 'cancelTrade', playerId: pt.proposerId };
+      action = pendingTradeStep(s, (id) => shouldAcceptTrade(s, id, personaOf(id)));
     } else {
       const id = getActingPlayerId(s);
       action = chooseAction(s, id, personaOf(id)) ?? { type: 'endTurn', playerId: id };
@@ -167,8 +167,7 @@ function playTable(seed: number): TableSeat[] {
     const pt = s.pendingTrade;
     let action: Action;
     if (pt) {
-      const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id, personaOf(p.id)));
-      action = acceptor ? { type: 'acceptTrade', playerId: acceptor.id } : { type: 'cancelTrade', playerId: pt.proposerId };
+      action = pendingTradeStep(s, (id) => shouldAcceptTrade(s, id, personaOf(id)));
     } else {
       const id = getActingPlayerId(s);
       action = chooseAction(s, id, personaOf(id)) ?? { type: 'endTurn', playerId: id };

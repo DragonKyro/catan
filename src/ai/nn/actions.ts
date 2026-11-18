@@ -1,4 +1,4 @@
-// Catan learned agent — action space v1: a fixed slot list over the board plus
+// Catan learned agent — action space v2: a fixed slot list over the board plus
 // a global block, the legality mask, and the decoder from slot to reducer
 // action.
 //
@@ -10,7 +10,7 @@
 //   [V+E, V+E+H)      hex      move the robber here
 //   [V+E+H, +G)       global   GLOBAL_SLOTS below
 //
-// At 4 players that is 54 + 72 + 19 + 119 = 264 slots.
+// At 4 players that is 54 + 72 + 19 + 199 = 344 slots.
 //
 // Multi-part answers are one decision per part, carried in a CatanDraft
 // (never game state): a discard is one card at a time until the required
@@ -19,19 +19,23 @@
 // require); Road Building is the card, then each road (finishing by itself
 // when no second road fits).
 //
-// Player trades are offers from a fixed menu — 1:1, 2:1 and 1:2 between any
-// two resources — at most MAX_OFFERS_PER_TURN a turn, never the same offer
-// twice in a turn, and only when some opponent could hold what's asked.
-// Counter-offers aren't in the space; an offer is answered accept / reject.
+// Player trades are offers from a fixed menu — 1:1, 2:1, 1:2 (v1) and 3:1,
+// 1:3, 3:2, 2:3 (v2) between any two resources — at most MAX_OFFERS_PER_TURN
+// a turn, never the same offer twice in a turn, only when some opponent could
+// hold what's asked, and never one the bank or a harbor already gives at the
+// same or a better rate (n of X for m of Y when n ≥ m × the viewer's rate for
+// X). Counter-offers aren't in the space; an offer is answered accept / reject.
 //
 // Bump ACTION_SPACE_VERSION whenever slots are added, removed or reordered.
+// v2 only appended slots (the new offers, after `reject`), so a v1 policy
+// upgrades by growing its global head (training/catan/upgrade_policy.py).
 
 import type { Action, EdgeId, Resource, ResourceBank } from '@/game/types';
 import { COSTS, RESOURCES } from '@/game/types';
 import { analyseBoard, type BoardFacts } from './encode';
 import type { CatanDraft, CatanObservation, ObservedPlayer } from './observation';
 
-export const ACTION_SPACE_VERSION = 1;
+export const ACTION_SPACE_VERSION = 2;
 export const MAX_OFFERS_PER_TURN = 2;
 /** Victim slots name seat offsets 1..MAX_VICTIM_OFFSET (8 players max). */
 const MAX_VICTIM_OFFSET = 7;
@@ -45,10 +49,13 @@ interface Offer {
   give: Partial<ResourceBank>;
   receive: Partial<ResourceBank>;
 }
-const OFFERS: Offer[] = [];
-for (const [n, m] of [[1, 1], [2, 1], [1, 2]] as const) {
-  for (const [give, get] of SWAPS) OFFERS.push({ give: { [give]: n }, receive: { [get]: m } });
-}
+const offersOfShape = (shapes: ReadonlyArray<readonly [number, number]>): Offer[] =>
+  shapes.flatMap(([n, m]) => SWAPS.map(([give, get]) => ({ give: { [give]: n }, receive: { [get]: m } })));
+/** v1's menu, in its slot block in the middle of the globals. */
+const OFFERS_V1 = offersOfShape([[1, 1], [2, 1], [1, 2]]);
+/** Added in v2, appended after every v1 slot. */
+const OFFERS_V2 = offersOfShape([[3, 1], [1, 3], [3, 2], [2, 3]]);
+const OFFERS: Offer[] = [...OFFERS_V1, ...OFFERS_V2];
 const offerName = (o: Offer) => {
   const side = (b: Partial<ResourceBank>) => RESOURCES.filter((r) => b[r]).map((r) => `${b[r]}${r}`).join('+');
   return `offer:${side(o.give)}>${side(o.receive)}`;
@@ -63,11 +70,12 @@ export const GLOBAL_SLOTS: readonly string[] = [
   ...PAIRS.map(([a, b]) => `yearOfPlenty:${a}+${b}`),
   ...RESOURCES.map((r) => `monopoly:${r}`),
   ...SWAPS.map(([give, get]) => `bank:${give}>${get}`),
-  ...OFFERS.map(offerName),
+  ...OFFERS_V1.map(offerName),
   ...RESOURCES.map((r) => `discard:${r}`),
   ...Array.from({ length: MAX_VICTIM_OFFSET }, (_, k) => `victim:${k + 1}`),
   'accept',
   'reject',
+  ...OFFERS_V2.map(offerName),
 ];
 const GLOBAL_INDEX = new Map(GLOBAL_SLOTS.map((name, i) => [name, i]));
 const globalSlot = (name: string) => {
@@ -78,7 +86,9 @@ const globalSlot = (name: string) => {
 const PAIR_BASE = globalSlot(`yearOfPlenty:${RESOURCES[0]}+${RESOURCES[0]}`);
 const MONOPOLY_BASE = globalSlot(`monopoly:${RESOURCES[0]}`);
 const BANK_BASE = globalSlot(`bank:${SWAPS[0]![0]}>${SWAPS[0]![1]}`);
-const OFFER_BASE = globalSlot(offerName(OFFERS[0]!));
+/** Global index of each offer in OFFERS (the two blocks), and back. */
+const OFFER_SLOT = OFFERS.map((o) => globalSlot(offerName(o)));
+const OFFER_AT = new Map(OFFER_SLOT.map((gi, i) => [gi, i]));
 const DISCARD_BASE = globalSlot(`discard:${RESOURCES[0]}`);
 const VICTIM_BASE = globalSlot('victim:1');
 
@@ -195,8 +205,11 @@ export function legalMask(obs: CatanObservation, facts?: BoardFacts): Uint8Array
           if (obs.offeredThisTurn.some((t) => sameOffer(t, o))) return;
           const r = RESOURCES.findIndex((x) => (o.receive[x] ?? 0) > 0);
           const want = o.receive[RESOURCES[r]!]!;
+          // The bank or a harbor already does this at the same or a better rate.
+          const give = RESOURCES.find((x) => (o.give[x] ?? 0) > 0)!;
+          if (o.give[give]! >= want * bankRate(me, give) && obs.bank[RESOURCES[r]!] >= want) return;
           if (!opps.some((p) => (want >= 2 ? p.estimate.atLeast2[r]! : p.estimate.atLeast1[r]!) > 0)) return;
-          mask[G0 + OFFER_BASE + i] = 1;
+          mask[G0 + OFFER_SLOT[i]!] = 1;
         });
       }
       g('endTurn');
@@ -275,8 +288,9 @@ export function decodeSlot(
     const [give, receive] = SWAPS[gi - BANK_BASE]!;
     return act({ type: 'bankTrade', playerId, give, receive });
   }
-  if (gi >= OFFER_BASE && gi < OFFER_BASE + OFFERS.length) {
-    const o = OFFERS[gi - OFFER_BASE]!;
+  const offer = OFFER_AT.get(gi);
+  if (offer !== undefined) {
+    const o = OFFERS[offer]!;
     return act({ type: 'proposeTrade', playerId, give: { ...o.give }, receive: { ...o.receive } });
   }
   if (gi >= DISCARD_BASE && gi < DISCARD_BASE + RESOURCES.length && d.type === 'discard') {
@@ -332,8 +346,10 @@ export function slotForAction(obs: CatanObservation, action: Action): number {
       return at(G0 + MONOPOLY_BASE, RESOURCES.indexOf(action.resource));
     case 'bankTrade':
       return at(G0 + BANK_BASE, SWAPS.findIndex(([give, get]) => give === action.give && get === action.receive));
-    case 'proposeTrade':
-      return at(G0 + OFFER_BASE, OFFERS.findIndex((o) => sameOffer(o, action)));
+    case 'proposeTrade': {
+      const i = OFFERS.findIndex((o) => sameOffer(o, action));
+      return i < 0 ? -1 : G0 + OFFER_SLOT[i]!;
+    }
     case 'acceptTrade':
       return G0 + globalSlot('accept');
     case 'rejectTrade':

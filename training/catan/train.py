@@ -19,6 +19,11 @@ Each update:
        blend      two learner seats, one heuristic, one past checkpoint (4-way)
      Past checkpoints are drawn from the newest `--pool` (heuristic seats until
      a checkpoint exists), or are all `--fixed-opponent` when that is set.
+     Heuristic seats play personas from `--heuristic-personas` (name:weight to
+     draw one more often; `--distinct-personas` for no repeats at a table);
+     `--target-personas` aim their robber and cut-offs at the learner, and
+     `--learner-setup-share` of learner seats start from an opening a lopsided
+     persona placed (`--learner-setup-personas`).
      `--mix kind=count,...` sets the workers directly (instead of the shares).
      Learner seats rotate round the table match by match.
   2. The first `--bc-updates` imitate the heuristic (supervised: `--bc-epochs`
@@ -34,9 +39,12 @@ Each update:
      exported policy (policies/update_N.json, all kept) — the opponent pool,
      evals and the game's future AI levels read these.
   4. Every `--eval-every`: in the background (separate processes), greedy
-     seat-rotated matches of the new policy vs three heuristic AIs and vs
-     three copies of the checkpoint `--eval-past-gap` saves earlier → tensorboard
-     `eval/*`, evals.jsonl, and progress.md (latest 10 checkpoints, then all).
+     seat-rotated matches of the new policy vs three heuristic AIs (the
+     training personas, targets and all) and vs three copies of the checkpoint
+     `--eval-past-gap` saves earlier — or, with `--benchmark POLICY`, vs three
+     copies of that policy, and (with `--learner-setup-share`) the same from a
+     lopsided opening every match → tensorboard `eval/*`, evals.jsonl, and
+     progress.md (latest 10 checkpoints, then all).
   5. Guard: when an eval vs the heuristic comes in clearly below the best so
      far (its whole 95% CI under the best score), one self-play worker moves
      to heuristic tables (up to `--guard-max-shift`); it moves back once the
@@ -131,6 +139,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     game.add_argument("--heuristic-personas", default="allRounder",
                       help="heuristic personas (src/ai/persona.ts) every heuristic seat is drawn from, one per "
                            "seat per match: 'all', or a comma list such as allRounder,longestRoad,griefer")
+    game.add_argument("--distinct-personas", action="store_true",
+                      help="no persona twice at a table (while the pool lasts)")
+    game.add_argument("--target-personas", default="",
+                      help="personas whose heuristic seats aim the robber and their cut-offs at the learner (comma list)")
+    game.add_argument("--learner-setup-share", type=float, default=0.0,
+                      help="share of learner seats whose opening a persona from --learner-setup-personas plays")
+    game.add_argument("--learner-setup-personas", default="woodBrick,oreWheatSheep,portStack",
+                      help="lopsided openings for --learner-setup-share (comma list)")
     game.add_argument("--refused-offer-penalty", type=float, default=0.002,
                       help="charged when everyone rejects an offer (a VP of shaping is 0.05, a place 0.17)")
 
@@ -173,6 +189,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     save.add_argument("--eval-past-gap", type=int, default=5, help="compare with the checkpoint this many saves back")
     save.add_argument("--eval-past-every", type=int, default=0,
                       help="updates between evals vs the earlier checkpoint (0 = every --eval-every)")
+    save.add_argument("--benchmark", default=None, metavar="POLICY",
+                      help="eval only: vs three copies of this policy (a .json, RUN@N, ...) instead of the earlier "
+                           "checkpoint; training seats are unaffected")
     return p.parse_args(argv)
 
 
@@ -305,10 +324,10 @@ class Evaluator:
             job = self.jobs.get()
             if job is None:
                 return
-            update, tag, policy, opponent, lineup = job
+            update, tag, policy, opponent, lineup, extra = job
             cmd = [sys.executable, "-u", os.path.join(HERE, "evaluate.py"), "match", policy, opponent,
                    "--games", str(self.games), "--workers", str(self.workers), "--device", self.device,
-                   "--max-turns", str(self.max_turns), "--players", str(self.players), "--json"]
+                   "--max-turns", str(self.max_turns), "--players", str(self.players), "--json", *extra]
             if lineup:
                 cmd += ["--lineup", lineup]
             try:
@@ -320,13 +339,13 @@ class Evaluator:
             except Exception as e:  # noqa: BLE001 — reported, training carries on
                 self.results.put((update, tag, opponent, None, str(e)))
 
-    def submit(self, update: int, policy: str, jobs: list[tuple[str, str, str | None]]) -> bool:
-        """Queue one eval cycle of (tag, opponent, lineup) jobs; refuse while the
-        previous cycle hasn't fully started."""
+    def submit(self, update: int, policy: str, jobs: list[tuple[str, str, str | None, list[str]]]) -> bool:
+        """Queue one eval cycle of (tag, opponent, lineup, extra args) jobs; refuse
+        while the previous cycle hasn't fully started."""
         if self.jobs.qsize() > 0:
             return False
-        for tag, opponent, lineup in jobs:
-            self.jobs.put((update, tag, policy, opponent, lineup))
+        for tag, opponent, lineup, extra in jobs:
+            self.jobs.put((update, tag, policy, opponent, lineup, extra))
         return True
 
     def drain(self) -> list[tuple]:
@@ -444,6 +463,12 @@ class Trainer:
         for k in self.guard_workers:  # self-play workers the guard had moved to heuristic tables
             roles[k] = "heuristic"
         self.fixed_path = ev.resolve(a.fixed_opponent) if a.fixed_opponent else None
+        self.bench_path = ev.resolve(a.benchmark) if a.benchmark else None
+        self.bench_label = ""
+        if self.bench_path:
+            with open(self.bench_path, encoding="utf-8") as f:
+                u = json.load(f).get("meta", {}).get("update")
+            self.bench_label = f"u{u}" if u is not None else os.path.basename(self.bench_path)
         self.fixed_label = ""
         fixed = None
         if self.fixed_path:
@@ -462,8 +487,7 @@ class Trainer:
             worker.batch = env.reset(num_envs=a.envs_per_worker, seed=seed,
                                      seats=seats_for(role, a.players, fixed is not None),
                                      max_turns=a.max_turns, vp_shaping=a.vp_shaping, teacher=self.teacher_on,
-                                     refused_offer_penalty=a.refused_offer_penalty,
-                                     personas=[x.strip() for x in a.heuristic_personas.split(",") if x.strip()])
+                                     refused_offer_penalty=a.refused_offer_penalty, **self.opponent_options())
             self.workers.append(worker)
         # After the workers: --mix decides how many there are.
         with open(os.path.join(self.run_dir, "config.json"), "w", encoding="utf-8") as f:
@@ -785,20 +809,49 @@ class Trainer:
                             "phase": "imitation" if u <= a.bc_updates else "ppo"})
         return path
 
-    def eval_jobs(self) -> list[tuple[str, str, str | None]]:
-        jobs: list[tuple[str, str, str | None]] = [("heuristic", "heuristic", None)]
+    def opponent_options(self) -> dict:
+        """The heuristic seats' settings, for training envs."""
+        a = self.args
+        split = lambda s: [x.strip() for x in s.split(",") if x.strip()]  # noqa: E731
+        return dict(personas=split(a.heuristic_personas), distinct_personas=a.distinct_personas,
+                    target_personas=split(a.target_personas) or None,
+                    learner_setup_share=a.learner_setup_share,
+                    learner_setup_personas=split(a.learner_setup_personas) or None)
+
+    def eval_args(self, lopsided: bool = False) -> list[str]:
+        """evaluate.py flags for the heuristic seats the learner trains against
+        (no lopsided openings, unless `lopsided`: then every match has one)."""
+        a = self.args
+        out = ["--personas", a.heuristic_personas]
+        if a.distinct_personas:
+            out.append("--distinct-personas")
+        if a.target_personas:
+            out += ["--target-personas", a.target_personas]
+        if lopsided:
+            out += ["--learner-setup-share", "1", "--learner-setup-personas", a.learner_setup_personas]
+        return out
+
+    def eval_jobs(self) -> list[tuple[str, str, str | None, list[str]]]:
+        jobs: list[tuple[str, str, str | None, list[str]]] = [("heuristic", "heuristic", None, self.eval_args())]
+        if self.bench_path:
+            # The yardstick: three copies of the benchmark, and the same from a lopsided opening.
+            jobs.append(("bench", self.bench_path, None, []))
+            if self.args.learner_setup_share > 0:
+                jobs.append(("skew", self.bench_path, None, ["--learner-setup-share", "1",
+                                                             "--learner-setup-personas", self.args.learner_setup_personas]))
+            return jobs
         if self.fixed_path:
             # The tables the learner trains at: vs three of the fixed policy, and the 4-way one if in the mix.
-            jobs.append(("fixed", self.fixed_path, None))
+            jobs.append(("fixed", self.fixed_path, None, []))
             if any(w.role == "blend" for w in self.workers):
-                jobs.append(("blend", self.fixed_path, "AAHB"))
+                jobs.append(("blend", self.fixed_path, "AAHB", []))
             return jobs
         # By update number, not position: a crash-time save adds an off-cycle policy.
         a = self.args
         every = a.eval_past_every or a.eval_every
         earlier = dict(ev.list_policies(self.run_dir)).get(self.update - a.eval_past_gap * a.save_every)
         if earlier and self.update % every == 0:
-            jobs.append(("past", earlier, None))
+            jobs.append(("past", earlier, None, []))
         return jobs
 
     def refresh_past_opponents(self) -> None:
@@ -821,10 +874,15 @@ class Trainer:
 
     # ------------------------------------------------------------ logging
 
+    @property
+    def heuristic_name(self) -> str:
+        """'heuristic' (the all-rounder alone) or 'personas'."""
+        return "heuristic" if self.args.heuristic_personas.strip() == "allRounder" else "personas"
+
     def label(self, kind: str) -> str:
         """Short name of a table kind in the log."""
         if kind == "heuristic":
-            return "heur"
+            return "heur" if self.heuristic_name == "heuristic" else "pers"
         if kind == "past" and self.fixed_label:
             return f"vs {self.fixed_label}"
         return {"blend": "4-way"}.get(kind, kind)
@@ -962,9 +1020,12 @@ class Trainer:
         gap = a.eval_past_gap * a.save_every
         tags = {t for u in rows for t in self.eval_results[u]}
         names = {"past": f"vs {gap} updates earlier", "fixed": f"vs 3× {self.fixed_label or 'fixed'}",
-                 "blend": f"4-way (2× agent, heuristic, {self.fixed_label or 'fixed'})"}
-        extra = [t for t in ("past", "fixed", "blend") if t in tags]
-        head = "| update | hours | decisions | vs heuristic: win (95% CI) | place | VP | turns | offers (taken) | trades |"
+                 "blend": f"4-way (2× agent, heuristic, {self.fixed_label or 'fixed'})",
+                 "bench": f"vs 3× {self.bench_label or 'benchmark'}",
+                 "skew": f"lopsided opening vs 3× {self.bench_label or 'benchmark'}"}
+        extra = [t for t in ("bench", "skew", "past", "fixed", "blend") if t in tags]
+        head = (f"| update | hours | decisions | vs {self.heuristic_name}: win (95% CI) | place | VP | turns | "
+                f"offers (taken) | trades |")
         head += "".join(f" {names[t]}: win (95% CI) | place |" for t in extra)
         lines = [head, "|" + "---:|" * (9 + 2 * len(extra))]
         def win(x: dict | None) -> str:
@@ -989,7 +1050,7 @@ class Trainer:
         heur = [u for u in done if "heuristic" in self.eval_results[u]]
         if heur:
             best = max(heur, key=lambda u: self.eval_results[u]["heuristic"]["winRate"])
-            lines.append(f"\nbest vs heuristic so far: update {best} at "
+            lines.append(f"\nbest vs {self.heuristic_name} so far: update {best} at "
                          f"{100 * self.eval_results[best]['heuristic']['winRate']:.1f}% (25% = as good as each heuristic seat)")
         return "\n".join(lines)
 
@@ -1001,7 +1062,9 @@ class Trainer:
                f"Base-game Catan, {a.players} players. Encoder v{v['encoderVersion']}, action space "
                f"v{v['actionSpaceVersion']} ({self.shape['slots']} slots), graph net {self.net.width}x{self.net.n_rounds}. "
                f"Each checkpoint plays {a.eval_games} greedy matches per table: as one seat against three heuristic "
-               f"AIs, and (columns further right) against three copies of an earlier policy or at the 4-way table, "
+               f"AIs ({a.heuristic_personas}"
+               f"{', distinct' if a.distinct_personas else ''}{', targeting it: ' + a.target_personas if a.target_personas else ''}), "
+               f"and (columns further right) against three copies of an earlier policy or the benchmark, or at the 4-way table, "
                f"where it holds two seats and its win % is per seat. Seats rotate round the table. "
                f"Win 25% = parity with each opponent seat; place 1 = first, "
                f"{a.players} = last (2.5 = average); offers / trades are the agent's per match vs the heuristics. Updated {time.strftime('%Y-%m-%d %H:%M')}, update "

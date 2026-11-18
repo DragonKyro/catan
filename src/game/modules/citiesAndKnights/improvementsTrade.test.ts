@@ -161,6 +161,8 @@ describe('C&K trading (p.7)', () => {
       receiveCommodities: { coin: 1 },
     });
     s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' });
+    expect(s.players[0]!.commodities).toEqual({ paper: 1, cloth: 0, coin: 0 }); // a yes moves nothing
+    s = applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p1' });
     expect(s.players[0]!.commodities).toEqual({ paper: 0, cloth: 0, coin: 1 });
     expect(s.players[0]!.resources.wood).toBe(0);
     expect(s.players[1]!.commodities).toEqual({ paper: 1, cloth: 0, coin: 0 });

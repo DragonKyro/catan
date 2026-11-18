@@ -11,7 +11,7 @@ import { canPlaceSettlement, canConnectRoad, canPlaceCity } from '@/game/placeme
 import { canAfford } from '@/game/resources';
 import { getBankTradeRate } from '@/game/actions/trade';
 import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
-import { tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
+import { chooseTradePartner, tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
 import { chooseDevCardPlay } from './devcard';
 import { calculateRouteLength } from '@/game/engine';
 import { calculateVictoryPoints } from '@/game/scoring/points';
@@ -60,12 +60,14 @@ export function chooseMainPhaseAction(
   if (!player) return null;
 
   // Handle any pending trade involving us before doing anything else:
-  // - If we proposed it, cancel (the driver's wait already gave humans time).
+  // - If we proposed it, trade with our pick of whoever accepted, else walk
+  //   away (the driver's wait already gave everyone time to answer).
   // - If it's a counter to our trade (or any trade we're now the current
   //   player on), accept if beneficial, otherwise cancel.
   if (state.pendingTrade) {
     if (state.pendingTrade.proposerId === playerId) {
-      return { type: 'cancelTrade', playerId };
+      const partner = chooseTradePartner(state, playerId);
+      return partner ? { type: 'confirmTrade', playerId, with: partner } : { type: 'cancelTrade', playerId };
     }
     if (shouldAcceptTrade(state, playerId)) {
       return { type: 'acceptTrade', playerId };

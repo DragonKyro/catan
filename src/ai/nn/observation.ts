@@ -293,7 +293,7 @@ function decisionFor(
         const answer = { proposerOffset: offsetOf(pt.proposerId), give: bank(pt.receive), get: bank(pt.give) };
         // A counter-offer is answered by the turn player alone.
         if (pt.proposerId !== acting) return acting === viewerId ? { type: 'tradeResponse', ...answer, counter: true } : null;
-        if (pt.rejectedBy.includes(viewerId)) return null;
+        if (pt.rejectedBy.includes(viewerId) || (pt.acceptedBy ?? []).includes(viewerId)) return null; // answered
         return { type: 'tradeResponse', ...answer, counter: false };
       }
       if (acting !== viewerId) return null;
