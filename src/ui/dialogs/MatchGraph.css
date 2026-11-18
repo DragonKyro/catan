@@ -33,9 +33,9 @@
 }
 
 .mgraph-tab.is-active {
-  background: var(--accent);
-  color: #1a1a1a;
-  border-color: var(--accent);
+  background: var(--gold-btn);
+  color: var(--on-accent);
+  border-color: var(--accent-strong);
   font-weight: 600;
 }
 
@@ -56,6 +56,16 @@
   stroke-opacity: 0.4;
   stroke-width: 1;
   stroke-dasharray: 2 2;
+}
+
+.mgraph-line-casing {
+  stroke: rgba(40, 25, 5, 0.55);
+  stroke-width: 3.6;
+}
+
+.mgraph-tooltip-swatch {
+  stroke: rgba(40, 25, 5, 0.55);
+  stroke-width: 0.8;
 }
 
 .mgraph-tooltip-bg {
@@ -79,12 +89,12 @@
 }
 
 .mgraph-grid {
-  stroke: rgba(255, 255, 255, 0.06);
+  stroke: rgba(90, 60, 20, 0.1);
   stroke-width: 1;
 }
 
 .mgraph-axis {
-  stroke: rgba(255, 255, 255, 0.18);
+  stroke: rgba(90, 60, 20, 0.35);
   stroke-width: 1;
 }
 
@@ -122,8 +132,8 @@
 
 .mgraph-bar {
   fill: var(--accent);
-  fill-opacity: 0.75;
-  stroke: #1a1a1a;
+  fill-opacity: 0.85;
+  stroke: #5a3a10;
   stroke-width: 1;
   rx: 2;
 }
@@ -146,7 +156,7 @@
 }
 
 .mgraph-subselector select {
-  background: var(--panel-soft);
+  background: var(--field);
   color: var(--text);
   border: 1px solid var(--panel-border);
   border-radius: 4px;

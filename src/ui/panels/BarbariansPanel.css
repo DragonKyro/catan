@@ -78,11 +78,11 @@
 }
 
 .bp-bad {
-  color: #d97c63;
+  color: var(--danger);
 }
 
 .bp-good {
-  color: var(--accent);
+  color: var(--success);
 }
 
 .bp-hint {
@@ -155,7 +155,7 @@
 .bp-bar {
   height: 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(122, 92, 54, 0.12);
   overflow: hidden;
 }
 .bp-bar-fill {

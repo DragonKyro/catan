@@ -256,7 +256,7 @@
 }
 
 .rb-article-body em {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-style: normal;
   font-weight: 600;
 }

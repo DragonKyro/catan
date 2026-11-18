@@ -52,6 +52,15 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
   const vb = getViewBox(board);
   // T&B Barbarian Attack: conquered buildings are drawn tipped over.
   const conquered = conqueredBuildingVertices(game);
+  // The sea runs well past the view box so the letterbox bands either side
+  // of the board (and a zoomed-out board) are sea too, not a flat frame.
+  const seaPad = Math.max(vb.width, vb.height) * 2;
+  const sea = {
+    x: vb.x - seaPad,
+    y: vb.y - seaPad,
+    width: vb.width + seaPad * 2,
+    height: vb.height + seaPad * 2,
+  };
 
   return (
     <div className={className ?? 'board-wrap'}>
@@ -61,6 +70,14 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
+          {/* The home screen's sunlit sea, held still: shallower round the
+              island, fading to the plain sea by the edge of the view box (an
+              ellipse fitted to it), so the sea beyond — and the frame's
+              background behind a zoomed-out board — is one flat colour. */}
+          <radialGradient id="ocean-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style={{ stopColor: 'var(--ocean-shallow)', stopOpacity: 1 }} />
+            <stop offset="100%" style={{ stopColor: 'var(--ocean-shallow)', stopOpacity: 0 }} />
+          </radialGradient>
           {/* Subtle wave pattern for the ocean. Two-row offset crests at
               low opacity so the board doesn't compete with the hexes. */}
           <pattern
@@ -71,24 +88,25 @@ export function BoardSVG({ game, overlay, className, pulseToken }: Props) {
             height={20}
             patternUnits="userSpaceOnUse"
           >
-            <rect width={28} height={20} fill="var(--ocean)" />
             <path
               d="M0,8 q3,-3 6,0 t6,0 t6,0 t6,0"
               fill="none"
-              stroke="rgba(255,255,255,0.07)"
+              stroke="rgba(255,255,255,0.12)"
               strokeWidth={1}
               strokeLinecap="round"
             />
             <path
               d="M-14,18 q3,-3 6,0 t6,0 t6,0 t6,0 t6,0 t6,0"
               fill="none"
-              stroke="rgba(255,255,255,0.05)"
+              stroke="rgba(255,255,255,0.08)"
               strokeWidth={1}
               strokeLinecap="round"
             />
           </pattern>
         </defs>
-        <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill="url(#ocean-waves)" />
+        <rect {...sea} fill="var(--ocean)" />
+        <rect x={vb.x} y={vb.y} width={vb.width} height={vb.height} fill="url(#ocean-glow)" />
+        <rect {...sea} fill="url(#ocean-waves)" />
 
         <g className="hexes">
           {(() => {

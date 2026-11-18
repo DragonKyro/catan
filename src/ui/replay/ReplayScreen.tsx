@@ -254,6 +254,9 @@ function ReplayBody({
         })()}
       </div>
 
+      {/* Step, slider and controls share one parchment card (text can't sit
+          on the sea). */}
+      <div className="rscreen-dock">
       <div className="rscreen-status">
         <span className="rscreen-stepcount">
           Step {step} / {maxStep}
@@ -350,6 +353,7 @@ function ReplayBody({
             </button>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

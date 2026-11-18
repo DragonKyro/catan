@@ -1,7 +1,8 @@
 .log {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
   flex: 0 0 240px;
@@ -12,6 +13,7 @@
   background: transparent;
   border: none;
   border-radius: 0;
+  box-shadow: none;
   min-height: 0;
 }
 
@@ -22,7 +24,10 @@
 
 .log-header h3 {
   margin: 0;
-  font-size: 0.95em;
+  font-family: var(--display-font);
+  font-weight: 700;
+  font-size: 1.1em;
+  letter-spacing: 0.02em;
 }
 
 .log-search {
@@ -106,39 +111,55 @@
 }
 
 .log-line-gain {
-  background: rgba(123, 191, 122, 0.08);
+  background: rgba(46, 125, 58, 0.1);
 }
 
 .log-line-discard {
-  background: rgba(220, 100, 100, 0.08);
+  background: rgba(180, 60, 48, 0.09);
 }
 
 .log-line-trade {
-  background: rgba(255, 198, 88, 0.1);
+  background: rgba(242, 169, 31, 0.14);
 }
 
 .log-line-win {
-  background: rgba(255, 215, 0, 0.18);
+  background: rgba(242, 169, 31, 0.3);
   font-weight: 600;
   padding: 6px 4px;
 }
 
 .log-line-turn {
-  color: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--display-font);
   font-weight: 700;
   text-align: center;
   padding: 6px 4px;
   margin-top: 4px;
   letter-spacing: 0.04em;
-  font-size: 0.85em;
+  font-size: 0.95em;
 }
 
 .log-soft {
   color: var(--text-soft);
 }
 
+/* A player's name: their colour as a dot, the name itself in ink. Coloured
+   text doesn't work on parchment (white, gold or lime names would vanish). */
 .log-name {
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.log-name::before {
+  content: '';
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  margin-right: 0.28em;
+  border-radius: 50%;
+  background: var(--pc, var(--text-soft));
+  border: 1px solid rgba(40, 25, 5, 0.55);
+  vertical-align: 0.02em;
 }
 
 .log-dice {

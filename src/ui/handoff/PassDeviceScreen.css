@@ -1,7 +1,10 @@
 .handoff {
   position: fixed;
   inset: 0;
-  background: var(--bg);
+  /* Covers the board so the next player doesn't see the last one's hand:
+     the sea, like every screen between turns. */
+  background: var(--sea-waves), var(--sea-gradient);
+  background-color: #1b62a4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11,15 +14,18 @@
 .handoff-card {
   width: 100%;
   max-width: 360px;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
   padding: 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 5px 0 var(--paper-edge),
+    0 18px 38px var(--shadow-sea),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .handoff-eyebrow {
@@ -33,12 +39,15 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  border: 3px solid #ffffff10;
+  border: 3px solid rgba(40, 25, 5, 0.35);
+  box-shadow: 0 2px 0 var(--paper-edge);
 }
 
 .handoff-name {
   margin: 0;
-  font-size: 1.6em;
+  font-family: var(--display-font);
+  font-weight: 900;
+  font-size: 1.9em;
   text-align: center;
 }
 

@@ -83,8 +83,9 @@
 .actionbar-costs-btn {
   flex: 0 0 auto;
   width: 32px;
-  background: var(--panel-soft);
+  background: var(--paper-btn);
   border: 1px solid var(--panel-border);
+  box-shadow: 0 2px 0 var(--paper-edge);
   border-radius: var(--radius);
   cursor: pointer;
   font-size: 16px;
@@ -96,21 +97,25 @@
   line-height: 1;
 }
 
-.actionbar-costs-btn:hover {
-  background: var(--panel);
-  border-color: var(--accent);
+.actionbar-costs-btn:hover,
+.actionbar-devcards-btn:hover {
+  background: var(--panel-hover);
+  border-color: #cfae72;
 }
 
-.actionbar-costs-btn.is-active {
-  background: var(--accent);
-  border-color: var(--accent);
+.actionbar-costs-btn.is-active,
+.actionbar-devcards-btn.is-active {
+  background: var(--gold-btn);
+  border-color: var(--accent-strong);
+  box-shadow: 0 2px 0 var(--gold-edge);
 }
 
 .actionbar-undo-btn {
   flex: 0 0 auto;
   width: 32px;
-  background: var(--panel-soft);
+  background: var(--paper-btn);
   border: 1px solid var(--panel-border);
+  box-shadow: 0 2px 0 var(--paper-edge);
   border-radius: var(--radius);
   cursor: pointer;
   font-size: 18px;
@@ -123,27 +128,29 @@
 }
 
 .actionbar-undo-btn:hover {
-  background: var(--panel);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--panel-hover);
+  border-color: #cfae72;
+  color: var(--accent-ink);
 }
 
 .cost-cheatsheet {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 0;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
   padding: 10px 12px;
   z-index: 50;
   min-width: 200px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 
 .cost-cheatsheet-title {
+  font-family: var(--display-font);
   font-weight: 700;
-  font-size: 0.95em;
+  font-size: 1.1em;
+  letter-spacing: 0.02em;
   margin-bottom: 6px;
   color: var(--text);
 }
@@ -180,9 +187,9 @@
   align-items: center;
   justify-content: center;
   background: var(--panel-soft);
-  border: 1px dashed var(--accent);
+  border: 1px dashed var(--accent-strong);
   border-radius: var(--radius);
-  color: var(--accent);
+  color: var(--accent-ink);
   font-size: 0.85em;
   font-weight: 600;
   padding: 0 4px;
@@ -192,7 +199,7 @@
 }
 
 .cost-cheatsheet-chip {
-  background: var(--panel-soft);
+  background: var(--field);
   border: 1px solid var(--panel-border);
   border-radius: 4px;
   padding: 1px 5px;
@@ -246,8 +253,9 @@
 .actionbar-devcards-btn {
   flex: 0 0 auto;
   width: 32px;
-  background: var(--panel-soft);
+  background: var(--paper-btn);
   border: 1px solid var(--panel-border);
+  box-shadow: 0 2px 0 var(--paper-edge);
   border-radius: var(--radius);
   cursor: pointer;
   font-size: 18px;
@@ -259,15 +267,6 @@
   line-height: 1;
 }
 
-.actionbar-devcards-btn:hover {
-  background: var(--panel);
-  border-color: var(--accent);
-}
-
-.actionbar-devcards-btn.is-active {
-  background: var(--accent);
-  border-color: var(--accent);
-}
 
 /* Dev cheatsheet needs more horizontal room than the cost cheatsheet. */
 .cost-cheatsheet.is-devcards {

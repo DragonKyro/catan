@@ -1,3 +1,7 @@
+/* The game sits on the home screen's sea, held still (no drifting waves,
+   clouds or sparkles: nothing should move at the edge of your eye while you
+   play), with the board framed like the New Game map preview and every
+   panel a parchment card. */
 .gameview {
   flex: 1;
   display: grid;
@@ -12,13 +16,22 @@
   max-height: 100vh;
   min-height: 100dvh;
   max-height: 100dvh;
+  background: var(--sea-waves), var(--sea-gradient);
+  background-color: #1b62a4;
+  color: var(--text);
 }
 
+/* The board's window onto its sea: a parchment rim with the cards' bottom
+   edge, like the map preview on the New Game screen. */
 .gameview-board {
   grid-area: board;
   position: relative;
-  background: var(--ocean-deep);
-  border-radius: var(--radius);
+  background: var(--ocean);
+  border: 4px solid #f3e2b8;
+  border-radius: var(--card-radius);
+  box-shadow:
+    0 3px 0 var(--paper-edge),
+    0 10px 24px var(--shadow-sea);
   overflow: hidden;
   display: flex;
   min-height: 0;
@@ -45,13 +58,33 @@
   align-items: center;
 }
 
+/* Round parchment buttons floating on the board (top controls, the
+   Players button; the zoom buttons in Board.css match): the home buttons' bottom edge and a shadow on the sea. */
+.gameview-topctrl-btn,
+.gameview-players-btn {
+  border: 1px solid var(--panel-border);
+  background: var(--paper-btn);
+  color: var(--text);
+  box-shadow:
+    0 2px 0 var(--paper-edge),
+    0 4px 10px var(--shadow-sea);
+}
+
+.gameview-topctrl-btn:hover {
+  background: var(--panel-hover);
+  border-color: #cfae72;
+}
+
+.gameview-topctrl-btn:focus-visible,
+.gameview-players-btn:focus-visible {
+  outline: 3px solid #2f8fd0;
+  outline-offset: 2px;
+}
+
 .gameview-topctrl-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  color: var(--text);
   font-family: inherit;
   font-size: 1em;
   font-weight: 700;
@@ -59,21 +92,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   padding: 0;
   line-height: 1;
 }
 
-.gameview-topctrl-btn:hover {
-  background: var(--accent);
-  color: #1a1a1a;
-  border-color: var(--accent);
-}
-
 .gameview-topctrl-btn.is-active {
-  background: var(--accent);
-  color: #1a1a1a;
-  border-color: var(--accent);
+  background: var(--gold-btn);
+  color: var(--on-accent);
+  border-color: var(--accent-strong);
+  box-shadow:
+    0 2px 0 var(--gold-edge),
+    0 4px 10px var(--shadow-sea);
 }
 
 /* Wrapper around a top-control button + its popover. Lets the popover
@@ -103,7 +132,9 @@
   right: 12px;
   z-index: 7; /* above .gameview-banner-overlay so the active compose wins */
   pointer-events: none;
-  width: min(300px, calc(100vw - 24px));
+  /* As wide as a docked dialog's minimum (DialogShell.css), so its right
+     edge isn't clipped. */
+  width: min(320px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   max-height: calc(100% - 84px);
   overflow-y: auto;
@@ -171,19 +202,15 @@
   min-height: 40px;
   padding: 0 16px;
   border-radius: 20px;
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  color: var(--text);
   font-family: inherit;
   font-size: 0.95em;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .gameview-players-btn:active {
-  background: var(--accent);
-  color: #1a1a1a;
+  background: var(--gold-btn);
+  color: var(--on-accent);
 }
 
 /* The drawer's own header (title + Close) only exists in the drawer. */
@@ -197,9 +224,10 @@
   flex-direction: row;
   gap: 12px;
   align-items: stretch;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
   padding: 10px 12px;
   /* Locked height so dice rolls, builds, and AI turns don't reflow the
      board above. */
@@ -224,8 +252,10 @@
   background: var(--danger);
   color: #fff;
   padding: 10px 16px;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  border-radius: 10px;
+  box-shadow:
+    0 3px 0 #7e1d13,
+    0 8px 20px var(--shadow-sea);
   cursor: pointer;
   z-index: 150;
   max-width: 600px;
@@ -236,7 +266,7 @@
 .gameview-rulebook-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -245,9 +275,9 @@
 }
 
 .gameview-rulebook {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
   width: 100%;
   max-width: 1000px;
   /* Fixed height (not max-height) so the inner grid + overflow:auto panes
@@ -256,7 +286,9 @@
   height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  box-shadow:
+    0 5px 0 var(--paper-edge),
+    0 18px 38px var(--shadow-sea);
   overflow: hidden;
 }
 
@@ -270,7 +302,10 @@
 
 .gameview-rulebook-head h2 {
   margin: 0;
-  font-size: 1.1em;
+  font-family: var(--display-font);
+  font-weight: 900;
+  font-size: 1.45em;
+  letter-spacing: 0.01em;
 }
 
 .gameview-rulebook-body {
@@ -320,12 +355,14 @@
     inset: auto 0 0 0;
     z-index: 110;
     max-height: 70dvh;
-    background: var(--panel);
+    /* The drawer is parchment table-top, so the cards inside it still read
+       as cards. */
+    background: var(--bg);
     border-top: 1px solid var(--panel-border);
     border-top-left-radius: 16px;
     border-top-right-radius: 16px;
     padding: 0 12px 12px;
-    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 -12px 36px var(--shadow-sea);
     transform: translateY(100%);
     transition: transform 0.22s ease-out;
     overflow-y: auto;
@@ -351,8 +388,13 @@
     z-index: 2;
     order: -2;
     padding: 12px 0 8px;
-    background: var(--panel);
+    background: var(--bg);
     font-weight: 700;
+  }
+
+  .gameview-side-head > span {
+    font-family: var(--display-font);
+    font-size: 1.15em;
   }
 
   .gameview-side-close {
@@ -360,7 +402,8 @@
     padding: 0 16px;
     border-radius: 20px;
     border: 1px solid var(--panel-border);
-    background: var(--panel-soft);
+    background: var(--paper-btn);
+    box-shadow: 0 2px 0 var(--paper-edge);
     color: var(--text);
     font-family: inherit;
     font-size: 0.95em;
@@ -371,7 +414,7 @@
   .gameview-side-scrim {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--scrim);
     z-index: 105;
   }
 }
@@ -446,7 +489,7 @@
     border-top: none;
     border-left: 1px solid var(--panel-border);
     border-radius: 16px 0 0 16px;
-    box-shadow: -12px 0 36px rgba(0, 0, 0, 0.5);
+    box-shadow: -12px 0 36px var(--shadow-sea);
     transform: translateX(100%);
   }
 

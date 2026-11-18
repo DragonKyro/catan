@@ -8,8 +8,12 @@
   --terrain-desert: #d9c598;
   --terrain-sea: #2a5a8a;
   --terrain-gold: #d4951a;
-  --ocean: #3b7ab8;
-  --ocean-deep: #2e6398;
+  /* The sea around the board: the home screen's sunlit sea, a little
+     calmer. Sea hexes (--terrain-sea) stay darker, so the sea you can sail
+     on still reads apart from the water around the island. */
+  --ocean: #2f84c4;
+  --ocean-shallow: #4aa8dc;
+  --ocean-deep: #2f84c4;
 
   /* Player colors — picked for maximum hue separation and to avoid clashes
      with terrain colors (wood/sheep green, brick/orange/gold, ore gray). */
@@ -33,19 +37,68 @@
   --token-edge: #4a3a25;
   --token-hot: #c9302c; /* 6 and 8 */
 
-  /* Surfaces */
-  --bg: #0f1922;
-  --panel: #1c2934;
-  --panel-soft: #243443;
-  --panel-border: #2f4254;
-  --text: #e6ecf2;
-  --text-soft: #97a7b8;
-  --accent: #ffce6b;
-  --danger: #e25c5c;
-  --success: #5dba8a;
+  /* Surfaces: parchment on the sea, the same palette on the menus and in
+     the game. */
+  --bg: #f3e6c4;
+  --panel: #fcf5e3;
+  --panel-soft: #f3e6c6;
+  --panel-border: #dcc391;
+  /* Hover / pressed fill for small parchment controls. */
+  --panel-hover: #fff4d2;
+  /* The outline of a parchment card (a touch lighter than --panel-border). */
+  --card-border: #e6d3a6;
+  --text: #3a260f;
+  --text-soft: #7a5c36;
+  /* Gold for fills, glows and thick borders only: it doesn't read as text or
+     a thin line on parchment. Text accents use --accent-ink. */
+  --accent: #f2a91f;
+  --accent-strong: #d98e1a;
+  --accent-ink: #a5421a;
+  /* Dark text on a gold fill. */
+  --on-accent: #3a1f05;
+  --danger: #c0392b;
+  --success: #2e8b57;
+  /* Give / get tints for trades (text + fill). */
+  --give: #b43c30;
+  --get: #2e7d3a;
+  /* The 3D bottom edge of cards and buttons, as on the home buttons. */
+  --paper-edge: #c9a96a;
+  --field: #fffbf1;
+  --field-border: #cfb27c;
+  --display-font: 'Alegreya SC', Georgia, 'Times New Roman', serif;
+  --story-font: 'Alegreya', Georgia, serif;
+  /* Shadows fall on the sea, so they are a deep blue rather than black. */
+  --shadow-sea: rgba(3, 30, 60, 0.32);
+  /* Behind a modal: the sea, dimmed. */
+  --scrim: rgba(6, 34, 66, 0.55);
+
+  /* The sea behind every screen (the menus animate theirs; the game's
+     stays still so nothing moves at the edge of your eye while you play). */
+  --sea-gradient:
+    radial-gradient(ellipse 55% 60% at 32% 52%, rgba(150, 236, 242, 0.5), transparent 70%),
+    radial-gradient(ellipse 120% 100% at 45% 35%, #48b9e0 0%, #2a8bcb 42%, #1b62a4 75%, #143f7a 100%);
+  --sea-waves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='80'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-opacity='0.22'%3E%3Cpath d='M14 22q7-6 14 0t14 0'/%3E%3Cpath d='M96 62q7-6 14 0t14 0'/%3E%3C/g%3E%3C/svg%3E");
+
+  /* A parchment card sitting on the sea: the soft highlight, the darker
+     bottom edge and the shadow of the home screen's cards, scaled down for
+     the game's denser panels. */
+  --card-bg:
+    radial-gradient(ellipse 90% 50% at 15% 0%, rgba(255, 255, 255, 0.7), transparent 70%),
+    var(--panel);
+  --card-shadow:
+    0 3px 0 var(--paper-edge),
+    0 10px 24px var(--shadow-sea),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --card-radius: 14px;
+  /* Button faces: parchment, and the gold of the primary button. */
+  --paper-btn: linear-gradient(180deg, #fffaea 0%, #f4e4bd 100%);
+  --paper-btn-hover: linear-gradient(180deg, #fffdf5 0%, #f8eac8 100%);
+  --gold-btn: linear-gradient(180deg, #ffe892 0%, #ffc642 52%, #f6a11d 100%);
+  --gold-btn-hover: linear-gradient(180deg, #fff0a8 0%, #ffd25a 52%, #f8ad2c 100%);
+  --gold-edge: #b2620e;
 
   /* Sizes */
-  --radius: 8px;
+  --radius: 10px;
 }
 
 * {
@@ -54,13 +107,44 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  /* Deep sea, so a screen loading in never flashes parchment. */
+  background: #1b62a4;
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
 button {
   font-family: inherit;
+}
+
+/* Parchment text fields, on the menus, in the game and on the replay screen.
+   Scoped under those screen roots (the menus had them as `.menu-screen …`),
+   so they win over a component's single-class input rule: components set
+   size and spacing, these set the look. Range sliders are left alone. */
+:is(.menu-screen, .gameview, .rscreen)
+  :is(input:not([type]), input[type='text'], input[type='number'], input[type='search'], select, textarea) {
+  background: var(--field);
+  border: 1px solid var(--field-border);
+  color: var(--text);
+  box-shadow: inset 0 1px 2px rgba(80, 50, 10, 0.12);
+}
+
+:is(.menu-screen, .gameview, .rscreen)
+  :is(input:not([type]), input[type='text'], input[type='number'], input[type='search'], select, textarea):focus {
+  outline: none;
+  border-color: #e0a020;
+  box-shadow:
+    0 0 0 3px rgba(242, 169, 31, 0.32),
+    inset 0 1px 2px rgba(80, 50, 10, 0.12);
+}
+
+:is(.menu-screen, .gameview, .rscreen) ::placeholder {
+  color: #a88b62;
+  opacity: 1;
+}
+
+:is(.menu-screen, .gameview, .rscreen) input[type='checkbox'] {
+  accent-color: #d98e1a;
 }
 
 .app-root {

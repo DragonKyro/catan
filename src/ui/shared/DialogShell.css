@@ -1,7 +1,7 @@
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9,16 +9,19 @@
 }
 
 .dialog {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
   min-width: min(360px, 92vw);
   max-width: min(560px, 96vw);
   max-height: 88vh;
   max-height: 88dvh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 5px 0 var(--paper-edge),
+    0 18px 38px var(--shadow-sea),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .dialog-header {
@@ -31,7 +34,11 @@
 
 .dialog-title {
   margin: 0;
-  font-size: 1.05em;
+  font-family: var(--display-font);
+  font-weight: 700;
+  font-size: 1.25em;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
 }
 
 .dialog-close {
@@ -45,7 +52,7 @@
 }
 
 .dialog-close:hover {
-  color: var(--text);
+  color: var(--accent-ink);
 }
 
 .dialog-body {
@@ -76,16 +83,19 @@
 
 .dialog-docked {
   pointer-events: auto;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
   min-width: min(320px, 92vw);
   max-width: min(640px, 92vw);
   max-height: 60vh;
   max-height: 60dvh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+  box-shadow:
+    0 4px 0 var(--paper-edge),
+    0 14px 32px var(--shadow-sea),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 /* Phone: modal dialogs slide up from the bottom as a sheet. Docked

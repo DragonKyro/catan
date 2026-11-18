@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useLogStore } from '@/store/logStore';
 import {
@@ -65,7 +65,10 @@ export function GameOverDialog() {
           aria-label="Show game results"
         >
           🏆{' '}
-          <strong style={{ color: playerColorVar(winner.color) }}>
+          <strong
+            className="gameover-winner"
+            style={{ '--pc': playerColorVar(winner.color) } as CSSProperties}
+          >
             {winner.name}
           </strong>{' '}
           wins · show results
@@ -114,7 +117,13 @@ export function GameOverDialog() {
       }
     >
       <p style={{ marginTop: 0, fontSize: '1.05em' }}>
-        <strong style={{ color: playerColorVar(winner.color) }}>{winner.name}</strong> wins!
+        <strong
+          className="gameover-winner"
+          style={{ '--pc': playerColorVar(winner.color) } as CSSProperties}
+        >
+          {winner.name}
+        </strong>{' '}
+        wins!
         <span style={{ color: 'var(--text-soft)', marginLeft: 12, fontSize: '0.9em' }}>
           Total game time: {formatDurationMs(Math.max(0, lastActionT - startTime))}
         </span>
@@ -151,6 +160,7 @@ export function GameOverDialog() {
                           height: 10,
                           borderRadius: 2,
                           background: playerColorVar(p.color),
+                          border: '1px solid rgba(40, 25, 5, 0.45)',
                           marginRight: 8,
                         }}
                       />

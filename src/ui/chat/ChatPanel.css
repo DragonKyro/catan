@@ -71,8 +71,8 @@
 }
 
 .chat-input button {
-  background: var(--accent);
-  color: #1a1a1a;
+  background: var(--gold-btn);
+  color: var(--on-accent);
   border: none;
   border-radius: 6px;
   padding: 0 12px;
