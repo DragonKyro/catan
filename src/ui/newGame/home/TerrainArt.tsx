@@ -1,10 +1,11 @@
 // Illustrations for the home screen's island tiles, drawn in each hex's
 // local coordinates (centre 0,0; circumradius HEX). Art stays clear of the
-// centre, where the number token sits. The small animated parts (swaying
-// wheat, hopping sheep, nodding pines) carry a class from HomeMenu.css and
-// a --d delay so neighbours don't move in step.
+// centre, where the number token sits. The parts that move (hopping sheep,
+// swaying wheat sheaves) aren't drawn here: `terrainFx` lists them and
+// HomeIsland draws each in its own small box that animates on the
+// compositor (HomeMenu.css), so the tile itself is painted once. Their
+// shadows stay on the tile.
 
-import type { CSSProperties } from 'react';
 import type { HomeTerrain } from './island';
 
 export const TERRAIN_COLORS: Record<HomeTerrain, { light: string; base: string; dark: string; side: string }> = {
@@ -16,32 +17,82 @@ export const TERRAIN_COLORS: Record<HomeTerrain, { light: string; base: string; 
   desert: { light: '#f6e6b8', base: '#e7cf98', dark: '#cdb277', side: '#93794a' },
 };
 
-const delay = (d: number) => ({ '--d': `${d}s` }) as CSSProperties;
-
 function Shadow({ rx, y = 6 }: { rx: number; y?: number }) {
   return <ellipse cx={0} cy={y} rx={rx} ry={rx * 0.32} fill="#000" opacity={0.2} />;
 }
 
-function Pine({ x, y, s = 1, d = 0 }: { x: number; y: number; s?: number; d?: number }) {
+function Pine({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
       <Shadow rx={6.5} y={5.5} />
-      <g className="home-nod" style={delay(d)}>
-        <rect x={-1} y={2.5} width={2} height={3.5} fill="#5b3a1d" />
-        <path d="M0,-5 L7,3.5 L-7,3.5 Z" fill="#1f5a28" />
-        <path d="M0,-5 L-7,3.5 L-1,3.5 Z" fill="#2f7d37" />
-        <path d="M0,-11.5 L5.2,-1.5 L-5.2,-1.5 Z" fill="#256a2e" />
-        <path d="M0,-11.5 L-5.2,-1.5 L-0.8,-1.5 Z" fill="#3c9c45" />
-      </g>
+      <rect x={-1} y={2.5} width={2} height={3.5} fill="#5b3a1d" />
+      <path d="M0,-5 L7,3.5 L-7,3.5 Z" fill="#1f5a28" />
+      <path d="M0,-5 L-7,3.5 L-1,3.5 Z" fill="#2f7d37" />
+      <path d="M0,-11.5 L5.2,-1.5 L-5.2,-1.5 Z" fill="#256a2e" />
+      <path d="M0,-11.5 L-5.2,-1.5 L-0.8,-1.5 Z" fill="#3c9c45" />
     </g>
   );
 }
 
-function Sheep({ x, y, flip = false, d = 0 }: { x: number; y: number; flip?: boolean; d?: number }) {
+/** A tile's moving part, in hex-local units: hopping sheep and swaying wheat sheaves. */
+export interface TerrainFx {
+  kind: 'sheep' | 'sheaf';
+  x: number;
+  y: number;
+  s: number;
+  flip: boolean;
+  /** Seconds into its loop, so neighbours don't move in step. */
+  d: number;
+}
+
+/**
+ * Each moving part's box in its own units (scaled by `s`), with the point it
+ * pivots on (a sheaf sways from the foot of its stalks). The box moves as a
+ * whole, so the art inside never leaves it.
+ */
+export const FX_BOX: Record<TerrainFx['kind'], { x: number; y: number; w: number; h: number; px: number; py: number }> = {
+  sheep: { x: -9, y: -6, w: 18, h: 12, px: 0, py: 0 },
+  sheaf: { x: -7, y: -10, w: 14, h: 16, px: 0, py: 5 },
+};
+
+export function terrainFx(terrain: HomeTerrain, seed: number): TerrainFx[] {
+  const d = (n: number) => ((seed * 7 + n * 13) % 17) / 6;
+  const fx = (kind: TerrainFx['kind'], x: number, y: number, n: number, s = 1, flip = false): TerrainFx => ({
+    kind,
+    x,
+    y,
+    s,
+    flip,
+    d: d(n),
+  });
+  switch (terrain) {
+    case 'sheep':
+      return [fx('sheep', -14, -10, 1), fx('sheep', 14, 13, 2, 1, true), fx('sheep', -9, 17, 3)];
+    case 'wheat':
+      return [fx('sheaf', -15, -12, 1), fx('sheaf', 14, -13, 2, 0.95), fx('sheaf', -15, 13, 3, 0.9), fx('sheaf', 16, 12, 4)];
+    default:
+      return [];
+  }
+}
+
+/** The still shadow a moving part casts on its tile. */
+function FxShadow({ fx }: { fx: TerrainFx }) {
   return (
-    <g transform={`translate(${x} ${y}) scale(${flip ? -1 : 1} 1)`}>
-      <Shadow rx={6} y={5} />
-      <g className="home-hop" style={delay(d)}>
+    <g transform={`translate(${fx.x} ${fx.y}) scale(${fx.s})`}>
+      {fx.kind === 'sheep' ? <Shadow rx={6} y={5} /> : <Shadow rx={4.5} y={5.5} />}
+    </g>
+  );
+}
+
+/** A moving part's art at its own origin (its box places, scales and animates it). */
+export function TerrainFxArt({ fx }: { fx: TerrainFx }) {
+  return fx.kind === 'sheep' ? <SheepBody flip={fx.flip} /> : <SheafBody />;
+}
+
+function SheepBody({ flip }: { flip: boolean }) {
+  return (
+    <g transform={flip ? 'scale(-1 1)' : undefined}>
+      <g>
         {[-3.2, -1.2, 1.4, 3.2].map((lx) => (
           <rect key={lx} x={lx - 0.6} y={1.5} width={1.2} height={3.4} rx={0.5} fill="#2d2a26" />
         ))}
@@ -83,24 +134,21 @@ function Fence({ x, y, w }: { x: number; y: number; w: number }) {
   );
 }
 
-function Sheaf({ x, y, s = 1, d = 0 }: { x: number; y: number; s?: number; d?: number }) {
+function SheafBody() {
   return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <Shadow rx={4.5} y={5.5} />
-      <g className="home-sway" style={delay(d)}>
-        {[-16, 0, 16].map((rot) => (
-          <g key={rot} transform={`rotate(${rot} 0 5)`}>
-            <line x1={0} y1={5} x2={0} y2={-6} stroke="#9a6d12" strokeWidth={0.9} />
-            {[-7.5, -5.2, -2.9].map((gy) => (
-              <g key={gy}>
-                <ellipse cx={-1.1} cy={gy} rx={0.9} ry={1.7} fill="#c8901c" transform={`rotate(-28 -1.1 ${gy})`} />
-                <ellipse cx={1.1} cy={gy} rx={0.9} ry={1.7} fill="#e2a92a" transform={`rotate(28 1.1 ${gy})`} />
-              </g>
-            ))}
-          </g>
-        ))}
-        <rect x={-2.4} y={1.2} width={4.8} height={1.5} rx={0.6} fill="#8a5a1a" />
-      </g>
+    <g>
+      {[-16, 0, 16].map((rot) => (
+        <g key={rot} transform={`rotate(${rot} 0 5)`}>
+          <line x1={0} y1={5} x2={0} y2={-6} stroke="#9a6d12" strokeWidth={0.9} />
+          {[-7.5, -5.2, -2.9].map((gy) => (
+            <g key={gy}>
+              <ellipse cx={-1.1} cy={gy} rx={0.9} ry={1.7} fill="#c8901c" transform={`rotate(-28 -1.1 ${gy})`} />
+              <ellipse cx={1.1} cy={gy} rx={0.9} ry={1.7} fill="#e2a92a" transform={`rotate(28 1.1 ${gy})`} />
+            </g>
+          ))}
+        </g>
+      ))}
+      <rect x={-2.4} y={1.2} width={4.8} height={1.5} rx={0.6} fill="#8a5a1a" />
     </g>
   );
 }
@@ -173,18 +221,17 @@ function Stripes({ color, gap, width, angle }: { color: string; gap: number; wid
 }
 
 export function TerrainArt({ terrain, seed }: { terrain: HomeTerrain; seed: number }) {
-  const d = (n: number) => ((seed * 7 + n * 13) % 17) / 6;
   switch (terrain) {
     case 'wood':
       return (
         <g>
-          <Pine x={2} y={-19} s={0.9} d={d(1)} />
-          <Pine x={-14} y={-12} d={d(2)} />
-          <Pine x={15} y={-10} s={1.05} d={d(3)} />
-          <Pine x={-19} y={6} s={0.95} d={d(4)} />
-          <Pine x={19} y={9} s={0.85} d={d(5)} />
-          <Pine x={-7} y={20} d={d(6)} />
-          <Pine x={9} y={21} s={0.85} d={d(7)} />
+          <Pine x={2} y={-19} s={0.9} />
+          <Pine x={-14} y={-12} />
+          <Pine x={15} y={-10} s={1.05} />
+          <Pine x={-19} y={6} s={0.95} />
+          <Pine x={19} y={9} s={0.85} />
+          <Pine x={-7} y={20} />
+          <Pine x={9} y={21} s={0.85} />
         </g>
       );
     case 'sheep':
@@ -195,19 +242,18 @@ export function TerrainArt({ terrain, seed }: { terrain: HomeTerrain; seed: numb
           <Tuft x={-3} y={-20} color="#5f9a3a" />
           <Tuft x={-1} y={22} color="#5f9a3a" />
           <Fence x={6} y={-15} w={14} />
-          <Sheep x={-14} y={-10} d={d(1)} />
-          <Sheep x={14} y={13} flip d={d(2)} />
-          <Sheep x={-9} y={17} d={d(3)} />
+          {terrainFx(terrain, seed).map((fx, k) => (
+            <FxShadow key={k} fx={fx} />
+          ))}
         </g>
       );
     case 'wheat':
       return (
         <g>
           <Stripes color="#c48c1c" gap={6} width={2.2} angle={-30} />
-          <Sheaf x={-15} y={-12} d={d(1)} />
-          <Sheaf x={14} y={-13} s={0.95} d={d(2)} />
-          <Sheaf x={-15} y={13} s={0.9} d={d(3)} />
-          <Sheaf x={16} y={12} d={d(4)} />
+          {terrainFx(terrain, seed).map((fx, k) => (
+            <FxShadow key={k} fx={fx} />
+          ))}
         </g>
       );
     case 'brick':

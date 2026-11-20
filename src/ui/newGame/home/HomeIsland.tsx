@@ -3,6 +3,18 @@
 // sailing round it. The dice in the corner roll for real: the hexes with
 // that number light up and pay out a card, the buildings on them hop, and a
 // 7 sends the robber somewhere new.
+//
+// Drawn as a stack of layers sharing one coordinate system (the island's
+// user units, VB below), so the motion stays off the main thread. Anything
+// animated inside an SVG repaints that whole SVG every frame, so the still
+// drawing (sea, beach and harbors, pieces) sits in SVGs that never change,
+// and everything that keeps moving or arrives (each tile with its landing
+// and hover lift, the sheep and wheat on it, its number token, the surf, the
+// ship, the chimney smoke) is its own small box animating only transform /
+// opacity, which the compositor runs. Boxes are placed in `cqw` of
+// .home-island (a size container), so 1 unit = its width / 412. Only the
+// pieces' arrival and the dice roll's brief effects (glow, cards, hops)
+// still repaint.
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { PLAYER_COLOR_HEX } from '@/ui/shared/playerColors';
@@ -27,11 +39,44 @@ import {
   type Pt,
   type RoadPiece,
 } from './island';
-import { ResourceGlyph, TERRAIN_COLORS, TerrainArt } from './TerrainArt';
+import { FX_BOX, ResourceGlyph, TERRAIN_COLORS, TerrainArt, TerrainFxArt, terrainFx, type TerrainFx } from './TerrainArt';
 import { useReducedMotion } from './useReducedMotion';
 
 const ORIGIN: Pt = { x: 0, y: 0 };
 const delay = (s: number) => ({ '--d': `${s}s` }) as CSSProperties;
+
+/** The scene's user units: every layer and box is placed in these. */
+const VB = { x: -206, y: -196, w: 412, h: 392 };
+const VIEWBOX = `${VB.x} ${VB.y} ${VB.w} ${VB.h}`;
+/** A length of n island units (.home-island is a size container 412 units wide). */
+const u = (n: number) => `${+((n * 100) / VB.w).toFixed(4)}cqw`;
+
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const viewBox = (b: Box) => `${b.x} ${b.y} ${b.w} ${b.h}`;
+
+/**
+ * Style for a box drawn in its own coordinates `b`, scaled by `s`, with its
+ * own origin placed at `at` in its parent's coordinates (the parent's
+ * top-left being `parent`). It transforms about `pivot` (its own
+ * coordinates; default its origin).
+ */
+function place(b: Box, at: Pt, parent: Pt, s = 1, pivot: Pt = ORIGIN): CSSProperties {
+  return {
+    left: u(at.x + b.x * s - parent.x),
+    top: u(at.y + b.y * s - parent.y),
+    width: u(b.w * s),
+    height: u(b.h * s),
+    transformOrigin: `${u((pivot.x - b.x) * s)} ${u((pivot.y - b.y) * s)}`,
+  };
+}
+
+const ISLAND_TOP_LEFT: Pt = { x: VB.x, y: VB.y };
 const lerp = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
 const RING = (i: number) => {
@@ -43,6 +88,7 @@ const LAST_TILE = Math.max(...ISLAND.map((_, i) => dealDelay(i)));
 /** When the pieces start arriving, once every tile and token is down. */
 const PIECES_AT = LAST_TILE + 0.75;
 const BUILDING_HEXES = BUILDINGS.map((b) => hexesAtCorner(b.hex, b.corner));
+const buildingAt = (k: number) => PIECES_AT + 0.35 + k * 0.09;
 
 const RESOURCE: Record<HomeTerrain, string> = {
   wood: 'wood',
@@ -135,36 +181,45 @@ export function HomeIsland() {
 
   return (
     <div className="home-scene">
-      <svg
+      <div
         className="home-island"
-        viewBox="-206 -196 412 392"
         role="img"
         aria-label="An island of hex tiles with settlements, roads and harbors, and a ship sailing around it"
       >
-        <Defs />
-        <circle cx={0} cy={4} r={200} fill="url(#home-shallow)" />
-        <Coast />
-        {HARBORS.map((h, k) => (
-          <HarborMarker key={k} harbor={h} at={PIECES_AT - 0.3 + k * 0.06} />
-        ))}
-        <Ship reduced={reduced} />
+        <svg className="home-layer home-layer-base" viewBox={VIEWBOX} aria-hidden>
+          <Defs />
+          <circle cx={0} cy={4} r={200} fill="url(#home-shallow)" />
+          <Shallows />
+        </svg>
+        <Surf phase="a" />
+        <Surf phase="b" />
+        <svg className="home-layer" viewBox={VIEWBOX} aria-hidden>
+          <Beach />
+          {HARBORS.map((h, k) => (
+            <HarborMarker key={k} harbor={h} at={PIECES_AT - 0.3 + k * 0.06} />
+          ))}
+        </svg>
+        <ShipOrbit />
         {ISLAND.map((_, i) => (
           <Tile key={i} i={i} />
         ))}
-        {ROADS.map((r, k) => (
-          <RoadSvg key={k} road={r} at={PIECES_AT + k * 0.07} />
-        ))}
-        {BUILDINGS.map((b, k) => (
-          <BuildingSvg
-            key={k}
-            building={b}
-            at={PIECES_AT + 0.35 + k * 0.09}
-            collectId={result && BUILDING_HEXES[k]!.some((i) => producing.has(i)) ? result.id : null}
-          />
-        ))}
-        <RobberSvg at={robber} bump={result && result.blocked !== null ? result.id : null} />
-        {result && <Production key={result.id} result={result} />}
-      </svg>
+        <svg className="home-layer" viewBox={VIEWBOX} aria-hidden>
+          {ROADS.map((r, k) => (
+            <RoadSvg key={k} road={r} at={PIECES_AT + k * 0.07} />
+          ))}
+          {BUILDINGS.map((b, k) => (
+            <BuildingSvg
+              key={k}
+              building={b}
+              at={buildingAt(k)}
+              collectId={result && BUILDING_HEXES[k]!.some((i) => producing.has(i)) ? result.id : null}
+            />
+          ))}
+          <RobberSvg at={robber} bump={result && result.blocked !== null ? result.id : null} />
+          {result && <Production key={result.id} result={result} />}
+        </svg>
+        {BUILDINGS.map((b, k) => (b.kind === 'city' ? <ChimneySmoke key={k} building={b} at={buildingAt(k)} /> : null))}
+      </div>
 
       <button
         type="button"
@@ -208,58 +263,129 @@ function Defs() {
   );
 }
 
-/** Shallows, surf and beach: unions of enlarged hexes, so they follow the jagged coast. */
-function Coast() {
+// Shallows, surf and beach: unions of enlarged hexes, so they follow the jagged coast.
+
+function Shallows() {
   return (
-    <g>
-      <g fill="#93e9ee" opacity={0.55}>
-        {ISLAND.map((_, i) => (
-          <polygon key={i} points={hexPoints(hexCenter(i), HEX + 17)} />
-        ))}
-      </g>
-      <g fill="none" stroke="#ffffff" strokeWidth={2.2} strokeLinecap="round" opacity={0.85}>
-        {COASTAL.map((i) => (
-          <polygon key={i} className="home-foam" points={hexPoints(hexCenter(i), HEX + 10.5)} />
-        ))}
-      </g>
-      <g fill="#f4dfa3">
-        {ISLAND.map((_, i) => (
-          <polygon key={i} points={hexPoints(hexCenter(i), HEX + 5.5)} />
-        ))}
-      </g>
+    <g fill="#93e9ee" opacity={0.55}>
+      {ISLAND.map((_, i) => (
+        <polygon key={i} points={hexPoints(hexCenter(i), HEX + 17)} />
+      ))}
     </g>
   );
 }
 
+function Beach() {
+  return (
+    <g fill="#f4dfa3">
+      {ISLAND.map((_, i) => (
+        <polygon key={i} points={hexPoints(hexCenter(i), HEX + 5.5)} />
+      ))}
+    </g>
+  );
+}
+
+const SURF_SIZE = HEX + 10.5;
+/** Bounds of the surf line, plus its stroke. */
+const SURF_BOX: Box = (() => {
+  const pts = COASTAL.flatMap((i) => [0, 1, 2, 3, 4, 5].map((k) => corner(hexCenter(i), SURF_SIZE, k)));
+  const x = Math.floor(Math.min(...pts.map((p) => p.x)) - 2);
+  const y = Math.floor(Math.min(...pts.map((p) => p.y)) - 2);
+  const right = Math.ceil(Math.max(...pts.map((p) => p.x)) + 2);
+  const bottom = Math.ceil(Math.max(...pts.map((p) => p.y)) + 2);
+  return { x, y, w: right - x, h: bottom - y };
+})();
+
+/**
+ * The surf line round the beach. Two of them lap in and out of phase (the
+ * second with its dashes in the first's gaps), so the surf seems to wash
+ * along the coast while each layer only scales and fades.
+ */
+function Surf({ phase }: { phase: 'a' | 'b' }) {
+  return (
+    <svg
+      className={`home-surf home-surf-${phase}`}
+      viewBox={viewBox(SURF_BOX)}
+      style={place(SURF_BOX, ORIGIN, ISLAND_TOP_LEFT)}
+      aria-hidden
+    >
+      <g
+        fill="none"
+        stroke="#ffffff"
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeDasharray="7 10"
+        strokeDashoffset={phase === 'b' ? 8.5 : 0}
+      >
+        {COASTAL.map((i) => (
+          <polygon key={i} points={hexPoints(hexCenter(i), SURF_SIZE)} />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+/** A tile's box in hex-local units: the edging, and the thickness showing below it. */
+const TILE_BOX: Box = { x: -31, y: -36, w: 62, h: 78 };
+const TILE_TOP_LEFT: Pt = { x: TILE_BOX.x, y: TILE_BOX.y };
+/** The number token with its shadow (Token draws it 1 unit low). */
+const TOKEN_BOX: Box = { x: -13, y: -12, w: 26, h: 27 };
+
+/**
+ * One tile: its own box, which lands and lifts on hover; the sheep or wheat
+ * on it and then its token ride along on top as boxes of their own. Only the
+ * tile's hex takes the pointer, so a hover means the hex itself.
+ */
 function Tile({ i }: { i: number }) {
   const h = ISLAND[i]!;
   const c = hexCenter(i);
   const col = TERRAIN_COLORS[h.terrain];
   const d = dealDelay(i);
   return (
-    <g transform={`translate(${c.x} ${c.y})`}>
-      <g className="home-tile-drop" style={delay(d)}>
-        <g className="home-tile">
-          {/* Dark edging that shows in the seams between tiles; part of the tile,
-              so the beach shows where tiles haven't landed yet. */}
-          <polygon points={hexPoints(ORIGIN, HEX + 0.4)} fill="#3a2814" />
-          <polygon points={hexPoints({ x: 0, y: 6 }, HEX - 0.8)} fill={col.side} />
-          <polygon
-            points={hexPoints(ORIGIN, HEX - 0.8)}
-            fill={`url(#home-top-${h.terrain})`}
-            stroke={col.dark}
-            strokeWidth={0.8}
-          />
-          <polygon points={hexPoints(ORIGIN, HEX - 3.2)} fill="none" stroke="#fff" strokeOpacity={0.22} strokeWidth={1.4} />
-          <TerrainArt terrain={h.terrain} seed={i} />
-          {h.number !== null && (
-            <g className="home-token-pop" style={delay(d + 0.42)}>
-              <Token n={h.number} />
-            </g>
-          )}
-        </g>
-      </g>
-    </g>
+    <div className="home-tile" style={{ ...place(TILE_BOX, c, ISLAND_TOP_LEFT), ...delay(d) }}>
+      <svg className="home-tile-art" viewBox={viewBox(TILE_BOX)} aria-hidden>
+        {/* Dark edging that shows in the seams between tiles; part of the tile,
+            so the beach shows where tiles haven't landed yet. */}
+        <polygon className="home-tile-hit" points={hexPoints(ORIGIN, HEX + 0.4)} fill="#3a2814" />
+        <polygon points={hexPoints({ x: 0, y: 6 }, HEX - 0.8)} fill={col.side} />
+        <polygon
+          points={hexPoints(ORIGIN, HEX - 0.8)}
+          fill={`url(#home-top-${h.terrain})`}
+          stroke={col.dark}
+          strokeWidth={0.8}
+        />
+        <polygon points={hexPoints(ORIGIN, HEX - 3.2)} fill="none" stroke="#fff" strokeOpacity={0.22} strokeWidth={1.4} />
+        <TerrainArt terrain={h.terrain} seed={i} />
+      </svg>
+      {terrainFx(h.terrain, i).map((fx, k) => (
+        <TileFx key={k} fx={fx} />
+      ))}
+      {h.number !== null && (
+        <svg
+          className="home-token-pop"
+          viewBox={viewBox(TOKEN_BOX)}
+          style={{ ...place(TOKEN_BOX, ORIGIN, TILE_TOP_LEFT, 1, { x: 0, y: 1 }), ...delay(d + 0.42) }}
+          aria-hidden
+        >
+          <Token n={h.number} />
+        </svg>
+      )}
+    </div>
+  );
+}
+
+/** A hopping sheep or a swaying sheaf, in its own box on its tile. */
+function TileFx({ fx }: { fx: TerrainFx }) {
+  const b = FX_BOX[fx.kind];
+  return (
+    <svg
+      className={`home-fx ${fx.kind === 'sheep' ? 'home-hop' : 'home-sway'}`}
+      viewBox={viewBox(b)}
+      style={{ ...place(b, fx, TILE_TOP_LEFT, fx.s, { x: b.px, y: b.py }), ...delay(fx.d) }}
+      aria-hidden
+    >
+      <TerrainFxArt fx={fx} />
+    </svg>
   );
 }
 
@@ -335,12 +461,32 @@ function HarborMarker({ harbor, at }: { harbor: Harbor; at: number }) {
   );
 }
 
-const SHIP_PATH = 'M 184 0 A 184 178 0 1 1 -184 0 A 184 178 0 1 1 184 0';
+/** How far out the ship sails, clear of the harbors. */
+const SHIP_ORBIT = 181;
+/** The ship's box: its art turned bow-down, the way it heads at the orbit's 3 o'clock. */
+const SHIP_BOX: Box = { x: -13, y: -34, w: 26, h: 52 };
+
+/**
+ * The ship sails clockwise round the island: the whole layer turns about
+ * the island's centre (so the bow always points along the course) and the
+ * ship's own box rocks. Both are compositor-only rotations.
+ */
+function ShipOrbit() {
+  return (
+    <div className="home-ship-orbit" aria-hidden>
+      <svg className="home-ship" viewBox={viewBox(SHIP_BOX)} style={place(SHIP_BOX, { x: SHIP_ORBIT, y: 0 }, ISLAND_TOP_LEFT)}>
+        <g transform="rotate(90)">
+          <ShipArt />
+        </g>
+      </svg>
+    </div>
+  );
+}
 
 /** Seen from above (so it reads the same whichever way it's heading), bow towards +x. */
-function Ship({ reduced }: { reduced: boolean }) {
-  const art = (
-    <g className="home-ship">
+function ShipArt() {
+  return (
+    <g>
       <path d="M-12,-3.5 L-32,-10 M-12,3.5 L-32,10" stroke="#fff" strokeWidth={1.5} strokeLinecap="round" opacity={0.55} />
       <ellipse cx={1.5} cy={4} rx={15} ry={6} fill="#06325a" opacity={0.22} />
       <path d="M15,0 C9,-6.8 -6,-6.8 -12,-5.2 L-12,5.2 C-6,6.8 9,6.8 15,0 Z" fill="#7a4a24" stroke="#3d220d" strokeWidth={1} />
@@ -349,13 +495,6 @@ function Ship({ reduced }: { reduced: boolean }) {
       <path d="M-11.5,0 L-17,-2.6 L-17,2.6 Z" fill={PLAYER_COLOR_HEX.red} stroke="#3d220d" strokeWidth={0.5} />
       <path d="M1.2,-11.5 Q8,0 1.2,11.5 L-1.4,11.5 Q4.2,0 -1.4,-11.5 Z" fill="#fffaf0" stroke="#bdb196" strokeWidth={0.6} />
       <circle cx={-1} cy={0} r={1.5} fill="#3d220d" />
-    </g>
-  );
-  if (reduced) return <g transform="translate(146 -112) rotate(128)">{art}</g>;
-  return (
-    <g>
-      <animateMotion dur="90s" repeatCount="indefinite" rotate="auto" path={SHIP_PATH} />
-      {art}
     </g>
   );
 }
@@ -406,15 +545,23 @@ function BuildingSvg({ building, at, collectId }: { building: Building; at: numb
         <g key={collectId ?? 'idle'} className={collectId !== null ? 'home-collect' : undefined}>
           {body}
         </g>
-        {city && (
-          <g transform="translate(1.6 -12)">
-            {[0, 1.3, 2.6].map((d) => (
-              <circle key={d} className="home-smoke" r={2.3} fill="#f6f3ec" style={delay(d)} />
-            ))}
-          </g>
-        )}
       </g>
     </g>
+  );
+}
+
+const PUFF: Box = { x: -2.3, y: -2.3, w: 4.6, h: 4.6 };
+
+/** A city's chimney smoke: three puffs, each its own box, arriving with the city. */
+function ChimneySmoke({ building, at }: { building: Building; at: number }) {
+  const p = cornerOf(building.hex, building.corner);
+  const vent = { x: p.x + 1.6, y: p.y - 12 };
+  return (
+    <div className="home-smoke-stack" style={delay(at)} aria-hidden>
+      {[0, 1.3, 2.6].map((d) => (
+        <span key={d} className="home-smoke" style={{ ...place(PUFF, vent, ISLAND_TOP_LEFT), ...delay(d) }} />
+      ))}
+    </div>
   );
 }
 
