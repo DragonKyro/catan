@@ -28,7 +28,8 @@ export const POLICY_FORMAT = 'catan/gnn@1';
 
 interface TensorJson {
   shape: number[];
-  data: string;
+  /** Base64 float32 (training's .json files), or already decoded (packed .bin files). */
+  data: string | Float32Array;
 }
 
 export interface CatanPolicyFile {
@@ -39,6 +40,61 @@ export interface CatanPolicyFile {
   arch: { dims: { hex: number; vertex: number; edge: number; global: number }; num_globals: number; width: number; rounds: number };
   tensors: Record<string, TensorJson>;
   meta?: Record<string, unknown>;
+}
+
+/** float16 bit pattern → float32, for all 65,536 patterns (built on first use). */
+let halfTable: Float32Array | null = null;
+function halfToFloat(): Float32Array {
+  if (halfTable) return halfTable;
+  const t = new Float32Array(65536);
+  for (let h = 0; h < 65536; h++) {
+    const sign = h & 0x8000 ? -1 : 1;
+    const exp = (h >> 10) & 0x1f;
+    const frac = h & 0x3ff;
+    t[h] = exp === 0 ? sign * 2 ** -14 * (frac / 1024)
+      : exp === 31 ? (frac ? Number.NaN : sign * Infinity)
+        : sign * 2 ** (exp - 15) * (1 + frac / 1024);
+  }
+  halfTable = t;
+  return t;
+}
+
+const POLICY_MAGIC = 'CATANPOL';
+
+/** Is this a packed (.bin) policy file? */
+export function isPolicyBinary(buf: ArrayBuffer | Uint8Array): boolean {
+  const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  return b.length >= 12 && String.fromCharCode(...b.subarray(0, 8)) === POLICY_MAGIC;
+}
+
+/**
+ * A packed policy file (training/catan/pack_policy.py: header JSON + float16
+ * weights) as a CatanPolicyFile with float32 tensors, ready for CatanPolicyNet.
+ */
+export function decodePolicyBinary(buf: ArrayBuffer | Uint8Array): CatanPolicyFile {
+  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  if (!isPolicyBinary(bytes)) throw new Error('not a packed Catan policy file');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const n = view.getUint32(8, true);
+  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(12, 12 + n))) as Omit<CatanPolicyFile, 'tensors'> & {
+    dtype: string;
+    tensors: Record<string, { shape: number[]; offset: number }>;
+  };
+  if (header.dtype !== 'f16') throw new Error(`packed policy dtype ${header.dtype} is not supported`);
+  const start = 12 + n + ((8 - ((12 + n) % 8)) % 8);
+  const table = halfToFloat();
+  const tensors: Record<string, TensorJson> = {};
+  for (const [name, t] of Object.entries(header.tensors)) {
+    const count = t.shape.reduce((a, b) => a * b, 1);
+    const at = start + t.offset;
+    const out = new Float32Array(count);
+    for (let i = 0; i < count; i++) out[i] = table[view.getUint16(at + 2 * i, true)]!;
+    tensors[name] = { shape: t.shape, data: out };
+  }
+  const { dtype: _dtype, tensors: _t, ...rest } = header;
+  void _dtype;
+  void _t;
+  return { ...rest, tensors };
 }
 
 function decodeFloat32(b64: string): Float32Array {
@@ -165,7 +221,7 @@ export class CatanPolicyNet {
       const t = file.tensors[name];
       if (!t) throw new Error(`policy file is missing ${name}`);
       if (t.shape.join() !== shape.join()) throw new Error(`${name} is [${t.shape}], expected [${shape}]`);
-      return decodeFloat32(t.data);
+      return typeof t.data === 'string' ? decodeFloat32(t.data) : t.data;
     };
     const linear = (name: string, nIn: number, nOut: number, bias = true) =>
       new Linear(tensor(`${name}.weight`, [nOut, nIn]), bias ? tensor(`${name}.bias`, [nOut]) : null, nIn, nOut);

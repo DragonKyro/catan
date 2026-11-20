@@ -12,10 +12,10 @@ import { ACTION_SPACE_VERSION } from './actions';
 import { ENCODER_VERSION } from './encode';
 import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL, loadedAiLevel, setAiLevelNet } from './levels';
 import { KnowledgeSession, chooseNeuralAction, neuralLevel } from './index';
-import { CatanPolicyNet, type CatanPolicyFile } from './runtime';
+import { CatanPolicyNet, decodePolicyBinary } from './runtime';
 
 const readPolicy = (level: AiLevel) =>
-  JSON.parse(readFileSync(resolve('src/ai/nn/policies', AI_LEVELS[level].file), 'utf8')) as CatanPolicyFile;
+  decodePolicyBinary(readFileSync(resolve('src/ai/nn/policies', AI_LEVELS[level].file)));
 
 const nets = {} as Record<AiLevel, CatanPolicyNet>;
 for (const level of AI_LEVEL_IDS) {

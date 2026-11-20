@@ -89,7 +89,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import evaluate as ev
 from env_client import ROLE_LEARNER, ROLE_OPPONENT, Batch, CatanEnv
-from model import (CatanNet, Topology, export_policy, load_checkpoint, load_policy, masked_logits,
+from model import (CatanNet, Topology, export_policy, load_checkpoint, load_policy, masked_logits, read_policy_meta,
                    net_from_checkpoint, save_checkpoint)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -167,6 +167,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     learn.add_argument("--vf-coef", type=float, default=0.5)
     learn.add_argument("--max-grad-norm", type=float, default=0.5)
     learn.add_argument("--bc-updates", type=int, default=25, help="first N updates imitate the heuristic (0 = none)")
+    learn.add_argument("--teacher-policy", default=None, metavar="POLICY",
+                       help="imitate this network instead of the heuristic (a .json, RUN@N, ...): its sampled moves "
+                            "play during teacher forcing, the student matches its whole move distribution, and the "
+                            "anchor after imitation pulls toward it. Must share this build's encoder / action space.")
     learn.add_argument("--bc-epochs", type=int, default=10, help="epochs per imitation update (supervised, so more is safe)")
     learn.add_argument("--bc-lr", type=float, default=1e-3, help="learning rate during imitation")
     learn.add_argument("--bc-dagger", type=float, default=0.4,
@@ -441,8 +445,7 @@ class Trainer:
             path = ev.resolve(a.init_from)
             self.net = load_policy(path, self.versions, self.device)
             self.opt = torch.optim.Adam(self.net.parameters(), lr=a.lr, eps=1e-5)
-            with open(path, encoding="utf-8") as f:
-                meta = json.load(f).get("meta", {})
+            meta = read_policy_meta(path)
             self.update, self.decisions = meta.get("update", 0), meta.get("decisions", 0)
             for row in self.read_jsonl("metrics.jsonl"):
                 if row["update"] == self.update:
@@ -466,18 +469,22 @@ class Trainer:
         self.bench_path = ev.resolve(a.benchmark) if a.benchmark else None
         self.bench_label = ""
         if self.bench_path:
-            with open(self.bench_path, encoding="utf-8") as f:
-                u = json.load(f).get("meta", {}).get("update")
+            u = read_policy_meta(self.bench_path).get("update")
             self.bench_label = f"u{u}" if u is not None else os.path.basename(self.bench_path)
         self.fixed_label = ""
         fixed = None
         if self.fixed_path:
             fixed = load_policy(self.fixed_path, self.versions, self.device)
             fixed.topology, fixed.amp = self.topology, self.net.amp
-            with open(self.fixed_path, encoding="utf-8") as f:
-                u = json.load(f).get("meta", {}).get("update")
+            u = read_policy_meta(self.fixed_path).get("update")
             self.fixed_label = f"u{u}" if u is not None else os.path.basename(self.fixed_path)
+        self.teacher_net = None
+        if a.teacher_policy:
+            self.teacher_net = load_policy(ev.resolve(a.teacher_policy), self.versions, self.device)
+            self.teacher_net.topology, self.teacher_net.amp = self.topology, self.net.amp
         self.teacher_on = self.update < self.teacher_until()
+        # The env labels learner rows with the heuristic's move only when the heuristic is the teacher.
+        env_teacher = self.teacher_on and self.teacher_net is None
         for w, role in enumerate(roles):
             env = CatanEnv(players=a.players)
             seed = a.seed * 10_007 + w * 7_919 + self.update * 104_729
@@ -486,7 +493,7 @@ class Trainer:
                 worker.opponent, worker.opponent_name = fixed, self.fixed_label
             worker.batch = env.reset(num_envs=a.envs_per_worker, seed=seed,
                                      seats=seats_for(role, a.players, fixed is not None),
-                                     max_turns=a.max_turns, vp_shaping=a.vp_shaping, teacher=self.teacher_on,
+                                     max_turns=a.max_turns, vp_shaping=a.vp_shaping, teacher=env_teacher,
                                      refused_offer_penalty=a.refused_offer_penalty, **self.opponent_options())
             self.workers.append(worker)
         # After the workers: --mix decides how many there are.
@@ -504,7 +511,8 @@ class Trainer:
               f"{' bf16' if self.net.amp and self.device.type == 'cuda' else ''}", flush=True)
         if self.update < a.bc_updates:
             fade = (f", with a pull toward it fading out by update {self.teacher_until()}" if a.bc_anchor > 0 else "")
-            print(f"  imitating the heuristic until update {a.bc_updates}, then PPO{fade}")
+            who = f"network {a.teacher_policy}" if self.teacher_net is not None else "the heuristic"
+            print(f"  imitating {who} until update {a.bc_updates}, then PPO{fade}")
         if self.guard_workers:
             print(f"  guard: workers {self.guard_workers} on heuristic tables "
                   f"(best vs heuristic {100 * self.guard_best:.1f}%)")
@@ -626,8 +634,19 @@ class Trainer:
         learner = np.flatnonzero(role == ROLE_LEARNER)
         if len(learner):
             obs = to_device([p[learner] for p in parts], dev)
-            action, logp, value = sample(self.net, obs, torch.from_numpy(mask[learner]).to(dev))
+            m_learner = torch.from_numpy(mask[learner]).to(dev)
+            action, logp, value = sample(self.net, obs, m_learner)
             action_np = action.cpu().numpy()
+            if self.teacher_net is not None and self.update < self.teacher_until():
+                # A network teacher: its top move labels the row; while forcing, its sampled move plays.
+                with torch.no_grad():
+                    t_logits = masked_logits(self.teacher_net(*obs)[0], m_learner)
+                labels = t_logits.argmax(-1).cpu().numpy()
+                teacher = teacher.copy()
+                teacher[learner] = labels
+                if self.teacher_forcing:
+                    t_action = torch.distributions.Categorical(logits=t_logits.float()).sample().cpu().numpy()
+                    teacher[learner] = t_action  # played below (the KL target is recomputed in learn)
             if self.teacher_forcing:
                 # The heuristic plays (where its move exists in the action space).
                 t = teacher[learner]
@@ -754,11 +773,22 @@ class Trainer:
                 logp_all = F.log_softmax(masked_logits(logits, mask[b]), dim=-1)
                 entropy = -(logp_all.exp() * logp_all).sum(-1).mean()
                 labelled = teacher[b] >= 0
-                imitation = (F.nll_loss(logp_all[labelled], teacher[b][labelled]) if labelled.any()
-                             else logp_all.new_zeros(()))
-                if labelled.any():
-                    stats["teacher_agreement"].append(
-                        (logp_all[labelled].argmax(-1) == teacher[b][labelled]).float().mean().item())
+                if self.teacher_net is not None and labelled.any():
+                    # Distillation: match the teacher's whole move distribution (KL(teacher || student)).
+                    bl = b[labelled]
+                    with torch.no_grad():
+                        t_logp = F.log_softmax(masked_logits(
+                            self.teacher_net(hexes[bl], vertices[bl], edges[bl], glob[bl])[0], mask[bl]).float(), dim=-1)
+                    s_logp = logp_all[labelled].float()
+                    t_p = t_logp.exp()
+                    imitation = (t_p * (t_logp - s_logp)).masked_fill(t_p == 0, 0).sum(-1).mean()
+                    stats["teacher_agreement"].append((s_logp.argmax(-1) == t_logp.argmax(-1)).float().mean().item())
+                else:
+                    imitation = (F.nll_loss(logp_all[labelled], teacher[b][labelled]) if labelled.any()
+                                 else logp_all.new_zeros(()))
+                    if labelled.any():
+                        stats["teacher_agreement"].append(
+                            (logp_all[labelled].argmax(-1) == teacher[b][labelled]).float().mean().item())
                 if self.imitating:
                     pi_loss = imitation
                 else:
@@ -909,7 +939,8 @@ class Trainer:
         parts = []
         imitated = stats.get("imitation", 0) > 0  # the update just trained (self.update has moved on)
         if imitated:
-            parts.append(f"imitating: agrees with heuristic {100 * stats.get('teacher_agreement', 0):.0f}%")
+            who = "teacher" if self.teacher_net is not None else "heuristic"
+            parts.append(f"imitating: agrees with {who} {100 * stats.get('teacher_agreement', 0):.0f}%")
         elif stats.get("anchor_weight", 0) > 0:
             parts.append(f"anchor {stats['anchor_weight']:.2f}, agrees {100 * stats.get('teacher_agreement', 0):.0f}%")
         for kind in ("heuristic", "past", "blend", "mixed"):
@@ -1129,8 +1160,9 @@ class Trainer:
                 if self.update == a.bc_updates and a.bc_updates > 0:
                     print(f"imitation done at update {self.update} - PPO from here", flush=True)
                 if self.teacher_on and self.update >= self.teacher_until():
-                    for w in self.workers:
-                        w.env.configure(teacher=False)
+                    if self.teacher_net is None:
+                        for w in self.workers:
+                            w.env.configure(teacher=False)
                     self.teacher_on = False
                 self.log_evals()
         except KeyboardInterrupt:

@@ -104,6 +104,67 @@ deals. All three levels score 5–7 points lower now. For Normal and Hard the
 old figure is outside today's interval, which fits the all-rounder having got
 stronger with the Nov 12 changes.
 
+## 4. Hard on the training tables (baseline for run `adapt`)
+
+Measured 2026-11-18 with `evaluate.py` (greedy, 400 games, 3 workers,
+the eval seed — the same deals as the run's evals). Action space v2.
+
+| Table (Hard as one seat) | Win (95% CI) | Place | Roads | Dev cards | Knights | Bank trades | Player trades |
+|---|---|---:|---:|---:|---:|---:|---:|
+| vs 3 all-rounders | 74.2% (69.7–78.3) | 1.36 | 3.18 | 6.55 | 3.02 | 4.41 | 17.8 |
+| vs personas (LR:3, LA:3, griefer:3 aimed at it, cities first, high pips, all five, expansion; distinct) | 70.2% (65.6–74.5) | 1.46 | 3.54 | 6.59 | 3.10 | 4.61 | 18.3 |
+| lopsided opening (wood-brick / OWS / port stack) vs 3× Hard | 20.0% (16.4–24.2) | 2.67 | 4.69 | 3.24 | 1.56 | 4.87 | 6.2 |
+
+Per game counts are the agent's. Against the persona tables Hard builds
+almost exactly as against all-rounders (roads, dev cards, knights, bank
+trades within a few percent), which matches it "playing the same whatever
+the position": the fine-tune should move those numbers on those tables.
+
+## 5. Run `adapt` results (fresh deals)
+
+Fine-tune of Hard (u10000 → u12500, 2,500 updates, 4.8 h): persona tables
+(LR:3, LA:3, griefer:3 aimed at the network, cities first, high pips, all
+five, expansion; distinct), a quarter of openings lopsided, self-play and past
+checkpoints; lr 5e-5 → 0. Re-tested on deals it was never evaluated on
+(`evaluate.py --seed 777`, 800 games per table, 4 workers):
+
+| Policy | vs personas | vs 3× current Hard | lopsided opening vs 3× Hard | vs 3 all-rounders |
+|---|---|---|---|---|
+| u10000 (current Hard) | 69.4% (66.1–72.5) | 25% (mirror) | 20.5% (17.8–23.4) | 78.5% (75.5–81.2) |
+| u12000 | 75.5% (72.4–78.4) | 29.1% (26.1–32.4) | 24.0% (21.2–27.1) | 82.5% (79.7–85.0) |
+| u12300 | 77.1% (74.1–79.9) | 31.5% (28.4–34.8) | 23.8% (20.9–26.8) | 80.4% (77.5–83.0) |
+| u12500 | 74.8% (71.6–77.6) | 29.8% (26.7–33.0) | 23.5% (20.7–26.6) | 83.9% (81.2–86.3) |
+
+Every candidate beats the current Hard on every table, head-to-head
+included (all three intervals clear 25%). In-run evals (same deals every
+checkpoint, 400 games) understated the head-to-head gain (~27–28%).
+
+## 6. Run `big` results (fresh deals)
+
+The larger network (128 wide x 4 rounds, 1,889,739 parameters, encoder v2):
+300 updates imitating Hard (adapt u12300), then 2,000 PPO updates (lr 1e-4
+-> 0, anchor toward the teacher fading over 500), same tables as `adapt`.
+Re-tested on fresh deals (`evaluate.py --seed 777`, 800 games per table):
+
+| Policy | vs personas | vs 3x adapt u12300 (current Hard) | lopsided opening vs 3x u12300 | vs 3 all-rounders |
+|---|---|---|---|---|
+| adapt u12300 (current Hard) | 77.1% | 25% (mirror; 24.5% measured) | ~24% | 80.4% |
+| big u1900 | 79.9% (77.0-82.5) | 31.5% (28.4-34.8) | 27.4% (24.4-30.6) | 83.1% (80.4-85.6) |
+| big u2000 | 78.2% (75.3-81.0) | 32.5% (29.3-35.8) | 26.0% (23.1-29.1) | 83.9% (81.2-86.3) |
+| big u2200 | 78.0% (75.0-80.7) | 31.9% (28.7-35.2) | 28.0% (25.0-31.2) | 83.8% (81.0-86.1) |
+| big u2300 | 78.6% (75.7-81.3) | 31.8% (28.6-35.1) | 28.2% (25.2-31.5) | 84.2% (81.6-86.6) |
+
+The four are within noise of each other; all beat the current Hard on every
+table. In-run (same 400 deals each checkpoint) u1900 read 35.0%: picking the
+best of 20 checkpoints on the same deals overstated it.
+
+Opening search (a look-ahead over the snake order scoring lines by the network's
+value head; built and measured 2026-11-19, then removed):
+Hard + search in one seat vs 3x Hard on the same 800 deals: control 24.5%,
+search 8x8 **15.0%** (12.7-17.6) — worse; 1x1 (no real search) 25.1%, so
+the plumbing is right and the value head's ranking of openings is the
+problem (argmax over 64 noisy estimates picks the overrated ones).
+
 ## What it says
 
 - **Only the two bonus chasers beat the all-rounder**, both one-vs-three and

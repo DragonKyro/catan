@@ -23,14 +23,14 @@ import { RESOURCES } from '@/game/types';
 import { chooseAction, shouldAcceptTrade } from '../index';
 import { AI_LEVELS, loadedAiLevel, setAiLevelNet } from './levels';
 import { KnowledgeSession, chooseNeuralAction } from './index';
-import { CatanPolicyNet, type CatanPolicyFile } from './runtime';
+import { CatanPolicyNet, decodePolicyBinary } from './runtime';
 
 type Kind = 'heuristic' | AiLevel;
 
 const LEVEL: AiLevel = (process.env.DIAG_LEVEL as AiLevel) ?? 'hard';
 setAiLevelNet(
   LEVEL,
-  new CatanPolicyNet(JSON.parse(readFileSync(resolve('src/ai/nn/policies', AI_LEVELS[LEVEL].file), 'utf8')) as CatanPolicyFile),
+  new CatanPolicyNet(decodePolicyBinary(readFileSync(resolve('src/ai/nn/policies', AI_LEVELS[LEVEL].file)))),
 );
 
 interface Stat {

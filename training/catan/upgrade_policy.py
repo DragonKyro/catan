@@ -1,7 +1,12 @@
-"""Upgrade a policy file to this build's action space, when the newer space
-only appended global slots (action space v2 appended the 3:1 / 1:3 / 3:2 /
-2:3 player offers after every v1 slot). The trunk and every existing slot are
-copied unchanged; the global head's last layer gains one row per new slot.
+"""Upgrade a policy file to this build's encoder and action space, when the
+newer versions only appended features / slots. Everything the file already
+has is copied unchanged, so the upgraded policy plays exactly as before:
+
+  - encoder (v2 appended features at the end of each row): the four input
+    layers (embed_*.0.weight) gain zero-weight columns for the new features;
+  - action space (v2 appended the 3:1 / 1:3 / 3:2 / 2:3 player offers after
+    every v1 slot): the global head's last layer gains one row per new slot,
+    as --new-offers says.
 
     python training/catan/upgrade_policy.py IN.json OUT.json --new-offers frozen
     python training/catan/upgrade_policy.py IN.json OUT.json --new-offers warm
@@ -28,6 +33,9 @@ import sys
 import numpy as np
 
 HEAD_W, HEAD_B = "global_head.2.weight", "global_head.2.bias"
+# Input layer per row type (Linear weight [out, in_features]).
+EMBED = {"hex": "embed_hex.0.weight", "vertex": "embed_vertex.0.weight",
+         "edge": "embed_edge.0.weight", "global": "embed_global.0.weight"}
 # New offer shape (give n, get m) -> the old shape its row starts from.
 SOURCE_SHAPE = {(3, 1): (2, 1), (1, 3): (1, 2), (3, 2): (2, 1), (2, 3): (1, 2)}
 FROZEN_BIAS = -100.0
@@ -86,11 +94,34 @@ def upgrade_doc(doc: dict, slots: list[str], version: int, mode: str, warm_offse
     return out
 
 
+def upgrade_encoder(doc: dict, dims: dict, version: int) -> dict:
+    """A copy of policy `doc` for an encoder whose rows are the file's with
+    features appended (`dims` per row type, at encoder `version`): the new
+    input columns get zero weight."""
+    old = doc["arch"]["dims"]
+    if all(old[k] == dims[k] for k in EMBED) and doc["encoderVersion"] == version:
+        return doc
+    out = json.loads(json.dumps(doc))
+    for kind, name in EMBED.items():
+        w = _decode(doc["tensors"][name])
+        if w.shape[1] != old[kind]:
+            raise ValueError(f"{name} is {w.shape}, expected {old[kind]} input features")
+        if dims[kind] < old[kind]:
+            raise ValueError(f"{kind} rows shrank ({old[kind]} -> {dims[kind]}): not an append-only encoder change")
+        pad = np.zeros((w.shape[0], dims[kind] - old[kind]), np.float32)
+        out["tensors"][name] = _encode(np.concatenate([w, pad], 1))
+    out["arch"]["dims"] = {**old, **{k: dims[k] for k in EMBED}}
+    out["meta"] = {**doc.get("meta", {}), "encoderUpgradedFrom": {"encoderVersion": doc["encoderVersion"], "dims": old}}
+    out["encoderVersion"] = version
+    return out
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("src")
     p.add_argument("dst")
-    p.add_argument("--new-offers", choices=("frozen", "warm"), required=True)
+    p.add_argument("--new-offers", choices=("frozen", "warm"), default=None,
+                   help="how new action slots start (needed only when the action space grew)")
     p.add_argument("--warm-offset", type=float, default=2.0)
     a = p.parse_args(argv)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -98,20 +129,22 @@ def main(argv: list[str] | None = None) -> None:
 
     env = CatanEnv(players=4)
     try:
-        slots, version, enc = env.global_slots, env.action_space_version, env.encoder_version
+        slots, version, enc, dims = env.global_slots, env.action_space_version, env.encoder_version, env.dims
     finally:
         env.close()
     with open(a.src, encoding="utf-8") as f:
         doc = json.load(f)
-    if doc["encoderVersion"] != enc:
-        raise SystemExit(f"{a.src} is encoder v{doc['encoderVersion']}, this build v{enc}: only the action space can be upgraded")
-    out = upgrade_doc(doc, slots, version, a.new_offers, a.warm_offset)
+    out = upgrade_encoder(doc, dims, enc)
+    if out["arch"]["num_globals"] != len(slots) or out["actionSpaceVersion"] != version:
+        if not a.new_offers:
+            raise SystemExit("the action space grew: say how new slots start with --new-offers frozen|warm")
+        out = upgrade_doc(out, slots, version, a.new_offers, a.warm_offset)
     tmp = a.dst + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(out, f)
     os.replace(tmp, a.dst)
-    print(f"{a.src} (action space v{doc['actionSpaceVersion']}, {doc['arch']['num_globals']} globals) -> "
-          f"{a.dst} (v{version}, {len(slots)} globals, new offers {a.new_offers})")
+    print(f"{a.src} (encoder v{doc['encoderVersion']}, action space v{doc['actionSpaceVersion']}, "
+          f"{doc['arch']['num_globals']} globals) -> {a.dst} (encoder v{enc}, action space v{version}, {len(slots)} globals)")
 
 
 if __name__ == "__main__":

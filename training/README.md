@@ -94,12 +94,23 @@ learner-setup share, the same from a lopsided opening every match — in place
 of the "vs 500 updates earlier" column. Training seats don't change. The
 "heuristic" eval uses the training personas and targets ("vs personas").
 
-**Upgrading a policy to a newer action space.** When an action space only
-appends slots (v2 appended the 3:1 / 1:3 / 3:2 / 2:3 offers),
-`python training/catan/upgrade_policy.py IN.json OUT.json --new-offers warm`
-grows the global head: old slots copied exactly, each new offer starting from
-its nearest old offer (`frozen` instead never picks them — what the shipped
-levels got). Then `--init-from OUT.json`.
+**Upgrading a policy to a newer encoder / action space.** When a version only
+appends — encoder v2 appended features to every row, action space v2 the
+3:1 / 1:3 / 3:2 / 2:3 offers —
+`python training/catan/upgrade_policy.py IN.json OUT.json [--new-offers warm|frozen]`
+carries a policy over exactly: new input columns get zero weight, and new
+offers start from their nearest old offer (`warm`) or are never picked
+(`frozen` — what the shipped levels got). Then `--init-from OUT.json`, or use
+it as a teacher / benchmark.
+
+**A network as the teacher (warm-starting a bigger network).**
+`--teacher-policy POLICY --width 128 --rounds 4 --bc-updates N` imitates a
+network instead of the heuristic: during teacher forcing its sampled moves
+play the learner's seats; the student learns its whole move distribution
+(KL, the teacher re-run on each minibatch) — on its own moves too in the last
+`--bc-dagger` share —, then PPO with `--bc-anchor` pulling toward the teacher
+and fading out. The teacher must share the build's encoder and action space
+(upgrade it first).
 
 **Guard.** Self-play can drift toward habits that only beat copies of itself
 (the first run did: it stopped accepting trades and lost ground to the
@@ -215,9 +226,13 @@ re-freezing all three.
 
 ## Shipping a policy
 
-The game's Easy / Normal / Hard AIs are plain policy files copied out of a run:
-`runs/catan/<run>/policies/update_NNNNNN.json` → `src/ai/nn/policies/`, then
-point `AI_LEVELS` in `src/ai/nn/levels.ts` at the new file. The browser runs
+The game's Easy / Normal / Hard AIs are policy files out of a run, packed to
+16-bit weights for shipping (a third the size, same moves):
+
+    python training/catan/pack_policy.py runs/catan/<run>/policies/update_NNNNNN.json src/ai/nn/policies/<name>.bin
+
+then point `AI_LEVELS` in `src/ai/nn/levels.ts` at the new file. `load_policy`,
+`evaluate.py` and the env server read packed `.bin` files as well as `.json`. The browser runs
 them with `src/ai/nn/runtime.ts`, a TypeScript port of the network's forward
 pass; `test_typescript_runtime_matches_pytorch` checks it gives the same logits
 as PyTorch. Checkpoints (`ckpt/`) are only for resuming training.
