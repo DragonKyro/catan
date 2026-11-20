@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useGameStore } from '@/store/gameStore';
+import { tradeOfferKey, useGameStore } from '@/store/gameStore';
 import { useNetworkStore } from '@/store/networkStore';
 import { useLogStore } from '@/store/logStore';
 import { getActingPlayerId } from '@/game/helpers';
@@ -154,9 +154,7 @@ export function AIDriver() {
   // recreate the timers — that was making rejections look sequential, each
   // paying the initial-wait again.
   // (Cities & Knights offers can differ only in their commodity columns.)
-  const tradeKey = game?.pendingTrade
-    ? `${game.pendingTrade.proposerId}|${JSON.stringify(game.pendingTrade.give)}|${JSON.stringify(game.pendingTrade.receive)}|${JSON.stringify(game.pendingTrade.giveCommodities ?? {})}|${JSON.stringify(game.pendingTrade.receiveCommodities ?? {})}`
-    : null;
+  const tradeKey = game?.pendingTrade ? tradeOfferKey(game.pendingTrade) : null;
   useEffect(() => {
     if (!canDriveAI) return;
     if (!tradeKey) return;

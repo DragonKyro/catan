@@ -11,7 +11,7 @@ import { playerColorVar } from '@/ui/shared/playerColors';
 import './PendingTradeBanner.css';
 
 export function PendingTradeBanner() {
-  const { game, dispatch, openDialog } = useGameStore();
+  const { game, dispatch, openCounterDialog } = useGameStore();
   const role = useNetworkStore((s) => s.role);
   // Auto-reject for any human seat that can't fulfill the trade's ask.
   // Cuts down on the AI's wait time on a trade no one can accept anyway,
@@ -240,7 +240,7 @@ export function PendingTradeBanner() {
               Accept
             </Button>
             {canViewerCounter && (
-              <Button size="sm" onClick={() => openDialog('playerTrade')}>
+              <Button size="sm" onClick={() => openCounterDialog(viewer.id)}>
                 Counter
               </Button>
             )}

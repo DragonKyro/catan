@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { Commodity, CommodityBank, Resource, ResourceBank, TradeGood } from '@/game/types';
+import { useState } from 'react';
+import type { Commodity, CommodityBank, PendingTrade, Player, Resource, ResourceBank, TradeGood } from '@/game/types';
 import { COMMODITIES, RESOURCES } from '@/game/types';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { getBankTradeRate } from '@/game/actions/trade';
@@ -23,39 +23,41 @@ const ZERO: Values = {
   coin: 0,
 };
 
+/**
+ * A counter starts from the offer turned round: we ask for what they offered
+ * and give what they asked for (only as much as we hold — the counter is
+ * ours to adjust).
+ */
+function counterSeed(offer: PendingTrade, me: Player): { values: Values; gold: number } {
+  const values: Values = { ...ZERO };
+  for (const r of RESOURCES) {
+    values[r] = (offer.give[r] ?? 0) - Math.min(offer.receive[r] ?? 0, me.resources[r]);
+  }
+  for (const c of COMMODITIES) {
+    values[c] = (offer.giveCommodities?.[c] ?? 0) - Math.min(offer.receiveCommodities?.[c] ?? 0, me.commodities?.[c] ?? 0);
+  }
+  return { values, gold: (offer.giveGold ?? 0) - Math.min(offer.receiveGold ?? 0, me.gold ?? 0) };
+}
+
 export function PlayerTradeDialog() {
   const { game, dispatch, closeDialog } = useGameStore();
+  // Opened by the offer banner's Counter button: who is countering. (The
+  // acting player is still the one whose turn it is — the offer's proposer.)
+  const counter = useGameStore((s) => s.tradeCounter);
+  const pending = game?.pendingTrade ?? null;
+  const isCounter = !!counter && !!pending;
+  const acting = game ? (isCounter ? counter.as : getActingPlayerId(game)) : null;
+  const player = game?.players.find((p) => p.id === acting) ?? null;
+  const [seed] = useState(() => (isCounter && player ? counterSeed(pending, player) : { values: ZERO, gold: 0 }));
   // One signed value per card type: negative = give that many, positive =
   // receive that many. Combines what used to be two separate ResourcePicker
   // sections into a single, compact column. Commodities (Cities & Knights)
   // trade like resources (p.7).
-  const [values, setValues] = useState<Values>(ZERO);
+  const [values, setValues] = useState<Values>(seed.values);
   // T&B coins (state.coinsInPlay): signed gold, negative = give.
-  const [gold, setGold] = useState(0);
+  const [gold, setGold] = useState(seed.gold);
 
-  // Determine if we are countering an existing pending trade.
-  const pending = game?.pendingTrade ?? null;
-  const acting = game ? getActingPlayerId(game) : null;
-  const isCounter =
-    !!pending && !!acting && pending.proposerId !== acting;
-
-  // When countering, seed the inputs with the swap of the original offer.
-  useEffect(() => {
-    if (!isCounter || !pending) return;
-    const seed: Values = { ...ZERO };
-    // Original `give` was offered TO us — we'd be the one receiving it in
-    // the original. In a counter, we offer them what they wanted (receive)
-    // and ask for what they offered (give).
-    for (const r of RESOURCES) seed[r] = (pending.give[r] ?? 0) - (pending.receive[r] ?? 0);
-    for (const c of COMMODITIES) {
-      seed[c] = (pending.giveCommodities?.[c] ?? 0) - (pending.receiveCommodities?.[c] ?? 0);
-    }
-    setValues(seed);
-    setGold((pending.giveGold ?? 0) - (pending.receiveGold ?? 0));
-  }, [isCounter, pending]);
-
-  if (!game || !acting) return null;
-  const player = game.players.find((p) => p.id === acting)!;
+  if (!game || !acting || !player) return null;
   const hasCK = game.settings.expansions.includes(CITIES_AND_KNIGHTS_EXPANSION_ID);
   const goods: readonly TradeGood[] = hasCK ? [...RESOURCES, ...COMMODITIES] : RESOURCES;
   const held = (g: TradeGood) =>
