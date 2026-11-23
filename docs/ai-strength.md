@@ -165,6 +165,43 @@ search 8x8 **15.0%** (12.7-17.6) — worse; 1x1 (no real search) 25.1%, so
 the plumbing is right and the value head's ranking of openings is the
 problem (argmax over 64 noisy estimates picks the overrated ones).
 
+## 7. Run `big2` results (in-run, 2026-11-21)
+
+More training for the larger network from big u2300 (the shipped Hard):
+3,000 PPO updates (u2300 -> u5300, lr 3e-5 -> 0, fresh optimizer, no anchor),
+heavier on self-play and past checkpoints (`self=3,past=2,heuristic=2,mixed=1`,
+past pool seeded with big u400-u2300), same personas / targets / lopsided
+openings. 5.7 h. In-run evals, 400 games per table on the same deals each
+checkpoint:
+
+| | vs personas | vs 3x big u2300 (Hard) | lopsided opening vs 3x u2300 |
+|---|---|---|---|
+| mean of 29 checkpoints (u2400-u5200) | ~81% | **26.9%** | ~17.5% |
+| best single reading | 84.5% (u3600, u4700) | 30.5% (u3800), 30.2% (u3500) | 20.5% (u5200) |
+| last 5 (u4800-u5200) | ~81% | 28.0% | 19.4% |
+
+No clear gain over Hard: 26.9% against 25% parity, and the best readings
+are the max of 29 noisy numbers on one set of deals, so overstated (big
+u1900 read 35.0% in-run and 31.5% on fresh deals). The guard fired five
+times (vs-personas dips below the best, a self-play worker moved to persona
+tables and back), the drift pattern of self-play-heavy mixes.
+
+Fresh deals (2026-11-23; 800 games each; seed 777 = the deals used for §5-6,
+seed 888 a second set):
+
+| big2 checkpoint | vs 3x Hard, seed 777 | vs 3x Hard, seed 888 | other tables (seed 777) |
+|---|---|---|---|
+| u3500 | 24.6% (21.8-27.7) | | |
+| u3800 | 24.9% (22.0-28.0) | | |
+| u5000 | 27.0% (24.0-30.2) | | |
+| u5200 | 28.5% (25.5-31.7) | 25.0% (22.1-28.1) | personas 79.6% (Hard on the same deals 78.0%), all-rounders 83.4%, lopsided opening vs 3x Hard 19.9% |
+| u5300 | 28.9% (25.8-32.1) | 24.4% (21.5-27.5) | |
+
+The in-run best (u3800, u3500) was luck; the late checkpoints' edge on seed
+777 vanished on seed 888 (pooled ~26.7% over 1,600 games). Hard stays big
+u2300. Reading: the 128x4 net is at its plateau under this PPO setup, so
+more of the same won't move it — confirm any candidate on two deal sets.
+
 ## What it says
 
 - **Only the two bonus chasers beat the all-rounder**, both one-vs-three and

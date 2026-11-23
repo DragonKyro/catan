@@ -371,17 +371,26 @@
 /* The island is a stack of layers in one coordinate system (HomeIsland.tsx):
    still SVGs that are painted once, and small boxes that move by transform /
    opacity alone, so the compositor runs every steady animation and nothing
-   repaints. A size container, so lengths inside are written in cqw: one
-   island unit is 100cqw / 412. Its width is capped by the height it may take
-   (--island-h), keeping the layers' boxes exactly the island's shape. */
+   repaints. Boxes are placed in percentages of their parent box, and moves
+   are percentages of the moving box itself (each box's size is noted where
+   it's used), so nothing needs container units. Its width is capped by the
+   height it may take (--island-vh, with --island-cap), keeping the box
+   exactly the island's shape. dvh where the browser has it, else vh. */
 .home-island {
-  --island-h: min(88dvh, 760px);
+  --island-vh: 88;
+  --island-cap: 760px;
   position: relative;
-  container-type: inline-size;
-  width: min(100%, calc(var(--island-h) * 412 / 392));
-  margin-inline: auto;
+  width: min(100%, calc(min(var(--island-vh) * 1vh, var(--island-cap)) * 412 / 392));
+  margin-left: auto;
+  margin-right: auto;
   -webkit-user-select: none;
   user-select: none;
+}
+
+@supports (height: 1dvh) {
+  .home-island {
+    width: min(100%, calc(min(var(--island-vh) * 1dvh, var(--island-cap)) * 412 / 392));
+  }
 }
 
 /* Only the tiles' hexes take the pointer (for the hover lift). */
@@ -453,14 +462,15 @@
   transition: transform 220ms cubic-bezier(0.3, 1.4, 0.5, 1);
 }
 
+/* Percentages of the tile's box, 78 units tall: 3 and 48 units. */
 .home-tile:has(.home-tile-hit:hover) {
-  transform: translateY(calc(-3 * 100cqw / 412));
+  transform: translateY(-3.846%);
 }
 
 @keyframes home-tile-drop {
   from {
     opacity: 0;
-    transform: translateY(calc(-48 * 100cqw / 412)) scale(1.08);
+    transform: translateY(-61.538%) scale(1.08);
   }
   55% {
     opacity: 1;
@@ -510,6 +520,7 @@
   animation-delay: calc(var(--d) * -1);
 }
 
+/* Percentages of the sheep's box, 12 units tall: 2.8 and 1.5 units. */
 @keyframes home-hop {
   0%,
   80%,
@@ -517,20 +528,21 @@
     transform: none;
   }
   84% {
-    transform: translateY(calc(-2.8 * 100cqw / 412));
+    transform: translateY(-23.333%);
   }
   88% {
     transform: none;
   }
   91% {
-    transform: translateY(calc(-1.5 * 100cqw / 412));
+    transform: translateY(-12.5%);
   }
   94% {
     transform: none;
   }
 }
 
-/* A city's smoke arrives with the city (like .home-piece, in island units). */
+/* A city's smoke arrives with the city (like .home-piece: 20 of the
+   island's 392 units). */
 .home-smoke-stack {
   inset: 0;
   animation: home-stack-drop 440ms cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
@@ -540,7 +552,7 @@
 @keyframes home-stack-drop {
   from {
     opacity: 0;
-    transform: translateY(calc(-20 * 100cqw / 412));
+    transform: translateY(-5.102%);
   }
 }
 
@@ -560,9 +572,10 @@
   20% {
     opacity: 0.8;
   }
+  /* 5 and 17 units of the puff's 4.6. */
   100% {
     opacity: 0;
-    transform: translate(calc(5 * 100cqw / 412), calc(-17 * 100cqw / 412)) scale(1.8);
+    transform: translate(108.696%, -369.565%) scale(1.8);
   }
 }
 
@@ -875,7 +888,8 @@
   }
 
   .home-island {
-    --island-h: 36dvh;
+    --island-vh: 36;
+    --island-cap: 100vw;
   }
 
   .home-menu {
@@ -925,7 +939,7 @@
   }
 
   .home-island {
-    --island-h: 33dvh;
+    --island-vh: 33;
   }
 
   .home-btn {
@@ -964,7 +978,8 @@
   }
 
   .home-island {
-    --island-h: 94dvh;
+    --island-vh: 94;
+    --island-cap: 100vw;
   }
 
   .home-menu {
@@ -1022,6 +1037,7 @@
   }
 
   .home-island {
-    --island-h: min(84dvh, 900px);
+    --island-vh: 84;
+    --island-cap: 900px;
   }
 }

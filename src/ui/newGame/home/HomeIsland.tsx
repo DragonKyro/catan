@@ -11,10 +11,11 @@
 // and everything that keeps moving or arrives (each tile with its landing
 // and hover lift, the sheep and wheat on it, its number token, the surf, the
 // ship, the chimney smoke) is its own small box animating only transform /
-// opacity, which the compositor runs. Boxes are placed in `cqw` of
-// .home-island (a size container), so 1 unit = its width / 412. Only the
-// pieces' arrival and the dice roll's brief effects (glow, cards, hops)
-// still repaint.
+// opacity, which the compositor runs. Boxes are placed in percentages of
+// their parent box, which always has its coordinates' shape (.home-island is
+// the island's, a tile's box its own), so they line up at any size and in
+// browsers without container units (iOS before 16). Only the pieces' arrival
+// and the dice roll's brief effects (glow, cards, hops) still repaint.
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { PLAYER_COLOR_HEX } from '@/ui/shared/playerColors';
@@ -45,12 +46,6 @@ import { useReducedMotion } from './useReducedMotion';
 const ORIGIN: Pt = { x: 0, y: 0 };
 const delay = (s: number) => ({ '--d': `${s}s` }) as CSSProperties;
 
-/** The scene's user units: every layer and box is placed in these. */
-const VB = { x: -206, y: -196, w: 412, h: 392 };
-const VIEWBOX = `${VB.x} ${VB.y} ${VB.w} ${VB.h}`;
-/** A length of n island units (.home-island is a size container 412 units wide). */
-const u = (n: number) => `${+((n * 100) / VB.w).toFixed(4)}cqw`;
-
 interface Box {
   x: number;
   y: number;
@@ -58,25 +53,28 @@ interface Box {
   h: number;
 }
 
+/** The scene's user units: every layer and box is placed in these. */
+const VB: Box = { x: -206, y: -196, w: 412, h: 392 };
+const VIEWBOX = `${VB.x} ${VB.y} ${VB.w} ${VB.h}`;
+const pct = (f: number) => `${+(f * 100).toFixed(4)}%`;
+
 const viewBox = (b: Box) => `${b.x} ${b.y} ${b.w} ${b.h}`;
 
 /**
  * Style for a box drawn in its own coordinates `b`, scaled by `s`, with its
- * own origin placed at `at` in its parent's coordinates (the parent's
- * top-left being `parent`). It transforms about `pivot` (its own
+ * own origin placed at `at` in its parent's coordinates (the parent box
+ * being `parent`, in the same units). It transforms about `pivot` (its own
  * coordinates; default its origin).
  */
-function place(b: Box, at: Pt, parent: Pt, s = 1, pivot: Pt = ORIGIN): CSSProperties {
+function place(b: Box, at: Pt, parent: Box, s = 1, pivot: Pt = ORIGIN): CSSProperties {
   return {
-    left: u(at.x + b.x * s - parent.x),
-    top: u(at.y + b.y * s - parent.y),
-    width: u(b.w * s),
-    height: u(b.h * s),
-    transformOrigin: `${u((pivot.x - b.x) * s)} ${u((pivot.y - b.y) * s)}`,
+    left: pct((at.x + b.x * s - parent.x) / parent.w),
+    top: pct((at.y + b.y * s - parent.y) / parent.h),
+    width: pct((b.w * s) / parent.w),
+    height: pct((b.h * s) / parent.h),
+    transformOrigin: `${pct((pivot.x - b.x) / b.w)} ${pct((pivot.y - b.y) / b.h)}`,
   };
 }
-
-const ISLAND_TOP_LEFT: Pt = { x: VB.x, y: VB.y };
 const lerp = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
 const RING = (i: number) => {
@@ -306,7 +304,7 @@ function Surf({ phase }: { phase: 'a' | 'b' }) {
     <svg
       className={`home-surf home-surf-${phase}`}
       viewBox={viewBox(SURF_BOX)}
-      style={place(SURF_BOX, ORIGIN, ISLAND_TOP_LEFT)}
+      style={place(SURF_BOX, ORIGIN, VB)}
       aria-hidden
     >
       <g
@@ -325,9 +323,12 @@ function Surf({ phase }: { phase: 'a' | 'b' }) {
   );
 }
 
-/** A tile's box in hex-local units: the edging, and the thickness showing below it. */
+/**
+ * A tile's box in hex-local units: the edging, and the thickness showing
+ * below it. (Its drop-in and hover lift in HomeMenu.css are percentages of
+ * its height, 78.)
+ */
 const TILE_BOX: Box = { x: -31, y: -36, w: 62, h: 78 };
-const TILE_TOP_LEFT: Pt = { x: TILE_BOX.x, y: TILE_BOX.y };
 /** The number token with its shadow (Token draws it 1 unit low). */
 const TOKEN_BOX: Box = { x: -13, y: -12, w: 26, h: 27 };
 
@@ -342,7 +343,7 @@ function Tile({ i }: { i: number }) {
   const col = TERRAIN_COLORS[h.terrain];
   const d = dealDelay(i);
   return (
-    <div className="home-tile" style={{ ...place(TILE_BOX, c, ISLAND_TOP_LEFT), ...delay(d) }}>
+    <div className="home-tile" style={{ ...place(TILE_BOX, c, VB), ...delay(d) }}>
       <svg className="home-tile-art" viewBox={viewBox(TILE_BOX)} aria-hidden>
         {/* Dark edging that shows in the seams between tiles; part of the tile,
             so the beach shows where tiles haven't landed yet. */}
@@ -364,7 +365,7 @@ function Tile({ i }: { i: number }) {
         <svg
           className="home-token-pop"
           viewBox={viewBox(TOKEN_BOX)}
-          style={{ ...place(TOKEN_BOX, ORIGIN, TILE_TOP_LEFT, 1, { x: 0, y: 1 }), ...delay(d + 0.42) }}
+          style={{ ...place(TOKEN_BOX, ORIGIN, TILE_BOX, 1, { x: 0, y: 1 }), ...delay(d + 0.42) }}
           aria-hidden
         >
           <Token n={h.number} />
@@ -381,7 +382,7 @@ function TileFx({ fx }: { fx: TerrainFx }) {
     <svg
       className={`home-fx ${fx.kind === 'sheep' ? 'home-hop' : 'home-sway'}`}
       viewBox={viewBox(b)}
-      style={{ ...place(b, fx, TILE_TOP_LEFT, fx.s, { x: b.px, y: b.py }), ...delay(fx.d) }}
+      style={{ ...place(b, fx, TILE_BOX, fx.s, { x: b.px, y: b.py }), ...delay(fx.d) }}
       aria-hidden
     >
       <TerrainFxArt fx={fx} />
@@ -474,7 +475,7 @@ const SHIP_BOX: Box = { x: -13, y: -34, w: 26, h: 52 };
 function ShipOrbit() {
   return (
     <div className="home-ship-orbit" aria-hidden>
-      <svg className="home-ship" viewBox={viewBox(SHIP_BOX)} style={place(SHIP_BOX, { x: SHIP_ORBIT, y: 0 }, ISLAND_TOP_LEFT)}>
+      <svg className="home-ship" viewBox={viewBox(SHIP_BOX)} style={place(SHIP_BOX, { x: SHIP_ORBIT, y: 0 }, VB)}>
         <g transform="rotate(90)">
           <ShipArt />
         </g>
@@ -550,6 +551,7 @@ function BuildingSvg({ building, at, collectId }: { building: Building; at: numb
   );
 }
 
+/** A smoke puff's box (its rise in HomeMenu.css is in percentages of its 4.6 units). */
 const PUFF: Box = { x: -2.3, y: -2.3, w: 4.6, h: 4.6 };
 
 /** A city's chimney smoke: three puffs, each its own box, arriving with the city. */
@@ -559,7 +561,7 @@ function ChimneySmoke({ building, at }: { building: Building; at: number }) {
   return (
     <div className="home-smoke-stack" style={delay(at)} aria-hidden>
       {[0, 1.3, 2.6].map((d) => (
-        <span key={d} className="home-smoke" style={{ ...place(PUFF, vent, ISLAND_TOP_LEFT), ...delay(d) }} />
+        <span key={d} className="home-smoke" style={{ ...place(PUFF, vent, VB), ...delay(d) }} />
       ))}
     </div>
   );

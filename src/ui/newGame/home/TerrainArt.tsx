@@ -48,7 +48,8 @@ export interface TerrainFx {
 /**
  * Each moving part's box in its own units (scaled by `s`), with the point it
  * pivots on (a sheaf sways from the foot of its stalks). The box moves as a
- * whole, so the art inside never leaves it.
+ * whole, so the art inside never leaves it. (The sheep's hop in
+ * HomeMenu.css is in percentages of its height, 12.)
  */
 export const FX_BOX: Record<TerrainFx['kind'], { x: number; y: number; w: number; h: number; px: number; py: number }> = {
   sheep: { x: -9, y: -6, w: 18, h: 12, px: 0, py: 0 },

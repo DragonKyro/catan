@@ -5,9 +5,78 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <title>Catan</title>
+    <style>
+      /* Shown until the app draws (React replaces #root's contents), so a
+         slow or failed start is never just a blank page. */
+      #boot {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: #2a86c2;
+        color: #fffaf0;
+        font: 18px/1.4 Georgia, 'Times New Roman', serif;
+        text-align: center;
+      }
+      #boot-msg {
+        max-width: 30em;
+        font-size: 15px;
+      }
+      #boot-ua {
+        max-width: 30em;
+        margin-top: 12px;
+        font: 11px/1.3 ui-monospace, Menlo, monospace;
+        opacity: 0.75;
+        word-break: break-word;
+      }
+    </style>
+    <script>
+      // Plain old JavaScript on purpose: runs on any browser, before the app,
+      // and says on screen why the app hasn't appeared yet.
+      (function () {
+        function show(text) {
+          if (!document.getElementById('boot')) return; // the app is up
+          document.getElementById('boot-msg').textContent = text;
+          document.getElementById('boot-ua').textContent = navigator.userAgent;
+        }
+        // Reported only if the app still isn't up a few seconds later: on old
+        // browsers the build's own modern-browser check throws on purpose
+        // before it loads the fallback copy, and that one is harmless.
+        window.addEventListener(
+          'error',
+          function (e) {
+            var el = e.target;
+            var text =
+              el && el !== window && (el.tagName === 'SCRIPT' || el.tagName === 'LINK')
+                ? "Couldn't download part of the game (" + (el.src || el.href) + '). Check the connection and reload.'
+                : 'The game hit an error while starting: ' + (e.message || 'unknown error') +
+                  '. This browser may be too old for it; updating the phone or the browser usually fixes this.';
+            setTimeout(function () {
+              show(text);
+            }, 4000);
+          },
+          true,
+        );
+        setTimeout(function () {
+          show('Still loading after 15 seconds. The connection may be slow or dropping; reloading the page can help.');
+        }, 15000);
+      })();
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot">
+        <p>Loading Catan…</p>
+        <p id="boot-msg"></p>
+        <p id="boot-ua"></p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
