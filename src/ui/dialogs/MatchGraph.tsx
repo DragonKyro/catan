@@ -621,15 +621,13 @@ function MultiLineChart({
         <text x={W / 2} y={H - 4} textAnchor="middle" className="mgraph-axislabel">
           turn →
         </text>
+        {/* Each line sits on a thin dark casing, so a white, gold or lime
+            player's line still shows on the parchment. */}
         {lines.map(({ series: s, d }) => (
-          <path
-            key={s.id}
-            d={d}
-            stroke={s.color}
-            strokeWidth={2}
-            fill="none"
-            strokeLinejoin="round"
-          />
+          <g key={s.id}>
+            <path d={d} className="mgraph-line-casing" fill="none" strokeLinejoin="round" />
+            <path d={d} stroke={s.color} strokeWidth={2} fill="none" strokeLinejoin="round" />
+          </g>
         ))}
         {/* Crosshair + per-series markers at the hovered step */}
         {hovered && (
@@ -685,6 +683,7 @@ function MultiLineChart({
                       width={6}
                       height={6}
                       fill={s.color}
+                      className="mgraph-tooltip-swatch"
                     />
                     <text
                       x={tooltipOnRight ? 16 : -(TOOLTIP_W - 16)}

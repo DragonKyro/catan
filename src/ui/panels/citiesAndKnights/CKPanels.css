@@ -23,11 +23,11 @@
   font-size: 0.8em;
   font-weight: 700;
 }
-.ck-hand-level-science { background: rgba(47, 125, 58, 0.45); }
-.ck-hand-level-trade { background: rgba(155, 207, 79, 0.35); }
-.ck-hand-level-politics { background: rgba(157, 180, 220, 0.35); }
+.ck-hand-level-science { background: rgba(47, 125, 58, 0.28); }
+.ck-hand-level-trade { background: rgba(155, 207, 79, 0.42); }
+.ck-hand-level-politics { background: rgba(110, 140, 200, 0.32); }
 .ck-hand-over {
-  color: #ffb4a8;
+  color: var(--danger);
   font-weight: 800;
   font-size: 0.8em;
 }

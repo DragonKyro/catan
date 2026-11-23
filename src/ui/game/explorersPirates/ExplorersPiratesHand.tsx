@@ -81,7 +81,7 @@ export function MissionChips({ game, playerId, className }: { game: GameState; p
           >
             <MissionIcon mission={m} size={14} />
             {pos}
-            {lead && <span style={{ color: 'var(--accent)' }}>★</span>}
+            {lead && <span style={{ color: 'var(--accent-strong)' }}>★</span>}
           </span>
         );
       })}

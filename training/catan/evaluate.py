@@ -92,7 +92,9 @@ def _greedy(net: CatanNet, parts: list[np.ndarray], mask: np.ndarray, rows: np.n
 
 def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, players: int = 4,
              seed: int = EVAL_SEED, max_turns: int = 200, device: str | None = None,
-             lineup: str | None = None, personas: list[str] | None = None) -> dict:
+             lineup: str | None = None, personas: list[str] | None = None, distinct_personas: bool = False,
+             target_personas: list[str] | None = None, learner_setup_share: float = 0.0,
+             learner_setup_personas: list[str] | None = None) -> dict:
     """`games` fresh deals at the `lineup` table (default A in one seat, B in every other)."""
     lineup = (lineup or "A" + "B" * (players - 1)).upper()
     if len(lineup) != players or set(lineup) - set("ABH") or "A" not in lineup:
@@ -118,7 +120,8 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         role_of = {"A": "learner", "B": "opponent" if net_b is not None else HEURISTIC, "H": HEURISTIC}
         seats = [role_of[c] for c in lineup]
         batches = [env.reset(num_envs=n, seed=seed + 1_000_003 * w, seats=seats, max_turns=max_turns, quota=1,
-                             personas=personas)
+                             personas=personas, distinct_personas=distinct_personas, target_personas=target_personas,
+                             learner_setup_share=learner_setup_share, learner_setup_personas=learner_setup_personas)
                    for w, (env, n) in enumerate(zip(envs, per))]
         episodes: list = []
         t0 = time.perf_counter()
@@ -174,6 +177,10 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         "tradesPerGame": per_game("tradeDone"),
         "citiesPerGame": per_game("buildCity"),
         "settlementsPerGame": per_game("buildSettlement"),
+        "roadsPerGame": per_game("buildRoad"),
+        "devCardsPerGame": per_game("buyDevCard"),
+        "knightsPerGame": per_game("playKnight"),
+        "bankTradesPerGame": per_game("bankTrade"),
         "seconds": seconds,
     }
 
@@ -185,8 +192,10 @@ def report(s: dict) -> str:
             f"(parity {100 / len(s['lineup']):.0f}%) | place {s['meanRank']:.2f} | VP {s['meanVp']:.1f} | "
             f"{s['meanTurns']:.0f} turns | {100 * s['truncated']:.1f}% cut off\n"
             f"A per match: {s['offersPerGame']:.1f} offers ({100 * s['offerTakenRate']:.0f}% taken), "
-            f"{s['tradesPerGame']:.1f} player trades, {s['citiesPerGame']:.1f} cities, "
-            f"{s['settlementsPerGame']:.1f} settlements")
+            f"{s['tradesPerGame']:.1f} player trades, {s.get('bankTradesPerGame', 0):.1f} bank trades, "
+            f"{s['citiesPerGame']:.1f} cities, {s['settlementsPerGame']:.1f} settlements, "
+            f"{s.get('roadsPerGame', 0):.1f} roads, {s.get('devCardsPerGame', 0):.1f} dev cards, "
+            f"{s.get('knightsPerGame', 0):.1f} knights")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -202,7 +211,13 @@ def main(argv: list[str] | None = None) -> None:
         q.add_argument("--device", default=None)
         q.add_argument("--personas", default=None,
                        help="heuristic seats play personas drawn from this list (src/ai/persona.ts): "
-                            "'all' or a comma list; default the all-rounder")
+                            "'all' or a comma list, name:weight to draw one more often; default the all-rounder")
+        q.add_argument("--distinct-personas", action="store_true", help="no persona twice at a table")
+        q.add_argument("--target-personas", default="",
+                       help="personas whose seats aim the robber and cut-offs at agent A (comma list)")
+        q.add_argument("--learner-setup-share", type=float, default=0.0,
+                       help="share of A's seats whose opening a persona from --learner-setup-personas plays")
+        q.add_argument("--learner-setup-personas", default="woodBrick,oreWheatSheep,portStack")
 
     m = sub.add_parser("match", help="A in one seat vs B in the others")
     m.add_argument("a")
@@ -217,9 +232,13 @@ def main(argv: list[str] | None = None) -> None:
     common(pr)
     args = p.parse_args(argv)
 
-    personas = [x.strip() for x in args.personas.split(",") if x.strip()] if args.personas else None
+    split = lambda s: [x.strip() for x in s.split(",") if x.strip()]  # noqa: E731
+    personas = split(args.personas) if args.personas else None
     kw = dict(games=args.games, workers=args.workers, players=args.players, seed=args.seed,
-              max_turns=args.max_turns, device=args.device, personas=personas)
+              max_turns=args.max_turns, device=args.device, personas=personas,
+              distinct_personas=args.distinct_personas, target_personas=split(args.target_personas) or None,
+              learner_setup_share=args.learner_setup_share,
+              learner_setup_personas=split(args.learner_setup_personas) or None)
     if args.cmd == "match":
         s = evaluate(args.a, args.b, lineup=args.lineup, **kw)
         print(json.dumps(s) if args.json else report(s), flush=True)

@@ -12,13 +12,19 @@ import type { Action, EdgeId, GameState, PlayerId } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { canConnectRoad } from '@/game/placement';
 import { chooseAction, shouldAcceptTrade } from '@/ai/index';
-import type { PersonaId } from '@/ai/persona';
+import { chooseTradePartner } from '@/ai/trade';
+import type { HeuristicPersona, PersonaId } from '@/ai/persona';
 import { slotForAction } from '@/ai/nn/actions';
 import type { CatanObservation } from '@/ai/nn/observation';
 
 /** A heuristic seat's move; `persona` picks its style (src/ai/persona.ts; default the all-rounder). */
-export function heuristicAction(s: GameState, id: PlayerId, persona?: PersonaId): Action {
+export function heuristicAction(s: GameState, id: PlayerId, persona?: HeuristicPersona | PersonaId): Action {
   const pt = s.pendingTrade;
+  if (pt && pt.proposerId === id) {
+    // Its own offer, everyone has answered: trade with its pick of the acceptors, or walk away.
+    const partner = chooseTradePartner(s, id);
+    return partner ? { type: 'confirmTrade', playerId: id, with: partner } : { type: 'cancelTrade', playerId: id };
+  }
   if (pt) {
     const me = s.players.find((p) => p.id === id)!;
     const canPay = RESOURCES.every((r) => me.resources[r] >= (pt.receive[r] ?? 0));

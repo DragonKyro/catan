@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { pendingTradeStep } from '@/ai/trade';
 import { createGame } from '../../createGame';
 import { applyAction } from '../../engine';
 import { chooseAction, shouldAcceptTrade } from '@/ai';
@@ -28,19 +29,8 @@ function playSeafarersGame(
   let safety = 0;
   while (s.winner === null && safety < 8000) {
     safety++;
-    const pt = s.pendingTrade;
-    if (pt) {
-      let accepted = false;
-      for (const p of s.players) {
-        if (p.id === pt.proposerId) continue;
-        if (shouldAcceptTrade(s, p.id)) {
-          s = applyAction(s, { type: 'acceptTrade', playerId: p.id });
-          accepted = true;
-          break;
-        }
-      }
-      if (accepted) continue;
-      s = applyAction(s, { type: 'cancelTrade', playerId: pt.proposerId });
+    if (s.pendingTrade) {
+      s = applyAction(s, pendingTradeStep(s, (id) => shouldAcceptTrade(s, id)));
       continue;
     }
     const acting = getActingPlayerId(s);
@@ -72,19 +62,8 @@ function playSeafarersGame5p(
   let safety = 0;
   while (s.winner === null && safety < 12000) {
     safety++;
-    const pt = s.pendingTrade;
-    if (pt) {
-      let accepted = false;
-      for (const p of s.players) {
-        if (p.id === pt.proposerId) continue;
-        if (shouldAcceptTrade(s, p.id)) {
-          s = applyAction(s, { type: 'acceptTrade', playerId: p.id });
-          accepted = true;
-          break;
-        }
-      }
-      if (accepted) continue;
-      s = applyAction(s, { type: 'cancelTrade', playerId: pt.proposerId });
+    if (s.pendingTrade) {
+      s = applyAction(s, pendingTradeStep(s, (id) => shouldAcceptTrade(s, id)));
       continue;
     }
     const acting = getActingPlayerId(s);

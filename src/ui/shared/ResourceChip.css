@@ -10,11 +10,16 @@
   justify-content: center;
 }
 
-.rchip-wood { background: rgba(61, 122, 61, 0.25); border-color: var(--terrain-wood); }
-.rchip-brick { background: rgba(201, 122, 61, 0.25); border-color: var(--terrain-brick); }
-.rchip-sheep { background: rgba(168, 217, 107, 0.25); border-color: var(--terrain-sheep); }
-.rchip-wheat { background: rgba(240, 196, 73, 0.25); border-color: var(--terrain-wheat); }
-.rchip-ore { background: rgba(138, 138, 150, 0.3); border-color: var(--terrain-ore); }
+.rchip {
+  color: var(--text);
+  box-shadow: 0 1px 0 rgba(90, 60, 20, 0.18);
+}
+
+.rchip-wood { background: color-mix(in srgb, var(--terrain-wood) 22%, var(--panel)); border-color: var(--terrain-wood); }
+.rchip-brick { background: color-mix(in srgb, var(--terrain-brick) 24%, var(--panel)); border-color: color-mix(in srgb, var(--terrain-brick) 85%, #3a1d05); }
+.rchip-sheep { background: color-mix(in srgb, var(--terrain-sheep) 38%, var(--panel)); border-color: color-mix(in srgb, var(--terrain-sheep) 65%, #2b4a0a); }
+.rchip-wheat { background: color-mix(in srgb, var(--terrain-wheat) 40%, var(--panel)); border-color: color-mix(in srgb, var(--terrain-wheat) 70%, #5a3a05); }
+.rchip-ore { background: color-mix(in srgb, var(--terrain-ore) 28%, var(--panel)); border-color: color-mix(in srgb, var(--terrain-ore) 85%, #1d1d25); }
 
 .rchip-sm { font-size: 0.8em; padding: 1px 6px; }
 .rchip-md { font-size: 0.95em; }

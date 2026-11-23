@@ -70,7 +70,7 @@ export function BankTradeDialog() {
           </div>
         </div>
         <div style={{ textAlign: 'center', color: 'var(--text-soft)' }}>
-          rate: <strong style={{ color: 'var(--accent)' }}>{rate}:1</strong> →
+          rate: <strong style={{ color: 'var(--accent-ink)' }}>{rate}:1</strong> →
         </div>
         <div>
           <div style={{ fontSize: '0.85em', color: 'var(--text-soft)', marginBottom: 4 }}>Receive</div>

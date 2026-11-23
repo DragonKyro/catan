@@ -13,6 +13,7 @@ import numpy as np
 import torch
 
 import evaluate as ev
+import pack_policy
 import train
 from env_client import CatanEnv, random_actions
 from model import CatanNet, Topology, export_policy, load_policy
@@ -160,7 +161,7 @@ def test_background_evals_with_a_fixed_opponent(tmp_path):
 
 def test_typescript_runtime_matches_pytorch(tmp_path):
     """src/ai/nn/runtime.ts (what the game plays) against model.py, on real mid-game positions."""
-    shipped = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ai", "nn", "policies", "hard-update10000.json")
+    shipped = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ai", "nn", "policies", "hard-big-update2300.bin")
     with CatanEnv() as env:
         rng = np.random.default_rng(3)
         batch = env.reset(num_envs=6, seed=11, seats=["learner"] * 4)
@@ -170,8 +171,10 @@ def test_typescript_runtime_matches_pytorch(tmp_path):
         net = CatanNet(env.dims, len(env.global_slots))
         net.topology = Topology(env.topology, env.shape)
         export_policy(net, rand, env.versions)
+        packed = os.path.join(tmp_path, "random.bin")
+        pack_policy.main([rand, packed])
         x = [torch.from_numpy(np.ascontiguousarray(getattr(batch, k))) for k in ("hexes", "vertices", "edges", "glob")]
-        for path in [rand] + ([shipped] if os.path.isfile(shipped) else []):
+        for path in [rand, packed] + ([shipped] if os.path.isfile(shipped) else []):
             ref_net = load_policy(path, env.versions)
             ref_net.topology, ref_net.amp = Topology(env.topology, env.shape), False
             with torch.no_grad():
@@ -182,3 +185,119 @@ def test_typescript_runtime_matches_pytorch(tmp_path):
             legal_ts = np.where(batch.mask, ts, -np.inf).argmax(1)
             legal_ref = np.where(batch.mask, ref, -np.inf).argmax(1)
             assert (legal_ts == legal_ref).all()
+
+
+def test_upgrade_policy_appends_slots_and_keeps_every_old_one(tmp_path):
+    """Action space v2 appended offers: a v1-sized head grows, old logits stay bit-identical."""
+    import upgrade_policy as up
+
+    dims, n_globals, shape, topo, versions, batch = _spec()
+    slots = CatanEnv().global_slots
+    n_old = slots.index("reject") + 1
+    assert n_old == 119 and n_globals == len(slots) == 199
+    old = CatanNet(dims, n_old, width=16, rounds=1)
+    path = os.path.join(tmp_path, "v1.json")
+    export_policy(old, path, {**versions, "actionSpaceVersion": 1})
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    g = torch.randn(8, 16)
+    with torch.no_grad():
+        before = old.global_head(g)
+    for mode in ("frozen", "warm"):
+        new_doc = up.upgrade_doc(doc, slots, versions["actionSpaceVersion"], mode)
+        assert new_doc["arch"]["num_globals"] == 199 and new_doc["actionSpaceVersion"] == versions["actionSpaceVersion"]
+        out = os.path.join(tmp_path, f"{mode}.json")
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump(new_doc, f)
+        net = load_policy(out, versions)
+        with torch.no_grad():
+            after = net.global_head(g)
+        assert torch.equal(after[:, :n_old], before)
+        if mode == "frozen":
+            assert torch.all(after[:, n_old:] == up.FROZEN_BIAS)
+        else:
+            k = slots.index("offer:3wood>1brick")
+            src = slots.index("offer:2wood>1brick")
+            assert torch.allclose(after[:, k], before[:, src] - 2.0, atol=1e-5)
+
+
+def test_persona_tables_benchmark_and_lopsided_evals(tmp_path):
+    """Weighted distinct personas aimed at the learner, lopsided openings, and the benchmark evals end to end."""
+    common = ["--runs-dir", str(tmp_path), "--run", "b", "--envs-per-worker", "2", "--rollout", "4",
+              "--save-every", "1", "--no-build", "--width", "16", "--rounds", "1", "--minibatch", "64",
+              "--device", "cpu", "--bc-updates", "0", "--bc-anchor", "0", "--max-turns", "30",
+              "--heuristic-personas", "longestRoad:3,largestArmy:3,griefer:3,citiesFirst", "--distinct-personas",
+              "--target-personas", "griefer", "--learner-setup-share", "0.5"]
+    run_dir = train.main(["--updates", "1", "--eval-every", "0", "--mix", "heuristic=1,self=1,mixed=1", *common])
+    train.main(["--updates", "2", "--resume", "--eval-every", "1", "--eval-games", "2", "--eval-workers", "1",
+                "--benchmark", f"{run_dir}@1", "--mix", "heuristic=1,self=1,mixed=1", *common])
+    with open(os.path.join(run_dir, "evals.jsonl"), encoding="utf-8") as f:
+        tags = {(r["update"], r["vs"]) for r in map(json.loads, f)}
+    assert {(2, "heuristic"), (2, "bench"), (2, "skew")} <= tags
+    with open(os.path.join(run_dir, "progress.md"), encoding="utf-8") as f:
+        doc = f.read()
+    assert "vs personas" in doc and "vs 3× u1" in doc and "lopsided opening" in doc and "targeting it: griefer" in doc
+
+
+def test_upgrade_encoder_appends_zero_weight_inputs(tmp_path):
+    """Encoder v2 appended features: a policy built for fewer input columns upgrades exactly."""
+    import upgrade_policy as up
+
+    dims, n_globals, shape, topo, versions, batch = _spec()
+    small = {k: (v - 3 if k != "edge" else v) for k, v in dims.items()}
+    old = CatanNet(small, n_globals, width=16, rounds=1)
+    old.topology = Topology(topo, shape)
+    path = os.path.join(tmp_path, "old.json")
+    export_policy(old, path, {**versions, "encoderVersion": versions["encoderVersion"] - 1})
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    new_doc = up.upgrade_encoder(doc, dims, versions["encoderVersion"])
+    assert new_doc["arch"]["dims"] == dims and new_doc["encoderVersion"] == versions["encoderVersion"]
+    out = os.path.join(tmp_path, "new.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(new_doc, f)
+    new = load_policy(out, versions)
+    new.topology = old.topology
+    torch.manual_seed(0)
+    parts = [torch.randn(4, shape[e], small[k]) for e, k in (("hexes", "hex"), ("vertices", "vertex"), ("edges", "edge"))]
+    g = torch.randn(4, small["global"])
+    extra = [torch.randn(4, shape[e], dims[k] - small[k]) for e, k in (("hexes", "hex"), ("vertices", "vertex"), ("edges", "edge"))]
+    with torch.no_grad():
+        l_old, v_old = old(*parts, g)
+        l_new, v_new = new(*[torch.cat([p, x], -1) for p, x in zip(parts, extra)],
+                           torch.cat([g, torch.randn(4, dims["global"] - small["global"])], -1))
+    assert torch.allclose(l_old, l_new, atol=1e-5) and torch.allclose(v_old, v_new, atol=1e-5)
+
+
+def test_imitating_a_network_teacher(tmp_path):
+    """--teacher-policy: a bigger student distils a saved policy, then carries on with PPO."""
+    common = ["--runs-dir", str(tmp_path), "--envs-per-worker", "2", "--rollout", "8", "--save-every", "1",
+              "--eval-every", "0", "--no-build", "--minibatch", "64", "--device", "cpu", "--max-turns", "30",
+              "--mix", "heuristic=1,self=1"]
+    teacher_dir = train.main(["--run", "teacher", "--updates", "1", "--width", "16", "--rounds", "1",
+                              "--bc-updates", "0", "--bc-anchor", "0", *common])
+    student_dir = train.main(["--run", "student", "--updates", "3", "--width", "24", "--rounds", "2",
+                              "--bc-updates", "2", "--bc-dagger", "0.5", "--bc-anchor", "0.3", "--bc-anchor-updates", "2",
+                              "--teacher-policy", f"{teacher_dir}@1", *common])
+    with open(os.path.join(student_dir, "metrics.jsonl"), encoding="utf-8") as f:
+        rows = [json.loads(line) for line in f]
+    assert [r["update"] for r in rows] == [1, 2, 3]
+    assert rows[0]["imitation"] == 1 and 0 <= rows[0]["teacher_agreement"] <= 1
+    assert rows[2]["imitation"] == 0 and rows[2]["anchor_weight"] > 0 and "anchor_loss" in rows[2]
+
+
+def test_pack_policy_round_trips_within_float16(tmp_path):
+    """pack_policy.py: header fields survive, weights come back as their float16 rounding."""
+    dims, n_globals, shape, topo, versions, batch = _spec()
+    net = CatanNet(dims, n_globals, width=16, rounds=1)
+    src, dst = os.path.join(tmp_path, "p.json"), os.path.join(tmp_path, "p.bin")
+    export_policy(net, src, versions, meta={"update": 7})
+    pack_policy.main([src, dst])
+    assert os.path.getsize(dst) < os.path.getsize(src) / 2  # ~1/2.7 for real nets; the header weighs more here
+    with open(dst, "rb") as f:
+        header, tensors = pack_policy.unpack(f.read())
+    assert header["meta"]["update"] == 7 and header["arch"]["width"] == 16
+    for k, v in net.state_dict().items():
+        want = v.float().numpy().astype(np.float16).astype(np.float32)
+        assert np.array_equal(tensors[k], want), k
+    assert train.read_policy_meta(dst)["update"] == 7

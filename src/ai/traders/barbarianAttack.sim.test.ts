@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { pendingTradeStep } from '@/ai/trade';
 import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
@@ -48,12 +49,9 @@ function play(seed: number, players: number): { final: GameState; stats: Stats }
     stats.steps++;
     const pt = s.pendingTrade;
     if (pt) {
-      const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id));
       s = applyAction(
         s,
-        acceptor
-          ? { type: 'acceptTrade', playerId: acceptor.id }
-          : { type: 'cancelTrade', playerId: pt.proposerId },
+        pendingTradeStep(s, (id) => shouldAcceptTrade(s, id)),
       );
       continue;
     }

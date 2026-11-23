@@ -1,5 +1,5 @@
 import { PROGRESS_CARD_LABEL } from '@/game/modules/citiesAndKnights/progress/catalogue';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useGameStore } from '@/store/gameStore';
 import { useLogStore, type LogEntry } from '@/store/logStore';
 import type { Player, PlayerId, Resource, ResourceBank } from '@/game/types';
@@ -307,7 +307,7 @@ function LogLine({
     return (
       <span
         className="log-name"
-        style={{ color: playerColorVar(p.color) }}
+        style={{ '--pc': playerColorVar(p.color) } as CSSProperties}
       >
         {p.name}
       </span>

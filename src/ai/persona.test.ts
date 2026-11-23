@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { pendingTradeStep } from './trade';
 import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
@@ -15,10 +16,12 @@ import {
   harborCorners,
   playStyleActive,
   portFocus,
+  rivalTargets,
   vpSources,
   withPersona,
   type PersonaId,
 } from './persona';
+import { chooseRobberMove } from './robber';
 import { chooseSetupSettlement } from './setup';
 
 /** Seeded stand-in for Math.random (the heuristic rolls its dice with it). */
@@ -47,8 +50,7 @@ function playOut(seed: number, persona: PersonaId, seat: number) {
     const pt = s.pendingTrade;
     let action: Action;
     if (pt) {
-      const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id, personaOf(p.id)));
-      action = acceptor ? { type: 'acceptTrade', playerId: acceptor.id } : { type: 'cancelTrade', playerId: pt.proposerId };
+      action = pendingTradeStep(s, (id) => shouldAcceptTrade(s, id, personaOf(id)));
     } else {
       const id = getActingPlayerId(s);
       action = chooseAction(s, id, personaOf(id)) ?? { type: 'endTurn', playerId: id };
@@ -163,6 +165,85 @@ describe('placement styles', () => {
       if (rivals.some((b) => cornerDistance(s, v, [b], 2) === 2)) crowded++;
     }
     expect(crowded).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('a target (training: the network seat)', () => {
+  /** A seeded game played by all-rounders up to its first main phase. */
+  const afterSetup = (seed: number) => {
+    seedRandom(seed);
+    let s = newGame(seed);
+    while (s.phase !== 'main') {
+      const id = getActingPlayerId(s);
+      s = applyAction(s, chooseAction(s, id)!);
+    }
+    vi.restoreAllMocks();
+    return s;
+  };
+  const touches = (s: GameState, hex: string, id: PlayerId) => {
+    const p = s.players.find((x) => x.id === id)!;
+    return [...p.settlements, ...p.cities].some((v) => s.board.vertices[v]!.hexes.includes(hex));
+  };
+
+  it('narrows the griefer to that seat\'s next spots', () => {
+    for (const seed of [1, 2, 3]) {
+      const s = afterSetup(seed);
+      const me = s.playerOrder[0]!;
+      const target = s.playerOrder[2]!;
+      const all = withPersona('griefer', () => rivalTargets(s, me));
+      const only = withPersona({ ...PERSONAS.griefer, target }, () => rivalTargets(s, me));
+      expect(only.size).toBeGreaterThan(0);
+      expect(only.size).toBeLessThan(all.size);
+      for (const v of only) expect(all.has(v)).toBe(true);
+      // Each of them is by the target's network.
+      const t = s.players.find((p) => p.id === target)!;
+      const net = new Set([...t.settlements, ...t.cities, ...t.roads.flatMap((e) => s.board.edges[e]!.vertices)]);
+      for (const v of only) {
+        expect(net.has(v) || s.board.vertices[v]!.neighborVertices.some((n) => net.has(n))).toBe(true);
+      }
+    }
+  });
+
+  it('starts the griefer next to its target', () => {
+    let crowded = 0;
+    for (const seed of [1, 2, 3, 4, 5]) {
+      seedRandom(seed);
+      let s = newGame(seed);
+      const griefer = s.playerOrder[2]!;
+      while (s.setupState?.step !== 'settlement' || getActingPlayerId(s) !== griefer) {
+        const id = getActingPlayerId(s);
+        s = applyAction(s, chooseAction(s, id)!);
+      }
+      const target = s.playerOrder[1]!; // placed just before the griefer
+      const v = withPersona({ ...PERSONAS.griefer, target }, () => chooseSetupSettlement(s, griefer));
+      const theirs = s.players.find((p) => p.id === target)!.settlements;
+      if (theirs.some((b) => cornerDistance(s, v, [b], 2) === 2)) crowded++;
+      vi.restoreAllMocks();
+    }
+    expect(crowded).toBeGreaterThanOrEqual(4);
+  });
+
+  it('sends the robber onto the target and robs it, whoever else is richer', () => {
+    let differs = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const base = afterSetup(seed);
+      const me = base.playerOrder[0]!;
+      const target = base.playerOrder[3]!;
+      // Everyone has cards; the target has the fewest, so only the target bonus explains choosing it.
+      const s: GameState = {
+        ...base,
+        players: base.players.map((p) => ({
+          ...p,
+          resources: p.id === target ? { wood: 1, brick: 0, sheep: 0, wheat: 0, ore: 0 } : { wood: 2, brick: 2, sheep: 2, wheat: 2, ore: 2 },
+        })),
+      };
+      const aimed = withPersona({ ...PERSONAS.griefer, target }, () => chooseRobberMove(s, me));
+      expect(touches(s, aimed.hex, target)).toBe(true);
+      expect(aimed.stealFrom).toBe(target);
+      const free = withPersona('griefer', () => chooseRobberMove(s, me));
+      if (free.stealFrom !== target) differs++;
+    }
+    expect(differs).toBeGreaterThan(0);
   });
 });
 

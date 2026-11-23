@@ -205,9 +205,24 @@ def export_policy(net: CatanNet, path: str, versions: dict, meta: dict | None = 
     _atomic_write(path, json.dumps(doc))
 
 
+def _read_policy(path: str) -> tuple[dict, dict[str, np.ndarray] | None]:
+    """(document, decoded tensors) — a training .json file (tensors still base64
+    in the document, None returned) or a packed shipping .bin (pack_policy.py)."""
+    with open(path, "rb") as f:
+        blob = f.read()
+    if blob[:8] == b"CATANPOL":
+        from pack_policy import unpack
+        return unpack(blob)
+    return json.loads(blob.decode("utf-8")), None
+
+
+def read_policy_meta(path: str) -> dict:
+    """A policy file's `meta` (run, update, ...), either format."""
+    return _read_policy(path)[0].get("meta", {})
+
+
 def load_policy(path: str, versions: dict | None = None, device: str | torch.device = "cpu") -> CatanNet:
-    with open(path, encoding="utf-8") as f:
-        doc = json.load(f)
+    doc, decoded = _read_policy(path)
     if doc.get("format") != POLICY_FORMAT or doc.get("game") != GAME:
         raise ValueError(f"{path} is not a {GAME} policy ({doc.get('format')}, {doc.get('game')})")
     if versions:
@@ -216,8 +231,11 @@ def load_policy(path: str, versions: dict | None = None, device: str | torch.dev
             raise ValueError(f"{path} was trained on {mine}, this build is {versions}")
     a = doc["arch"]
     net = CatanNet(a["dims"], a["num_globals"], a["width"], a["rounds"])
-    state = {k: torch.from_numpy(np.frombuffer(base64.b64decode(t["data"]), dtype="<f4").copy().reshape(t["shape"]))
-             for k, t in doc["tensors"].items()}
+    if decoded is not None:
+        state = {k: torch.from_numpy(v.copy()) for k, v in decoded.items()}
+    else:
+        state = {k: torch.from_numpy(np.frombuffer(base64.b64decode(t["data"]), dtype="<f4").copy().reshape(t["shape"]))
+                 for k, t in doc["tensors"].items()}
     net.load_state_dict(state)
     return net.to(device).eval()
 

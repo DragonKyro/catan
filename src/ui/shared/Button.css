@@ -1,63 +1,105 @@
+/* Parchment buttons with a darker bottom edge, as on the home screen; the
+   primary button is the gold one. Shared by the menus and the game. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   border: 1px solid var(--panel-border);
-  background: var(--panel-soft);
+  background: var(--paper-btn);
   color: var(--text);
   padding: 6px 12px;
   border-radius: var(--radius);
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 80ms ease, border-color 80ms ease, transform 60ms ease;
   user-select: none;
+  box-shadow:
+    0 2px 0 var(--paper-edge),
+    0 3px 8px rgba(60, 40, 10, 0.12);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
 }
 
 .btn:hover:not(:disabled) {
-  background: #2c4154;
-  border-color: #41576b;
+  background: var(--paper-btn-hover);
+  border-color: #cfae72;
+  transform: translateY(-1px);
+  box-shadow:
+    0 3px 0 var(--paper-edge),
+    0 6px 12px rgba(60, 40, 10, 0.16);
 }
 
 .btn:active:not(:disabled) {
   transform: translateY(1px);
+  box-shadow: 0 1px 0 var(--paper-edge);
+}
+
+.btn:focus-visible {
+  outline: 3px solid #2f8fd0;
+  outline-offset: 2px;
 }
 
 .btn:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .btn-primary {
-  background: var(--accent);
-  color: #1a1a1a;
-  border-color: var(--accent);
+  background: var(--gold-btn);
+  border-color: var(--accent-strong);
+  color: var(--on-accent);
+  box-shadow:
+    0 3px 0 var(--gold-edge),
+    0 6px 14px rgba(120, 60, 0, 0.22);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #ffd97e;
-  border-color: #ffd97e;
+  background: var(--gold-btn-hover);
+  border-color: var(--accent-strong);
+  box-shadow:
+    0 4px 0 var(--gold-edge),
+    0 9px 18px rgba(120, 60, 0, 0.26);
+}
+
+.btn-primary:active:not(:disabled) {
+  box-shadow: 0 1px 0 var(--gold-edge);
 }
 
 .btn-ghost {
   background: transparent;
   border-color: transparent;
+  box-shadow: none;
+  color: var(--text-soft);
 }
 
 .btn-ghost:hover:not(:disabled) {
-  background: var(--panel-soft);
-  border-color: var(--panel-border);
+  background: rgba(122, 92, 54, 0.1);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text);
+  transform: none;
 }
 
 .btn-danger {
-  background: var(--danger);
+  background: linear-gradient(180deg, #ec6e61 0%, #c0392b 100%);
+  border-color: #a5281c;
   color: #fff;
-  border-color: var(--danger);
+  box-shadow: 0 2px 0 #7e1d13;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #e87474;
-  border-color: #e87474;
+  background: linear-gradient(180deg, #f07f73 0%, #c94536 100%);
+  border-color: #a5281c;
+  box-shadow:
+    0 3px 0 #7e1d13,
+    0 6px 12px rgba(120, 20, 10, 0.2);
+}
+
+.btn-danger:active:not(:disabled) {
+  box-shadow: 0 1px 0 #7e1d13;
 }
 
 .btn-sm {
@@ -68,6 +110,14 @@
 .btn-lg {
   padding: 10px 18px;
   font-size: 1.05em;
+}
+
+/* The big gold button (Roll dice, Start game) carries the display font. */
+.btn-primary.btn-lg {
+  font-family: var(--display-font);
+  font-weight: 700;
+  font-size: 1.2em;
+  letter-spacing: 0.02em;
 }
 
 .btn-block {

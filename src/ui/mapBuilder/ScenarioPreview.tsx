@@ -5,6 +5,7 @@ import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
 import { rollDice } from '@/game/rng';
 import { chooseAction, shouldAcceptTrade } from '@/ai';
+import { pendingTradeStep } from '@/ai/trade';
 import { BoardSVG } from '@/ui/game/BoardSVG';
 import { BASE_SCENARIO_ORDER } from '@/game/modules/base/scenarios';
 import { SCENARIO_ORDER } from '@/game/modules/seafarers/board/scenarios';
@@ -137,12 +138,8 @@ function simulate(start: GameState, steps: number, seed: number): GameState {
   for (let n = 0; n < steps && s.phase !== 'gameOver'; n++) {
     try {
       let action: Action;
-      const pt = s.pendingTrade;
-      if (pt) {
-        const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id));
-        action = acceptor
-          ? { type: 'acceptTrade', playerId: acceptor.id }
-          : { type: 'cancelTrade', playerId: pt.proposerId };
+      if (s.pendingTrade) {
+        action = pendingTradeStep(s, (id) => shouldAcceptTrade(s, id));
       } else {
         const acting = getActingPlayerId(s);
         action = chooseAction(s, acting) ?? { type: 'endTurn', playerId: acting };

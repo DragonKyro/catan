@@ -154,7 +154,7 @@ export function EpTransferDialog() {
         {cell(harborCargo, 'load', current.load)}
       </TransferRow>
       {!fits && (
-        <p style={{ marginBottom: 0, color: '#ff8a80', fontSize: '0.85em' }}>Not enough room — move fewer pieces.</p>
+        <p style={{ marginBottom: 0, color: 'var(--danger)', fontSize: '0.85em' }}>Not enough room — move fewer pieces.</p>
       )}
     </DialogShell>
   );
@@ -177,7 +177,7 @@ function TransferRow({
       {icon}
       <strong style={{ minWidth: 52 }}>{label}</strong>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>{children}</div>
-      <span style={{ fontSize: '0.8em', color: full ? 'var(--accent)' : 'var(--text-soft)' }}>
+      <span style={{ fontSize: '0.8em', color: full ? 'var(--accent-ink)' : 'var(--text-soft)' }}>
         {cargoUnits(after)}/{EP_CAPACITY}
       </span>
     </div>

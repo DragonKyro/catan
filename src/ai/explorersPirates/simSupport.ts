@@ -7,6 +7,7 @@ import { rollDice } from '@/game/rng';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { epGame } from '@/game/modules/explorersPirates/testSupport';
 import { chooseAction, shouldAcceptTrade } from '@/ai';
+import { pendingTradeStep } from '@/ai/trade';
 
 export interface EpSimStats {
   steps: number;
@@ -110,7 +111,7 @@ export function simulateEp(
     if (a.type === 'spendGold') stats.goldSpent++;
     if (a.type === 'buyGold') stats.goldBought++;
     if (a.type === 'bankTrade') stats.bankTrades++;
-    if (a.type === 'acceptTrade') stats.playerTrades++;
+    if ((a.type === 'acceptTrade' || a.type === 'confirmTrade') && before.pendingTrade && !after.pendingTrade) stats.playerTrades++;
     if (a.type === 'proposeTrade') {
       stats.maxProposalsPerTurn = Math.max(stats.maxProposalsPerTurn, after.tradesProposedThisTurn);
     }
@@ -139,14 +140,8 @@ export function simulateEp(
   };
   while (s.phase !== 'gameOver' && stats.steps < maxSteps) {
     stats.steps++;
-    const pt = s.pendingTrade;
-    if (pt) {
-      const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id));
-      step(
-        acceptor
-          ? { type: 'acceptTrade', playerId: acceptor.id }
-          : { type: 'cancelTrade', playerId: pt.proposerId },
-      );
+    if (s.pendingTrade) {
+      step(pendingTradeStep(s, (id) => shouldAcceptTrade(s, id)));
       continue;
     }
     const acting = getActingPlayerId(s);

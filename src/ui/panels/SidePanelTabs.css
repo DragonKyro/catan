@@ -1,7 +1,8 @@
 .sidetabs {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -29,13 +30,13 @@
   background: transparent;
   border: none;
   color: var(--text-soft);
-  padding: 8px 12px;
-  font-family: inherit;
-  font-size: 0.9em;
-  font-weight: 600;
+  padding: 7px 12px 6px;
+  font-family: var(--display-font);
+  font-size: 1.05em;
+  font-weight: 700;
   cursor: pointer;
-  letter-spacing: 0.03em;
-  border-bottom: 2px solid transparent;
+  letter-spacing: 0.02em;
+  border-bottom: 3px solid transparent;
 }
 
 .sidetabs-tab:hover {
@@ -45,7 +46,12 @@
 .sidetabs-tab.is-active {
   color: var(--text);
   border-bottom-color: var(--accent);
-  background: var(--panel-soft);
+  background: rgba(242, 169, 31, 0.1);
+}
+
+.sidetabs-tab:focus-visible {
+  outline: 3px solid #2f8fd0;
+  outline-offset: -3px;
 }
 
 .sidetabs-body {
@@ -61,4 +67,5 @@
   background: transparent;
   border: none;
   border-radius: 0;
+  box-shadow: none;
 }

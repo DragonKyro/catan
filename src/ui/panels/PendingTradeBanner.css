@@ -1,12 +1,14 @@
 .ptbanner {
-  background: var(--panel);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
+  background: var(--card-bg);
+  border: 2px solid var(--accent-strong);
+  border-radius: 12px;
   padding: 6px 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    0 3px 0 var(--paper-edge),
+    0 10px 24px var(--shadow-sea);
   width: max-content;
   max-width: 100%;
   font-size: 0.85em;
@@ -51,7 +53,7 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: 12px;
-  background: var(--panel-soft);
+  background: var(--field);
   border: 1px solid var(--panel-border);
   font-size: 0.8em;
   color: var(--text);
@@ -73,6 +75,27 @@
   color: var(--danger);
   font-weight: 700;
   text-decoration: none;
+}
+
+.ptbanner-responder.is-accepted {
+  border-color: color-mix(in srgb, var(--success) 60%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, var(--field));
+}
+
+.ptbanner-responder-yes {
+  color: var(--success);
+  font-weight: 800;
+}
+
+.ptbanner-note {
+  color: var(--text-soft);
+  font-size: 0.95em;
+  font-style: italic;
+}
+
+.ptbanner-actions {
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .ptbanner-responder-name {

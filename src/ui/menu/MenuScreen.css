@@ -1,31 +1,12 @@
-/* The menu theme: the sea behind every screen outside a game, and a
-   parchment palette for what sits on it. The app's theme variables
-   (theme.css) are redefined for this subtree only, so shared pieces (Button,
-   ChatPanel, ColorPicker, the rulebook) turn parchment here and stay dark in
-   the game view. Components whose styles are shared with the game get their
-   menu look below, scoped under .menu-screen; menu-only screens style
-   themselves in their own CSS files using these variables. */
+/* The menu screens: the animated sea behind every screen outside a game,
+   and the menu-only looks of what sits on it. The parchment palette itself
+   (--panel, --text, --accent, --accent-ink, --paper-edge, the fonts, …) is
+   the app's, in theme.css, shared with the game view. Components whose
+   styles are shared with the game get their roomier menu look below, scoped
+   under .menu-screen; menu-only screens style themselves in their own CSS
+   files using the theme variables. */
 
 .menu-screen {
-  --bg: #f3e6c4;
-  --panel: #fcf5e3;
-  --panel-soft: #f3e6c6;
-  --panel-border: #dcc391;
-  --text: #3a260f;
-  --text-soft: #7a5c36;
-  --accent: #f2a91f;
-  /* Accent for text and thin lines (gold doesn't read on parchment). */
-  --accent-ink: #a5421a;
-  --danger: #c0392b;
-  --success: #2e8b57;
-  --radius: 10px;
-  /* The 3D bottom edge of cards and buttons, as on the home buttons. */
-  --paper-edge: #c9a96a;
-  --field: #fffbf1;
-  --field-border: #cfb27c;
-  --display-font: 'Alegreya SC', Georgia, 'Times New Roman', serif;
-  --story-font: 'Alegreya', Georgia, serif;
-
   position: relative;
   isolation: isolate;
   flex: 1;
@@ -45,24 +26,26 @@
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 55% 60% at 32% 52%, rgba(150, 236, 242, 0.5), transparent 70%),
-    radial-gradient(ellipse 120% 100% at 45% 35%, #48b9e0 0%, #2a8bcb 42%, #1b62a4 75%, #143f7a 100%);
+  background: var(--sea-gradient);
 }
 
+/* Each wave layer drifts one tile of its pattern and repeats, so it only
+   needs that much extra on the side it drifts from (big layers cost GPU
+   fill on every frame). */
 .menu-waves {
   position: absolute;
-  inset: -240px;
   background-repeat: repeat;
   will-change: transform;
 }
 
 .menu-waves-a {
+  inset: 0 0 0 -160px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='80'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-opacity='0.3'%3E%3Cpath d='M14 22q7-6 14 0t14 0'/%3E%3Cpath d='M96 62q7-6 14 0t14 0'/%3E%3C/g%3E%3C/svg%3E");
   animation: menu-waves-a 26s linear infinite;
 }
 
 .menu-waves-b {
+  inset: -120px -240px 0 0;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='120'%3E%3Cg fill='none' stroke='%23e6fbff' stroke-width='1.5' stroke-linecap='round' stroke-opacity='0.22'%3E%3Cpath d='M60 30q6-5 12 0t12 0t12 0'/%3E%3Cpath d='M170 92q6-5 12 0t12 0'/%3E%3C/g%3E%3C/svg%3E");
   animation: menu-waves-b 44s linear infinite;
 }
@@ -83,9 +66,13 @@
   position: absolute;
   width: 14px;
   height: 14px;
-  background: #ffffff;
-  clip-path: polygon(50% 0, 58% 42%, 100% 50%, 58% 58%, 50% 100%, 42% 58%, 0 50%, 42% 42%);
+  /* A drawn star, not a clip-path, on a layer of its own (will-change), so
+     the twinkle stays on the compositor and never wakes the main thread
+     (which also made Chrome re-check the home island's ship every frame). */
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 0L58 42L100 50L58 58L50 100L42 58L0 50L42 42Z' fill='%23fff'/%3E%3C/svg%3E")
+    center / 100% 100% no-repeat;
   opacity: 0;
+  will-change: transform, opacity;
   animation: menu-twinkle 5.2s ease-in-out infinite;
   animation-delay: var(--d);
 }
@@ -269,124 +256,14 @@
 
 /* ---- Buttons ------------------------------------------------------------------ */
 
-.menu-screen .btn {
-  background: linear-gradient(180deg, #fffaea 0%, #f4e4bd 100%);
-  border: 1px solid var(--panel-border);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow:
-    0 2px 0 var(--paper-edge),
-    0 3px 8px rgba(60, 40, 10, 0.12);
-  transition:
-    transform 120ms ease,
-    box-shadow 120ms ease,
-    background 120ms ease;
-}
-
-.menu-screen .btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, #fffdf5 0%, #f8eac8 100%);
-  border-color: #cfae72;
-  transform: translateY(-1px);
-  box-shadow:
-    0 3px 0 var(--paper-edge),
-    0 6px 12px rgba(60, 40, 10, 0.16);
-}
-
-.menu-screen .btn:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: 0 1px 0 var(--paper-edge);
-}
-
-.menu-screen .btn:focus-visible {
-  outline: 3px solid #2f8fd0;
-  outline-offset: 2px;
-}
-
-.menu-screen .btn:disabled {
-  opacity: 0.5;
-  box-shadow: none;
-}
-
-.menu-screen .btn-primary {
-  background: linear-gradient(180deg, #ffe892 0%, #ffc642 52%, #f6a11d 100%);
-  border-color: #d98e1a;
-  color: #3a1f05;
-  box-shadow:
-    0 3px 0 #b2620e,
-    0 6px 14px rgba(120, 60, 0, 0.22);
-}
-
-.menu-screen .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #fff0a8 0%, #ffd25a 52%, #f8ad2c 100%);
-  border-color: #d98e1a;
-  box-shadow:
-    0 4px 0 #b2620e,
-    0 9px 18px rgba(120, 60, 0, 0.26);
-}
-
-.menu-screen .btn-primary:active:not(:disabled) {
-  box-shadow: 0 1px 0 #b2620e;
-}
-
+/* The parchment / gold look is the base .btn (Button.css); the menus' big
+   buttons are a little roomier than the game's. */
 .menu-screen .btn-lg {
   padding: 11px 18px;
 }
 
 .menu-screen .btn-primary.btn-lg {
-  font-family: var(--display-font);
-  font-weight: 700;
   font-size: 1.3em;
-  letter-spacing: 0.02em;
-}
-
-.menu-screen .btn-ghost {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  color: var(--text-soft);
-}
-
-.menu-screen .btn-ghost:hover:not(:disabled) {
-  background: rgba(122, 92, 54, 0.1);
-  border-color: transparent;
-  box-shadow: none;
-  color: var(--text);
-  transform: none;
-}
-
-.menu-screen .btn-danger {
-  background: linear-gradient(180deg, #ec6e61 0%, #c0392b 100%);
-  border-color: #a5281c;
-  color: #fff;
-  box-shadow: 0 2px 0 #7e1d13;
-}
-
-/* ---- Fields --------------------------------------------------------------------- */
-
-.menu-screen
-  :is(input:not([type]), input[type='text'], input[type='number'], input[type='search'], select, textarea) {
-  background: var(--field);
-  border: 1px solid var(--field-border);
-  color: var(--text);
-  box-shadow: inset 0 1px 2px rgba(80, 50, 10, 0.12);
-}
-
-.menu-screen
-  :is(input:not([type]), input[type='text'], input[type='number'], input[type='search'], select, textarea):focus {
-  outline: none;
-  border-color: #e0a020;
-  box-shadow:
-    0 0 0 3px rgba(242, 169, 31, 0.32),
-    inset 0 1px 2px rgba(80, 50, 10, 0.12);
-}
-
-.menu-screen ::placeholder {
-  color: #a88b62;
-  opacity: 1;
-}
-
-.menu-screen input[type='checkbox'] {
-  accent-color: #d98e1a;
 }
 
 /* ---- Map previews sit on the sea ------------------------------------------------ */

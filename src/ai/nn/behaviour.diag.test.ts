@@ -8,6 +8,7 @@
 //   DIAG=1 [DIAG_LEVEL=easy|normal|hard] [DIAG_GAMES=24] npx vitest run src/ai/nn/behaviour.diag.test.ts
 //
 // Use it to measure an AI change before and after.
+import { nextTradeResponder } from '../trade';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it } from 'vitest';
@@ -22,14 +23,14 @@ import { RESOURCES } from '@/game/types';
 import { chooseAction, shouldAcceptTrade } from '../index';
 import { AI_LEVELS, loadedAiLevel, setAiLevelNet } from './levels';
 import { KnowledgeSession, chooseNeuralAction } from './index';
-import { CatanPolicyNet, type CatanPolicyFile } from './runtime';
+import { CatanPolicyNet, decodePolicyBinary } from './runtime';
 
 type Kind = 'heuristic' | AiLevel;
 
 const LEVEL: AiLevel = (process.env.DIAG_LEVEL as AiLevel) ?? 'hard';
 setAiLevelNet(
   LEVEL,
-  new CatanPolicyNet(JSON.parse(readFileSync(resolve('src/ai/nn/policies', AI_LEVELS[LEVEL].file), 'utf8')) as CatanPolicyFile),
+  new CatanPolicyNet(decodePolicyBinary(readFileSync(resolve('src/ai/nn/policies', AI_LEVELS[LEVEL].file)))),
 );
 
 interface Stat {
@@ -143,12 +144,8 @@ function decidingSeat(s: GameState): PlayerId {
   if (pt) {
     const acting = s.playerOrder[s.currentPlayerIndex]!;
     if (pt.proposerId !== acting) return acting;
-    const n = s.playerOrder.length;
-    const at = s.playerOrder.indexOf(pt.proposerId);
-    for (let k = 1; k < n; k++) {
-      const id = s.playerOrder[(at + k) % n]!;
-      if (!pt.rejectedBy.includes(id)) return id;
-    }
+    // Each opponent answers in turn; then the proposer picks a partner.
+    return nextTradeResponder(s) ?? pt.proposerId;
   }
   return getActingPlayerId(s);
 }
@@ -185,7 +182,7 @@ function play(seed: number, kinds: Kind[], stats: Record<string, Stat>) {
       action =
         chooseNeuralAction(s, id, known[id]!, loadedAiLevel(LEVEL)!) ??
         (s.pendingTrade?.proposerId === id
-          ? { type: 'cancelTrade', playerId: id }
+          ? chooseAction(s, id)!
           : chooseAction(s, id) ?? { type: 'endTurn', playerId: id });
     } else if (s.pendingTrade && s.pendingTrade.proposerId !== id) {
       const counter = s.pendingTrade.proposerId !== s.playerOrder[s.currentPlayerIndex];

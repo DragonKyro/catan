@@ -69,6 +69,7 @@ export function PassBootDialog() {
                   height: 12,
                   borderRadius: '50%',
                   background: playerColorVar(p.color),
+                  border: '1px solid rgba(40, 25, 5, 0.45)',
                   marginRight: 8,
                   verticalAlign: 'middle',
                 }}

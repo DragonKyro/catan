@@ -10,28 +10,44 @@
 }
 
 .gameover-restore {
-  background: var(--panel);
-  border: 1px solid var(--accent);
+  background: var(--card-bg);
+  border: 2px solid var(--accent-strong);
   color: var(--text);
   border-radius: 999px;
   padding: 10px 18px;
   font-family: inherit;
   font-size: 0.95em;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  box-shadow:
+    0 3px 0 var(--paper-edge),
+    0 10px 24px var(--shadow-sea);
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
 .gameover-restore:hover {
-  background: var(--accent);
-  color: #1a1a1a;
-  border-color: var(--accent);
+  background: var(--gold-btn);
+  color: var(--on-accent);
+  border-color: var(--accent-strong);
 }
 
-.gameover-restore:hover strong {
-  color: #1a1a1a !important;
+/* The winner's name: their colour as a chip behind dark ink, so a white or
+   gold winner reads as well as a red one. */
+.gameover-winner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  color: var(--text);
+}
+
+.gameover-winner::before {
+  content: '';
+  width: 0.75em;
+  height: 0.75em;
+  border-radius: 50%;
+  background: var(--pc, var(--text-soft));
+  border: 1px solid rgba(40, 25, 5, 0.55);
 }
 
 .gameover-tabs {
@@ -61,8 +77,8 @@
 }
 
 .gameover-tab.is-active {
-  background: var(--accent);
-  color: #1a1a1a;
-  border-color: var(--accent);
+  background: var(--gold-btn);
+  color: var(--on-accent);
+  border-color: var(--accent-strong);
   font-weight: 600;
 }

@@ -1,7 +1,8 @@
 .bank {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
@@ -41,8 +42,9 @@
 }
 
 .bank-count-btn {
-  background: var(--panel);
+  background: var(--paper-btn);
   border: 1px solid var(--panel-border);
+  box-shadow: 0 2px 0 var(--paper-edge);
   border-radius: 6px;
   color: var(--text);
   font-size: 1.1em;
@@ -53,8 +55,9 @@
 }
 
 .bank-count-btn:hover:not(:disabled) {
-  background: var(--accent);
-  color: #1a1a1a;
+  background: var(--gold-btn);
+  border-color: var(--accent-strong);
+  color: var(--on-accent);
 }
 
 .bank-count-btn:disabled {

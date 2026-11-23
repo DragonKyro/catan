@@ -14,6 +14,12 @@ function reachMainPhase() {
   return s;
 }
 
+/** Four players, p0 to play: several opponents can answer one offer. */
+function reachMainPhase4() {
+  const s = runSetupPhase(createGame({ playerNames: ['A', 'B', 'C', 'D'], seed: 42, randomizeTurnOrder: false }));
+  return applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 3] });
+}
+
 describe('bank trade', () => {
   it('defaults to 4:1 with no ports', () => {
     let s = reachMainPhase();
@@ -86,12 +92,63 @@ describe('player-to-player trade', () => {
     });
     expect(s.pendingTrade).toBeDefined();
     expect(s.pendingTrade?.proposerId).toBe('p0');
+    // An accept is a yes: nothing moves until the proposer picks a partner.
     s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' });
+    expect(s.pendingTrade?.acceptedBy).toEqual(['p1']);
+    expect(s.players[0]!.resources).toEqual(p0Before);
+    s = applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p1' });
     expect(s.pendingTrade).toBeUndefined();
     expect(s.players[0]!.resources.wood).toBe(p0Before.wood - 1);
     expect(s.players[0]!.resources.brick).toBe(p0Before.brick + 1);
     expect(s.players[1]!.resources.brick).toBe(p1Before.brick - 1);
     expect(s.players[1]!.resources.wood).toBe(p1Before.wood + 1);
+  });
+
+  it('when several accept, the proposer picks one (or nobody); only acceptors can be picked', () => {
+    let s = reachMainPhase4();
+    s = giveResources(s, 'p0', { wood: 2 });
+    s = giveResources(s, 'p1', { brick: 2 });
+    s = giveResources(s, 'p2', { brick: 2 });
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: { brick: 1 } });
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' });
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' }); // a second yes changes nothing
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p2' });
+    expect(s.pendingTrade?.acceptedBy).toEqual(['p1', 'p2']);
+    expect(() => applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p3' })).toThrow(/hasn't accepted/);
+    expect(() => applyAction(s, { type: 'confirmTrade', playerId: 'p1', with: 'p2' })).toThrow(/proposer/);
+    const p1Brick = s.players[1]!.resources.brick;
+    const p2Brick = s.players[2]!.resources.brick;
+    const done = applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p2' });
+    expect(done.pendingTrade).toBeUndefined();
+    expect(done.players[2]!.resources.brick).toBe(p2Brick - 1);
+    expect(done.players[1]!.resources.brick).toBe(p1Brick); // the other acceptor keeps theirs
+    // Or the proposer walks away from every acceptor.
+    expect(applyAction(s, { type: 'cancelTrade', playerId: 'p0' }).pendingTrade).toBeUndefined();
+  });
+
+  it('a rejection after a yes takes the yes back', () => {
+    let s = reachMainPhase4();
+    s = giveResources(s, 'p0', { wood: 2 });
+    s = giveResources(s, 'p1', { brick: 2 });
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: { brick: 1 } });
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' });
+    s = applyAction(s, { type: 'rejectTrade', playerId: 'p1' });
+    expect(s.pendingTrade?.acceptedBy).toEqual([]);
+    expect(s.pendingTrade?.rejectedBy).toEqual(['p1']);
+    expect(() => applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p1' })).toThrow(/hasn't accepted/);
+  });
+
+  it('a counter-offer is completed by its accept (only one possible partner)', () => {
+    let s = reachMainPhase();
+    s = giveResources(s, 'p0', { wood: 2, sheep: 2 });
+    s = giveResources(s, 'p1', { brick: 2 });
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: { brick: 1 } });
+    s = applyAction(s, { type: 'counterTrade', playerId: 'p1', give: { brick: 1 }, receive: { wood: 1, sheep: 1 } });
+    const before = s.players[0]!.resources;
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p0' });
+    expect(s.pendingTrade).toBeUndefined();
+    expect(s.players[0]!.resources.brick).toBe(before.brick + 1);
+    expect(s.players[0]!.resources.sheep).toBe(before.sheep - 1);
   });
 
   it('cannot accept your own trade', () => {

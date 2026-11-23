@@ -14,20 +14,21 @@
    forest green, cloth on pasture green, coin on mountain grey. A dashed
    border sets them apart from the resource chip of the same terrain. */
 .cchip-paper {
-  background: rgba(61, 122, 61, 0.22);
+  background: color-mix(in srgb, var(--terrain-wood) 18%, var(--panel));
   border-color: var(--terrain-wood);
   border-style: dashed;
 }
 .cchip-cloth {
-  background: rgba(168, 217, 107, 0.22);
-  border-color: var(--terrain-sheep);
+  background: color-mix(in srgb, var(--terrain-sheep) 32%, var(--panel));
+  border-color: color-mix(in srgb, var(--terrain-sheep) 65%, #2b4a0a);
   border-style: dashed;
 }
 .cchip-coin {
-  background: rgba(138, 138, 150, 0.28);
-  border-color: var(--terrain-ore);
+  background: color-mix(in srgb, var(--terrain-ore) 24%, var(--panel));
+  border-color: color-mix(in srgb, var(--terrain-ore) 85%, #1d1d25);
   border-style: dashed;
 }
+.cchip { color: var(--text); }
 .cchip-icon { display: inline-flex; }
 
 .cchip-sm { font-size: 0.8em; padding: 1px 6px; }

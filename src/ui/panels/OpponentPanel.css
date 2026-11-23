@@ -5,9 +5,10 @@
 }
 
 .opp {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
@@ -33,8 +34,10 @@
 }
 
 .opp-vp {
-  color: var(--text-soft);
+  color: var(--text);
+  font-weight: 700;
   font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
 }
 
 .opp-stats {
@@ -53,49 +56,63 @@
   color: var(--text-soft);
 }
 
+/* Whose turn it is: the one thing the side panel must say at a glance, so
+   it gets the strongest treatment on the parchment (gold border, gold wash,
+   a gold glow, a gold "turn" pill). */
 .opp-acting {
-  border-color: var(--accent);
+  border-color: var(--accent-strong);
   border-width: 2px;
   padding: 7px 9px; /* compensate so layout doesn't jump on the +1px border */
   background: linear-gradient(
     to right,
-    color-mix(in srgb, var(--accent) 18%, transparent),
-    var(--panel) 55%
+    color-mix(in srgb, var(--accent) 30%, var(--panel)),
+    var(--panel) 65%
   );
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow:
+    0 3px 0 var(--paper-edge),
+    0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 10px 24px var(--shadow-sea);
 }
 
 .opp-acting .opp-name::after {
-  content: '· turn';
+  content: 'turn';
   margin-left: 8px;
-  font-weight: 600;
-  font-size: 0.78em;
-  color: var(--accent);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--gold-btn);
+  border: 1px solid var(--accent-strong);
+  font-weight: 700;
+  font-size: 0.72em;
+  color: var(--on-accent);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  vertical-align: 0.1em;
 }
 
 /* Paired-player partner (5+p games): the OTHER of the paired pair that
    isn't currently acting. Sky-blue so it's clearly distinct from the gold
    .opp-acting treatment. */
 .opp-partner {
-  border-color: #5fa8d9;
+  border-color: #3f8fcc;
   border-width: 2px;
   padding: 7px 9px;
   background: linear-gradient(
     to right,
-    color-mix(in srgb, #5fa8d9 18%, transparent),
-    var(--panel) 55%
+    color-mix(in srgb, #5fa8d9 22%, var(--panel)),
+    var(--panel) 60%
   );
-  box-shadow: 0 0 0 2px color-mix(in srgb, #5fa8d9 28%, transparent);
+  box-shadow:
+    0 3px 0 var(--paper-edge),
+    0 0 0 3px color-mix(in srgb, #5fa8d9 35%, transparent),
+    0 10px 24px var(--shadow-sea);
 }
 
 .opp-partner .opp-name::after {
   content: '· paired';
   margin-left: 8px;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.78em;
-  color: #5fa8d9;
+  color: #23679c;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }

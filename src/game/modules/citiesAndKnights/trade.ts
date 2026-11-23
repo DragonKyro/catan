@@ -1,6 +1,7 @@
 import type {
   AcceptTradeAction,
   BankTradeCKAction,
+  ConfirmTradeAction,
   Commodity,
   CommodityBank,
   CounterTradeAction,
@@ -14,6 +15,7 @@ import { currentPlayerId, getPlayer, isPairedPlayer2, updatePlayer } from '../..
 import {
   getBankTradeRate,
   handleAcceptTrade,
+  handleConfirmTrade,
   handleCounterTrade,
   handleProposeTrade,
 } from '../../actions/trade';
@@ -200,15 +202,36 @@ export function handleAcceptTradeCK(state: GameState, action: AcceptTradeAction)
   if (!holdsSelection(state, trade.proposerId, {}, trade.giveCommodities)) {
     throw new Error('The proposer no longer has the offered commodities');
   }
-  // Resources (and every base check) first; then the commodity columns.
-  let next = handleAcceptTrade(state, action);
+  // Resources (and every base check) first; then the commodity columns —
+  // only when the trade went through (on the active player's offer an
+  // accept is a yes, and nothing moves until the proposer confirms).
+  const next = handleAcceptTrade(state, action);
+  return next.pendingTrade ? next : moveTradeCommodities(next, trade, action.playerId);
+}
+
+/** The proposer completes an offer with commodities in it: base trade, then the commodity columns. */
+export function handleConfirmTradeCK(state: GameState, action: ConfirmTradeAction): GameState {
+  const trade = state.pendingTrade;
+  if (!trade || (!hasCommodities(trade.giveCommodities) && !hasCommodities(trade.receiveCommodities))) {
+    return handleConfirmTrade(state, action);
+  }
+  if (!holdsSelection(state, action.with, {}, trade.receiveCommodities)) {
+    throw new Error('That player no longer has the commodities the trade asks for');
+  }
+  if (!holdsSelection(state, trade.proposerId, {}, trade.giveCommodities)) {
+    throw new Error('The proposer no longer has the offered commodities');
+  }
+  return moveTradeCommodities(handleConfirmTrade(state, action), trade, action.with);
+}
+
+function moveTradeCommodities(state: GameState, trade: NonNullable<GameState['pendingTrade']>, partnerId: PlayerId): GameState {
   const giveC = trade.giveCommodities ?? {};
   const receiveC = trade.receiveCommodities ?? {};
-  next = updatePlayer(next, trade.proposerId, (p) => ({
+  let next = updatePlayer(state, trade.proposerId, (p) => ({
     ...p,
     commodities: addCommodities(subtractCommodities(p.commodities ?? NO_COMMODITIES, giveC), receiveC),
   }));
-  next = updatePlayer(next, action.playerId, (p) => ({
+  next = updatePlayer(next, partnerId, (p) => ({
     ...p,
     commodities: addCommodities(subtractCommodities(p.commodities ?? NO_COMMODITIES, receiveC), giveC),
   }));

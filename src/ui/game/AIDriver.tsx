@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useGameStore } from '@/store/gameStore';
+import { tradeOfferKey, useGameStore } from '@/store/gameStore';
 import { useNetworkStore } from '@/store/networkStore';
 import { useLogStore } from '@/store/logStore';
 import { getActingPlayerId } from '@/game/helpers';
@@ -98,31 +98,41 @@ export function AIDriver() {
 
     // If there's a pending trade, defer with a longer pause so the
     // player has time to see the offer / counter:
-    // - AI is the proposer: wait, then will cancel.
+    // - AI is the proposer: wait for the answers, then trade with its pick
+    //   of whoever accepted (or walk away).
     // - AI is the current player but a counter exists: wait, then evaluate.
     // - Otherwise the trade-evaluator effect below handles it.
+    // This effect re-runs on every answer, so the proposer resolves shortly
+    // after the last one comes in.
     let delay = AI_ACTION_DELAY_MS;
     if (game.pendingTrade) {
+      const trade = game.pendingTrade;
       const currentTurnId = game.playerOrder[game.currentPlayerIndex];
-      const isProposer = acting === game.pendingTrade.proposerId;
+      const isProposer = acting === trade.proposerId;
       const isCurrentNonProposer = acting === currentTurnId && !isProposer;
       if (!isProposer && !isCurrentNonProposer) return;
-      // Only wait the full 10s if a human could still respond. In an
-      // all-AI game there's no one to wait for — let the proposer
-      // resolve immediately. Same for situations where every human
-      // already auto-rejected for lack of resources.
-      const humanCanRespond = game.players.some((p) => {
-        if (p.isAI) return false;
-        if (p.id === game.pendingTrade!.proposerId) return false;
-        if (game.pendingTrade!.rejectedBy.includes(p.id)) return false;
-        return true;
-      });
-      delay = humanCanRespond ? AI_PROPOSER_WAIT_MS : AI_ACTION_DELAY_MS;
+      // Who still hasn't answered. A human: wait the full 10 s. Only AIs:
+      // just past their answer jitter. Nobody: resolve now.
+      const unanswered = game.players.filter(
+        (p) => p.id !== trade.proposerId && !trade.rejectedBy.includes(p.id) && !trade.acceptedBy?.includes(p.id),
+      );
+      const isCounter = trade.proposerId !== currentTurnId;
+      // (A counter: wait the full 10 s only while a human is in the negotiation.)
+      const humanInvolved = game.players.some(
+        (p) => !p.isAI && p.id !== trade.proposerId && !trade.rejectedBy.includes(p.id),
+      );
+      delay = isCounter
+        ? (humanInvolved ? AI_PROPOSER_WAIT_MS : AI_ACTION_DELAY_MS)
+        : unanswered.some((p) => !p.isAI)
+          ? AI_PROPOSER_WAIT_MS
+          : unanswered.length > 0
+            ? AI_TRADE_JITTER_MS + AI_ACTION_DELAY_MS
+            : AI_ACTION_DELAY_MS;
     }
 
     const t = setTimeout(() => {
       // The trained network where it applies; the classic AI otherwise (and
-      // for the proposer's wait on its own offer, which ends in a cancel).
+      // for the proposer's own offer: the classic AI picks the partner).
       const action = neuralAction(game, acting) ?? chooseAction(game, acting);
       if (action) {
         dispatch(action);
@@ -135,17 +145,16 @@ export function AIDriver() {
 
   // Trade-evaluator driver: when a NEW trade (or counter) appears, schedule
   // every eligible AI responder ONCE — all firing roughly in parallel after
-  // a fairness wait so the human can react. The first accept or counter
-  // wins; later timers see a different pendingTrade and bail.
+  // a fairness wait so the human can react. Each answers accept (a yes: the
+  // proposer then picks a partner), reject or counter; a counter replaces the
+  // offer, so later timers see a different pendingTrade and bail.
   //
   // The effect is keyed on a stable trade identity (proposer + give +
   // receive) so a rejection mutating `rejectedBy` doesn't tear down and
   // recreate the timers — that was making rejections look sequential, each
   // paying the initial-wait again.
   // (Cities & Knights offers can differ only in their commodity columns.)
-  const tradeKey = game?.pendingTrade
-    ? `${game.pendingTrade.proposerId}|${JSON.stringify(game.pendingTrade.give)}|${JSON.stringify(game.pendingTrade.receive)}|${JSON.stringify(game.pendingTrade.giveCommodities ?? {})}|${JSON.stringify(game.pendingTrade.receiveCommodities ?? {})}`
-    : null;
+  const tradeKey = game?.pendingTrade ? tradeOfferKey(game.pendingTrade) : null;
   useEffect(() => {
     if (!canDriveAI) return;
     if (!tradeKey) return;
@@ -161,7 +170,7 @@ export function AIDriver() {
     const eligibleAIs = initial.players.filter((p) => {
       if (!p.isAI) return false;
       if (p.id === trade.proposerId) return false;
-      if (trade.rejectedBy.includes(p.id)) return false;
+      if (trade.rejectedBy.includes(p.id) || trade.acceptedBy?.includes(p.id)) return false;
       if (isCounter && p.id !== currentTurnPlayerId) return false;
       return true;
     });
@@ -173,7 +182,7 @@ export function AIDriver() {
     const humanCanRespond = initial.players.some((p) => {
       if (p.isAI) return false;
       if (p.id === trade.proposerId) return false;
-      if (trade.rejectedBy.includes(p.id)) return false;
+      if (trade.rejectedBy.includes(p.id) || trade.acceptedBy?.includes(p.id)) return false;
       if (isCounter && p.id !== currentTurnPlayerId) return false;
       return true;
     });
@@ -187,7 +196,7 @@ export function AIDriver() {
         const latest = useGameStore.getState().game;
         if (!latest?.pendingTrade) return;
         if (latest.pendingTrade.proposerId === p.id) return;
-        if (latest.pendingTrade.rejectedBy.includes(p.id)) return;
+        if (latest.pendingTrade.rejectedBy.includes(p.id) || latest.pendingTrade.acceptedBy?.includes(p.id)) return;
         const liveCurrent =
           latest.playerOrder[latest.currentPlayerIndex] ?? null;
         const liveIsCounter = latest.pendingTrade.proposerId !== liveCurrent;

@@ -53,7 +53,7 @@
 }
 
 .wonders-dialog-progress.is-complete {
-  color: var(--accent);
+  color: var(--accent-ink);
   font-weight: 700;
 }
 

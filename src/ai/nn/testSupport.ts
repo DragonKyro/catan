@@ -9,6 +9,7 @@ import { nextRng, rollDice, shuffle } from '@/game/rng';
 import type { Action, DevCardType, GameState, PlayerId, ResourceBank } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { chooseAction, shouldAcceptTrade } from '../index';
+import { pendingTradeStep } from '../trade';
 import { initialKnowledge, observeTransition, type CatanKnowledge } from './knowledge';
 
 export interface Sample {
@@ -66,10 +67,8 @@ export function playGame(
 
   for (let n = 0; s.phase !== 'gameOver' && n < maxSteps; n++) {
     if (n % every === 0) samples.push({ state: s, knowledge });
-    const pt = s.pendingTrade;
-    if (pt) {
-      const acceptor = s.players.find((p) => p.id !== pt.proposerId && shouldAcceptTrade(s, p.id));
-      step(acceptor ? { type: 'acceptTrade', playerId: acceptor.id } : { type: 'cancelTrade', playerId: pt.proposerId });
+    if (s.pendingTrade) {
+      step(pendingTradeStep(s, (id) => shouldAcceptTrade(s, id)));
       continue;
     }
     const acting = getActingPlayerId(s);

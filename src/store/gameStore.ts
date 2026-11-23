@@ -6,6 +6,7 @@ import type {
   EpLocation,
   HexId,
   KnightStrength,
+  PendingTrade,
   PlayerId,
   VertexId,
 } from '@/game/types';
@@ -17,6 +18,28 @@ import { useLogStore, type LogStoreSnapshot } from './logStore';
 
 // Re-export the pure helper for callers used to importing it from the store.
 export { getActingPlayerId };
+
+/**
+ * An offer's identity: who proposed what for what. Answers (a yes, a no)
+ * don't change it; a counter-offer or a new offer does.
+ */
+export function tradeOfferKey(t: PendingTrade): string {
+  return [
+    t.proposerId,
+    JSON.stringify(t.give),
+    JSON.stringify(t.receive),
+    JSON.stringify(t.giveCommodities ?? {}),
+    JSON.stringify(t.receiveCommodities ?? {}),
+    t.giveGold ?? 0,
+    t.receiveGold ?? 0,
+  ].join('|');
+}
+
+/** The counter-offer being written: who is countering, and the offer (its tradeOfferKey) they answer. */
+export interface TradeCounter {
+  as: PlayerId;
+  key: string;
+}
 
 /** The game plus its log, as captured for undo and for online rollbacks. */
 export interface GameSnapshot {
@@ -164,6 +187,12 @@ interface AppStore {
   game: GameState | null;
   uiMode: UIMode;
   dialog: DialogName | null;
+  /**
+   * Set while the trade dialog is open as a counter-offer (PendingTradeBanner's
+   * Counter button). Other players' moves normally close any open dialog;
+   * this one stays open while the offer it answers stands.
+   */
+  tradeCounter: TradeCounter | null;
   handoffPending: boolean;
   handoffAcknowledgedForPlayer: PlayerId | null;
   error: string | null;
@@ -199,6 +228,8 @@ interface AppStore {
   undo: () => void;
   setMode: (mode: UIMode) => void;
   openDialog: (d: DialogName) => void;
+  /** Open the trade dialog as `as`'s counter to the pending offer. */
+  openCounterDialog: (as: PlayerId) => void;
   closeDialog: () => void;
   acknowledgeHandoff: () => void;
   dismissError: () => void;
@@ -310,17 +341,29 @@ function applyTransition(
   set: (s: Partial<{
     game: GameState;
     uiMode: UIMode;
-    dialog: null;
-    error: null;
+    dialog: DialogName | null;
+    tradeCounter: TradeCounter | null;
+    error: string | null;
     handoffPending: boolean;
     handoffAcknowledgedForPlayer: PlayerId | null;
     pendingRobberHex: null;
     pendingPirateHex: null;
   }>) => void,
-  get: () => { handoffAcknowledgedForPlayer: PlayerId | null; uiMode: UIMode },
+  get: () => {
+    handoffAcknowledgedForPlayer: PlayerId | null;
+    uiMode: UIMode;
+    dialog: DialogName | null;
+    tradeCounter: TradeCounter | null;
+  },
   before: GameState,
   next: GameState,
 ): void {
+  // A counter-offer being written survives other players' answers to the
+  // offer it counters; if the offer itself goes (taken, withdrawn, or
+  // replaced by someone else's counter) the dialog closes and says why.
+  const counter = get().dialog === 'playerTrade' ? get().tradeCounter : null;
+  const counterStands = !!counter && !!next.pendingTrade && tradeOfferKey(next.pendingTrade) === counter.key;
+  const counterLost = !!counter && !counterStands && next.pendingTrade?.proposerId !== counter.as;
   let uiMode = phaseToMode(next);
   // Explorers & Pirates Movement phase: a free ship action (loading,
   // unloading, a crew landing…) keeps the ship the player had selected.
@@ -364,8 +407,9 @@ function applyTransition(
   set({
     game: next,
     uiMode,
-    dialog: null,
-    error: null,
+    dialog: counterStands ? 'playerTrade' : null,
+    tradeCounter: counterStands ? counter : null,
+    error: counterLost ? 'That offer changed before your counter went in.' : null,
     handoffPending: handoff,
     handoffAcknowledgedForPlayer: acknowledged,
     pendingRobberHex: null,
@@ -377,6 +421,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
   game: null,
   uiMode: { kind: 'idle' },
   dialog: null,
+  tradeCounter: null,
   handoffPending: false,
   handoffAcknowledgedForPlayer: null,
   error: null,
@@ -527,8 +572,13 @@ export const useGameStore = create<AppStore>((set, get) => ({
   },
 
   setMode: (mode) => set({ uiMode: mode, error: null }),
-  openDialog: (d) => set({ dialog: d, error: null }),
-  closeDialog: () => set({ dialog: null }),
+  openDialog: (d) => set({ dialog: d, tradeCounter: null, error: null }),
+  openCounterDialog: (as) => {
+    const trade = get().game?.pendingTrade;
+    if (!trade) return;
+    set({ dialog: 'playerTrade', tradeCounter: { as, key: tradeOfferKey(trade) }, error: null });
+  },
+  closeDialog: () => set({ dialog: null, tradeCounter: null }),
   acknowledgeHandoff: () => {
     const game = get().game;
     if (!game) return;

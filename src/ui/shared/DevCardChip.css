@@ -5,7 +5,8 @@
   padding: 4px 10px;
   border-radius: 6px;
   border: 1px solid var(--panel-border);
-  background: var(--panel-soft);
+  background: var(--field);
+  box-shadow: 0 1px 0 rgba(90, 60, 20, 0.18);
   font-size: 0.9em;
   font-weight: 500;
   color: var(--text);
@@ -15,10 +16,11 @@
   font-size: 1.1em;
 }
 
+/* A face-down card: the dev-card back's purple. */
 .dchip-back {
-  background: #3b2a45;
-  border-color: #6a4a83;
-  color: var(--text-soft);
+  background: #e9def0;
+  border-color: #9a7bb3;
+  color: #4f3766;
 }
 
 .dchip-clickable {
@@ -26,7 +28,8 @@
   transition: background 80ms;
 }
 .dchip-clickable:hover {
-  background: #2c4154;
+  background: var(--panel-hover);
+  border-color: #cfae72;
 }
 
 .dchip-disabled {

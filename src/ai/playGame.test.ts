@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { pendingTradeStep } from './trade';
 import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { chooseAction, shouldAcceptTrade } from './index';
@@ -28,24 +29,9 @@ function playFullGame(
   while (s.winner === null && safety < 5000) {
     safety++;
 
-    // 1) If there's a pending trade, evaluate acceptance for each opponent.
-    const pt = s.pendingTrade;
-    if (pt) {
-      let accepted = false;
-      for (const p of s.players) {
-        if (p.id === pt.proposerId) continue;
-        if (shouldAcceptTrade(s, p.id)) {
-          s = applyAction(s, { type: 'acceptTrade', playerId: p.id });
-          accepted = true;
-          break;
-        }
-      }
-      if (accepted) continue;
-      // Nobody wanted it — cancel it so the proposer can move on.
-      s = applyAction(s, {
-        type: 'cancelTrade',
-        playerId: pt.proposerId,
-      });
+    // 1) A pending trade: each opponent answers, then the proposer picks a partner or walks away.
+    if (s.pendingTrade) {
+      s = applyAction(s, pendingTradeStep(s, (id) => shouldAcceptTrade(s, id)));
       continue;
     }
 

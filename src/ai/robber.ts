@@ -3,6 +3,7 @@ import { hexPips } from '@/game/board/hexNumbers';
 import { totalResources } from '@/game/resources';
 import { assessThreats, isRival, type PlayerThreat } from './threats';
 import { robberHexAllowed, robberStealCandidates } from '@/game/engine';
+import { activeTarget } from './persona';
 
 export interface RobberChoice {
   hex: HexId;
@@ -30,9 +31,13 @@ const SCARCITY_HEX_BONUS = 1.6;
 // 6/8 over 4/10 when both feed similar threats.
 const HIGH_NUMBER_PIPS = 4;
 const HIGH_NUMBER_BONUS = 2.0;
+// A persona with a target (persona.ts) multiplies the damage it does to that
+// seat by this — enough to pick the target's best hex over a richer one.
+const TARGET_DAMAGE_MULT = 6.0;
 
 export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberChoice {
   const threats = assessThreats(state);
+  const target = activeTarget(state, playerId);
   // Pre-compute every player's pip totals by resource so we can spot
   // hexes that are an opponent's only source of a given resource.
   const pipsByResourceByPlayer = computePipsByResourceByPlayer(state);
@@ -72,7 +77,7 @@ export function chooseRobberMove(state: GameState, playerId: PlayerId): RobberCh
               totalPipsForRes > 0 && hexPipsHere / totalPipsForRes >= 0.5
                 ? SCARCITY_HEX_BONUS
                 : 1.0;
-            score += baseDamage * threatMult * scarcityFactor;
+            score += baseDamage * threatMult * scarcityFactor * (p.id === target ? TARGET_DAMAGE_MULT : 1);
           }
         }
       }
@@ -192,7 +197,9 @@ function pickStealTarget(
     if (!allowed.has(candidates[i]!)) candidates.splice(i, 1);
   }
   if (candidates.length === 0) return null;
-  // Score: closeToWin >> direct rival of ours >> closeToLA/LR >> largest hand.
+  // A persona's target first (persona.ts); then
+  // closeToWin >> direct rival of ours >> closeToLA/LR >> largest hand.
+  const target = activeTarget(state, playerId);
   // Direct rival = head-to-head with us in the LA or LR race. Stealing
   // from a rival both slows them down AND blunts the resource we'd most
   // hate them spending.
@@ -203,7 +210,8 @@ function pickStealTarget(
     const t = threats[pid];
     const hand = totalResources(p.resources);
     let s = hand;
-    if (t?.closeToWin) s += 100;
+    if (pid === target) s += 1000;
+    else if (t?.closeToWin) s += 100;
     else if (isRival(state, playerId, pid)) s += 50;
     else if (t?.closeToLargestArmy || t?.closeToLongestRoad) s += 30;
     if (s > bestScore) {

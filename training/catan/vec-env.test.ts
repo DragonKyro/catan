@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { nextRng } from '@/game/rng';
+import { isSetupPhase } from '@/game/actions/setup';
+import type { GameState } from '@/game/types';
 import { CatanVecEnv, type Episode, type SeatRole } from './vec-env';
 
 /** Drive every env with uniformly random legal slots until `episodes` matches finish. */
@@ -31,6 +33,72 @@ function run(seats: SeatRole[], episodes: number, opts: Partial<ConstructorParam
   return { env, done, rewardBySeat, decisions, ms: performance.now() - t0 };
 }
 
+describe('CatanVecEnv opponents for training', () => {
+  const tables = (opts: Partial<ConstructorParameters<typeof CatanVecEnv>[0]>) => {
+    // Matches are drawn at start, so many fresh envs show the draw without playing.
+    const env = new CatanVecEnv({ numEnvs: 64, seed: 5, seats: ['learner', 'heuristic', 'heuristic', 'heuristic'], ...opts });
+    env.reset();
+    return (env as unknown as { envs: { roles: SeatRole[]; personas: (string | null)[]; targets: (number | null)[]; setupBy: (string | null)[]; state: GameState }[] }).envs;
+  };
+
+  it('draws weighted personas, without repeats at a table when asked', () => {
+    const envs = tables({ personas: ['longestRoad:3', 'largestArmy:3', 'griefer:3', 'citiesFirst'], distinctPersonas: true });
+    const count: Record<string, number> = {};
+    for (const e of envs) {
+      const ps = e.personas.filter((p): p is string => p !== null);
+      expect(new Set(ps).size).toBe(3);
+      for (const p of ps) count[p] = (count[p] ?? 0) + 1;
+    }
+    // Every table has three of the four; the weight-1 persona is the one usually
+    // left out (it sits at ~42% of tables, each weight-3 one at ~86%).
+    expect(count.citiesFirst!).toBeLessThan(count.longestRoad! * 0.75);
+    expect(envs.filter((e) => ['longestRoad', 'largestArmy', 'griefer'].every((p) => e.personas.includes(p))).length).toBeGreaterThan(20);
+  });
+
+  it('points the targeting personas at the learner seat', () => {
+    const envs = tables({ personas: ['griefer', 'longestRoad'], targetPersonas: ['griefer'] });
+    let aimed = 0;
+    for (const e of envs) {
+      const learner = e.roles.indexOf('learner');
+      e.personas.forEach((p, k) => {
+        expect(e.targets[k]).toBe(p === 'griefer' ? learner : null);
+        if (p === 'griefer') aimed++;
+      });
+    }
+    expect(aimed).toBeGreaterThan(30);
+  });
+
+  it('plays a share of learner openings with a lopsided persona, then hands over at the first roll', () => {
+    const all = tables({ learnerSetupShare: 1, learnerSetupPersonas: ['oreWheatSheep'] });
+    for (const e of all) {
+      e.roles.forEach((r, k) => expect(e.setupBy[k]).toBe(r === 'learner' ? 'oreWheatSheep' : null));
+      // The first decision handed to the network comes after setup.
+      expect(isSetupPhase(e.state.phase)).toBe(false);
+    }
+    const some = tables({ learnerSetupShare: 0.3 });
+    const share = some.filter((e) => e.setupBy.some((p) => p !== null)).length / some.length;
+    expect(share).toBeGreaterThan(0.1);
+    expect(share).toBeLessThan(0.55);
+    expect(tables({}).every((e) => e.setupBy.every((p) => p === null))).toBe(true);
+  });
+
+  it('plays whole matches with targets and lopsided openings', () => {
+    const { done } = run(['learner', 'heuristic', 'heuristic', 'heuristic'], 8, {
+      personas: ['longestRoad:3', 'largestArmy:3', 'griefer:3', 'citiesFirst'],
+      distinctPersonas: true,
+      targetPersonas: ['griefer'],
+      learnerSetupShare: 0.5,
+      maxTurns: 80,
+    });
+    expect(done.length).toBeGreaterThanOrEqual(8);
+    for (const e of done) {
+      expect(e.aborted).toBe(false);
+      expect(e.fallbacks).toBe(0);
+      expect(e.targets.length).toBe(4);
+    }
+  }, 120_000);
+});
+
 describe('CatanVecEnv', () => {
   it('self-play: random networks finish or are cut off, with zero-sum rewards', () => {
     const { done, rewardBySeat, decisions, ms } = run(['learner', 'learner', 'learner', 'learner'], 8, { maxTurns: 120 });
@@ -58,6 +126,7 @@ describe('CatanVecEnv', () => {
     const defaults = run(['learner', 'heuristic', 'heuristic', 'heuristic'], 2, { maxTurns: 30 }).done;
     for (const e of defaults) for (const p of e.personas) expect(p === null || p === 'allRounder').toBe(true);
     expect(() => new CatanVecEnv({ seats: ['learner', 'heuristic', 'heuristic', 'heuristic'], personas: ['nope'] })).toThrow(/unknown persona/);
+    expect(() => new CatanVecEnv({ seats: ['learner', 'heuristic', 'heuristic', 'heuristic'], personas: ['griefer:0'] })).toThrow(/weight/);
   }, 120_000);
 
   it('a lone learner vs heuristics visits every seat, and heuristic seats never ask for a decision', () => {

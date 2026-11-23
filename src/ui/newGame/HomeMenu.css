@@ -368,62 +368,127 @@
   width: 100%;
 }
 
+/* The island is a stack of layers in one coordinate system (HomeIsland.tsx):
+   still SVGs that are painted once, and small boxes that move by transform /
+   opacity alone, so the compositor runs every steady animation and nothing
+   repaints. Boxes are placed in percentages of their parent box, and moves
+   are percentages of the moving box itself (each box's size is noted where
+   it's used), so nothing needs container units. Its width is capped by the
+   height it may take (--island-vh, with --island-cap), keeping the box
+   exactly the island's shape. dvh where the browser has it, else vh. */
 .home-island {
+  --island-vh: 88;
+  --island-cap: 760px;
+  position: relative;
+  width: min(100%, calc(min(var(--island-vh) * 1vh, var(--island-cap)) * 412 / 392));
+  margin-left: auto;
+  margin-right: auto;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@supports (height: 1dvh) {
+  .home-island {
+    width: min(100%, calc(min(var(--island-vh) * 1dvh, var(--island-cap)) * 412 / 392));
+  }
+}
+
+/* Only the tiles' hexes take the pointer (for the hover lift). */
+.home-island * {
+  pointer-events: none;
+}
+
+.home-island .home-tile-hit {
+  pointer-events: visiblePainted;
+}
+
+.home-layer {
   display: block;
   width: 100%;
   height: auto;
-  max-height: min(88vh, 760px);
-  max-height: min(88dvh, 760px);
   overflow: visible;
-  -webkit-user-select: none;
-  user-select: none;
+}
+
+.home-layer:not(.home-layer-base) {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.home-surf,
+.home-ship-orbit,
+.home-ship,
+.home-tile,
+.home-tile-art,
+.home-fx,
+.home-token-pop,
+.home-smoke-stack,
+.home-smoke {
+  position: absolute;
+  display: block;
+  overflow: visible;
 }
 
 .home-token-num {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-.home-foam {
-  stroke-dasharray: 7 10;
-  animation: home-foam 7s linear infinite;
+/* Surf: two dashed lines (the second's dashes in the first's gaps) lapping
+   against the beach out of phase. Without motion only the first shows. */
+.home-surf {
+  opacity: 0.85;
+  animation: home-surf 3.4s ease-in-out infinite alternate;
 }
 
-@keyframes home-foam {
+.home-surf-b {
+  opacity: 0;
+  animation-delay: -3.4s;
+}
+
+@keyframes home-surf {
+  from {
+    opacity: 0.85;
+    transform: none;
+  }
   to {
-    stroke-dashoffset: -34;
+    opacity: 0.12;
+    transform: scale(1.028);
   }
 }
 
-.home-tile-drop {
+.home-tile {
   animation: home-tile-drop 560ms cubic-bezier(0.25, 0.9, 0.35, 1.3) backwards;
   animation-delay: var(--d);
+  transition: transform 220ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+/* Percentages of the tile's box, 78 units tall: 3 and 48 units. */
+.home-tile:has(.home-tile-hit:hover) {
+  transform: translateY(-3.846%);
 }
 
 @keyframes home-tile-drop {
   from {
     opacity: 0;
-    transform: translateY(-48px) scale(1.08);
+    transform: translateY(-61.538%) scale(1.08);
   }
   55% {
     opacity: 1;
   }
 }
 
-.home-tile {
-  transition: transform 220ms cubic-bezier(0.3, 1.4, 0.5, 1);
-}
-
-.home-tile:hover {
-  transform: translateY(-3px);
+.home-tile-art {
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .home-token-pop {
-  transform-box: fill-box;
-  transform-origin: center;
   animation: home-pop-in 380ms cubic-bezier(0.3, 1.7, 0.5, 1) backwards;
   animation-delay: var(--d);
 }
 
+/* Pieces arriving inside the (still) pieces SVG: there 1px = 1 island unit. */
 .home-piece {
   animation: home-piece-drop 440ms cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
   animation-delay: var(--d);
@@ -437,8 +502,6 @@
 }
 
 .home-sway {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
   animation: home-sway 3.6s ease-in-out infinite alternate;
   animation-delay: calc(var(--d) * -1);
 }
@@ -457,6 +520,7 @@
   animation-delay: calc(var(--d) * -1);
 }
 
+/* Percentages of the sheep's box, 12 units tall: 2.8 and 1.5 units. */
 @keyframes home-hop {
   0%,
   80%,
@@ -464,23 +528,38 @@
     transform: none;
   }
   84% {
-    transform: translateY(-2.8px);
+    transform: translateY(-23.333%);
   }
   88% {
     transform: none;
   }
   91% {
-    transform: translateY(-1.5px);
+    transform: translateY(-12.5%);
   }
   94% {
     transform: none;
   }
 }
 
+/* A city's smoke arrives with the city (like .home-piece: 20 of the
+   island's 392 units). */
+.home-smoke-stack {
+  inset: 0;
+  animation: home-stack-drop 440ms cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+  animation-delay: var(--d);
+}
+
+@keyframes home-stack-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-5.102%);
+  }
+}
+
 .home-smoke {
+  border-radius: 50%;
+  background: #f6f3ec;
   opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
   animation: home-smoke 3.9s ease-out infinite;
   animation-delay: var(--d);
 }
@@ -493,14 +572,37 @@
   20% {
     opacity: 0.8;
   }
+  /* 5 and 17 units of the puff's 4.6. */
   100% {
     opacity: 0;
-    transform: translate(5px, -17px) scale(1.8);
+    transform: translate(108.696%, -369.565%) scale(1.8);
+  }
+}
+
+/* The ship: the orbit layer turns about the island's centre; at rest (no
+   motion) it sits up and to the right. Both it and the rocking ship inside
+   keep their own layers (will-change): without that, Chrome re-checked
+   these nested moving layers on the main thread every frame whenever the
+   sea's sparkles were twinkling. */
+.home-ship-orbit {
+  inset: 0;
+  transform: rotate(-38deg);
+  animation: home-orbit 90s linear infinite;
+  will-change: transform;
+}
+
+@keyframes home-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 
 .home-ship {
   animation: home-bob 3.2s ease-in-out infinite alternate;
+  will-change: transform;
 }
 
 @keyframes home-bob {
@@ -786,9 +888,8 @@
   }
 
   .home-island {
-    max-height: 36vh;
-    max-height: 36dvh;
-    margin: 0 auto;
+    --island-vh: 36;
+    --island-cap: 100vw;
   }
 
   .home-menu {
@@ -838,8 +939,7 @@
   }
 
   .home-island {
-    max-height: 33vh;
-    max-height: 33dvh;
+    --island-vh: 33;
   }
 
   .home-btn {
@@ -878,8 +978,8 @@
   }
 
   .home-island {
-    max-height: 94vh;
-    max-height: 94dvh;
+    --island-vh: 94;
+    --island-cap: 100vw;
   }
 
   .home-menu {
@@ -937,6 +1037,7 @@
   }
 
   .home-island {
-    max-height: min(84dvh, 900px);
+    --island-vh: 84;
+    --island-cap: 900px;
   }
 }

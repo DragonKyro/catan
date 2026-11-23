@@ -345,6 +345,8 @@ describe('Rivers of Catan: coins in player trades', () => {
     s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: {}, giveGold: 2, receive: { ore: 1 } });
     expect(s.pendingTrade?.giveGold).toBe(2);
     s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' });
+    expect(gold(s, 'p0')).toBe(3); // a yes: nothing moves until p0 picks p1
+    s = applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p1' });
     expect(gold(s, 'p0')).toBe(1);
     expect(gold(s, 'p1')).toBe(2);
     expect(s.players[0]!.resources.ore).toBe(1);

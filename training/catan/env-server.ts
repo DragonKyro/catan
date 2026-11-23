@@ -37,7 +37,7 @@ import { ACTION_SPACE_VERSION, GLOBAL_SLOTS } from '@/ai/nn/actions';
 import {
   EDGE_DIM, EDGE_LAYOUT, ENCODER_VERSION, GLOBAL_DIM, GLOBAL_LAYOUT, HEX_DIM, HEX_LAYOUT, VERTEX_DIM, VERTEX_LAYOUT,
 } from '@/ai/nn/encode';
-import { CatanPolicyNet, type CatanPolicyFile } from '@/ai/nn/runtime';
+import { CatanPolicyNet, decodePolicyBinary, isPolicyBinary, type CatanPolicyFile } from '@/ai/nn/runtime';
 import { CatanVecEnv, boardShape, type VecBatch, type VecEnvOptions } from './vec-env';
 
 const bytes = (a: ArrayBufferView) => Buffer.from(a.buffer, a.byteOffset, a.byteLength);
@@ -117,7 +117,8 @@ function handle(msg: Request): object | BatchReply {
     case 'policyLogits': {
       if (!env) throw new Error('policyLogits before reset');
       if (!msg.path) throw new Error('policyLogits needs "path"');
-      const net = new CatanPolicyNet(JSON.parse(readFileSync(msg.path, 'utf8')) as CatanPolicyFile);
+      const raw = readFileSync(msg.path);
+      const net = new CatanPolicyNet(isPolicyBinary(raw) ? decodePolicyBinary(raw) : (JSON.parse(raw.toString('utf8')) as CatanPolicyFile));
       return { ok: true, logits: env.policyLogits(net) };
     }
     case 'close':

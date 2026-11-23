@@ -20,6 +20,15 @@
 // Values stay within ±4, mostly [0, 1]. Bump ENCODER_VERSION whenever a
 // segment is added, removed, reordered or rescaled; trained weights are only
 // valid for the version they saw.
+//
+// v2 (2026-11-19) only appended segments at the end of each row (the `v2.`
+// ones below): v1's columns are a prefix of v2's, so a v1 network upgrades
+// exactly by giving the new inputs zero weight (training/catan/upgrade_policy.py
+// --encoder). They add what a player works out from what's public: robber
+// damage per hex and seat, what a steal would likely give, what each opponent
+// still needs, Longest Road / Largest Army races, VP ceilings with hidden
+// cards, knights in hand, room to expand, income after the robber, and the
+// snake order of the opening.
 
 import type { PortType, ResourceBank } from '@/game/types';
 import { RESOURCES } from '@/game/types';
@@ -28,7 +37,7 @@ import type { BoardIndex } from './board';
 import { AFFORD_COSTS, DEV_TYPES, PLAYABLE_DEV } from './knowledge';
 import type { CatanObservation, ObservedPlayer } from './observation';
 
-export const ENCODER_VERSION = 1;
+export const ENCODER_VERSION = 2;
 
 /** me, next1, next2, next3, far. */
 export const SEAT_SLOTS = 5;
@@ -90,7 +99,11 @@ export const HEX_LAYOUT = new FeatureLayout()
   .add('coastal', 1)
   .add('rollShare', 1) // how often its number has come up
   .add('rolledNow', 1) // this turn's roll is its number
-  .add('buildings', SEAT_SLOTS); // settlements + 2 × cities on its corners, per seat slot
+  .add('buildings', SEAT_SLOTS) // settlements + 2 × cities on its corners, per seat slot
+  // ---- v2 ----
+  .add('v2.harm', SEAT_SLOTS) // what the robber here would cost each seat (pips × buildings)
+  .add('v2.harmLeader', 1) // ... the leading opponent
+  .add('v2.stealable', 1); // opponents with cards on its corners
 
 export const VERTEX_LAYOUT = new FeatureLayout()
   .add('present', 1)
@@ -109,7 +122,12 @@ export const VERTEX_LAYOUT = new FeatureLayout()
   .add('port', PORTS.length)
   .add('coastal', 1)
   .add('hexCount', 1)
-  .add('setupAnchor', 1); // the settlement a setup road must touch
+  .add('setupAnchor', 1) // the settlement a setup road must touch
+  // ---- v2 ----
+  .add('v2.diversity', 1) // resources here the viewer doesn't produce yet
+  .add('v2.portFit', 1) // a harbor here, weighted by what the viewer would produce for it
+  .add('v2.startCards', 1) // cards a second starting settlement here would pay
+  .add('v2.contest', 1); // opponents' best road distance minus the viewer's, for open corners
 
 export const EDGE_LAYOUT = new FeatureLayout()
   .add('present', 1)
@@ -228,6 +246,28 @@ export const GLOBAL_LAYOUT = (() => {
     .add('opps.hands', 1)
     .add('opps.devCards', 1)
     .add('opps.hiddenVp', 1);
+  // ---- v2: the opening, and what a player works out about each seat ----
+  l.add('v2.setup.placed', 1) // settlements placed so far / 2n
+    .add('v2.setup.picksBefore', 1); // others' settlements before the viewer's next one (snake order)
+  for (let k = 0; k <= NEXT_SEATS; k++) {
+    const t = `v2.s${k}`; // s0 = the viewer, s1..s3 = the next seats
+    l.add(`${t}.income`, R) // expected cards per roll, robber excluded
+      .add(`${t}.pAnyIncome`, 1) // P(a roll pays this seat anything)
+      .add(`${t}.robbed`, 1) // share of its pips under the robber
+      .add(`${t}.lrGap`, 1) // route length minus the best other seat's
+      .add(`${t}.roadsToLr`, 1) // roads still needed to hold Longest Road
+      .add(`${t}.laGap`, 1) // knights played minus the best other seat's
+      .add(`${t}.knightsToLa`, 1) // knights still needed to hold Largest Army
+      .add(`${t}.vpCeiling`, 1) // public VP + every possible hidden VP card
+      .add(`${t}.pKnight`, 1) // P(a knight in hand)
+      .add(`${t}.need`, R) // cards short of its next settlement / city, per resource
+      .add(`${t}.needSettle`, 1)
+      .add(`${t}.needCity`, 1)
+      .add(`${t}.stealOdds`, R) // what a steal from it would likely give
+      .add(`${t}.spots1`, 1) // open corners within one road
+      .add(`${t}.spots2`, 1) // ... within two roads
+      .add(`${t}.contested`, 1); // ... of those, ones another seat reaches as fast
+  }
   return l;
 })();
 
@@ -460,6 +500,8 @@ function writeHexes(obs: CatanObservation, b: BoardFacts, x: Float32Array): void
   const rolled = new Array<number>(13).fill(0);
   for (const t of rolls) rolled[t]! += 1;
   const buildings = HEX_LAYOUT.seg('buildings').offset;
+  const harm = HEX_LAYOUT.seg('v2.harm').offset;
+  const leader = leadingOpponent(obs);
   const w = new Row(x, HEX_LAYOUT);
   idx.hexIds.forEach((id, h) => {
     const hex = obs.board.hexes[id]!;
@@ -474,13 +516,35 @@ function writeHexes(obs: CatanObservation, b: BoardFacts, x: Float32Array): void
     w.flag('coastal', idx.coastalHex[h] === 1);
     if (num !== null && rolls.length > 0) w.set('rollShare', clamp((rolled[num]! / rolls.length) * 6, 0, 4));
     w.flag('rolledNow', num !== null && obs.lastRoll === num);
+    const pips = probabilityDots(num) / 5;
+    const victims = new Set<number>();
+    let leaderHarm = 0;
     for (let k = 0; k < 6; k++) {
       const v = idx.hexVertices[h * 6 + k]!;
       const owner = b.vertexOwner[v]!;
       if (owner < 0) continue;
-      x[h * HEX_DIM + buildings + seatSlot(owner)]! += (b.vertexCity[v] ? 2 : 1) / 3;
+      const weight = b.vertexCity[v] ? 2 : 1;
+      x[h * HEX_DIM + buildings + seatSlot(owner)]! += weight / 3;
+      x[h * HEX_DIM + harm + seatSlot(owner)]! += (pips * weight) / 3;
+      if (owner === leader) leaderHarm += (pips * weight) / 3;
+      if (owner > 0 && obs.players[owner]!.handSize > 0) victims.add(owner);
     }
+    if (leaderHarm > 0) w.set('v2.harmLeader', leaderHarm);
+    if (victims.size > 0) w.set('v2.stealable', victims.size / 3);
   });
+}
+
+/** Offset of the opponent with the most public VP (the first in turn order on a tie), or −1. */
+function leadingOpponent(obs: CatanObservation): number {
+  let best = -1;
+  let vp = -1;
+  for (let k = 1; k < obs.players.length; k++) {
+    if (obs.players[k]!.publicVp > vp) {
+      vp = obs.players[k]!.publicVp;
+      best = k;
+    }
+  }
+  return best;
 }
 
 /** Port lookups, built once per board (ports don't move during a game). */
@@ -502,6 +566,7 @@ function writeVertices(obs: CatanObservation, b: BoardFacts, x: Float32Array): v
   const idx = b.idx;
   const portAt = portsOf(obs).byVertex;
   const anchor = obs.decision?.type === 'setupRoad' ? obs.decision.settlement : null;
+  const mine = production(obs, obs.players[0]!);
   const w = new Row(x, VERTEX_LAYOUT);
   idx.vertexIds.forEach((id, v) => {
     w.at(v * VERTEX_DIM);
@@ -540,6 +605,21 @@ function writeVertices(obs: CatanObservation, b: BoardFacts, x: Float32Array): v
     w.flag('coastal', idx.coastalVertex[v] === 1);
     w.set('hexCount', hexes / 3);
     w.flag('setupAnchor', id === anchor);
+    // ---- v2 ----
+    let fresh = 0;
+    let cards = 0;
+    for (let r = 0; r < R; r++) if (pips[r]! > 0 && mine[r] === 0) fresh++;
+    for (let k = 0; k < 3; k++) {
+      const h = idx.vertexHexes[v * 3 + k]!;
+      if (h >= 0 && obs.board.hexes[idx.hexIds[h]!]!.numberToken !== null) cards++;
+    }
+    w.set('v2.diversity', fresh / 3);
+    w.set('v2.startCards', cards / 3);
+    if (port) {
+      const r = RESOURCES.indexOf(port as (typeof RESOURCES)[number]);
+      w.set('v2.portFit', r >= 0 ? clamp((mine[r]! + pips[r]!) / 10, 0, 2) : 0.3);
+    }
+    if (b.open[v] === 1) w.set('v2.contest', clamp((opp - b.dist[0]![v]!) / 2, -2, 2));
   });
 }
 
@@ -718,6 +798,112 @@ function writeGlobal(obs: CatanObservation, b: BoardFacts, x: Float32Array): voi
     w.set('opps.hands', Math.min(4, sum(opps.map((p) => p.handSize)) / 40));
     w.set('opps.devCards', Math.min(4, sum(opps.map((p) => p.devCardCount)) / 10));
     w.set('opps.hiddenVp', Math.min(4, sum(opps.map((p) => p.devCardCount)) * pVp / 3));
+  }
+
+  writeGlobalV2(obs, b, w);
+}
+
+const SETTLEMENT_COST = [1, 1, 1, 1, 0]; // RESOURCES order: wood, brick, sheep, wheat, ore
+const CITY_COST = [0, 0, 0, 2, 3];
+
+/** P(at least one knight among `held` cards drawn blind from `unseen`, `knights` of them knights). */
+function pAnyKnight(held: number, unseen: number, knights: number): number {
+  if (held <= 0 || knights <= 0 || unseen <= 0) return 0;
+  let none = 1;
+  for (let j = 0; j < held && j < unseen; j++) none *= Math.max(0, unseen - knights - j) / (unseen - j);
+  return 1 - none;
+}
+
+function writeGlobalV2(obs: CatanObservation, b: BoardFacts, w: Row): void {
+  const n = obs.playerCount;
+  const target = obs.vpToWin;
+  const placed = obs.players.reduce((s, p) => s + p.settlements.length + p.cities.length, 0);
+  const d = obs.decision;
+  if (d?.type === 'setupSettlement' || d?.type === 'setupRoad') {
+    // The viewer's own settlement this turn: still to place, or just placed (its road next).
+    const i = d.type === 'setupRoad' ? placed - 1 : placed;
+    w.set('v2.setup.placed', i / (2 * n));
+    // Snake order: the viewer's i-th-overall settlement in round 1 is followed
+    // by 2n - 2 - 2i others before its second; round 2 is its last.
+    if (d.round === 1) w.set('v2.setup.picksBefore', Math.max(0, 2 * n - 2 - 2 * i) / (2 * n));
+  }
+  const unseenTotal = sum(DEV_TYPES.map((c) => obs.unseenDev[c]));
+  const routes = obs.players.map((p) => p.longestRoad);
+  const knights = obs.players.map((p) => p.played.knight);
+  const V = b.idx.vertexIds.length;
+  for (let k = 0; k <= NEXT_SEATS && k < n; k++) {
+    const p = obs.players[k]!;
+    const t = `v2.s${k}`;
+    // Income after the robber, and how much of it the robber is sitting on.
+    const prod = production(obs, p);
+    w.values(`${t}.income`, prod, 1 / 9); // pips / 36 per roll, × 4
+    const numbers = new Set<number>();
+    let all = 0;
+    let robbed = 0;
+    const add = (v: string, mult: number) => {
+      for (const h of obs.board.vertices[v]!.hexes) {
+        const hex = obs.board.hexes[h]!;
+        if (hex.numberToken === null || !RESOURCES.includes(hex.terrain as (typeof RESOURCES)[number])) continue;
+        const dots = probabilityDots(hex.numberToken) * mult;
+        all += dots;
+        if (h === obs.board.robberHex) robbed += dots;
+        else numbers.add(hex.numberToken);
+      }
+    };
+    for (const v of p.settlements) add(v, 1);
+    for (const v of p.cities) add(v, 2);
+    w.set(`${t}.pAnyIncome`, sum([...numbers].map((num) => probabilityDots(num))) / 36);
+    if (all > 0) w.set(`${t}.robbed`, robbed / all);
+    // Races for the two bonuses.
+    const otherRoute = Math.max(0, ...routes.filter((_, j) => j !== k));
+    const otherKnights = Math.max(0, ...knights.filter((_, j) => j !== k));
+    w.set(`${t}.lrGap`, clamp((routes[k]! - otherRoute) / 5, -2, 2));
+    const lrHold = obs.longestRoad ? obs.longestRoad.length + 1 : 5;
+    w.set(`${t}.roadsToLr`, p.hasLongestRoad ? 0 : clamp((Math.max(5, lrHold) - routes[k]!) / 5, 0, 3));
+    w.set(`${t}.laGap`, clamp((knights[k]! - otherKnights) / 3, -2, 2));
+    const laHold = obs.largestArmy ? obs.largestArmy.size + 1 : 3;
+    w.set(`${t}.knightsToLa`, p.hasLargestArmy ? 0 : clamp((Math.max(3, laHold) - knights[k]!) / 3, 0, 3));
+    // Hidden cards: every VP card it might hold, and the odds it holds a knight.
+    if (k === 0) {
+      w.set(`${t}.vpCeiling`, p.trueVp! / target);
+      const own = p.devCards!;
+      w.set(`${t}.pKnight`, own.playable.knight + own.boughtThisTurn.knight > 0 ? 1 : 0);
+    } else {
+      w.set(`${t}.vpCeiling`, (p.publicVp + Math.min(p.devCardCount, obs.unseenDev.victoryPoint)) / target);
+      w.set(`${t}.pKnight`, pAnyKnight(p.devCardCount, unseenTotal, obs.unseenDev.knight));
+    }
+    // What it still needs for its next settlement / city (where it can build one).
+    const mean = k === 0 ? counts(p.hand!) : p.estimate.mean;
+    let spots1 = 0;
+    let spots2 = 0;
+    let contested = 0;
+    const dist = b.dist[k]!;
+    for (let v = 0; v < V; v++) {
+      if (b.open[v] !== 1) continue;
+      const dv = dist[v]!;
+      if (dv <= 1) spots1++;
+      if (dv <= 2) {
+        spots2++;
+        for (let o = 0; o < b.dist.length; o++) {
+          if (o !== k && b.dist[o]![v]! <= dv) {
+            contested++;
+            break;
+          }
+        }
+      }
+    }
+    const canSettle = spots1 > 0 && p.settlements.length < MAX_SETTLEMENTS;
+    const canCity = p.settlements.length > 0 && p.cities.length < MAX_CITIES;
+    const need = RESOURCES.map((_, r) =>
+      Math.max(canSettle ? Math.max(0, SETTLEMENT_COST[r]! - mean[r]!) : 0, canCity ? Math.max(0, CITY_COST[r]! - mean[r]!) : 0),
+    );
+    w.values(`${t}.need`, need, 1 / 3);
+    w.set(`${t}.needSettle`, canSettle ? sum(RESOURCES.map((_, r) => Math.max(0, SETTLEMENT_COST[r]! - mean[r]!))) / 4 : 0);
+    w.set(`${t}.needCity`, canCity ? sum(RESOURCES.map((_, r) => Math.max(0, CITY_COST[r]! - mean[r]!))) / 5 : 0);
+    if (k > 0 && p.handSize > 0) w.values(`${t}.stealOdds`, mean.map((m) => m / p.handSize));
+    w.set(`${t}.spots1`, Math.min(4, spots1 / 5));
+    w.set(`${t}.spots2`, Math.min(4, spots2 / 8));
+    w.set(`${t}.contested`, Math.min(4, contested / 5));
   }
 }
 

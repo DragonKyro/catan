@@ -47,7 +47,46 @@ describe('catan feature encoder', () => {
 
   it('matches the versioned sizes (bump ENCODER_VERSION when these change)', () => {
     expect({ version: ENCODER_VERSION, hex: HEX_DIM, vertex: VERTEX_DIM, edge: EDGE_DIM, global: GLOBAL_DIM })
-      .toEqual({ version: 1, hex: 29, vertex: 38, edge: 11, global: 371 });
+      .toEqual({ version: 2, hex: 36, vertex: 42, edge: 11, global: 485 });
+  });
+
+  it('v2 only appended features: v1 columns are a prefix (upgrade_policy.py --encoder relies on it)', () => {
+    const v1 = { hex: 29, vertex: 38, edge: 11, global: 371 };
+    const first = (layout: FeatureLayout) => layout.segments.find((s) => s.name.startsWith('v2.'))?.offset;
+    expect(first(HEX_LAYOUT)).toBe(v1.hex);
+    expect(first(VERTEX_LAYOUT)).toBe(v1.vertex);
+    expect(first(EDGE_LAYOUT)).toBeUndefined();
+    expect(first(GLOBAL_LAYOUT)).toBe(v1.global);
+    for (const layout of [HEX_LAYOUT, VERTEX_LAYOUT, GLOBAL_LAYOUT]) {
+      const at = layout.segments.findIndex((s) => s.name.startsWith('v2.'));
+      expect(layout.segments.slice(at).every((s) => s.name.startsWith('v2.'))).toBe(true);
+    }
+  });
+
+  it('v2 features: snake order, steal odds, robber damage, races', () => {
+    // The first player's first settlement in a 4p game: 6 others place before its second.
+    const first = SAMPLES.find((x) => x.state.players.length === 4 && x.state.phase === 'setupRound1'
+      && x.state.players.every((p) => p.settlements.length === 0))!;
+    const opener = getActingPlayerId(first.state);
+    expect(seg(encode(first, opener), 'global', 0, 'v2.setup.picksBefore')[0]).toBeCloseTo(6 / 8);
+    // Mid-game: every opponent with cards has steal odds summing to 1, and the
+    // robber's hex costs its owners something.
+    const s = SAMPLES.find((x) => x.state.players.length === 4 && x.state.phase === 'main' && x.state.players.every((p) => p.cities.length + p.settlements.length >= 2))!;
+    const viewer = getActingPlayerId(s.state);
+    const f = encode(s, viewer);
+    for (let k = 1; k <= 3; k++) {
+      const odds = seg(f, 'global', 0, `v2.s${k}.stealOdds`);
+      const total = odds.reduce((a, b) => a + b, 0);
+      expect(total === 0 || Math.abs(total - 1) < 1e-4).toBe(true);
+    }
+    const idx = boardIndex(s.state.board);
+    const harmAll = idx.hexIds.map((_, h) => seg(f, 'hexes', h, 'v2.harm').reduce((a, b) => a + b, 0));
+    expect(Math.max(...harmAll)).toBeGreaterThan(0);
+    // Races: exactly the holder of Longest Road (if any) needs no roads for it.
+    if (s.state.longestRoad?.holder) {
+      const holderOffset = (s.state.playerOrder.indexOf(s.state.longestRoad.holder) - s.state.playerOrder.indexOf(viewer) + 4) % 4;
+      expect(seg(f, 'global', 0, `v2.s${holderOffset}.roadsToLr`)).toEqual([0]);
+    }
   });
 
   it('indexes every base board with consistent topology', () => {

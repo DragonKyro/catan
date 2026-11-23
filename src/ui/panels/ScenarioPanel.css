@@ -64,14 +64,14 @@
 }
 
 .scenario-panel-chip.is-claimed {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(122, 92, 54, 0.06);
 }
 
 .scenario-panel-chip-vp {
   font-weight: 700;
   min-width: 2em;
   text-align: right;
-  color: var(--accent);
+  color: var(--accent-ink);
   font-variant-numeric: tabular-nums;
 }
 

@@ -16,7 +16,8 @@
   height: 28px;
   border-radius: 6px;
   border: 1px solid var(--panel-border);
-  background: var(--panel-soft);
+  background: var(--paper-btn);
+  box-shadow: 0 2px 0 var(--paper-edge);
   color: var(--text);
   font-size: 1.05em;
   font-weight: 700;
@@ -29,7 +30,8 @@
 }
 
 .rpicker-btn:hover:not(:disabled) {
-  background: #2c4154;
+  background: var(--panel-hover);
+  border-color: #cfae72;
 }
 
 .rpicker-value {

@@ -27,7 +27,8 @@
 }
 
 .ep-track-tile.is-held {
-  color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
 }
 
 .ep-track-cells {
@@ -45,12 +46,12 @@
   min-height: 30px;
   padding: 2px 1px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--field);
   border: 1px solid var(--panel-border);
 }
 
 .ep-track-cell.is-start {
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(122, 92, 54, 0.12);
 }
 
 .ep-track-vp {
@@ -98,5 +99,5 @@
 }
 
 .ep-tracker-shoal.has-haul {
-  border-color: var(--accent);
+  border-color: var(--accent-strong);
 }
