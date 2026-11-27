@@ -38,6 +38,55 @@ function neuralAction(game: GameState, playerId: PlayerId): Action | undefined {
   }
 }
 
+/**
+ * Dispatch the first of `moves` the engine takes (a refused move leaves the
+ * game as it was: the driver only acts again when the game changes, so a
+ * refusal would freeze the AI). Logs each refusal with the engine's reason.
+ * True when one was taken.
+ */
+function dispatchFirst(
+  dispatch: (a: Action) => void,
+  who: PlayerId,
+  where: string,
+  moves: Array<() => Action | null | undefined>,
+): boolean {
+  for (const next of moves) {
+    let action: Action | null | undefined;
+    try {
+      action = next();
+    } catch (e) {
+      console.warn(`[AIDriver] ${who} (${where}): choosing a move failed:`, (e as Error).message);
+      continue;
+    }
+    if (!action) continue;
+    const before = useGameStore.getState().game;
+    dispatch(action);
+    if (useGameStore.getState().game !== before) return true;
+    console.warn(`[AIDriver] ${who} (${where}): the game refused ${action.type}:`, useGameStore.getState().error, action);
+  }
+  return false;
+}
+
+/** A move that always ends `who`'s part in a pending trade (or its turn). */
+function walkAway(game: GameState, who: PlayerId): Action {
+  const pt = game.pendingTrade;
+  if (!pt) return { type: 'endTurn', playerId: who };
+  const turn = game.playerOrder[game.currentPlayerIndex];
+  return pt.proposerId === who || turn === who ? { type: 'cancelTrade', playerId: who } : { type: 'rejectTrade', playerId: who };
+}
+
+/** The move that's always open in a plain turn: roll first, then end the turn. */
+function safeDefault(game: GameState, who: PlayerId): Action {
+  if (game.phase === 'rollOrPlayKnight' && !game.hasRolledThisTurn) {
+    const die = () => 1 + Math.floor(Math.random() * 6);
+    return { type: 'rollDice', playerId: who, dice: [die(), die()] };
+  }
+  return { type: 'endTurn', playerId: who };
+}
+
+/** How long an AI may go without the game moving before the watchdog steps in. */
+const AI_STALL_MS = 25000;
+
 const AI_ACTION_DELAY_MS = 450;
 // Initial pause before any AI evaluates a pending trade — gives the human
 // time to see the offer.
@@ -133,13 +182,14 @@ export function AIDriver() {
     const t = setTimeout(() => {
       // The trained network where it applies; the classic AI otherwise (and
       // for the proposer's own offer when the network's rules lack
-      // `tradePick`: the classic AI picks the partner).
-      const action = neuralAction(game, acting) ?? chooseAction(game, acting);
-      if (action) {
-        dispatch(action);
-      } else {
-        dispatch({ type: 'endTurn', playerId: acting });
-      }
+      // `tradePick`: the classic AI picks the partner). A move the game
+      // refuses falls through to the next, so the AI never freezes.
+      dispatchFirst(dispatch, acting, game.pendingTrade ? 'trade' : game.phase, [
+        () => neuralAction(game, acting),
+        () => chooseAction(game, acting),
+        () => (game.pendingTrade ? walkAway(game, acting) : null),
+        () => safeDefault(game, acting),
+      ]);
     }, delay);
     return () => clearTimeout(t);
   }, [game, handoffPending, dialog, pendingRobberHex, dispatch, canDriveAI, waitingForNet, loadTick]);
@@ -156,6 +206,9 @@ export function AIDriver() {
   // paying the initial-wait again.
   // (Cities & Knights offers can differ only in their commodity columns.)
   const tradeKey = game?.pendingTrade ? tradeOfferKey(game.pendingTrade) : null;
+  // An undo / rollback can bring back an offer the AIs already answered in
+  // the timeline it replaced: ask them again.
+  const rewinds = useGameStore((s) => s.rewinds);
   useEffect(() => {
     if (!canDriveAI) return;
     if (!tradeKey) return;
@@ -203,41 +256,70 @@ export function AIDriver() {
         const liveIsCounter = latest.pendingTrade.proposerId !== liveCurrent;
         if (liveIsCounter && p.id !== liveCurrent) return;
         // A trained network answers accept / reject, or counter-offers when
-        // its rules allow it (`counter`, at most once a turn).
-        const answer = neuralAction(latest, p.id);
-        if (answer) {
-          dispatch(answer);
-          return;
-        }
-        // Before plain-accepting, see if we can squeeze one more card
-        // out of a desperate proposer. Only on initial trades (not on
-        // counters, to avoid counter-chain loops).
-        if (!liveIsCounter) {
-          const extract = tryExtractCounter(latest, p.id);
-          if (extract) {
-            dispatch(extract);
-            return;
-          }
-        }
-        if (shouldAcceptTrade(latest, p.id)) {
-          dispatch({ type: 'acceptTrade', playerId: p.id });
-          return;
-        }
-        if (liveIsCounter) {
-          dispatch({ type: 'cancelTrade', playerId: p.id });
-          return;
-        }
-        const counter = tryCounterTrade(latest, p.id);
-        if (counter) {
-          dispatch(counter);
-          return;
-        }
-        dispatch({ type: 'rejectTrade', playerId: p.id });
+        // its rules allow it (`counter`, at most once a turn). Otherwise the
+        // classic AI: before plain-accepting, see if it can squeeze one more
+        // card out of a desperate proposer (only on initial trades, not on
+        // counters, to avoid counter-chain loops). Each answer the game
+        // refuses falls through to the next, ending with a plain no.
+        dispatchFirst(dispatch, p.id, 'trade answer', [
+          () => neuralAction(latest, p.id),
+          () => (liveIsCounter ? null : tryExtractCounter(latest, p.id)),
+          () => (shouldAcceptTrade(latest, p.id) ? { type: 'acceptTrade', playerId: p.id } : null),
+          () => (liveIsCounter ? null : tryCounterTrade(latest, p.id)),
+          () => walkAway(latest, p.id),
+        ]);
       }, delay);
       timeouts.push(id);
     }
     return () => timeouts.forEach((t) => window.clearTimeout(t));
-  }, [tradeKey, dispatch, canDriveAI]);
+  }, [tradeKey, rewinds, dispatch, canDriveAI]);
+
+  // Watchdog: when an AI seat owes a move (its turn, its own offer to settle,
+  // a counter to answer, or an answer to someone's offer) and the game hasn't
+  // moved for AI_STALL_MS, log what it was waiting on and walk that seat out
+  // of the trade (or let it play on). A human's open dialog or the hot-seat
+  // handoff is a deliberate pause, not a stall.
+  useEffect(() => {
+    if (!canDriveAI || !game || game.winner || waitingForNet || handoffPending || dialog || pendingRobberHex) return;
+    const owed = aiSeatsOwingAMove(game);
+    if (owed.length === 0) return;
+    const t = window.setTimeout(() => {
+      const now = useGameStore.getState().game;
+      if (now !== game) return;
+      const pt = game.pendingTrade;
+      console.warn(
+        `[AIDriver] no move for ${AI_STALL_MS / 1000}s from ${owed.join(', ')} in ${game.phase}`
+          + (pt ? ` (trade by ${pt.proposerId}: yes ${(pt.acceptedBy ?? []).join(',') || '-'}, no ${pt.rejectedBy.join(',') || '-'})` : ''),
+      );
+      const who = owed[0]!;
+      dispatchFirst(dispatch, who, 'watchdog', [
+        () => (pt ? walkAway(game, who) : null),
+        () => chooseAction(game, who),
+        () => safeDefault(game, who),
+      ]);
+    }, AI_STALL_MS);
+    return () => window.clearTimeout(t);
+  }, [game, canDriveAI, waitingForNet, handoffPending, dialog, pendingRobberHex, dispatch]);
 
   return null;
+}
+
+/** The AI seats the game is waiting on (see the watchdog above). */
+function aiSeatsOwingAMove(game: GameState): PlayerId[] {
+  const isAi = (id: PlayerId | undefined) => !!id && !!game.players.find((p) => p.id === id)?.isAI;
+  const pt = game.pendingTrade;
+  const turn = game.playerOrder[game.currentPlayerIndex];
+  if (!pt) {
+    const acting = getActingPlayerId(game);
+    return isAi(acting) ? [acting] : [];
+  }
+  // A counter: the turn player answers it.
+  if (pt.proposerId !== turn) return isAi(turn) ? [turn!] : [];
+  // An offer: everyone yet to answer; then the proposer picks.
+  const unanswered = game.players
+    .filter((p) => p.id !== pt.proposerId && !pt.rejectedBy.includes(p.id) && !(pt.acceptedBy ?? []).includes(p.id))
+    .map((p) => p.id);
+  const ai = unanswered.filter(isAi);
+  if (ai.length > 0) return ai;
+  return unanswered.length === 0 && isAi(pt.proposerId) ? [pt.proposerId] : [];
 }

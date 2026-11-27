@@ -13,8 +13,9 @@
 //           network (128 wide x 4 rounds, 1.97M parameters, 4.0 MB file):
 //           ~4x the work per move of Easy / Normal (64 x 4) — about 70 ms on a
 //           desktop, ~450 ms at 4x CPU throttling.
-//   (previous Hard: runs/catan/big u2300, policies/hard-big-update2300.bin,
-//   kept but not imported — 84.2% vs all-rounders, docs/ai-strength.md §6.)
+//   (previous Hard: runs/catan/big u2300 — 84.2% vs all-rounders,
+//   docs/ai-strength.md §6; its float32 file is in the git-ignored
+//   training/runs/catan/shipped-json/ to re-pack if it's ever wanted back.)
 //
 // Each policy file is a packed binary (training/catan/pack_policy.py: float16
 // weights, ~1 MB; Hard ~3.8 MB), a hashed asset (a `?url` import, never part
@@ -29,10 +30,9 @@ import { CatanPolicyNet, decodePolicyBinary } from './runtime';
 import { AI_LEVEL_LABEL } from './levelInfo';
 
 // One level since 2026-11-25: Hard (v3 u3400 since 2026-11-27). The retired
-// Easy (main u100), Normal (main u1000) and previous Hard (big u2300)
-// policies stay in policies/ (easy-update100.bin, normal-update1000.bin,
-// hard-big-update2300.bin) but aren't imported, so they don't ship; to bring
-// one back, widen AiLevel (or swap the import) and add its entry here again.
+// Easy (main u100) and Normal (main u1000) policies stay in policies/
+// (easy-update100.bin, normal-update1000.bin) but aren't imported, so they
+// don't ship; to bring one back, widen AiLevel and add its entry here again.
 export { AI_LEVEL_IDS, AI_LEVEL_LABEL, DEFAULT_AI_LEVEL } from './levelInfo';
 
 export const AI_LEVELS: Record<AiLevel, { label: string; url: string; file: string }> = {

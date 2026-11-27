@@ -217,6 +217,9 @@ interface AppStore {
   // turn's builds and trades, a completed trade with an AI undoing back to
   // before the offer (the AIs' answers in between don't count as moves).
   undoStack: GameSnapshot[];
+  // Bumped whenever the game is put back (undo, an online rollback), so the
+  // AI driver asks its seats about a restored offer again.
+  rewinds: number;
   // The most-recent dice token to highlight on the board (production
   // pulse). null when nothing should pulse. Cleared by a timeout in
   // BoardSVG ~1.5s after a roll. Excluded from network sync — each
@@ -508,6 +511,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
   pendingPirateHex: null,
   lastActionSnapshot: null,
   undoStack: [],
+  rewinds: 0,
   lastRolledHighlight: null,
 
   newGame: (opts) => {
@@ -627,6 +631,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
   restoreSnapshot: (snap) => {
     useLogStore.getState().restore(snap.log);
     set({
+      rewinds: get().rewinds + 1,
       game: snap.game,
       uiMode: phaseToMode(snap.game),
       dialog: null,
@@ -645,6 +650,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
     tradeStart = null;
     const rest = stack.slice(0, -1);
     set({
+      rewinds: get().rewinds + 1,
       game: snap.game,
       uiMode: phaseToMode(snap.game),
       dialog: null,
