@@ -337,7 +337,7 @@ export function ActionBar() {
           <Button
             onClick={() => openDialog('playerTrade')}
             disabled={!!game.pendingTrade}
-            title="Trade — single-resource swaps the bank can match are auto-routed; everything else is offered to other players"
+            title="Trade with the bank, or offer a trade to the other players"
           >
             🤝 Trade
           </Button>

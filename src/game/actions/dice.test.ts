@@ -3,8 +3,11 @@ import { createGame } from '../createGame';
 import { applyAction } from '../engine';
 import { runSetupPhase } from '../__testHelpers';
 
+// Two seats keep these tests short; the 3-4 player discard limit (7) is the one under test.
 function setupGame() {
-  return runSetupPhase(createGame({ playerNames: ['A', 'B'], seed: 42, randomizeTurnOrder: false }));
+  return runSetupPhase(
+    createGame({ playerNames: ['A', 'B'], seed: 42, randomizeTurnOrder: false, settings: { discardLimit: 7 } }),
+  );
 }
 
 describe('rollDice', () => {

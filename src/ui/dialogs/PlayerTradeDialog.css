@@ -1,142 +1,83 @@
-.ptrade-hint {
-  margin: 0 0 8px;
-  color: var(--text-soft);
-  font-size: 0.82em;
-}
-
-.ptrade-pill {
-  display: inline-block;
-  width: 1.4em;
-  text-align: center;
-  border-radius: 4px;
-  padding: 0 2px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.ptrade-pill-give {
-  background: var(--give);
-}
-
-.ptrade-pill-get {
-  background: var(--get);
-}
-
-.ptrade-list {
+/* The trade window (PlayerTradeDialog): cards to ask for, the "You get" and
+   "You give" lanes (TradeLane), and the player's own cards. */
+.trade {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.trade-pick {
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
-.ptrade-row {
-  display: grid;
-  grid-template-columns: 28px 1fr 56px 28px;
+.trade-pick-caption {
+  width: 100%;
+  font-size: 0.72em;
+  line-height: 1.2;
+  color: var(--text-soft);
+}
+
+.trade-pick-btn {
+  flex: 1 1 0;
+  min-width: 48px;
+  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  background: var(--panel-soft);
-  border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 2px 6px;
-  transition: border-color 0.15s;
-}
-
-.ptrade-row.is-give {
-  border-color: color-mix(in srgb, var(--give) 55%, transparent);
-}
-
-.ptrade-row.is-get {
-  border-color: color-mix(in srgb, var(--get) 55%, transparent);
-}
-
-.ptrade-btn {
+  gap: 1px;
+  padding: 4px 2px 3px;
   background: var(--paper-btn);
   border: 1px solid var(--panel-border);
   box-shadow: 0 2px 0 var(--paper-edge);
-  border-radius: 5px;
+  border-radius: 8px;
   color: var(--text);
-  font-size: 1em;
-  font-weight: 700;
+  font-family: inherit;
   cursor: pointer;
-  padding: 2px 0;
-  height: 26px;
-  line-height: 1;
 }
 
-.ptrade-btn:hover:not(:disabled) {
-  background: var(--gold-btn);
+.trade-pick-btn:hover:not(:disabled) {
   border-color: var(--accent-strong);
-  color: var(--on-accent);
 }
 
-.ptrade-btn:disabled {
-  opacity: 0.35;
+.trade-pick-btn:disabled {
+  opacity: 0.38;
   cursor: not-allowed;
 }
 
-.ptrade-btn-give {
-  color: var(--give);
-}
-
-.ptrade-btn-get {
-  color: var(--get);
-}
-
-.ptrade-mid {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.ptrade-name {
-  font-weight: 500;
-  font-size: 0.88em;
-}
-
-.ptrade-have {
-  margin-left: auto;
-  font-size: 0.72em;
+.trade-pick-rate {
+  font-size: 0.68em;
   color: var(--text-soft);
-}
-
-.ptrade-value {
-  display: flex;
-  justify-content: center;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
 }
 
-.ptrade-side {
-  padding: 1px 6px;
-  border-radius: 10px;
-  font-size: 0.85em;
-  line-height: 1.3;
+.trade-lane-card {
+  position: relative;
+  display: inline-flex;
+  padding: 0 6px 0 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
-.ptrade-side-give {
-  background: color-mix(in srgb, var(--give) 14%, transparent);
-  color: var(--give);
-}
-
-.ptrade-side-get {
-  background: color-mix(in srgb, var(--get) 14%, transparent);
-  color: var(--get);
-}
-
-.ptrade-side-zero {
+.trade-lane-x {
+  position: absolute;
+  top: -5px;
+  right: -1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--paper-btn);
+  border: 1px solid var(--panel-border);
   color: var(--text-soft);
+  font-size: 11px;
+  line-height: 12px;
+  text-align: center;
 }
 
-.ptrade-summary {
-  display: flex;
-  justify-content: space-around;
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--panel-border);
-  font-size: 0.85em;
-  color: var(--text-soft);
-}
-
-.ptrade-summary-side strong {
-  color: var(--text);
+.trade-gold {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }

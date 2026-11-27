@@ -1,0 +1,125 @@
+/* Short move animations (BoardAnimations.tsx): fixed over the game view,
+   above the board, panels and docked dialogs, below modals and the phone
+   drawer. Nothing here takes clicks. */
+.board-anim-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.board-anim-item {
+  position: fixed;
+  will-change: transform, opacity;
+  opacity: 0;
+}
+
+/* A flying card keeps the hand's look, with a lift so it reads over the board. */
+.board-anim-item .rchip,
+.board-anim-item .cchip {
+  box-shadow: 0 3px 8px rgba(20, 12, 0, 0.35);
+}
+
+/* Build: a ring in the builder's colour, with a dark outline so white /
+   gold / lime still show on the board. */
+.board-anim-ring {
+  box-sizing: border-box;
+  border: 5px solid;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px rgba(20, 12, 0, 0.55),
+    inset 0 0 0 2px rgba(20, 12, 0, 0.45);
+}
+
+/* A new road / ship: a streak along its edge, growing from one end. */
+.board-anim-streak {
+  transform-origin: 0 50%;
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 2px rgba(20, 12, 0, 0.55),
+    0 0 10px 2px rgba(255, 240, 200, 0.85);
+}
+
+/* A card: face down when bought, face up (its icon) when played. */
+.board-anim-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 42px;
+  border-radius: 5px;
+  border: 1.5px solid var(--paper-edge, #b99b62);
+  background: var(--card-bg, #fdf6e3);
+  box-shadow: 0 4px 10px rgba(20, 12, 0, 0.35);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.board-anim-card-back {
+  background: linear-gradient(135deg, #7a4b23, #a0672f);
+  border-color: #5a3418;
+  color: #f6e3b8;
+  font-weight: 700;
+  font-family: var(--display-font, serif);
+}
+
+.board-anim-card-award {
+  background: linear-gradient(180deg, #fff4d2, #f3d98c);
+  border-color: #d9a33e;
+}
+
+/* "Alice played Knight" / "Longest Road: Bo takes it". */
+.board-anim-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 12px;
+  border: 1.5px solid #d9a33e;
+  background: var(--panel, #fdf6e3);
+  box-shadow: 0 8px 22px rgba(20, 12, 0, 0.32);
+  color: var(--text, #3a2a14);
+  white-space: nowrap;
+}
+
+.board-anim-banner-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.board-anim-banner-text strong {
+  font-family: var(--display-font, serif);
+  font-size: 1.05rem;
+}
+
+.board-anim-banner-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  color: var(--text-soft, #6b5636);
+}
+
+.board-anim-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(40, 25, 5, 0.55);
+}
+
+/* "+3": how many cards a roll paid a player, over their hand / row. */
+.board-anim-gain {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #2f7d32;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.85),
+    0 4px 10px rgba(20, 12, 0, 0.35);
+}

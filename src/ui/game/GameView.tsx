@@ -40,6 +40,7 @@ import { Button } from '@/ui/shared/Button';
 import { CostCheatsheet } from '@/ui/panels/CostCheatsheet';
 import { DevCardCheatsheet } from '@/ui/panels/DevCardCheatsheet';
 import { CKCardCheatsheet } from '@/ui/panels/citiesAndKnights/CKCardCheatsheet';
+import { BoardAnimations } from './animations/BoardAnimations';
 import './GameView.css';
 
 export function GameView() {
@@ -67,12 +68,12 @@ export function GameView() {
     if (isOnline) leaveRoom();
     resetGame();
   };
-  // Dialogs that render as overlays above the bottom strip. Kept docked but
-  // anchored to the top of the board so they don't fight the hand panel.
+  // Dialogs that render as overlays docked on the board.
   const tradeDialog =
     dialog === 'playerTrade' ? <PlayerTradeDialog /> : null;
   const bankTradeDialog =
     dialog === 'bankTrade' ? <BankTradeDialog /> : null;
+  const composingTrade = !!(tradeDialog || bankTradeDialog);
   const yearOfPlentyDialog =
     dialog === 'yearOfPlenty' ? <YearOfPlentyDialog /> : null;
   const monopolyDialog = dialog === 'monopoly' ? <MonopolyDialog /> : null;
@@ -113,6 +114,7 @@ export function GameView() {
   return (
     <div className="gameview">
       <AIDriver />
+      <BoardAnimations />
 
       <main className="gameview-board">
         <Board />
@@ -120,7 +122,6 @@ export function GameView() {
           <GameClock />
           <DiceDisplay />
           <TurnTimer />
-          {game.pendingTrade && <PendingTradeBanner />}
         </div>
         <div className="gameview-topctrls">
           <button
@@ -193,12 +194,14 @@ export function GameView() {
         >
           <span aria-hidden>☰</span> Players
         </button>
-        {/* Trade-building dialogs (propose / counter / bank) anchor to the
-            left side of the board — the board middle stays viewable. */}
-        {(tradeDialog || bankTradeDialog) && (
-          <div className="gameview-side-dialog-overlay">
-            {tradeDialog}
-            {bankTradeDialog}
+        {/* The offer on the table docks at the board's bottom edge. The trade
+            window itself (trade / counter / bank) opens in the bottom strip
+            instead, so it never covers the board. The banner stays mounted
+            while composing (it auto-rejects humans who can't pay); compact
+            screens hide it then. */}
+        {game.pendingTrade && (
+          <div className={`gameview-trade-dock${composingTrade ? ' is-composing' : ''}`}>
+            <PendingTradeBanner />
           </div>
         )}
         {/* Other prompts (discard, robber, dev-card pick) dock at the
@@ -229,9 +232,19 @@ export function GameView() {
         )}
       </main>
 
-      <section className="gameview-bottom">
+      {/* While a trade is being written, its window takes the action bar's
+          place (it has its own buttons) and the strip grows to fit it: the
+          board above shrinks a little but stays in full view. */}
+      <section className={`gameview-bottom${composingTrade ? ' is-trading' : ''}`}>
         <HandPanel />
-        <ActionBar />
+        {composingTrade ? (
+          <div className="gameview-trade-compose">
+            {tradeDialog}
+            {bankTradeDialog}
+          </div>
+        ) : (
+          <ActionBar />
+        )}
       </section>
 
       {sideOpen && (

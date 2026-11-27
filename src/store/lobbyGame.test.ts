@@ -8,6 +8,8 @@ import {
   lobbyScenario,
   lobbySettings,
   lobbyStartProblem,
+  lobbyVariantLabels,
+  lobbyVariantOn,
   lobbyVpTarget,
   normalizeLobbyGame,
   withLobbyRules,
@@ -88,18 +90,49 @@ describe('online lobby game choice', () => {
     expect(game.barbarianAttack).toBeDefined();
   });
 
-  it('variants stack on any rules; Strongest Ports adds 1 to the target; no Event Cards with C&K', () => {
-    const base = { ...defaultLobbyGame(), variants: { friendlyRobber: true, strongestPorts: true, eventCards: true } };
-    const l = lobby(base);
+  it('the T&B variants go with a T&B scenario; Strongest Ports adds 1 to the target; the rule options go with anything', () => {
+    const tb = withLobbyRules(
+      { ...defaultLobbyGame(), variants: { friendlyRobber: true, strongestPorts: true, eventCards: true } },
+      'traders',
+    );
+    const l = lobby(tb);
     expect(lobbyVpTarget(l)).toBe(11);
     const game = startedGame(l);
     expect(game.settings.victoryPointsToWin).toBe(11);
     expect(game.settings.tradersVariants).toEqual({ friendlyRobber: true, strongestPorts: true, eventCards: true });
     expect(game.eventCards).toBeDefined();
+    // The Event Cards replace the dice: no balanced dice under them.
+    expect(lobbyVariantOn(lobby({ ...tb, variants: { ...tb.variants, balancedDice: true } }), 'balancedDice')).toBe(false);
 
-    const ck = withLobbyRules(base, 'citiesKnights');
-    expect(ck.variants).toEqual({ friendlyRobber: true, strongestPorts: true, eventCards: false });
-    expect(startedGame(lobby(ck)).settings.victoryPointsToWin).toBe(14);
+    // Other rules: the T&B variants switch off, the Friendly Robber stays.
+    const ck = withLobbyRules(tb, 'citiesKnights');
+    expect(ck.variants).toEqual({ friendlyRobber: true, strongestPorts: false, eventCards: false });
+    expect(startedGame(lobby(ck)).settings.victoryPointsToWin).toBe(13);
+    const base = lobbySettings(lobby({ ...defaultLobbyGame(), variants: { strongestPorts: false, eventCards: false, balancedDice: true } }));
+    expect(base.balancedDice).toBe(true);
+    expect(base.tradersVariants).toBeUndefined();
+    // Balanced dice alone doesn't take the base game off the trained AI.
+    expect(base.aiLevel).toBeDefined();
+  });
+
+  it('two seats: the base game on the standard board, 15 VP, Friendly Robber and balanced dice by default', () => {
+    const g = defaultLobbyGame();
+    const two = lobby(g, 2);
+    expect(lobbyStartProblem(two)).toBeNull();
+    expect(lobbyVpTarget(two)).toBe(15);
+    expect(lobbyVariantLabels(two)).toEqual(['Friendly Robber', 'Balanced dice']);
+    const game = startedGame(two);
+    expect(game.settings).toMatchObject({ victoryPointsToWin: 15, discardLimit: 9, balancedDice: true });
+    expect(game.settings.tradersVariants?.friendlyRobber).toBe(true);
+    expect(game.settings.aiLevel).toBeUndefined();
+    // The host can turn them off; at 3+ seats they're off unless chosen.
+    const off = lobby({ ...g, variants: { ...g.variants, friendlyRobber: false, balancedDice: false } }, 2);
+    expect(lobbyVariantLabels(off)).toEqual([]);
+    expect(lobbyVariantLabels(lobby(g, 3))).toEqual([]);
+    // Every other rule set needs 3.
+    expect(lobbyStartProblem(lobby(withLobbyRules(g, 'citiesKnights'), 2))).toMatch(/3/);
+    expect(lobbyStartProblem(lobby(withLobbyRules(g, 'seafarers'), 2))).toMatch(/3/);
+    expect(lobbyStartProblem(lobby({ ...g, baseScenarioId: 'goldRush' }, 2))).toMatch(/3/);
   });
 
   it('no variants means no tradersVariants (the trained AI still plays the plain base game)', () => {
@@ -117,7 +150,9 @@ describe('online lobby game choice', () => {
     );
     expect(lobbyRules(g)).toBe('explorersPirates');
     expect(g).toMatchObject({ seafarers: false, citiesKnights: false, traders: false, explorersPirates: true });
-    expect(g.variants).toEqual({ friendlyRobber: false, strongestPorts: false, eventCards: false });
+    // No robber: the Friendly Robber is kept but off; the T&B variants are off.
+    expect(g.variants).toEqual({ friendlyRobber: true, strongestPorts: false, eventCards: false });
+    expect(lobbyVariantOn(lobby(g), 'friendlyRobber')).toBe(false);
     const info = lobbyScenario(g);
     expect(info).toMatchObject({ name: 'Explorers & Pirates', minPlayers: 3, maxPlayers: 4 });
     expect(info.recommendedVp(4)).toBe(17);
@@ -144,7 +179,7 @@ describe('online lobby game choice', () => {
       traders: false,
       explorersPirates: false,
     });
-    expect(g.variants).toEqual({ friendlyRobber: false, strongestPorts: false, eventCards: false });
+    expect(g.variants).toEqual({ strongestPorts: false, eventCards: false });
     expect(lobbySettings(lobby(g)).expansions).toEqual(['seafarers']);
   });
 });

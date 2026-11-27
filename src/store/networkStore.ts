@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { AiLevel, GameState, PlayerColor, PlayerId } from '@/game/types';
+import type { GameState, PlayerColor, PlayerId } from '@/game/types';
 import { createGame, type CreateGameOptions } from '@/game/createGame';
-import { DEFAULT_AI_LEVEL } from '@/ai/nn/levels';
+import { DEFAULT_AI_LEVEL } from '@/ai/nn/levelInfo';
 import {
   type ChatMessage,
   type ConnectionState,
@@ -92,7 +92,6 @@ interface NetStore {
   hostRemoveSeat: (slot: number) => void;
   /** null = the scenario's recommended target. */
   hostSetVP: (vp: number | null) => void;
-  hostSetAiLevel: (level: AiLevel) => void;
   hostSetGame: (game: LobbyGame) => void;
   hostStartGame: () => Promise<void>;
   /** Recolor a seat: your own, or (host) an AI seat. A seat already wearing the color swaps to the old one. */
@@ -542,11 +541,6 @@ export const useNetworkStore = create<NetStore>((set, get) => {
     hostSetVP: (vp) => {
       if (get().role !== 'host') return;
       void editLobby((l) => (l.started ? null : { ...l, victoryPointsToWin: vp }));
-    },
-
-    hostSetAiLevel: (level) => {
-      if (get().role !== 'host') return;
-      void editLobby((l) => (l.started ? null : { ...l, aiLevel: level }));
     },
 
     hostSetGame: (game) => {

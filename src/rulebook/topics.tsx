@@ -9,6 +9,7 @@ import {
 } from './diagrams';
 import { SEAFARERS_TOPICS } from './seafarers/topics';
 import { FUN_MAPS_TOPICS } from './base/funMaps';
+import { RULE_OPTION_TOPICS } from './base/ruleOptions';
 import { CITIES_AND_KNIGHTS_TOPICS } from './citiesAndKnights/topics';
 import { TRADERS_TOPICS } from './traders/topics';
 import { EXPLORERS_PIRATES_TOPICS } from './explorersPirates/topics';
@@ -171,7 +172,10 @@ export const TOPICS: Topic[] = [
           <li>
             <strong>Player trade.</strong> Propose any combination of resources
             to anyone at the table. Any opponent with the asked-for cards may
-            accept, counter, or reject.
+            accept, counter, or reject. A counter-offer sits beside your offer
+            (everyone else can still take the original); once the answers are
+            in you trade with one player who accepted, take one counter, or
+            walk away.
           </li>
         </ul>
         <PortDiagram />
@@ -229,7 +233,7 @@ export const TOPICS: Topic[] = [
         <ol>
           <li>
             Every player holding <strong>more than 7</strong> resource cards
-            must discard half (rounded down).
+            (more than 9 in a two-player game) must discard half (rounded down).
           </li>
           <li>
             The current player moves the robber to any hex except its current
@@ -278,8 +282,8 @@ export const TOPICS: Topic[] = [
     body: (
       <>
         <p>
-          The first player to reach <strong>10 victory points</strong> on their
-          own turn wins immediately. Victory points come from:
+          The first player to reach <strong>10 victory points</strong> (15 in a
+          two-player game) on their own turn wins immediately. Victory points come from:
         </p>
         <ul>
           <li>Settlements: 1 VP each (up to 5)</li>
@@ -296,6 +300,8 @@ export const TOPICS: Topic[] = [
       </>
     ),
   },
+  // Two players (1v1) and the rule options that work with any game.
+  ...RULE_OPTION_TOPICS.map((t, i) => (i === 0 ? { ...t, section: 'Two players & rule options' } : t)),
   // Base-game Fun Maps — colonist.io-style variants. Their own section so
   // players can find Volcano's eruption rule without scrolling.
   ...FUN_MAPS_TOPICS.map((t, i) => (i === 0 ? { ...t, section: 'Fun Maps' } : t)),

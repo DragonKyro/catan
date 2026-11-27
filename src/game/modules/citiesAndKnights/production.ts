@@ -8,7 +8,7 @@ import type {
   VertexId,
 } from '../../types';
 import { COMMODITIES, RESOURCES, TERRAIN_TO_COMMODITY } from '../../types';
-import { updatePlayer } from '../../helpers';
+import { discardLimit, updatePlayer } from '../../helpers';
 import { addResources, subtractResources, totalResources } from '../../resources';
 import { addCommodities, subtractCommodities, totalCommodities } from '../../commodities';
 import { aqueductActive } from './improvements/state';
@@ -17,10 +17,10 @@ import { CITY_WALL_HAND_BONUS } from './constants';
 const NO_COMMODITIES: CommodityBank = { paper: 0, cloth: 0, coin: 0 };
 
 // Cards a player may hold before a 7 makes them discard (p.7-8): 7, plus 2
-// per city wall.
+// per city wall (the 7 is `discardLimit`, which a 2-player game raises).
 export function handLimitOnSeven(state: GameState, playerId: PlayerId): number {
   const p = state.players.find((pl) => pl.id === playerId);
-  return 7 + CITY_WALL_HAND_BONUS * (p?.cityWalls ?? 0);
+  return discardLimit(state) + CITY_WALL_HAND_BONUS * (p?.cityWalls ?? 0);
 }
 
 // Resource + commodity cards in hand (what a 7, the robber and Sabotage see).

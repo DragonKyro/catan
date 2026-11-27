@@ -99,3 +99,46 @@
   color: var(--text-soft);
   font-style: italic;
 }
+
+/* Balanced dice: each number's chance on the next roll; up / down = leaning
+   away from plain dice. */
+.balanced-dice-odds {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 3px;
+  margin: 4px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.balanced-dice-odd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3px 0;
+  border-radius: 6px;
+  background: var(--panel-soft);
+  border: 1px solid var(--panel-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.balanced-dice-odd.is-up {
+  background: #e4f1d9;
+  border-color: #8fb46f;
+}
+
+.balanced-dice-odd.is-down {
+  background: #f6e0d6;
+  border-color: #c9876a;
+}
+
+.balanced-dice-num {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.balanced-dice-pct {
+  font-size: 0.7rem;
+  color: var(--text-soft);
+}

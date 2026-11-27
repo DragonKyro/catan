@@ -29,6 +29,18 @@
 // still needs, Longest Road / Largest Army races, VP ceilings with hidden
 // cards, knights in hand, room to expand, income after the robber, and the
 // snake order of the opening.
+//
+// v3 (2026-11-25) appends the `v3.` segments the same way: how close each seat
+// is to winning (plan.ts — permanent / temporary / expected points with its
+// face-down dev cards, the chance it wins on its next turn, turns to its next
+// point by each route and to the target), the true leader by that measure
+// and the robber's damage to it, who wins the race to each open corner and
+// what a road toward it risks, this turn's offers and answers, the partner
+// pick (actions.ts PolicyRules.tradePick), every minimal winning combination,
+// how many turns each build the viewer could make saves its best plan, where
+// each opponent likely settles next, and in the opening, which corners are
+// likely still open at the viewer's second settlement and the best pair a
+// first settlement leaves.
 
 import type { PortType, ResourceBank } from '@/game/types';
 import { RESOURCES } from '@/game/types';
@@ -36,8 +48,12 @@ import { probabilityDots } from '../value';
 import type { BoardIndex } from './board';
 import { AFFORD_COSTS, DEV_TYPES, PLAYABLE_DEV } from './knowledge';
 import type { CatanObservation, ObservedPlayer } from './observation';
+import {
+  DIST_FAR, NEVER, PLAN_OPTIONS, buildGains, cornerRaces, openingOutlook, opponentTargets, seatPlans, trueLeader,
+  type BuildGains, type OpeningOutlook, type OpponentTargets, type SeatPlan,
+} from './plan';
 
-export const ENCODER_VERSION = 2;
+export const ENCODER_VERSION = 3;
 
 /** me, next1, next2, next3, far. */
 export const SEAT_SLOTS = 5;
@@ -52,8 +68,8 @@ export const DECISIONS = [
   'setupSettlement', 'setupRoad', 'roll', 'main', 'discard', 'robberHex', 'robberVictim', 'roadBuilding', 'tradeResponse',
 ] as const;
 /** Roads needed to reach a vertex: 0, 1, 2, 3, or 4+ / unreachable. */
-const DIST_BUCKETS = 5;
-const FAR = DIST_BUCKETS - 1;
+const DIST_BUCKETS = DIST_FAR + 1;
+const FAR = DIST_FAR;
 const MAX_SETTLEMENTS = 5;
 const MAX_CITIES = 4;
 const MAX_ROADS = 15;
@@ -103,7 +119,9 @@ export const HEX_LAYOUT = new FeatureLayout()
   // ---- v2 ----
   .add('v2.harm', SEAT_SLOTS) // what the robber here would cost each seat (pips × buildings)
   .add('v2.harmLeader', 1) // ... the leading opponent
-  .add('v2.stealable', 1); // opponents with cards on its corners
+  .add('v2.stealable', 1) // opponents with cards on its corners
+  // ---- v3 ----
+  .add('v3.harmTrueLeader', 1); // ... the opponent closest to winning (plan.ts), not the one with most points
 
 export const VERTEX_LAYOUT = new FeatureLayout()
   .add('present', 1)
@@ -127,7 +145,14 @@ export const VERTEX_LAYOUT = new FeatureLayout()
   .add('v2.diversity', 1) // resources here the viewer doesn't produce yet
   .add('v2.portFit', 1) // a harbor here, weighted by what the viewer would produce for it
   .add('v2.startCards', 1) // cards a second starting settlement here would pay
-  .add('v2.contest', 1); // opponents' best road distance minus the viewer's, for open corners
+  .add('v2.contest', 1) // opponents' best road distance minus the viewer's, for open corners
+  // ---- v3 ----
+  .add('v3.race', 1) // turns the fastest opponent needs to settle it minus the viewer's (+ = the viewer's)
+  .add('v3.speedup', 1) // turns a settlement / city here saves the viewer's best win plan (plan.ts buildGains)
+  .add('v3.oppNext', 1) // the chance an opponent's next settlement goes here (the likeliest opponent)
+  .add('v3.oppNextTurns', 1) // ... and that opponent's turns to settle it
+  .add('v3.secondOpen', 1) // opening, round 1: the chance it's still open at the viewer's second settlement
+  .add('v3.pairBest', 1); // opening: round 1, the expected best second settlement with a first here; later, the pair with the first
 
 export const EDGE_LAYOUT = new FeatureLayout()
   .add('present', 1)
@@ -136,7 +161,12 @@ export const EDGE_LAYOUT = new FeatureLayout()
   .add('canRoad', 1)
   .add('port', 1)
   .add('coastal', 1)
-  .add('blockedEnd', 1); // an opponent's building sits on an endpoint
+  .add('blockedEnd', 1) // an opponent's building sits on an endpoint
+  // ---- v3 ----
+  .add('v3.wins', 1) // open corners near a road the viewer could build here that it reaches first
+  .add('v3.loses', 1) // ... that an opponent reaches first: building toward them risks a cut-off
+  .add('v3.speedup', 1) // the best speedup of a corner this road is on a shortest way to
+  .add('v3.oppNextNear', 1); // the highest opponent next-settlement chance among the corners near it
 
 export const GLOBAL_LAYOUT = (() => {
   const l = new FeatureLayout();
@@ -268,6 +298,36 @@ export const GLOBAL_LAYOUT = (() => {
       .add(`${t}.spots2`, 1) // ... within two roads
       .add(`${t}.contested`, 1); // ... of those, ones another seat reaches as fast
   }
+  // ---- v3: how close each seat is to winning (plan.ts) ----
+  for (let k = 0; k <= NEXT_SEATS; k++) {
+    const t = `v3.s${k}`;
+    l.add(`${t}.permVp`, 1) // settlements + cities
+      .add(`${t}.tempVp`, 1) // Longest Road + Largest Army
+      .add(`${t}.expVp`, 1) // public points + what its face-down dev cards likely hold
+      .add(`${t}.soon`, 1) // P(it reaches the target by the end of its next turn)
+      .add(`${t}.options`, PLAN_OPTIONS.length) // turns to its next point: settlement, city, VP card, Longest Road, Largest Army
+      .add(`${t}.eta`, 1) // turns to the target, cheapest route first
+      .add(`${t}.etaLead`, 1) // its eta minus the best other seat's
+      // Every minimal winning combination, costed whole (plan.ts WinPlans):
+      .add(`${t}.planBest`, 1) // the best plan's turns
+      .add(`${t}.planGap`, 1) // the next best's extra turns
+      .add(`${t}.planNear`, 1) // plans within NEAR_TURNS of the best: options still open
+      .add(`${t}.planShare`, PLAN_OPTIONS.length) // per route, the share of those plans that use it
+      .add(`${t}.planMix`, PLAN_OPTIONS.length); // the best plan: settlements, cities, VP cards, LR, LA
+  }
+  l.add('v3.trueLeader', OPP_SLOTS) // the opponent with the lowest eta
+    .add('v3.leaderGap', 1) // that opponent's eta minus the viewer's
+    // ---- v3: this turn's offers and answers ----
+    .add('v3.turn.rejectedBy', OPP_SLOTS) // the viewer's offers each seat said no to
+    .add('v3.turn.acceptedBy', OPP_SLOTS) // ... said yes to
+    .add('v3.turn.refused', R) // resources the viewer asked for that nobody would give
+    .add('v3.turn.asked', NEXT_SEATS * R) // resources each next seat asked for in its own offers
+    // ---- v3: picking a partner for the viewer's own offer ----
+    .add('v3.decision.tradePick', 1)
+    .add('v3.decision.counterOffer', 1) // choosing the counter (the offer answered is in decision.trade*)
+    .add('v3.pick.acceptors', OPP_SLOTS)
+    .add('v3.pick.give', R)
+    .add('v3.pick.get', R);
   return l;
 })();
 
@@ -493,7 +553,7 @@ const played = (p: ObservedPlayer) => PLAYABLE_DEV.map((c) => p.played[c]);
 const counts = (b: ResourceBank) => RESOURCES.map((r) => b[r]);
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
-function writeHexes(obs: CatanObservation, b: BoardFacts, x: Float32Array): void {
+function writeHexes(obs: CatanObservation, b: BoardFacts, x: Float32Array, plans: SeatPlan[]): void {
   const idx = b.idx;
   const rolls = obs.rolls;
   const draftHex = obs.decision?.type === 'robberVictim' ? idx.hexIndex.get(obs.decision.hex)! : -1;
@@ -502,6 +562,7 @@ function writeHexes(obs: CatanObservation, b: BoardFacts, x: Float32Array): void
   const buildings = HEX_LAYOUT.seg('buildings').offset;
   const harm = HEX_LAYOUT.seg('v2.harm').offset;
   const leader = leadingOpponent(obs);
+  const realLeader = trueLeader(plans);
   const w = new Row(x, HEX_LAYOUT);
   idx.hexIds.forEach((id, h) => {
     const hex = obs.board.hexes[id]!;
@@ -519,6 +580,7 @@ function writeHexes(obs: CatanObservation, b: BoardFacts, x: Float32Array): void
     const pips = probabilityDots(num) / 5;
     const victims = new Set<number>();
     let leaderHarm = 0;
+    let realHarm = 0;
     for (let k = 0; k < 6; k++) {
       const v = idx.hexVertices[h * 6 + k]!;
       const owner = b.vertexOwner[v]!;
@@ -527,10 +589,12 @@ function writeHexes(obs: CatanObservation, b: BoardFacts, x: Float32Array): void
       x[h * HEX_DIM + buildings + seatSlot(owner)]! += weight / 3;
       x[h * HEX_DIM + harm + seatSlot(owner)]! += (pips * weight) / 3;
       if (owner === leader) leaderHarm += (pips * weight) / 3;
+      if (owner === realLeader) realHarm += (pips * weight) / 3;
       if (owner > 0 && obs.players[owner]!.handSize > 0) victims.add(owner);
     }
     if (leaderHarm > 0) w.set('v2.harmLeader', leaderHarm);
     if (victims.size > 0) w.set('v2.stealable', victims.size / 3);
+    if (realHarm > 0) w.set('v3.harmTrueLeader', realHarm);
   });
 }
 
@@ -562,7 +626,16 @@ function portsOf(obs: CatanObservation): { byVertex: Map<string, PortType>; edge
   return p;
 }
 
-function writeVertices(obs: CatanObservation, b: BoardFacts, x: Float32Array): void {
+/** The v3 per-corner / per-road look-ahead (plan.ts). */
+interface Lookahead {
+  races: Float32Array;
+  gains: BuildGains;
+  opp: OpponentTargets;
+  opening: OpeningOutlook | null;
+}
+
+function writeVertices(obs: CatanObservation, b: BoardFacts, x: Float32Array, look: Lookahead): void {
+  const { races, gains, opp: oppNext, opening } = look;
   const idx = b.idx;
   const portAt = portsOf(obs).byVertex;
   const anchor = obs.decision?.type === 'setupRoad' ? obs.decision.settlement : null;
@@ -620,10 +693,22 @@ function writeVertices(obs: CatanObservation, b: BoardFacts, x: Float32Array): v
       w.set('v2.portFit', r >= 0 ? clamp((mine[r]! + pips[r]!) / 10, 0, 2) : 0.3);
     }
     if (b.open[v] === 1) w.set('v2.contest', clamp((opp - b.dist[0]![v]!) / 2, -2, 2));
+    // ---- v3 ----
+    if (!Number.isNaN(races[v]!)) w.set('v3.race', clamp(races[v]! / 3, -2, 2));
+    if (!Number.isNaN(gains.vertex[v]!)) w.set('v3.speedup', clamp(gains.vertex[v]! / 5, -2, 2));
+    if (oppNext.chance[v]! > 0) {
+      w.set('v3.oppNext', oppNext.chance[v]!);
+      w.set('v3.oppNextTurns', Math.min(3, oppNext.turns[v]! / 10));
+    }
+    if (opening) {
+      if (opening.round === 1) w.set('v3.secondOpen', opening.secondOpen[v]!);
+      if (!Number.isNaN(opening.pairBest[v]!)) w.set('v3.pairBest', clamp(opening.pairBest[v]!, 0, 2));
+    }
   });
 }
 
-function writeEdges(obs: CatanObservation, b: BoardFacts, x: Float32Array): void {
+function writeEdges(obs: CatanObservation, b: BoardFacts, x: Float32Array, look: Lookahead): void {
+  const { races, gains, opp: oppNext } = look;
   const idx = b.idx;
   const portEdges = portsOf(obs).edges;
   const w = new Row(x, EDGE_LAYOUT);
@@ -640,10 +725,50 @@ function writeEdges(obs: CatanObservation, b: BoardFacts, x: Float32Array): void
       const vo = b.vertexOwner[idx.edgeVertices[e * 2 + k]!]!;
       if (vo > 0) w.set('blockedEnd', 1);
     }
+    // ---- v3: what lies past a road the viewer could build here ----
+    if (b.canRoad[e] === 1) {
+      let wins = 0;
+      let loses = 0;
+      let threat = 0;
+      for (const v of cornersNear(b, e)) {
+        threat = Math.max(threat, oppNext.chance[v]!);
+        const m = races[v]!;
+        if (Number.isNaN(m)) continue;
+        if (m > 0.25) wins++;
+        else if (m < -0.25) loses++;
+      }
+      w.set('v3.wins', Math.min(2, wins / 3));
+      w.set('v3.loses', Math.min(2, loses / 3));
+      w.set('v3.oppNextNear', threat);
+      if (!Number.isNaN(gains.edge[e]!)) w.set('v3.speedup', clamp(gains.edge[e]! / 5, -2, 2));
+    }
   });
 }
 
-function writeGlobal(obs: CatanObservation, b: BoardFacts, x: Float32Array): void {
+/** Vertices within two steps of edge `e`'s ends, not through an opponent's building. */
+function cornersNear(b: BoardFacts, e: number): number[] {
+  const idx = b.idx;
+  const seen = new Set<number>();
+  let frontier = [idx.edgeVertices[e * 2]!, idx.edgeVertices[e * 2 + 1]!];
+  for (const v of frontier) seen.add(v);
+  for (let step = 0; step < 2; step++) {
+    const next: number[] = [];
+    for (const u of frontier) {
+      if (b.vertexOwner[u]! > 0) continue;
+      for (let k = 0; k < 3; k++) {
+        const n = idx.vertexNeighbors[u * 3 + k]!;
+        if (n >= 0 && !seen.has(n)) {
+          seen.add(n);
+          next.push(n);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return [...seen];
+}
+
+function writeGlobal(obs: CatanObservation, b: BoardFacts, x: Float32Array, plans: SeatPlan[]): void {
   const w = new Row(x, GLOBAL_LAYOUT);
   const n = obs.playerCount;
   const target = obs.vpToWin;
@@ -651,7 +776,7 @@ function writeGlobal(obs: CatanObservation, b: BoardFacts, x: Float32Array): voi
   const me = obs.players[0]!;
 
   // ---- the decision at hand ----
-  w.oneHot('decision', d ? DECISIONS.indexOf(d.type) : -1);
+  w.oneHot('decision', d ? (DECISIONS as readonly string[]).indexOf(d.type) : -1);
   if (d?.type === 'setupSettlement' || d?.type === 'setupRoad') w.flag('decision.setupRound2', d.round === 2);
   if (d?.type === 'discard') {
     const chosen = counts(d.chosen);
@@ -662,11 +787,11 @@ function writeGlobal(obs: CatanObservation, b: BoardFacts, x: Float32Array): voi
   if (d?.type === 'robberHex') w.flag('decision.robberKnight', d.reason === 'knight');
   if (d?.type === 'robberVictim') for (const off of d.candidates) w.set('decision.victims', 1, seatSlot(off) - 1);
   if (d?.type === 'roadBuilding') w.set('decision.roadsPlaced', d.placed.length / 2);
-  if (d?.type === 'tradeResponse') {
+  if (d?.type === 'tradeResponse' || d?.type === 'counterOffer') {
     w.set('decision.tradeProposer', 1, seatSlot(d.proposerOffset) - 1);
     w.values('decision.tradeGive', counts(d.give), 1 / 5);
     w.values('decision.tradeGet', counts(d.get), 1 / 5);
-    w.flag('decision.tradeCounter', d.counter);
+    w.flag('decision.tradeCounter', d.type === 'tradeResponse' && d.counter);
   }
   if (d?.type === 'main') {
     w.flag('decision.canPlayDev', d.canPlayDev);
@@ -801,6 +926,64 @@ function writeGlobal(obs: CatanObservation, b: BoardFacts, x: Float32Array): voi
   }
 
   writeGlobalV2(obs, b, w);
+  writeGlobalV3(obs, w, plans);
+}
+
+function writeGlobalV3(obs: CatanObservation, w: Row, plans: SeatPlan[]): void {
+  const n = obs.playerCount;
+  const target = obs.vpToWin;
+  // How close each seat is to winning.
+  for (let k = 0; k <= NEXT_SEATS && k < n; k++) {
+    const p = plans[k]!;
+    const t = `v3.s${k}`;
+    w.set(`${t}.permVp`, p.permVp / target);
+    w.set(`${t}.tempVp`, p.tempVp / target);
+    w.set(`${t}.expVp`, clamp(p.expVp / target, 0, 2));
+    w.set(`${t}.soon`, p.soon);
+    w.values(`${t}.options`, p.options.map((o) => clamp(o / 10, 0, NEVER / 10)));
+    w.set(`${t}.eta`, clamp(p.eta / 20, 0, 2));
+    const others = plans.filter((_, j) => j !== k).map((q) => q.eta);
+    if (others.length > 0) w.set(`${t}.etaLead`, clamp((p.eta - Math.min(...others)) / 10, -2, 2));
+    const wp = p.plans;
+    w.set(`${t}.planBest`, clamp(wp.best / 20, 0, NEVER / 20));
+    w.set(`${t}.planGap`, clamp((wp.second - wp.best) / 10, 0, 3));
+    w.set(`${t}.planNear`, Math.min(3, wp.near / 10));
+    w.values(`${t}.planShare`, wp.share);
+    w.values(`${t}.planMix`, [wp.bestMix[0]! / 5, wp.bestMix[1]! / 4, wp.bestMix[2]! / 5, wp.bestMix[3]!, wp.bestMix[4]!]);
+  }
+  const leader = trueLeader(plans);
+  if (leader > 0) {
+    w.set('v3.trueLeader', 1, seatSlot(leader) - 1);
+    w.set('v3.leaderGap', clamp((plans[leader]!.eta - plans[0]!.eta) / 10, -2, 2));
+  }
+  // This turn's offers: who refused the viewer, what nobody would give, what others asked for.
+  const refused = new Array<number>(R).fill(0);
+  const asked = new Array<number>(NEXT_SEATS * R).fill(0);
+  for (const o of obs.turnOffers) {
+    if (o.proposerOffset === 0) {
+      for (const off of o.rejected) w.set('v3.turn.rejectedBy', Math.min(1, offerCount(obs, off, 'rejected') / 2), seatSlot(off) - 1);
+      for (const off of o.accepted) w.set('v3.turn.acceptedBy', Math.min(1, offerCount(obs, off, 'accepted') / 2), seatSlot(off) - 1);
+      if (o.accepted.length === 0 && o.tradedWithOffset === null) RESOURCES.forEach((r, j) => { if (o.receive[r] > 0) refused[j] = 1; });
+    } else if (o.proposerOffset <= NEXT_SEATS) {
+      RESOURCES.forEach((r, j) => { if (o.receive[r] > 0) asked[(o.proposerOffset - 1) * R + j] = 1; });
+    }
+  }
+  w.values('v3.turn.refused', refused);
+  w.values('v3.turn.asked', asked);
+  // The partner pick.
+  const d = obs.decision;
+  if (d?.type === 'counterOffer') w.set('v3.decision.counterOffer', 1);
+  if (d?.type === 'tradePick') {
+    w.set('v3.decision.tradePick', 1);
+    for (const off of d.acceptors) w.set('v3.pick.acceptors', 1, seatSlot(off) - 1);
+    w.values('v3.pick.give', counts(d.give), 1 / 5);
+    w.values('v3.pick.get', counts(d.get), 1 / 5);
+  }
+}
+
+/** How many of the viewer's offers this turn seat `off` answered that way. */
+function offerCount(obs: CatanObservation, off: number, how: 'accepted' | 'rejected'): number {
+  return obs.turnOffers.filter((o) => o.proposerOffset === 0 && o[how].includes(off)).length;
 }
 
 const SETTLEMENT_COST = [1, 1, 1, 1, 0]; // RESOURCES order: wood, brick, sheep, wheat, ore
@@ -920,10 +1103,17 @@ export function encodeObservation(obs: CatanObservation, facts?: BoardFacts): Ca
     global: new Float32Array(GLOBAL_DIM),
   };
   const b = facts ?? analyseBoard(obs);
-  writeHexes(obs, b, out.hexes);
-  writeVertices(obs, b, out.vertices);
-  writeEdges(obs, b, out.edges);
-  writeGlobal(obs, b, out.global);
+  const plans = seatPlans(obs, b);
+  const look: Lookahead = {
+    races: cornerRaces(b, plans),
+    gains: buildGains(obs, b, plans),
+    opp: opponentTargets(obs, b, plans),
+    opening: openingOutlook(obs, b),
+  };
+  writeHexes(obs, b, out.hexes, plans);
+  writeVertices(obs, b, out.vertices, look);
+  writeEdges(obs, b, out.edges, look);
+  writeGlobal(obs, b, out.global, plans);
   return out;
 }
 

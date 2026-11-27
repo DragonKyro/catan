@@ -52,14 +52,13 @@ import { calculateVictoryPoints } from '@/game/scoring/points';
 import { initialKnowledge, observeTransition, type CatanKnowledge } from '@/ai/nn/knowledge';
 import { observe, type CatanDraft, type CatanObservation } from '@/ai/nn/observation';
 import { EDGE_DIM, GLOBAL_DIM, HEX_DIM, VERTEX_DIM, analyseBoard, encodeObservation } from '@/ai/nn/encode';
-import { decodeSlot, legalMask, slotLayout } from '@/ai/nn/actions';
+import { NO_RULES, decodeSlot, legalMask, slotLayout, type PolicyRules } from '@/ai/nn/actions';
 import { actWithPolicy } from '@/ai/nn/agent';
 import type { CatanPolicyNet } from '@/ai/nn/runtime';
 import { DEFAULT_REWARD_WEIGHTS, finalStandings, terminalRewards, type RewardWeights } from '@/ai/nn/reward';
 import { heuristicAction, teacherSlot } from './teacher';
 import { PERSONAS, PERSONA_IDS, isPersonaId, type HeuristicPersona, type PersonaId } from '@/ai/persona';
 import { isSetupPhase } from '@/game/actions/setup';
-import { isCounterOffer } from '@/game/actions/trade';
 import { nextTradeResponder } from '@/ai/trade';
 
 export type SeatRole = 'learner' | 'opponent' | 'heuristic';
@@ -99,6 +98,11 @@ export interface VecEnvOptions {
    *  at the first roll, so it learns to play from a lopsided start. */
   learnerSetupShare: number;
   learnerSetupPersonas: string[];
+  /** How learner seats play the v3 additions (actions.ts PolicyRules): picking
+   *  their own trade partner, offers filtered to ones some opponent needs. */
+  learnerRules: PolicyRules;
+  /** The same for frozen-opponent seats — the rules of the policy playing them. */
+  opponentRules: PolicyRules;
 }
 
 export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
@@ -119,6 +123,8 @@ export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
   targetPersonas: [],
   learnerSetupShare: 0,
   learnerSetupPersonas: ['woodBrick', 'oreWheatSheep', 'portStack'],
+  learnerRules: NO_RULES,
+  opponentRules: NO_RULES,
 };
 
 export interface Episode {
@@ -143,8 +149,13 @@ export interface Episode {
   setupBy: (PersonaId | null)[];
   /** The match was abandoned after an error (no terminal reward). */
   aborted: boolean;
+  /** Seats (state.players indices) in turn order, and the points target — to line results up by seat offset. */
+  order: number[];
+  vpToWin: number;
   /** Per seat, how often each action type was played, plus `tradeDone`
-   *  (player trades completed, either side) and `offerTaken` (own offers accepted). */
+   *  (player trades completed, either side), `offerTaken` (own offers taken),
+   *  `counterRefused` (own counters turned down) and `tradeWith:<seat>`
+   *  (trades completed with that seat). */
   actions: Record<string, number[]>;
 }
 
@@ -250,8 +261,14 @@ export class CatanVecEnv {
     };
   }
 
-  /** Change the seat roles / heuristic personas for matches that start from now on, and/or turn teacher labels on or off. */
-  configure(update: { seats?: SeatRole[]; teacher?: boolean; personas?: string[] }): void {
+  /** Change the seat roles / heuristic personas for matches that start from now on, and/or turn
+   *  teacher labels on or off, and/or the rules learner / frozen-opponent seats play by. */
+  configure(update: {
+    seats?: SeatRole[]; teacher?: boolean; personas?: string[];
+    learnerRules?: Partial<PolicyRules>; opponentRules?: Partial<PolicyRules>;
+  }): void {
+    if (update.learnerRules) this.opts.learnerRules = { ...NO_RULES, ...update.learnerRules };
+    if (update.opponentRules) this.opts.opponentRules = { ...NO_RULES, ...update.opponentRules };
     if (update.personas) {
       this.pool = resolvePersonas(update.personas);
       this.opts.personas = update.personas.slice();
@@ -304,6 +321,11 @@ export class CatanVecEnv {
 
   /** Run `f` on env i; on an error, abandon that match, start a fresh one and
    *  run `recover` on it (by default: play it up to its first network decision). */
+  /** The rules a network seat in this role plays by (heuristic seats don't use them). */
+  private rulesFor(role: SeatRole): PolicyRules {
+    return role === 'learner' ? this.opts.learnerRules : role === 'opponent' ? this.opts.opponentRules : NO_RULES;
+  }
+
   private guarded(i: number, f: () => void, recover: () => void = () => this.advance(i)): void {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -414,10 +436,24 @@ export class CatanVecEnv {
       row[after.players.findIndex((p) => p.id === id)]! += 1;
     };
     count(action.type, action.playerId);
-    if (action.type === 'acceptTrade' && before.pendingTrade) {
-      count('tradeDone', action.playerId);
-      count('tradeDone', before.pendingTrade.proposerId);
-      count('offerTaken', before.pendingTrade.proposerId);
+    // A trade is done when cards move: the proposer's confirm, or the turn
+    // player's yes to a counter-offer (a yes to an open offer only says yes).
+    const pt = before.pendingTrade;
+    if (pt && !after.pendingTrade && (action.type === 'confirmTrade' || action.type === 'acceptTrade')) {
+      const partner = action.type === 'confirmTrade' ? action.with : action.playerId;
+      count('tradeDone', partner);
+      count('tradeDone', pt.proposerId);
+      count('offerTaken', pt.proposerId);
+      // Who traded with whom: `tradeWith:<seat>` per seat (state.players order).
+      const seatOf = (id: PlayerId) => after.players.findIndex((p) => p.id === id);
+      count(`tradeWith:${seatOf(partner)}`, pt.proposerId);
+      count(`tradeWith:${seatOf(pt.proposerId)}`, partner);
+    }
+    if (action.type === 'cancelTrade' && pt && pt.proposerId !== action.playerId) {
+      // The turn player turned a counter-offer down: charged like an offer nobody took.
+      count('counterRefused', pt.proposerId);
+      const s = after.players.findIndex((p) => p.id === pt.proposerId);
+      this.batch.reward[i * this.opts.players + s]! -= this.opts.refusedOfferPenalty;
     }
     if (action.type === 'rejectTrade' && before.pendingTrade && !after.pendingTrade) {
       // The last answer was a rejection too: nobody took the offer.
@@ -471,9 +507,9 @@ export class CatanVecEnv {
       }
       const id = decidingSeat(s);
       const seat = s.players.findIndex((p) => p.id === id);
-      if (s.pendingTrade?.proposerId === id && !isCounterOffer(s)) {
-        // Everyone has answered the offer. The action space has no
-        // pick-a-partner move, so the heuristic picks for every seat.
+      if (s.pendingTrade?.proposerId === id && !this.rulesFor(env.roles[seat]!).tradePick) {
+        // Everyone has answered the offer; this seat's policy doesn't pick
+        // its own partner (pre-v3 rules), so the heuristic picks for it.
         this.heuristicMove(i, seat, id);
         continue;
       }
@@ -518,6 +554,8 @@ export class CatanVecEnv {
       targets: env.targets.slice(),
       setupBy: env.setupBy.slice(),
       aborted,
+      order: s.playerOrder.map((id) => s.players.findIndex((p) => p.id === id)),
+      vpToWin: s.settings.victoryPointsToWin,
       actions: env.actions,
     });
   }
@@ -551,9 +589,10 @@ export class CatanVecEnv {
       return;
     }
     const id = env.state.players[env.seat]!.id;
-    const obs = observe(env.state, id, env.knowledge[env.seat]!, { draft: env.draft });
+    const rules = this.rulesFor(env.roles[env.seat]!);
+    const obs = observe(env.state, id, env.knowledge[env.seat]!, { draft: env.draft, tradePick: rules.tradePick });
     const facts = analyseBoard(obs);
-    const mask = legalMask(obs, facts);
+    const mask = legalMask(obs, facts, rules);
     if (!mask.some((x) => x === 1)) {
       throw new Error(`${id} has no legal slot (phase ${env.state.phase}, decision ${JSON.stringify(obs.decision)})`);
     }
@@ -611,8 +650,8 @@ function validateSeats(seats: SeatRole[], players: number): void {
 function decidingSeat(s: GameState): PlayerId {
   const pt = s.pendingTrade;
   if (pt) {
-    if (isCounterOffer(s)) return s.playerOrder[s.currentPlayerIndex]!; // the turn player answers
-    // Each opponent answers in turn; then the proposer picks a partner.
+    // Each opponent answers in turn (yes, no or a counter-offer); then the
+    // proposer settles it.
     return nextTradeResponder(s) ?? pt.proposerId;
   }
   return getActingPlayerId(s);

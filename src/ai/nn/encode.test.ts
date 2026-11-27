@@ -47,7 +47,20 @@ describe('catan feature encoder', () => {
 
   it('matches the versioned sizes (bump ENCODER_VERSION when these change)', () => {
     expect({ version: ENCODER_VERSION, hex: HEX_DIM, vertex: VERTEX_DIM, edge: EDGE_DIM, global: GLOBAL_DIM })
-      .toEqual({ version: 2, hex: 36, vertex: 42, edge: 11, global: 485 });
+      .toEqual({ version: 3, hex: 37, vertex: 48, edge: 15, global: 630 });
+  });
+
+  it('v3 only appended features: v2 columns are a prefix (upgrade_policy.py --encoder relies on it)', () => {
+    const v2 = { hex: 36, vertex: 42, edge: 11, global: 485 };
+    const first = (layout: FeatureLayout) => layout.segments.find((s) => s.name.startsWith('v3.'))?.offset;
+    expect(first(HEX_LAYOUT)).toBe(v2.hex);
+    expect(first(VERTEX_LAYOUT)).toBe(v2.vertex);
+    expect(first(EDGE_LAYOUT)).toBe(v2.edge);
+    expect(first(GLOBAL_LAYOUT)).toBe(v2.global);
+    for (const layout of [HEX_LAYOUT, VERTEX_LAYOUT, EDGE_LAYOUT, GLOBAL_LAYOUT]) {
+      const at = layout.segments.findIndex((s) => s.name.startsWith('v3.'));
+      expect(layout.segments.slice(at).every((s) => s.name.startsWith('v3.'))).toBe(true);
+    }
   });
 
   it('v2 only appended features: v1 columns are a prefix (upgrade_policy.py --encoder relies on it)', () => {
@@ -59,7 +72,8 @@ describe('catan feature encoder', () => {
     expect(first(GLOBAL_LAYOUT)).toBe(v1.global);
     for (const layout of [HEX_LAYOUT, VERTEX_LAYOUT, GLOBAL_LAYOUT]) {
       const at = layout.segments.findIndex((s) => s.name.startsWith('v2.'));
-      expect(layout.segments.slice(at).every((s) => s.name.startsWith('v2.'))).toBe(true);
+      const v3 = layout.segments.findIndex((s) => s.name.startsWith('v3.'));
+      expect(layout.segments.slice(at, v3).every((s) => s.name.startsWith('v2.'))).toBe(true);
     }
   });
 

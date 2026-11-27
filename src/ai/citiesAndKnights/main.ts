@@ -2,7 +2,7 @@ import type { Action, GameState, PlayerId, VertexId } from '@/game/types';
 import { COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
 import { canPlaceSettlement } from '@/game/placement';
-import { chooseTradePartner, shouldAcceptTrade, tryProposeFavorableTrade, tryProposeTrade } from '../trade';
+import { chooseTradeResolution, shouldAcceptTrade, tryProposeFavorableTrade, tryProposeTrade } from '../trade';
 import { tryBankTrade } from '../main';
 import { tryBuildRoadCK } from './roads';
 import { vertexScore } from '../value';
@@ -86,12 +86,9 @@ export function chooseCKMainAction(
 
   // A pending trade involving us comes first (same as the base tree).
   if (state.pendingTrade) {
-    if (state.pendingTrade.proposerId === playerId) {
-      const partner = chooseTradePartner(state, playerId);
-      return partner ? { type: 'confirmTrade', playerId: playerId, with: partner } : { type: 'cancelTrade', playerId: playerId };
-    }
+    if (state.pendingTrade.proposerId === playerId) return chooseTradeResolution(state, playerId);
     if (shouldAcceptTrade(state, playerId)) return { type: 'acceptTrade', playerId };
-    return { type: 'cancelTrade', playerId };
+    return { type: 'rejectTrade', playerId };
   }
 
   return (

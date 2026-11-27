@@ -2,14 +2,63 @@ import type { GameState } from '@/game/types';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import { portBuildingsVp } from '@/game/modules/traders/scoring/strongestPorts';
 import { EVENT_CARD_INFO } from '@/game/modules/traders/variants/eventCards/deck';
+import { balancedDiceOdds } from '@/game/modules/balancedDice';
 
-// Scenario tab: the Traders & Barbarians variants in play (any rule set) —
-// Friendly Robber reminder, the Strongest Ports tile and everyone's harbor
-// VPs, and the Catan Event Cards deck.
+// Scenario tab: the rule options and Traders & Barbarians variants in play
+// (any rule set) — the Strongest Ports tile and everyone's harbor VPs, the
+// Catan Event Cards deck, the Friendly Robber reminder, and balanced dice's
+// odds for the next roll.
 export function hasTradersVariantBlock(game: GameState): boolean {
   const v = game.settings.tradersVariants;
-  return !!(v?.friendlyRobber || game.strongestPorts || game.eventCards);
+  return !!(v?.friendlyRobber || game.strongestPorts || game.eventCards || game.balancedDice);
 }
+
+/** Who rolls next: the turn's roller until they've rolled, then the next seat. */
+function nextRoller(game: GameState): string {
+  const n = game.playerOrder.length;
+  const holder = game.turnHolderIndex ?? game.currentPlayerIndex;
+  return game.playerOrder[game.hasRolledThisTurn ? (holder + 1) % n : holder]!;
+}
+
+function BalancedDiceBlock({ game }: { game: GameState }) {
+  const bd = game.balancedDice!;
+  const roller = nextRoller(game);
+  const odds = balancedDiceOdds(game, roller);
+  const name = game.players.find((p) => p.id === roller)?.name ?? roller;
+  const rolls = bd.counts.reduce((a, b) => a + b, 0);
+  return (
+    <div className="scenario-panel-block">
+      <div className="scenario-panel-block-head">
+        <span>Balanced dice</span>
+        <span className="scenario-panel-block-sum">{rolls} rolls so far</span>
+      </div>
+      <div className="scenario-panel-note">{name}&apos;s next roll:</div>
+      <ol className="balanced-dice-odds" aria-label={`${name}'s next roll`}>
+        {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((t) => {
+          const plain = WAYS[t]! / 36;
+          const p = odds[t]!;
+          const lean = p > plain * 1.15 ? ' is-up' : p < plain / 1.15 ? ' is-down' : '';
+          return (
+            <li
+              key={t}
+              className={`balanced-dice-odd${lean}`}
+              title={`${t}: ${pct(p)} now (${pct(plain)} with plain dice); rolled ${bd.counts[t] ?? 0}×`}
+            >
+              <span className="balanced-dice-num">{t}</span>
+              <span className="balanced-dice-pct">{Math.round(p * 100)}%</span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="scenario-panel-note">
+        7s rolled: {game.players.map((p) => `${p.name} ${bd.sevens[p.id] ?? 0}`).join(' · ')}
+      </div>
+    </div>
+  );
+}
+
+const WAYS = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1];
+const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 export function TradersVariantsBlock({ game }: { game: GameState }) {
   const v = game.settings.tradersVariants;
@@ -75,6 +124,7 @@ export function TradersVariantsBlock({ game }: { game: GameState }) {
           </div>
         </div>
       )}
+      {game.balancedDice && <BalancedDiceBlock game={game} />}
     </>
   );
 }

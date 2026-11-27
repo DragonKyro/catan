@@ -25,6 +25,10 @@ describe('PendingTradeBanner: the proposer picks who to trade with', () => {
     useGameStore.setState({ game: s });
     const view = render(<PendingTradeBanner />);
     expect(view.getByText(/Waiting for answers/)).toBeTruthy();
+    // My own offer, from my seat: the brick comes in, the wood goes out.
+    expect(view.getByText('Your offer')).toBeTruthy();
+    expect(view.container.querySelector('.tlane-get .rchip-brick')).toBeTruthy();
+    expect(view.container.querySelector('.tlane-give .rchip-wood')).toBeTruthy();
     expect(view.queryByText(/Trade with/)).toBeNull();
 
     s = applyAction(s, { type: 'acceptTrade', playerId: 'p1' });

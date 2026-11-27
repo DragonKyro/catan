@@ -1,0 +1,21 @@
+.lazy-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: var(--text-soft, #6b5636);
+  font-family: var(--display-font, serif);
+  font-size: 1.1rem;
+}
+
+/* Inside the menu's sea: a parchment card, not a blank page. */
+.lazy-loading-menu {
+  min-height: 0;
+  margin: 40px auto;
+  padding: 18px 28px;
+  width: fit-content;
+  border-radius: var(--card-radius, 14px);
+  background: var(--panel, #fdf6e3);
+  box-shadow: var(--card-shadow, 0 6px 18px rgba(0, 0, 0, 0.2));
+}

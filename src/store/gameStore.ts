@@ -15,6 +15,7 @@ import { createGame, type CreateGameOptions } from '@/game/createGame';
 import { getActingPlayerId } from '@/game/helpers';
 import type { GameState } from '@/game/types';
 import { useLogStore, type LogStoreSnapshot } from './logStore';
+import { emitBoardTransition } from './boardEvents';
 
 // Re-export the pure helper for callers used to importing it from the store.
 export { getActingPlayerId };
@@ -34,6 +35,9 @@ export function tradeOfferKey(t: PendingTrade): string {
     t.receiveGold ?? 0,
   ].join('|');
 }
+
+/** Where the menus open after a game ends: the New Game settings or the online menu (null = home). */
+export type MenuStart = 'local' | 'online';
 
 /** The counter-offer being written: who is countering, and the offer (its tradeOfferKey) they answer. */
 export interface TradeCounter {
@@ -203,11 +207,19 @@ interface AppStore {
   // Same for the pirate (Seafarers): the clicked sea hex while the player
   // picks whom to rob.
   pendingPirateHex: HexId | null;
-  // Pre-action snapshot for solo/hot-seat undo. Set after a successful
-  // dispatch of one of UNDOABLE_ACTION_TYPES; cleared by any non-undoable
-  // action, by undo, or by starting/resetting a game.
+  // Pre-action snapshot for solo/hot-seat undo (the top of `undoStack`).
+  // Set after a successful dispatch of one of UNDOABLE_ACTION_TYPES; cleared
+  // by any non-undoable action, by undo, or by starting/resetting a game.
   // Bundles game state + log-store state so undo rewinds both together.
   lastActionSnapshot: GameSnapshot | null;
+  // Every undo step still open, oldest first. Hot-seat keeps one (the last
+  // build / bank trade); a game against AIs only (one human) keeps the whole
+  // turn's builds and trades, a completed trade with an AI undoing back to
+  // before the offer (the AIs' answers in between don't count as moves).
+  undoStack: GameSnapshot[];
+  // Bumped whenever the game is put back (undo, an online rollback), so the
+  // AI driver asks its seats about a restored offer again.
+  rewinds: number;
   // The most-recent dice token to highlight on the board (production
   // pulse). null when nothing should pulse. Cleared by a timeout in
   // BoardSVG ~1.5s after a roll. Excluded from network sync — each
@@ -217,8 +229,13 @@ interface AppStore {
   newGame: (opts: CreateGameOptions) => void;
   /** Show `state` as a fresh game; `startedAt` sets the game clock's start (default now). */
   setGameState: (state: GameState, startedAt?: number) => void;
-  resetGame: () => void;
+  /** Back to the menus; `then` opens one of them instead of home (read once by HomeMenu). */
+  resetGame: (opts?: { then?: MenuStart }) => void;
+  /** Set by resetGame({ then }); HomeMenu opens there and clears it. */
+  menuStart: MenuStart | null;
   dispatch: (action: Action) => void;
+  /** Dispatch moves in order as one (a mixed bank trade): stops at the first refusal, and undo takes back all of them. */
+  dispatchAll: (actions: Action[]) => void;
   /** Apply an action without broadcasting it (moves from the room), logged at time `at`. False when the engine rejects it. */
   applyLocal: (action: Action, at?: number) => boolean;
   /** Current game + log, for `restoreSnapshot`. */
@@ -284,6 +301,70 @@ function revealedSomething(before: GameState, next: GameState): boolean {
   // Anything that rolled dice (T&B Barbarian Attack landings after a build).
   if (before.rngState !== next.rngState) return true;
   return next.phase !== before.phase;
+}
+
+// Against AIs only: our offer's state from just before we made it, so a
+// trade that completes undoes back to there (cleared by anything else we do).
+let tradeStart: GameSnapshot | null = null;
+
+/** AI answers to an offer: they don't end the offerer's undo history. */
+const TRADE_ANSWERS = new Set<Action['type']>(['acceptTrade', 'rejectTrade', 'counterTrade', 'cancelTrade']);
+
+type UndoSet = (s: { lastActionSnapshot: GameSnapshot | null; undoStack: GameSnapshot[] }) => void;
+
+function setUndo(set: UndoSet, stack: GameSnapshot[]): void {
+  set({ undoStack: stack, lastActionSnapshot: stack[stack.length - 1] ?? null });
+}
+
+/**
+ * Undo bookkeeping after one of this device's moves. Hot-seat: the last
+ * build / bank trade only (one step). Against AIs (one human seat): every
+ * build and trade of the turn, in order; an offer to the AIs that gets
+ * taken (our confirm, or our accept of their counter) is one step back to
+ * before the offer. Anything else clears the history.
+ */
+function recordUndo(
+  set: UndoSet,
+  get: () => { undoStack: GameSnapshot[] },
+  before: GameState,
+  action: Action,
+  next: GameState,
+  log: LogStoreSnapshot,
+  solo: boolean,
+): void {
+  const entry: GameSnapshot = { game: before, log };
+  const humans = before.players.filter((p) => !p.isAI);
+  const vsAi = solo && humans.length === 1;
+  const me = humans[0]?.id;
+  const by = 'playerId' in action ? action.playerId : null;
+  const stack = get().undoStack;
+  if (!solo) {
+    tradeStart = null;
+    setUndo(set, []);
+    return;
+  }
+  if (vsAi && by !== me && TRADE_ANSWERS.has(action.type)) return; // an AI answering
+  if (vsAi && by === me && action.type === 'proposeTrade') {
+    tradeStart = entry;
+    return;
+  }
+  if (vsAi && by === me && action.type === 'cancelTrade') {
+    tradeStart = null;
+    return;
+  }
+  const traded = (action.type === 'confirmTrade' || action.type === 'acceptTrade')
+    && !!before.pendingTrade && !next.pendingTrade;
+  if (vsAi && by === me && traded && tradeStart) {
+    setUndo(set, [...stack, tradeStart]);
+    tradeStart = null;
+    return;
+  }
+  tradeStart = null;
+  if (UNDOABLE_ACTION_TYPES.has(action.type) && !revealedSomething(before, next)) {
+    setUndo(set, vsAi ? [...stack, entry] : [entry]);
+  } else {
+    setUndo(set, []);
+  }
 }
 
 const phaseToMode = (state: GameState): UIMode => {
@@ -422,12 +503,15 @@ export const useGameStore = create<AppStore>((set, get) => ({
   uiMode: { kind: 'idle' },
   dialog: null,
   tradeCounter: null,
+  menuStart: null,
   handoffPending: false,
   handoffAcknowledgedForPlayer: null,
   error: null,
   pendingRobberHex: null,
   pendingPirateHex: null,
   lastActionSnapshot: null,
+  undoStack: [],
+  rewinds: 0,
   lastRolledHighlight: null,
 
   newGame: (opts) => {
@@ -443,12 +527,14 @@ export const useGameStore = create<AppStore>((set, get) => ({
       pendingRobberHex: null,
       pendingPirateHex: null,
       lastActionSnapshot: null,
+      undoStack: [],
     });
   },
 
-  resetGame: () => {
+  resetGame: (opts) => {
     useLogStore.getState().reset();
     set({
+      menuStart: opts?.then ?? null,
       game: null,
       uiMode: { kind: 'idle' },
       dialog: null,
@@ -458,6 +544,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       pendingRobberHex: null,
       pendingPirateHex: null,
       lastActionSnapshot: null,
+      undoStack: [],
     });
   },
 
@@ -477,6 +564,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       const next = applyAction(before, action);
       useLogStore.getState().record(before, action, next, at);
       applyTransition(set, get, before, next);
+      emitBoardTransition(before, action, next, at);
       // Production-pulse highlight: only on real production rolls (not 7).
       // Cleared by the BoardSVG effect ~1.5s later.
       // A new roll (or, with Catan Event Cards, the production after the
@@ -488,15 +576,24 @@ export const useGameStore = create<AppStore>((set, get) => ({
       // Broadcast only after the local apply succeeds.
       if (broadcastHandler) broadcastHandler(action, { game: before, log: logBefore }, at);
       // Update snapshot bookkeeping for undo (solo/hot-seat only).
-      const solo = !isOnlinePredicate();
-      if (solo && UNDOABLE_ACTION_TYPES.has(action.type) && !revealedSomething(before, next)) {
-        set({ lastActionSnapshot: { game: before, log: logBefore } });
-      } else {
-        set({ lastActionSnapshot: null });
-      }
+      recordUndo(set, get, before, action, next, logBefore, !isOnlinePredicate());
     } catch (e) {
       set({ error: (e as Error).message });
     }
+  },
+
+  dispatchAll: (actions) => {
+    const start = get().takeSnapshot();
+    const depth = get().undoStack.length;
+    for (const action of actions) {
+      const before = get().game;
+      get().dispatch(action);
+      if (get().game === before) return;
+    }
+    // Each move left an undo snapshot from just before itself; fold them into
+    // one from before the first so undo takes back the whole batch.
+    const stack = get().undoStack;
+    if (start && stack.length > depth) setUndo(set, [...stack.slice(0, depth), start]);
   },
 
   applyLocal: (action, at) => {
@@ -506,6 +603,9 @@ export const useGameStore = create<AppStore>((set, get) => ({
       const next = applyAction(before, action);
       useLogStore.getState().record(before, action, next, at);
       applyTransition(set, get, before, next);
+      // `at` is when the move was made: a rejoin's replay of old moves is
+      // too old to animate (BoardAnimations skips it).
+      emitBoardTransition(before, action, next, at ?? Date.now());
       // A new roll (or, with Catan Event Cards, the production after the
       // flipped card's event) pulses the hexes of its number.
       if (next.lastRoll && next.lastRoll !== before.lastRoll) {
@@ -513,7 +613,8 @@ export const useGameStore = create<AppStore>((set, get) => ({
         set({ lastRolledHighlight: total !== 7 ? total : null });
       }
       // Remote actions never produce an undo snapshot — clear any stale one.
-      set({ lastActionSnapshot: null });
+      tradeStart = null;
+      set({ lastActionSnapshot: null, undoStack: [] });
       return true;
     } catch (e) {
       // Remote action failed locally — log but don't surface as user error.
@@ -530,27 +631,34 @@ export const useGameStore = create<AppStore>((set, get) => ({
   restoreSnapshot: (snap) => {
     useLogStore.getState().restore(snap.log);
     set({
+      rewinds: get().rewinds + 1,
       game: snap.game,
       uiMode: phaseToMode(snap.game),
       dialog: null,
       pendingRobberHex: null,
       pendingPirateHex: null,
       lastActionSnapshot: null,
+      undoStack: [],
     });
   },
 
   undo: () => {
-    const snap = get().lastActionSnapshot;
+    const stack = get().undoStack;
+    const snap = stack[stack.length - 1];
     if (!snap) return;
     useLogStore.getState().restore(snap.log);
+    tradeStart = null;
+    const rest = stack.slice(0, -1);
     set({
+      rewinds: get().rewinds + 1,
       game: snap.game,
       uiMode: phaseToMode(snap.game),
       dialog: null,
       error: null,
       pendingRobberHex: null,
       pendingPirateHex: null,
-      lastActionSnapshot: null,
+      lastActionSnapshot: rest[rest.length - 1] ?? null,
+      undoStack: rest,
     });
   },
 
@@ -568,6 +676,7 @@ export const useGameStore = create<AppStore>((set, get) => ({
       pendingRobberHex: null,
       pendingPirateHex: null,
       lastActionSnapshot: null,
+      undoStack: [],
     });
   },
 

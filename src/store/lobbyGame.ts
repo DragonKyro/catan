@@ -1,7 +1,8 @@
 // What the online lobby's choices mean for the game: the base game (any Fun
-// Map), Seafarers (any scenario), Cities & Knights (the maps it allows),
-// Traders & Barbarians (any scenario) or Explorers & Pirates, plus the T&B
-// variants; the seat range
+// Map; 2 players on the standard board), Seafarers (any scenario), Cities &
+// Knights (the maps it allows), Traders & Barbarians (any scenario) or
+// Explorers & Pirates, plus the rule options (Friendly Robber, balanced dice:
+// any game, on by default at 2 players) and the T&B variants (with T&B); the seat range
 // each allows, the VP target, and the createGame settings. Shared by
 // networkStore (to start the game) and the lobby screen (to show it). The
 // rules mirror the New Game screen (ui/newGame/ExpansionPicker + NewGame).
@@ -35,11 +36,12 @@ import {
   EP_MIN_PLAYERS,
   EXPLORERS_PIRATES_EXPANSION_ID,
 } from '@/game/modules/explorersPirates/constants';
-import { DEFAULT_AI_LEVEL, supportsNeuralAi } from '@/ai/nn';
+import { supportsNeuralAi } from '@/ai/nn/support';
+import { TWO_PLAYER_VP_TO_WIN } from '@/game/createGame';
 import type { LobbyGame, LobbyState, LobbyVariants } from '@/net/types';
 
-/** Online games need at least 3 seats (official rules); the lobby holds up to 8. */
-export const MIN_SEATS = 3;
+/** Online games need at least 2 seats (the base game; the rest need 3); the lobby holds up to 8. */
+export const MIN_SEATS = 2;
 export const MAX_SEATS = 8;
 
 export const ONLINE_SEAFARERS_SCENARIOS = SCENARIO_ORDER;
@@ -58,25 +60,22 @@ export const LOBBY_RULES: { id: LobbyRules; label: string }[] = [
   { id: 'explorersPirates', label: 'Explorers & Pirates' },
 ];
 
-export const LOBBY_VARIANTS: { id: keyof LobbyVariants; label: string; title: string }[] = [
-  {
-    id: 'friendlyRobber',
-    label: 'Friendly Robber',
-    title: 'The robber may not go to a hex with a building of a player who has only 2 VPs',
-  },
-  {
-    id: 'strongestPorts',
-    label: 'Strongest Ports (+1 VP target)',
-    title: '3+ VPs in buildings on harbors takes a 2 VP tile; a player with more takes it over',
-  },
-  {
-    id: 'eventCards',
-    label: 'Catan Event Cards',
-    title: 'Flip an event card each turn instead of rolling: resolve its event, then produce for its number',
-  },
-];
+export type LobbyVariantId = keyof LobbyVariants;
 
-const NO_VARIANTS: LobbyVariants = { friendlyRobber: false, strongestPorts: false, eventCards: false };
+/** Rule options for any game (on by default at 2 players). */
+export const LOBBY_RULE_OPTIONS: LobbyVariantId[] = ['friendlyRobber', 'balancedDice'];
+/** Traders & Barbarians variants (offered with a T&B scenario). */
+export const LOBBY_TRADERS_VARIANTS: LobbyVariantId[] = ['strongestPorts', 'eventCards'];
+const ALL_VARIANTS = [...LOBBY_RULE_OPTIONS, ...LOBBY_TRADERS_VARIANTS];
+
+const VARIANT_LABELS: Record<LobbyVariantId, string> = {
+  friendlyRobber: 'Friendly Robber',
+  balancedDice: 'Balanced dice',
+  strongestPorts: 'Strongest Ports',
+  eventCards: 'Catan Event Cards',
+};
+
+const NO_VARIANTS: LobbyVariants = { strongestPorts: false, eventCards: false };
 
 export function defaultLobbyGame(): LobbyGame {
   return {
@@ -115,19 +114,29 @@ function lobbyExpansions(game: LobbyGame): string[] {
 }
 
 /**
- * Why a variant can't be picked with these rules (createGame refuses the
- * combination), or null when it can: Event Cards with Cities & Knights, any
- * variant with Explorers & Pirates (no robber, harbors or plain dice roll).
+ * Why an option can't be picked with these rules (createGame refuses the
+ * combination), or null when it can: the T&B variants only with a T&B
+ * scenario, no Friendly Robber in Explorers & Pirates (no robber), no
+ * balanced dice under the Event Cards (they replace the dice).
  */
-export function lobbyVariantBlockReason(game: LobbyGame, id: keyof LobbyVariants): string | null {
+export function lobbyVariantBlockReason(game: LobbyGame, id: LobbyVariantId): string | null {
   const rules = lobbyRules(game);
-  if (rules === 'explorersPirates') return "Can't be combined with Explorers & Pirates";
-  if (id === 'eventCards' && rules === 'citiesKnights') return "Can't be combined with Cities & Knights yet";
+  if ((id === 'strongestPorts' || id === 'eventCards') && rules !== 'traders') return 'Traders & Barbarians only';
+  if (id === 'friendlyRobber' && rules === 'explorersPirates') return 'Explorers & Pirates has no robber';
+  if (id === 'balancedDice' && rules === 'traders' && game.variants.eventCards) return 'The Catan Event Cards replace the dice';
   return null;
 }
 
-export function lobbyVariantAllowed(game: LobbyGame, id: keyof LobbyVariants): boolean {
+export function lobbyVariantAllowed(game: LobbyGame, id: LobbyVariantId): boolean {
   return lobbyVariantBlockReason(game, id) === null;
+}
+
+/** Whether an option is on: the host's choice, else the default (rule options on at 2 seats). */
+export function lobbyVariantOn(lobby: Pick<LobbyState, 'game' | 'seats'>, id: LobbyVariantId): boolean {
+  if (!lobbyVariantAllowed(lobby.game, id)) return false;
+  const chosen = lobby.game.variants[id];
+  if (chosen !== undefined) return chosen;
+  return LOBBY_RULE_OPTIONS.includes(id) && lobby.seats.length === 2;
 }
 
 /**
@@ -149,8 +158,10 @@ export function normalizeLobbyGame(game: LobbyGame): LobbyGame {
   if (!baseScenarioAllowed(getBaseScenario(next.baseScenarioId), lobbyExpansions(next))) {
     next.baseScenarioId = DEFAULT_BASE_SCENARIO_ID;
   }
-  for (const v of LOBBY_VARIANTS) {
-    if (!lobbyVariantAllowed(next, v.id)) next.variants[v.id] = false;
+  // The T&B variants go with the T&B scenarios; a rule option the rules
+  // refuse is simply off (lobbyVariantOn), so it comes back with other rules.
+  for (const id of LOBBY_TRADERS_VARIANTS) {
+    if (!lobbyVariantAllowed(next, id)) next.variants[id] = false;
   }
   return next;
 }
@@ -205,7 +216,7 @@ export function lobbyScenario(game: LobbyGame): LobbyScenarioInfo {
       const m = getBaseScenario(game.baseScenarioId);
       return {
         name: m.id === DEFAULT_BASE_SCENARIO_ID ? 'Cities & Knights' : `Cities & Knights: ${m.name}`,
-        ...seats(m.minPlayers, Math.min(m.maxPlayers, CITIES_AND_KNIGHTS_MAX_PLAYERS)),
+        ...seats(Math.max(3, m.minPlayers), Math.min(m.maxPlayers, CITIES_AND_KNIGHTS_MAX_PLAYERS)),
         recommendedVp: () => CITIES_AND_KNIGHTS_DEFAULT_VP,
       };
     }
@@ -216,17 +227,18 @@ export function lobbyScenario(game: LobbyGame): LobbyScenarioInfo {
       return {
         name: game.seafarers ? `Seafarers: ${s.name}` : s.name === 'Standard' ? 'Base game' : `Base game: ${s.name}`,
         ...seats(s.minPlayers, s.maxPlayers),
-        recommendedVp: (n) => (n >= 5 && s.defaultVpToWin5_6 != null ? s.defaultVpToWin5_6 : vp),
+        recommendedVp: (n) =>
+          n === 2 && !game.seafarers
+            ? TWO_PLAYER_VP_TO_WIN
+            : n >= 5 && s.defaultVpToWin5_6 != null ? s.defaultVpToWin5_6 : vp,
       };
     }
   }
 }
 
-/** The variants on (and allowed) for the lobby's rules, as labels. */
-export function lobbyVariantLabels(game: LobbyGame): string[] {
-  return LOBBY_VARIANTS.filter((v) => game.variants[v.id] && lobbyVariantAllowed(game, v.id)).map(
-    (v) => v.label.replace(/ \(.*\)$/, ''),
-  );
+/** The options on for the lobby's rules and seats, as labels. */
+export function lobbyVariantLabels(lobby: Pick<LobbyState, 'game' | 'seats'>): string[] {
+  return ALL_VARIANTS.filter((id) => lobbyVariantOn(lobby, id)).map((id) => VARIANT_LABELS[id]);
 }
 
 /** The VP target the host picked (or the recommended one), before the Strongest Ports +1. */
@@ -236,7 +248,7 @@ export function lobbyVp(lobby: LobbyState): number {
 
 /** The VP target the game will actually use: createGame adds 1 for Strongest Ports. */
 export function lobbyVpTarget(lobby: LobbyState): number {
-  return lobbyVp(lobby) + (lobby.game.variants.strongestPorts ? 1 : 0);
+  return lobbyVp(lobby) + (lobbyVariantOn(lobby, 'strongestPorts') ? 1 : 0);
 }
 
 /** Why the host can't start yet, or null when they can. */
@@ -254,9 +266,11 @@ export function lobbySettings(lobby: LobbyState): Partial<GameSettings> {
   const rules = lobbyRules(game);
   const expansions = lobbyExpansions(game);
   const baseScenarioId = rules === 'base' || rules === 'citiesKnights' ? game.baseScenarioId : undefined;
-  const anyVariant = LOBBY_VARIANTS.some((v) => game.variants[v.id]);
-  const tradersVariants = anyVariant ? { ...game.variants } : undefined;
-  const neural = supportsNeuralAi({ expansions, baseScenarioId, tradersVariants });
+  const on = (id: LobbyVariantId) => lobbyVariantOn({ game, seats: lobby.seats }, id);
+  const tv = { friendlyRobber: on('friendlyRobber'), strongestPorts: on('strongestPorts'), eventCards: on('eventCards') };
+  const tradersVariants = tv.friendlyRobber || tv.strongestPorts || tv.eventCards ? tv : undefined;
+  const balancedDice = on('balancedDice');
+  const neural = supportsNeuralAi({ expansions, baseScenarioId, tradersVariants, numPlayers: lobby.seats.length });
   return {
     victoryPointsToWin: lobbyVp({ ...lobby, game }),
     expansions,
@@ -264,11 +278,12 @@ export function lobbySettings(lobby: LobbyState): Partial<GameSettings> {
     baseScenarioId,
     tradersScenarioId: rules === 'traders' ? game.tradersScenarioId : undefined,
     tradersVariants,
-    aiLevel: neural ? (lobby.aiLevel ?? DEFAULT_AI_LEVEL) : undefined,
+    ...(balancedDice ? { balancedDice: true } : {}),
+    aiLevel: neural ? 'hard' : undefined,
   };
 }
 
-/** Whether the AI difficulty choice applies (the trained AI only plays the base game on the standard map). */
-export function lobbyHasAiLevels(lobby: LobbyState): boolean {
+/** Whether the AI seats play the trained network (it only plays the base game on the standard map). */
+export function lobbyUsesTrainedAi(lobby: LobbyState): boolean {
   return lobbySettings(lobby).aiLevel !== undefined;
 }

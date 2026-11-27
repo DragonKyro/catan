@@ -368,7 +368,7 @@ describe('Rivers of Catan: coins in player trades', () => {
     s = giveResources(s, 'p0', { wood: 1 });
     s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: {}, receiveGold: 1 });
     s = applyAction(s, { type: 'counterTrade', playerId: 'p1', give: {}, giveGold: 1, receive: { wood: 1 } });
-    s = applyAction(s, { type: 'acceptTrade', playerId: 'p0' });
+    s = applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p1', counter: true });
     expect(gold(s, 'p0')).toBe(1);
     expect(s.players[1]!.resources.wood).toBe(1);
   });

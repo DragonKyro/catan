@@ -144,8 +144,9 @@ export const TRADERS_TOPICS: Topic[] = [
           highlights legal hexes.
         </p>
         <p className="rb-muted">
-          A variant: tick it under &quot;Traders &amp; Barbarians variants&quot; on the New Game
-          screen. It works with the base game, Seafarers and every T&amp;B scenario.
+          A rule option: tick it under &quot;Rule options&quot; on the New Game screen (or in the
+          online lobby). It works with every game that has a robber, and is on by default with 2
+          players.
         </p>
       </>
     ),

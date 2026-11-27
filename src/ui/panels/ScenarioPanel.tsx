@@ -24,7 +24,7 @@ export function hasScenarioTracker(state: ReturnType<typeof useGameStore.getStat
   if (!state) return false;
   // Explorers & Pirates: missions, exploration, lairs, farms, fish, pirate.
   if (state.explorersPirates) return true;
-  // T&B variants (Strongest Ports, Event Cards, Friendly Robber) show in any game.
+  // Rule options and T&B variants (Friendly Robber, balanced dice, Strongest Ports, Event Cards) show in any game.
   if (hasTradersVariantBlock(state)) return true;
   const hasSeafarers = state.settings.expansions.includes(SEAFARERS_EXPANSION_ID);
   const hasTraders = state.settings.expansions.includes(TRADERS_EXPANSION_ID);
@@ -104,12 +104,12 @@ export function ScenarioPanel() {
     return <TradersScenarioPanel />;
   }
   if (!hasSeafarers) {
-    // Base game with T&B variants only.
+    // Base game (or C&K) with rule options / T&B variants only.
     if (!hasTradersVariantBlock(game)) return null;
     return (
       <section className="scenario-panel">
         <header className="scenario-panel-header">
-          <span className="scenario-panel-title">Traders & Barbarians variants</span>
+          <span className="scenario-panel-title">Rule options</span>
         </header>
         <TradersVariantsBlock game={game} />
       </section>

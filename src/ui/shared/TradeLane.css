@@ -1,0 +1,55 @@
+.tlane {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1.5px solid;
+}
+
+.tlane-give {
+  border-color: color-mix(in srgb, var(--give) 55%, transparent);
+  background: color-mix(in srgb, var(--give) 7%, var(--panel-soft));
+}
+
+.tlane-get {
+  border-color: color-mix(in srgb, var(--get) 55%, transparent);
+  background: color-mix(in srgb, var(--get) 7%, var(--panel-soft));
+}
+
+.tlane-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 5.8em;
+  font-weight: 700;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.tlane-give .tlane-head {
+  color: var(--give);
+}
+
+.tlane-get .tlane-head {
+  color: var(--get);
+}
+
+.tlane-arrow {
+  flex-shrink: 0;
+}
+
+.tlane-cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tlane-empty {
+  color: var(--text-soft);
+  font-size: 0.8em;
+  font-style: italic;
+}

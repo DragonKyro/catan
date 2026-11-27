@@ -69,8 +69,21 @@ describe('createGame', () => {
   });
 
   it('uses default 10 victory points to win', () => {
-    const state = createGame({ playerNames: ['A', 'B'], seed: 1 });
+    const state = createGame({ playerNames: ['A', 'B', 'C'], seed: 1 });
     expect(state.settings.victoryPointsToWin).toBe(10);
+    expect(state.settings.discardLimit).toBeUndefined();
+  });
+
+  it('two players: 15 VP and a 9-card limit on a 7 (colonist.io 1v1), unless set', () => {
+    const state = createGame({ playerNames: ['A', 'B'], seed: 1 });
+    expect(state.settings.victoryPointsToWin).toBe(15);
+    expect(state.settings.discardLimit).toBe(9);
+    const own = createGame({ playerNames: ['A', 'B'], seed: 1, settings: { victoryPointsToWin: 12, discardLimit: 7 } });
+    expect(own.settings.victoryPointsToWin).toBe(12);
+    expect(own.settings.discardLimit).toBe(7);
+    // Balanced dice and the Friendly Robber are opt-in (the New Game screen / lobby default them on).
+    expect(state.settings.balancedDice).toBeUndefined();
+    expect(state.balancedDice).toBeUndefined();
   });
 
   it('respects a custom victoryPointsToWin', () => {

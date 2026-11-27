@@ -7,7 +7,7 @@ import type {
   VertexId,
 } from '../types';
 import { RESOURCES } from '../types';
-import { currentPlayerId, updatePlayer } from '../helpers';
+import { currentPlayerId, discardLimit, updatePlayer } from '../helpers';
 import {
   addResources,
   subtractResources,
@@ -45,15 +45,16 @@ export function handleRollDice(state: GameState, action: RollDiceAction): GameSt
   return maybeEruptVolcano(afterFish, total);
 }
 
-// "Resolve a 7": everyone over 7 cards discards half, then the roller moves
+// "Resolve a 7": everyone over 7 cards (9 at 2 players) discards half, then the roller moves
 // the robber (or, with Seafarers, chooses robber or pirate). Exported so a
 // scenario that resolves something between the roll and the 7 (Pirate
 // Islands' fleet attack) can start this step afterwards.
 export function startSevenResolution(next: GameState): GameState {
   const required: Record<PlayerId, number> = {};
+  const limit = discardLimit(next);
   for (const p of next.players) {
     const count = totalResources(p.resources);
-    if (count > 7) required[p.id] = Math.floor(count / 2);
+    if (count > limit) required[p.id] = Math.floor(count / 2);
   }
   if (Object.keys(required).length > 0) {
     return {

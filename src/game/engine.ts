@@ -10,6 +10,7 @@ import { SEAFARERS_EXPANSION_ID } from './modules/seafarers/constants';
 import { CITIES_AND_KNIGHTS_EXPANSION_ID } from './modules/citiesAndKnights/constants';
 import { TRADERS_EXPANSION_ID } from './modules/traders/constants';
 import { tradersVariantModules } from './modules/traders/variants';
+import { balancedDiceModule } from './modules/balancedDice';
 import { canMoveRobberTo } from './placement';
 import { totalResources } from './resources';
 import { calculateLongestRoad } from './scoring/longestRoad';
@@ -26,10 +27,14 @@ import {
 // the T&B build wrappers that grant river-gold, and Cities & Knights'
 // full overrides of rollDice / discard / etc.).
 export function getActiveModules(state: GameState): RuleModule[] {
-  // Traders & Barbarians variants (Friendly Robber, Strongest Ports, Catan
-  // Event Cards) layer on top of any rule set, so they go first; a variant
+  // Balanced dice and the Traders & Barbarians variants (Friendly Robber,
+  // Strongest Ports, Catan Event Cards) layer on top of any rule set, so they go first; a variant
   // that wraps an action hands it on with `applyNextModuleHandler`.
-  const out: RuleModule[] = tradersVariantModules(state.settings);
+  const out: RuleModule[] = [
+    // Balanced dice decides the dice before any rule set sees the roll.
+    ...(state.settings.balancedDice ? [balancedDiceModule] : []),
+    ...tradersVariantModules(state.settings),
+  ];
   if (state.settings.expansions.includes(EXPLORERS_PIRATES_EXPANSION_ID)) {
     out.push(explorersPiratesModule);
   }

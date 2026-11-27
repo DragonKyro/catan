@@ -102,7 +102,7 @@ export function HandPanel() {
   };
 
   return (
-    <section className="hand">
+    <section className="hand" data-anim-hand={player.id}>
       <header className="hand-header">
         <h3 title={player.name}>
           <span

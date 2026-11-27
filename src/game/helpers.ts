@@ -17,6 +17,11 @@ export function currentPlayerId(state: GameState): PlayerId {
   return id;
 }
 
+/** Resource cards a player may hold when a 7 is rolled without discarding (7, or 9 in a 2-player game). */
+export function discardLimit(state: Pick<GameState, 'settings'>): number {
+  return state.settings.discardLimit ?? 7;
+}
+
 export function getPlayer(state: GameState, playerId: PlayerId): Player {
   const p = state.players.find((x) => x.id === playerId);
   if (!p) throw new Error(`Unknown player: ${playerId}`);

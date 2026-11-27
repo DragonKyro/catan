@@ -1,3 +1,4 @@
+import { discardLimit } from '@/game/helpers';
 import type {
   GameState,
   PlayerId,
@@ -11,7 +12,7 @@ import { canPlaceSettlement, canConnectRoad, canPlaceCity } from '@/game/placeme
 import { canAfford } from '@/game/resources';
 import { getBankTradeRate } from '@/game/actions/trade';
 import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
-import { chooseTradePartner, tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
+import { chooseTradeResolution, tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
 import { chooseDevCardPlay } from './devcard';
 import { calculateRouteLength } from '@/game/engine';
 import { calculateVictoryPoints } from '@/game/scoring/points';
@@ -60,19 +61,16 @@ export function chooseMainPhaseAction(
   if (!player) return null;
 
   // Handle any pending trade involving us before doing anything else:
-  // - If we proposed it, trade with our pick of whoever accepted, else walk
-  //   away (the driver's wait already gave everyone time to answer).
-  // - If it's a counter to our trade (or any trade we're now the current
-  //   player on), accept if beneficial, otherwise cancel.
+  // - If we proposed it, trade with our pick of whoever said yes, else take
+  //   the best counter-offer we'd accept, else walk away (the driver's wait
+  //   already gave everyone time to answer).
+  // - Someone else's offer: yes if it's worth it, otherwise no.
   if (state.pendingTrade) {
-    if (state.pendingTrade.proposerId === playerId) {
-      const partner = chooseTradePartner(state, playerId);
-      return partner ? { type: 'confirmTrade', playerId, with: partner } : { type: 'cancelTrade', playerId };
-    }
+    if (state.pendingTrade.proposerId === playerId) return chooseTradeResolution(state, playerId);
     if (shouldAcceptTrade(state, playerId)) {
       return { type: 'acceptTrade', playerId };
     }
-    return { type: 'cancelTrade', playerId };
+    return { type: 'rejectTrade', playerId };
   }
 
   // 0) Play a dev card if it would clearly help (knight to clear robber etc.)
@@ -237,15 +235,15 @@ export function chooseMainPhaseAction(
       needs.goal === 'city' &&
       player.settlements.length > 0 &&
       cityShortfall <= 2 &&
-      handSize <= 8;
+      handSize <= discardLimit(state) + 1;
     const placedSettlesAndCities = player.settlements.length + player.cities.length;
     const earlyGame = placedSettlesAndCities < 2;
     // Play styles (persona.ts): the cities and expansion styles keep their
     // wheat / ore (sheep / wheat) for their own builds unless the hand is
     // about to be cut by a 7.
     const styleHolds =
-      (style === 'citiesFirst' && player.settlements.length > 0 && handSize < 8) ||
-      (style === 'expansion' && handSize < 8);
+      (style === 'citiesFirst' && player.settlements.length > 0 && handSize <= discardLimit(state)) ||
+      (style === 'expansion' && handSize <= discardLimit(state));
     if (!saveForCity && !earlyGame && !styleHolds) {
       return { type: 'buyDevCard', playerId };
     }
@@ -546,10 +544,10 @@ export function tryBankTrade(state: GameState, playerId: PlayerId): Action | nul
   // back-and-forth churn: AI with 4 brick would trade for wood, then trade
   // back to brick the next turn. Now:
   //  1) Goal-driven: we have a concrete build goal AND a specific shortfall.
-  //  2) Discard-imminent: handSize >= 7 (at 8 we're forced to discard;
-  //     starting the spend-down at 7 gives a one-turn buffer).
+  //  2) Discard-imminent: handSize >= the discard limit (7; one more card
+  //     and a 7 forces a discard, so the spend-down starts a card early).
   const wantingForGoal = needs.goal !== 'none';
-  const discardImminent = handSize >= 7;
+  const discardImminent = handSize >= discardLimit(state);
   if (!wantingForGoal && !discardImminent) return null;
 
   // Pick the resource we want most. Goal mode targets the needed resource;

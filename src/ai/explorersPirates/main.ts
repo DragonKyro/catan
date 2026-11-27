@@ -21,7 +21,7 @@ import {
   shipById,
   shipsOf,
 } from '@/game/modules/explorersPirates/state';
-import { chooseTradePartner, shouldAcceptTrade, tryProposeFavorableTrade, tryProposeTrade } from '../trade';
+import { chooseTradeResolution, shouldAcceptTrade, tryProposeFavorableTrade, tryProposeTrade } from '../trade';
 import { tryBankTrade } from '../main';
 import { firstLegal, goldOf, handSize, leavesReserve, playerOf, sumShort } from './common';
 import { EP_GOAL_COST, epNeeds, roadSettlementSpots, type EpGoal } from './needs';
@@ -43,12 +43,9 @@ export function chooseEpMainAction(state: GameState, pid: PlayerId): Action | nu
   const p = playerOf(state, pid);
 
   if (state.pendingTrade) {
-    if (state.pendingTrade.proposerId === pid) {
-      const partner = chooseTradePartner(state, pid);
-      return partner ? { type: 'confirmTrade', playerId: pid, with: partner } : { type: 'cancelTrade', playerId: pid };
-    }
+    if (state.pendingTrade.proposerId === pid) return chooseTradeResolution(state, pid);
     if (shouldAcceptTrade(state, pid)) return { type: 'acceptTrade', playerId: pid };
-    return { type: 'cancelTrade', playerId: pid };
+    return { type: 'rejectTrade', playerId: pid };
   }
 
   const needs = epNeeds(state, pid);

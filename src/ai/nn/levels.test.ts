@@ -104,8 +104,8 @@ describe('AI levels', () => {
 
   it.each([
     [4, 'hard', 'every seat'],
-    [3, 'normal', 'every seat'],
-    [6, 'easy', 'every seat'],
+    [3, 'hard', 'every seat'],
+    [6, 'hard', 'every seat'],
     [4, 'hard', 'two seats, two heuristics'],
   ] as const)('%ip %s: %s play a full game to the end', (players, level, who) => {
     const { final, networkMoves } = playLevelGame(players, 900 + players, level, (i) => who === 'every seat' || i % 2 === 0);

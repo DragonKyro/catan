@@ -6,21 +6,26 @@ import { ChatPanel } from '@/ui/chat/ChatPanel';
 import { PLAYER_COLOR_LABEL, playerColorVar } from '@/ui/shared/playerColors';
 import { ColorPicker } from '@/ui/shared/ColorPicker';
 import { MenuBadge } from '@/ui/menu/MenuBadge';
-import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL } from '@/ai/nn';
+import { AI_LEVEL_LABEL } from '@/ai/nn/levelInfo';
+import { InfoTip } from '@/ui/shared/InfoTip';
+import { RULE_OPTION_TEXT, TWO_PLAYER_INFO } from '@/ui/shared/ruleOptions';
 import {
   LOBBY_RULES,
-  LOBBY_VARIANTS,
+  LOBBY_RULE_OPTIONS,
+  LOBBY_TRADERS_VARIANTS,
   MAX_SEATS,
+  type LobbyVariantId,
   ONLINE_SEAFARERS_SCENARIOS,
   ONLINE_TRADERS_SCENARIOS,
   type LobbyRules,
   lobbyBaseMaps,
-  lobbyHasAiLevels,
+  lobbyUsesTrainedAi,
   lobbyRules,
   lobbyScenario,
   lobbyStartProblem,
   lobbyVariantBlockReason,
   lobbyVariantLabels,
+  lobbyVariantOn,
   lobbyVp,
   lobbyVpTarget,
   withLobbyRules,
@@ -90,7 +95,7 @@ const VP_COMMIT_DELAY_MS = 600;
 
 /** The game the room will play: the host picks it, everyone else sees it. */
 function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean }) {
-  const { hostSetGame, hostSetVP, hostSetAiLevel } = useNetworkStore();
+  const { hostSetGame, hostSetVP } = useNetworkStore();
   const info = lobbyScenario(lobby.game);
   const recommended = info.recommendedVp(lobby.seats.length);
   const vp = lobbyVp(lobby);
@@ -111,10 +116,11 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vpDraft]);
   const hasAi = lobby.seats.some((s) => s.isAI);
-  const aiLevels = lobbyHasAiLevels(lobby);
-  const aiLevel = lobby.aiLevel ?? DEFAULT_AI_LEVEL;
+  const trainedAi = lobbyUsesTrainedAi(lobby);
   const rules = lobbyRules(lobby.game);
-  const variants = lobbyVariantLabels(lobby.game);
+  const variants = lobbyVariantLabels(lobby);
+  // Two seats on the base game: colonist.io's 1v1 rules.
+  const twoPlayer = lobby.seats.length === 2 && rules === 'base';
 
   if (!isHost) {
     return (
@@ -122,8 +128,14 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
         <h3>Game</h3>
         <p className="lobby-summary">
           {info.name} · {lobbyVpTarget(lobby)} VP to win
+          {twoPlayer && (
+            <>
+              {' · 1v1 rules'}
+              <InfoTip text={TWO_PLAYER_INFO} label="Two-player rules" />
+            </>
+          )}
           {variants.length > 0 && ` · ${variants.join(', ')}`}
-          {hasAi && aiLevels && ` · ${AI_LEVELS[aiLevel].label} AI`}
+          {hasAi && trainedAi && ` · ${AI_LEVEL_LABEL.hard} AI`}
         </p>
       </div>
     );
@@ -190,39 +202,30 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
           </select>
         </label>
       )}
-      <div className="lobby-variants" role="group" aria-label="Traders & Barbarians variants">
-        <span className="lobby-variants-label">Variants</span>
-        {LOBBY_VARIANTS.map((v) => {
-          const blocked = lobbyVariantBlockReason(lobby.game, v.id);
-          const allowed = blocked === null;
-          return (
-            <label
-              key={v.id}
-              className="lobby-variant"
-              title={blocked ?? v.title}
-            >
-              <input
-                type="checkbox"
-                checked={allowed && lobby.game.variants[v.id]}
-                disabled={!allowed}
-                onChange={(e) =>
-                  hostSetGame({
-                    ...lobby.game,
-                    variants: { ...lobby.game.variants, [v.id]: e.target.checked },
-                  })
-                }
-              />
-              <span>{v.label}</span>
-            </label>
-          );
-        })}
-      </div>
+      {rules === 'traders' && (
+        <OptionGroup
+          label="Variants"
+          aria="Traders & Barbarians variants"
+          ids={LOBBY_TRADERS_VARIANTS}
+          lobby={lobby}
+          onToggle={(id, on) => hostSetGame({ ...lobby.game, variants: { ...lobby.game.variants, [id]: on } })}
+        />
+      )}
+      <OptionGroup
+        label="Rule options"
+        aria="Rule options"
+        ids={LOBBY_RULE_OPTIONS}
+        lobby={lobby}
+        onToggle={(id, on) => hostSetGame({ ...lobby.game, variants: { ...lobby.game.variants, [id]: on } })}
+        note={twoPlayer ? <InfoTip text={TWO_PLAYER_INFO} label="Two-player rules" /> : null}
+      />
       <label className="lobby-vp">
         <span>
           Victory points to win{' '}
           <span className="lobby-vp-hint">
             (recommended {recommended}
-            {lobby.game.variants.strongestPorts && ', +1 for Strongest Ports'})
+            {lobbyVariantOn(lobby, 'strongestPorts') && ', +1 for Strongest Ports'}
+            {twoPlayer && lobby.victoryPointsToWin === null && ', 1v1 rules'})
           </span>
         </span>
         <span className="lobby-vp-controls">
@@ -241,18 +244,6 @@ function GameSettings({ lobby, isHost }: { lobby: LobbyState; isHost: boolean })
           />
         </span>
       </label>
-      {hasAi && aiLevels && (
-        <label className="lobby-vp">
-          <span>AI difficulty</span>
-          <select value={aiLevel} onChange={(e) => hostSetAiLevel(e.target.value as keyof typeof AI_LEVELS)}>
-            {AI_LEVEL_IDS.map((id) => (
-              <option key={id} value={id}>
-                {AI_LEVELS[id].label}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
     </div>
   );
 }
@@ -410,6 +401,49 @@ export function LobbyScreen() {
       <div className="lobby-chat-wrap">
         <ChatPanel />
       </div>
+    </div>
+  );
+}
+
+/** A row of option checkboxes, each with an ⓘ saying what it does (host only). */
+function OptionGroup({
+  label,
+  aria,
+  ids,
+  lobby,
+  onToggle,
+  note,
+}: {
+  label: string;
+  aria: string;
+  ids: LobbyVariantId[];
+  lobby: LobbyState;
+  onToggle: (id: LobbyVariantId, on: boolean) => void;
+  note?: React.ReactNode;
+}) {
+  return (
+    <div className="lobby-variants" role="group" aria-label={aria}>
+      <span className="lobby-variants-label">
+        {label}
+        {note}
+      </span>
+      {ids.map((id) => {
+        const blocked = lobbyVariantBlockReason(lobby.game, id);
+        const text = RULE_OPTION_TEXT[id];
+        return (
+          <label key={id} className="lobby-variant" title={blocked ?? undefined}>
+            <input
+              type="checkbox"
+              aria-label={text.label}
+              checked={lobbyVariantOn(lobby, id)}
+              disabled={blocked !== null}
+              onChange={(e) => onToggle(id, e.target.checked)}
+            />
+            <span>{text.label}</span>
+            <InfoTip text={blocked ? `${blocked}. ${text.info}` : text.info} label={text.label} />
+          </label>
+        );
+      })}
     </div>
   );
 }

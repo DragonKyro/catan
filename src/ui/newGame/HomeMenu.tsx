@@ -1,9 +1,14 @@
-import { useRef, useState, type CSSProperties } from 'react';
-import { NewGame } from './NewGame';
-import { OnlineMenu } from './OnlineMenu';
-import { Rulebook } from '@/rulebook/Rulebook';
-import { MapBuilderScreen } from '@/ui/mapBuilder/MapBuilderScreen';
+import { Suspense, lazy, useRef, useState, type CSSProperties } from 'react';
+import { LoadingScreen } from '@/ui/shared/lazyScreens';
+
+// The menu's screens load on first use (New Game is also prefetched once the
+// home screen is idle, see prefetchGameScreens).
+const NewGame = lazy(() => import('./NewGame').then((m) => ({ default: m.NewGame })));
+const OnlineMenu = lazy(() => import('./OnlineMenu').then((m) => ({ default: m.OnlineMenu })));
+const Rulebook = lazy(() => import('@/rulebook/Rulebook').then((m) => ({ default: m.Rulebook })));
+const MapBuilderScreen = lazy(() => import('@/ui/mapBuilder/MapBuilderScreen').then((m) => ({ default: m.MapBuilderScreen })));
 import { useReplayStore, parseReplay } from '@/store/replayStore';
+import { useGameStore } from '@/store/gameStore';
 import { roomCodeFromUrl } from '@/net';
 import { MenuBadge, type MenuBadgeKind } from '@/ui/menu/MenuBadge';
 import { RULE_SETS } from '@/ui/menu/ruleSets';
@@ -15,8 +20,14 @@ import './HomeMenu.css';
 type Mode = 'choose' | 'local' | 'online' | 'rules' | 'builder';
 
 export function HomeMenu() {
-  // An invite link (?room=ABCD) opens the online menu on that room.
-  const [mode, setMode] = useState<Mode>(() => (roomCodeFromUrl() ? 'online' : 'choose'));
+  // An invite link (?room=ABCD) opens the online menu on that room; after a
+  // game, "New game" opens straight on its settings (gameStore.menuStart).
+  const [mode, setMode] = useState<Mode>(() => {
+    if (roomCodeFromUrl()) return 'online';
+    const start = useGameStore.getState().menuStart;
+    if (start) useGameStore.setState({ menuStart: null });
+    return start ?? 'choose';
+  });
   const [replayError, setReplayError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const loadReplay = useReplayStore((s) => s.load);
@@ -37,17 +48,18 @@ export function HomeMenu() {
       });
   };
 
+  const screen = (node: React.ReactNode) => <Suspense fallback={<LoadingScreen inMenu />}>{node}</Suspense>;
   if (mode === 'local') {
-    return <NewGame onBack={() => setMode('choose')} />;
+    return screen(<NewGame onBack={() => setMode('choose')} />);
   }
   if (mode === 'online') {
-    return <OnlineMenu onBack={() => setMode('choose')} />;
+    return screen(<OnlineMenu onBack={() => setMode('choose')} />);
   }
   if (mode === 'rules') {
-    return <Rulebook onClose={() => setMode('choose')} heading={<ScreenTitle badge="rules" title="Rulebook" />} />;
+    return screen(<Rulebook onClose={() => setMode('choose')} heading={<ScreenTitle badge="rules" title="Rulebook" />} />);
   }
   if (mode === 'builder') {
-    return <MapBuilderScreen onBack={() => setMode('choose')} />;
+    return screen(<MapBuilderScreen onBack={() => setMode('choose')} />);
   }
 
   return (

@@ -13,11 +13,13 @@ import type {
 import { COMMODITIES, RESOURCES } from '../../types';
 import { currentPlayerId, getPlayer, isPairedPlayer2, updatePlayer } from '../../helpers';
 import {
+  addCounter,
   getBankTradeRate,
   handleAcceptTrade,
   handleConfirmTrade,
   handleCounterTrade,
   handleProposeTrade,
+  stateForConfirm,
 } from '../../actions/trade';
 import { addResources, subtractResources } from '../../resources';
 import { addCommodities, subtractCommodities } from '../../commodities';
@@ -177,17 +179,13 @@ export function handleCounterTradeCK(state: GameState, action: CounterTradeActio
   if (!holdsSelection(state, action.playerId, action.give, giveC)) {
     throw new Error("You don't have the cards you're offering");
   }
-  return {
-    ...state,
-    pendingTrade: {
-      proposerId: action.playerId,
-      give: { ...action.give },
-      receive: { ...action.receive },
-      ...(giveC ? { giveCommodities: giveC } : {}),
-      ...(receiveC ? { receiveCommodities: receiveC } : {}),
-      rejectedBy: [],
-    },
-  };
+  return addCounter(state, {
+    by: action.playerId,
+    give: { ...action.give },
+    receive: { ...action.receive },
+    ...(giveC ? { giveCommodities: giveC } : {}),
+    ...(receiveC ? { receiveCommodities: receiveC } : {}),
+  });
 }
 
 export function handleAcceptTradeCK(state: GameState, action: AcceptTradeAction): GameState {
@@ -202,18 +200,18 @@ export function handleAcceptTradeCK(state: GameState, action: AcceptTradeAction)
   if (!holdsSelection(state, trade.proposerId, {}, trade.giveCommodities)) {
     throw new Error('The proposer no longer has the offered commodities');
   }
-  // Resources (and every base check) first; then the commodity columns —
-  // only when the trade went through (on the active player's offer an
-  // accept is a yes, and nothing moves until the proposer confirms).
-  const next = handleAcceptTrade(state, action);
-  return next.pendingTrade ? next : moveTradeCommodities(next, trade, action.playerId);
+  // A yes: nothing moves until the proposer confirms.
+  return handleAcceptTrade(state, action);
 }
 
 /** The proposer completes an offer with commodities in it: base trade, then the commodity columns. */
-export function handleConfirmTradeCK(state: GameState, action: ConfirmTradeAction): GameState {
+export function handleConfirmTradeCK(input: GameState, action: ConfirmTradeAction): GameState {
+  // A counter-offer taken: confirm its terms instead (commodities included).
+  const state = stateForConfirm(input, action);
+  const plain = { ...action, counter: undefined };
   const trade = state.pendingTrade;
   if (!trade || (!hasCommodities(trade.giveCommodities) && !hasCommodities(trade.receiveCommodities))) {
-    return handleConfirmTrade(state, action);
+    return handleConfirmTrade(state, plain);
   }
   if (!holdsSelection(state, action.with, {}, trade.receiveCommodities)) {
     throw new Error('That player no longer has the commodities the trade asks for');
@@ -221,7 +219,7 @@ export function handleConfirmTradeCK(state: GameState, action: ConfirmTradeActio
   if (!holdsSelection(state, trade.proposerId, {}, trade.giveCommodities)) {
     throw new Error('The proposer no longer has the offered commodities');
   }
-  return moveTradeCommodities(handleConfirmTrade(state, action), trade, action.with);
+  return moveTradeCommodities(handleConfirmTrade(state, plain), trade, action.with);
 }
 
 function moveTradeCommodities(state: GameState, trade: NonNullable<GameState['pendingTrade']>, partnerId: PlayerId): GameState {

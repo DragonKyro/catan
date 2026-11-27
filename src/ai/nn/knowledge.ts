@@ -15,6 +15,10 @@
 //             that one card moved, not which.
 //   hidden    which dev cards anyone bought, the deck order, the RNG.
 //
+// It also keeps this turn's player-trade offers and who said yes / no to
+// each (public, and forgotten when the turn passes): a player remembers that
+// nobody would give ore a moment ago, not grudges from earlier turns.
+//
 // Hands are tracked as a weighted set of joint hypotheses over every seat's
 // hand — exact Bayesian card counting. A hidden steal splits each hypothesis
 // by what the victim could have lost (weighted by how many of each they
@@ -47,6 +51,19 @@ export interface HandHypothesis {
   weight: number;
 }
 
+/** A player-trade offer made this turn and the table's answers (seats in `playerIds` order). */
+export interface TurnOffer {
+  proposer: number;
+  /** RESOURCES order, from the proposer's side. */
+  give: number[];
+  receive: number[];
+  /** Said yes (a yes taken back moves to `rejected`). */
+  accepted: number[];
+  rejected: number[];
+  /** The seat it was completed with, once cards moved. */
+  tradedWith: number | null;
+}
+
 export interface CatanKnowledge {
   viewerId: PlayerId;
   /** `state.players` order — the row order of every hypothesis. */
@@ -66,6 +83,8 @@ export interface CatanKnowledge {
   dropped: number;
   /** Times every hypothesis was ruled out and one had to be patched — a tracking bug if ever non-zero. */
   repairs: number;
+  /** This turn's offers and their answers; cleared when the turn ends. */
+  turnOffers: TurnOffer[];
 }
 
 export interface HandEstimate {
@@ -104,6 +123,7 @@ export function initialKnowledge(state: GameState, viewerId: PlayerId): CatanKno
     hiddenSteals: 0,
     dropped: 0,
     repairs: 0,
+    turnOffers: [],
   };
 }
 
@@ -160,6 +180,39 @@ export function observeTransition(
       edit().devPlayed = k.devPlayed.map((d, i) => (i === actor ? { ...d, [card]: d[card] + 1 } : d));
       break;
     }
+    case 'proposeTrade':
+    case 'counterTrade':
+      if (after.pendingTrade) {
+        const side = (b: Partial<Record<(typeof RESOURCES)[number], number>>) => RESOURCES.map((r) => b[r] ?? 0);
+        edit().turnOffers = [
+          ...k.turnOffers,
+          { proposer: actor, give: side(action.give), receive: side(action.receive), accepted: [], rejected: [], tradedWith: null },
+        ];
+      }
+      break;
+    case 'acceptTrade':
+    case 'rejectTrade':
+    case 'confirmTrade': {
+      if (!before.pendingTrade) break;
+      // Answers are to the offer (the latest by its proposer); a counter-offer
+      // taken marks the counter (the latest by its maker).
+      const proposer = seatOf(before.pendingTrade.proposerId);
+      const by = action.type === 'confirmTrade' && action.counter ? seatOf(action.with) : proposer;
+      let idx = -1;
+      for (let j = k.turnOffers.length - 1; j >= 0 && idx < 0; j--) if (k.turnOffers[j]!.proposer === by) idx = j;
+      if (idx < 0) break;
+      const o = k.turnOffers[idx]!;
+      let offer: TurnOffer;
+      if (action.type === 'confirmTrade') offer = { ...o, tradedWith: action.counter ? proposer : seatOf(action.with) };
+      else if (action.type === 'rejectTrade') {
+        offer = { ...o, accepted: o.accepted.filter((x) => x !== actor), rejected: [...o.rejected.filter((x) => x !== actor), actor] };
+      } else offer = { ...o, accepted: [...o.accepted.filter((x) => x !== actor), actor] };
+      edit().turnOffers = k.turnOffers.map((x, j) => (j === idx ? offer : x));
+      break;
+    }
+    case 'endTurn':
+      if (k.turnOffers.length > 0) edit().turnOffers = [];
+      break;
   }
 
   const n = k.playerIds.length;
