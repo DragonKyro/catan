@@ -13,16 +13,37 @@ interface Props {
 
 type Tab = 'log' | 'chat' | 'scenario' | 'barbarians';
 
+/** The log / chat box minimized to its tab bar (remembered on this device). */
+const COLLAPSED_KEY = 'catan.sidePanelCollapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function SidePanelTabs({ showChat }: Props) {
   const game = useGameStore((s) => s.game);
   const showScenario = hasScenarioTracker(game);
   const showBarbarians = hasBarbariansTracker(game);
   const [tab, setTab] = useState<Tab>('log');
-
-  // Single-pane fallbacks when there's nothing to tab between.
-  if (!showChat && !showScenario && !showBarbarians) {
-    return <LogPanel />;
-  }
+  const [collapsed, setCollapsedState] = useState(readCollapsed);
+  const setCollapsed = (v: boolean) => {
+    setCollapsedState(v);
+    try {
+      localStorage.setItem(COLLAPSED_KEY, v ? '1' : '0');
+    } catch {
+      // Private mode: just not remembered.
+    }
+  };
+  // A tab click while minimized opens the box on that tab.
+  const pick = (t: Tab) => {
+    setTab(t);
+    if (collapsed) setCollapsed(false);
+  };
+  const onlyLog = !showChat && !showScenario && !showBarbarians;
 
   // If the active tab disappears (e.g. an online game where Seafarers wasn't
   // selected), reset to log so we don't render an empty body.
@@ -34,24 +55,24 @@ export function SidePanelTabs({ showChat }: Props) {
       : tab;
 
   return (
-    <section className="sidetabs">
+    <section className={`sidetabs${collapsed ? ' is-collapsed' : ''}`}>
       <div className="sidetabs-bar" role="tablist">
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === 'log'}
-          className={`sidetabs-tab ${activeTab === 'log' ? 'is-active' : ''}`}
-          onClick={() => setTab('log')}
+          className={`sidetabs-tab ${activeTab === 'log' && !collapsed ? 'is-active' : ''}`}
+          onClick={() => pick('log')}
         >
-          Log
+          {onlyLog ? 'Game log' : 'Log'}
         </button>
         {showChat && (
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === 'chat'}
-            className={`sidetabs-tab ${activeTab === 'chat' ? 'is-active' : ''}`}
-            onClick={() => setTab('chat')}
+            className={`sidetabs-tab ${activeTab === 'chat' && !collapsed ? 'is-active' : ''}`}
+            onClick={() => pick('chat')}
           >
             Chat
           </button>
@@ -61,8 +82,8 @@ export function SidePanelTabs({ showChat }: Props) {
             type="button"
             role="tab"
             aria-selected={activeTab === 'scenario'}
-            className={`sidetabs-tab ${activeTab === 'scenario' ? 'is-active' : ''}`}
-            onClick={() => setTab('scenario')}
+            className={`sidetabs-tab ${activeTab === 'scenario' && !collapsed ? 'is-active' : ''}`}
+            onClick={() => pick('scenario')}
           >
             Scenario
           </button>
@@ -72,19 +93,31 @@ export function SidePanelTabs({ showChat }: Props) {
             type="button"
             role="tab"
             aria-selected={activeTab === 'barbarians'}
-            className={`sidetabs-tab ${activeTab === 'barbarians' ? 'is-active' : ''}`}
-            onClick={() => setTab('barbarians')}
+            className={`sidetabs-tab ${activeTab === 'barbarians' && !collapsed ? 'is-active' : ''}`}
+            onClick={() => pick('barbarians')}
           >
             Barbarians
           </button>
         )}
+        <button
+          type="button"
+          className="sidetabs-min"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Show the log' : 'Minimize the log'}
+          title={collapsed ? 'Show' : 'Minimize (more room for the players)'}
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          {collapsed ? '▸' : '▾'}
+        </button>
       </div>
-      <div className="sidetabs-body">
-        {activeTab === 'log' && <LogPanel embedded />}
-        {activeTab === 'chat' && <ChatPanel compact />}
-        {activeTab === 'scenario' && <ScenarioPanel />}
-        {activeTab === 'barbarians' && <BarbariansPanel />}
-      </div>
+      {!collapsed && (
+        <div className="sidetabs-body">
+          {activeTab === 'log' && <LogPanel embedded />}
+          {activeTab === 'chat' && <ChatPanel compact />}
+          {activeTab === 'scenario' && <ScenarioPanel />}
+          {activeTab === 'barbarians' && <BarbariansPanel />}
+        </div>
+      )}
     </section>
   );
 }

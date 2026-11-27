@@ -16,7 +16,7 @@ import { tradersBarbariansLogLines } from './tradersBarbariansLog';
 import { explorersPiratesLogLines } from './explorersPiratesLog';
 import { hexRollsOn } from '@/game/board/hexNumbers';
 import { citiesKnightsLogLines } from './citiesKnightsLog';
-import { pipsByResource } from '@/ai/value';
+import { pipsByResource } from '@/ai/pips';
 
 // =======================================================================
 // Log entries — derived from action dispatches by comparing before/after.
@@ -992,7 +992,9 @@ export const useLogStore = create<LogStore>((set, get) => ({
     for (const p of after.players) {
       const ts = newTradeStats[p.id] ?? { tradesCount: 0, tradesGiven: 0, tradesReceived: 0 };
       perPlayer[p.id] = {
-        vp: calculateVictoryPoints(after, p.id, false),
+        // Full points, hidden Victory Point cards included: the timeline is
+        // only shown at game over (MatchGraph), when every card is revealed.
+        vp: calculateVictoryPoints(after, p.id, true),
         handTotal: handTotal(after, p.id),
         gainedTotal: newGained[p.id] ?? 0,
         gainedByResource: { ...(newGainedByResource[p.id] ?? emptyResourceBank()) },

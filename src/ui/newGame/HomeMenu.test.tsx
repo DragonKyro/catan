@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useGameStore } from '@/store/gameStore';
 import { HomeMenu } from './HomeMenu';
 
 afterEach(() => {
@@ -18,11 +19,22 @@ describe('home screen', () => {
     }
   });
 
-  it('opens the local game setup', () => {
+  it('opens the local game setup', async () => {
     render(<HomeMenu />);
     fireEvent.click(screen.getByRole('button', { name: /Play on this device/ }));
-    expect(screen.getByRole('heading', { name: 'Play on this device' })).toBeTruthy();
+    // The New Game screen loads on first use.
+    expect(await screen.findByRole('heading', { name: 'Play on this device' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Start game' })).toBeTruthy();
+  });
+
+  it('after a game, New game opens straight on the setup (once)', async () => {
+    useGameStore.getState().resetGame({ then: 'local' });
+    render(<HomeMenu />);
+    expect(await screen.findByRole('heading', { name: 'Play on this device' })).toBeTruthy();
+    expect(useGameStore.getState().menuStart).toBeNull();
+    cleanup();
+    render(<HomeMenu />);
+    expect(screen.getByRole('button', { name: /Play on this device/ })).toBeTruthy(); // back to home next time
   });
 
   it('rolls the dice and says what the island produces', () => {

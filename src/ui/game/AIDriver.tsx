@@ -132,7 +132,8 @@ export function AIDriver() {
 
     const t = setTimeout(() => {
       // The trained network where it applies; the classic AI otherwise (and
-      // for the proposer's own offer: the classic AI picks the partner).
+      // for the proposer's own offer when the network's rules lack
+      // `tradePick`: the classic AI picks the partner).
       const action = neuralAction(game, acting) ?? chooseAction(game, acting);
       if (action) {
         dispatch(action);
@@ -201,7 +202,8 @@ export function AIDriver() {
           latest.playerOrder[latest.currentPlayerIndex] ?? null;
         const liveIsCounter = latest.pendingTrade.proposerId !== liveCurrent;
         if (liveIsCounter && p.id !== liveCurrent) return;
-        // A trained network answers accept / reject (it doesn't counter).
+        // A trained network answers accept / reject, or counter-offers when
+        // its rules allow it (`counter`, at most once a turn).
         const answer = neuralAction(latest, p.id);
         if (answer) {
           dispatch(answer);

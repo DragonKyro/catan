@@ -202,6 +202,43 @@ The in-run best (u3800, u3500) was luck; the late checkpoints' edge on seed
 u2300. Reading: the 128x4 net is at its plateau under this PPO setup, so
 more of the same won't move it — confirm any candidate on two deal sets.
 
+## 8. Run `v3` results (fresh deals, 2026-11-27) — the shipped Hard
+
+Encoder v3 (seat plans, win plans, build speedups, opponents' next
+settlements, the opening outlook) and action space v3 with its rules
+(`tradePick`, `offerNeeds`, `counter`), warm-started from big u2300 (the new
+inputs at zero weight). 3,000 PPO updates (u2300 -> u5300, lr 5e-5 -> 0,
+fresh optimizer, no anchor), outcome head at 0.1; persona tables of Longest
+Road / Largest Army / griefer only (distinct, the griefer aimed at the
+learner), mixed tables of two personas + a past checkpoint, self-play growing
+as the learning rate falls (4/2/2 -> 5/2/1 at u3300 -> 6/1/1 at u4300 of 8
+workers), no lopsided openings. 8.7 h.
+
+In-run, vs 3x big u2300 (the previous Hard, 400 games on the same deals each
+checkpoint): 28.7% at u2400, 37-46% from u3000 on (best 45.8% u3500, 44.5%
+u3400, 44.0% u4900); vs the training personas 57-71%.
+
+Fresh deals (800 games each; seed 777 = the deals used for §5-7, seed 888 a
+second set):
+
+| v3 checkpoint | vs 3x big u2300, seed 777 | seed 888 | pooled | vs 3 all-rounders (777 / 888) |
+|---|---|---|---|---|
+| u3400 (**shipped**) | 42.0% (38.6-45.5) | 41.0% (37.6-44.4) | **41.5%** | 79.1% / 81.1% |
+| u3500 | 39.9% (36.5-43.3) | | | 79.6% |
+| u3700 | 41.5% (38.1-44.9) | 39.6% (36.3-43.1) | 40.6% | 79.5% / 77.5% |
+| u4900 | 38.5% (35.2-41.9) | | | 81.4% |
+| u5200 | 41.2% (37.9-44.7) | 37.6% (34.3-41.0) | 39.4% | 82.2% / 80.5% |
+| u5300 | 41.0% (37.6-44.4) | | | 80.6% |
+| big u2300 (previous Hard) | 25% (mirror) | | | 84.2% / 84.9% |
+
+Every v3 checkpoint beats the previous Hard by a wide margin head to head
+(about 1.6x a parity seat's share), on both deal sets. Against plain
+all-rounders it wins a little less than the previous Hard did (about 80%
+against 84-85%): its training had no all-rounder tables, only personas,
+mixed tables and self-play. u3400 is the best and steadiest head to head
+and is now Hard (`src/ai/nn/levels.ts`); fp16 packing keeps its top move in
+3,200 of 3,200 sampled positions.
+
 ## What it says
 
 - **Only the two bonus chasers beat the all-rounder**, both one-vs-three and

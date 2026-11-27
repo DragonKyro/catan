@@ -138,6 +138,19 @@ class EntityHead(nn.Module):
         return self.out(F.relu(self.row(x) + self.glob(g)[None])).squeeze(-1).transpose(0, 1)
 
 
+# Seat offsets the outcome head predicts for (8 players max).
+OUTCOME_SEATS = 8
+
+
+def _load_weights(net: "CatanNet", state: dict) -> None:
+    """Load a state dict; files from before the outcome head (training-only)
+    simply start it fresh. Anything else missing or extra is an error."""
+    missing, unexpected = net.load_state_dict(state, strict=False)
+    missing = [k for k in missing if not k.startswith("outcome_head.")]
+    if missing or unexpected:
+        raise RuntimeError(f"policy weights don't fit this network: missing {missing}, unexpected {unexpected}")
+
+
 class CatanNet(nn.Module):
     def __init__(self, dims: dict, num_globals: int, width: int = 64, rounds: int = 4):
         super().__init__()
@@ -155,6 +168,10 @@ class CatanNet(nn.Module):
         self.hex_head = EntityHead(d)
         self.global_head = _mlp(d, d, num_globals, 0.01)
         self.value_head = _mlp(d, d, 1, 1.0)
+        # Training only (the browser never runs it): each seat's final points
+        # (/ target) and win logit, by seat offset from the viewer — an
+        # auxiliary target that sharpens the shared trunk's sense of who's ahead.
+        self.outcome_head = _mlp(d, d, 2 * OUTCOME_SEATS, 0.01)
         self.topology: Topology | None = None
         self.amp = False
 
@@ -162,8 +179,9 @@ class CatanNet(nn.Module):
     def arch(self) -> dict:
         return {"dims": self.dims, "num_globals": self.num_globals, "width": self.width, "rounds": self.n_rounds}
 
-    def forward(self, hexes, vertices, edges, glob) -> tuple[torch.Tensor, torch.Tensor]:
-        """Rows come batch-major ([B, N, features]); inside, entities lead ([N, B, d])."""
+    def forward(self, hexes, vertices, edges, glob, outcome: bool = False):
+        """Rows come batch-major ([B, N, features]); inside, entities lead ([N, B, d]).
+        Returns (logits, value), or with `outcome` (logits, value, outcome [B, 2 × OUTCOME_SEATS])."""
         t = self.topology
         if t is None:
             raise RuntimeError("set net.topology before calling the network")
@@ -176,6 +194,8 @@ class CatanNet(nn.Module):
                 h, v, e, g = r(h, v, e, g, t)
         h, v, e, g = (self.norm_hex(h.float()), self.norm_vertex(v.float()), self.norm_edge(e.float()), g.float())
         logits = torch.cat([self.vertex_head(v, g), self.edge_head(e, g), self.hex_head(h, g), self.global_head(g)], -1)
+        if outcome:
+            return logits, self.value_head(g).squeeze(-1), self.outcome_head(g)
         return logits, self.value_head(g).squeeze(-1)
 
 
@@ -221,6 +241,15 @@ def read_policy_meta(path: str) -> dict:
     return _read_policy(path)[0].get("meta", {})
 
 
+RULE_NAMES = ("tradePick", "offerNeeds", "counter")
+
+
+def policy_rules(path: str) -> dict:
+    """The action-space v3 rules a policy file plays by (meta.rules; missing = off, pre-v3 play)."""
+    rules = read_policy_meta(path).get("rules", {}) or {}
+    return {k: bool(rules.get(k, False)) for k in RULE_NAMES}
+
+
 def load_policy(path: str, versions: dict | None = None, device: str | torch.device = "cpu") -> CatanNet:
     doc, decoded = _read_policy(path)
     if doc.get("format") != POLICY_FORMAT or doc.get("game") != GAME:
@@ -236,7 +265,7 @@ def load_policy(path: str, versions: dict | None = None, device: str | torch.dev
     else:
         state = {k: torch.from_numpy(np.frombuffer(base64.b64decode(t["data"]), dtype="<f4").copy().reshape(t["shape"]))
                  for k, t in doc["tensors"].items()}
-    net.load_state_dict(state)
+    _load_weights(net, state)
     return net.to(device).eval()
 
 
@@ -256,7 +285,7 @@ def load_checkpoint(path: str, device: str | torch.device = "cpu") -> dict:
 def net_from_checkpoint(ckpt: dict, device: str | torch.device = "cpu") -> CatanNet:
     a = ckpt["arch"]
     net = CatanNet(a["dims"], a["num_globals"], a["width"], a["rounds"]).to(device)
-    net.load_state_dict(ckpt["model"])
+    _load_weights(net, ckpt["model"])
     return net
 
 

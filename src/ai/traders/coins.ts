@@ -1,3 +1,4 @@
+import { discardLimit } from '@/game/helpers';
 import type { Action, GameState, PlayerId, Resource } from '@/game/types';
 import { RESOURCES, COSTS } from '@/game/types';
 import { totalResources } from '@/game/resources';
@@ -60,7 +61,7 @@ export function tryCoinAction(state: GameState, playerId: PlayerId): Action | nu
   // 2) Buy gold with spare cards.
   const gain = wealthVpSwing(state, playerId, 1);
   const handSize = totalResources(player.resources);
-  const discardRisk = handSize >= 8;
+  const discardRisk = handSize > discardLimit(state);
   if (gain <= 0 && !discardRisk) return null;
   let best: { give: Resource; score: number } | null = null;
   for (const r of RESOURCES) {

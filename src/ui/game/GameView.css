@@ -122,35 +122,59 @@
   left: 0;
 }
 
-/* Trade-building dialogs (propose / counter / bank trade) dock at the
-   top-right of the board, just below the dice display. Keeps the centre
-   of the map clear so the player can still plan moves while composing,
-   and on 7-8p (taller boards) the dialog no longer overlaps pieces. */
-.gameview-side-dialog-overlay {
+/* Trading (the offer on the table, then the trade window) docks at the
+   board's edge right next to the hand and the controls, so the trade sits
+   beside the cards it moves. */
+.gameview-trade-dock {
   position: absolute;
-  top: 72px;
-  right: 12px;
-  z-index: 7; /* above .gameview-banner-overlay so the active compose wins */
-  pointer-events: none;
-  /* As wide as a docked dialog's minimum (DialogShell.css), so its right
-     edge isn't clipped. */
-  width: min(320px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
-  max-height: calc(100% - 84px);
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 7; /* above the Players and zoom buttons */
+  width: min(440px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
 }
 
-.gameview-side-dialog-overlay > * {
+.gameview-trade-dock > * {
   pointer-events: auto;
 }
 
-/* Compact the inner trade dialog when docked top-right: the body has its
-   own scroll, so it doesn't have to lay out everything at full size. */
-.gameview-side-dialog-overlay .ptrade-list {
-  gap: 3px;
+/* The trade window shrinks to the dock (its body scrolls) so the title and
+   the Bank / Offer buttons always show; the banner keeps its size. */
+.gameview-trade-dock > .ptbanner {
+  flex-shrink: 0;
 }
-.gameview-side-dialog-overlay .ptrade-row {
-  padding: 1px 5px;
+
+.gameview-trade-dock .dialog-dock {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.gameview-trade-dock .dialog-docked {
+  min-width: 0;
+  max-width: none;
+  min-height: 0;
+  max-height: none;
+}
+
+.gameview-trade-dock .dialog-header,
+.gameview-trade-dock .dialog-footer {
+  padding: 6px 12px;
+}
+
+.gameview-trade-dock .dialog-title {
+  font-size: 1.1em;
+}
+
+.gameview-trade-dock .dialog-body {
+  min-height: 0;
+  padding: 8px 12px;
 }
 
 /* Other prompt dialogs (discard, robber steal, year of plenty, monopoly)
@@ -172,20 +196,13 @@
 
 /* Suppress the .dialog-dock positioning when a dialog is rendered inside an
    overlay container — the container does the positioning. */
-.gameview-side-dialog-overlay .dialog-dock,
+.gameview-trade-dock .dialog-dock,
 .gameview-dialog-overlay .dialog-dock {
   position: static;
   transform: none;
   pointer-events: auto;
   max-width: none;
   width: auto;
-}
-
-/* Pending-trade banner inside the dice overlay column — sits directly
-   below the dice / timer stack so it never covers the dice or board. */
-.gameview-dice-overlay .ptbanner {
-  max-width: 280px;
-  margin-top: 4px;
 }
 
 /* Opens the players / log / chat drawer on compact screens. Bottom-left of the
@@ -235,6 +252,73 @@
   min-height: 132px;
 }
 
+/* Writing a trade: the strip grows to fit the trade window (the board row
+   above shrinks; nothing covers the board). */
+.gameview-bottom.is-trading {
+  height: auto;
+  max-height: 60vh;
+  max-height: 60dvh;
+}
+
+.gameview-trade-compose {
+  flex: 0 1 480px;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.gameview-trade-compose .dialog-dock {
+  position: static;
+  transform: none;
+  pointer-events: auto;
+  max-width: none;
+  width: auto;
+}
+
+.gameview-trade-compose .dialog-docked {
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  box-shadow: none;
+}
+
+.gameview-trade-compose .dialog-header,
+.gameview-trade-compose .dialog-footer {
+  padding: 6px 12px;
+}
+
+.gameview-trade-compose .dialog-title {
+  font-size: 1.1em;
+}
+
+.gameview-trade-compose .dialog-body {
+  padding: 8px 12px;
+}
+
+/* Short desktop windows (a quarter of a monitor): growing the strip would
+   leave a thumbnail board, so the trade window opens over the top of the
+   side panel instead (the log and the first player rows, not the board). */
+@media (min-width: 901px) and (max-height: 680px) {
+  .gameview {
+    position: relative;
+  }
+  .gameview-bottom.is-trading {
+    height: 132px;
+  }
+  .gameview-bottom .gameview-trade-compose {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 8;
+    width: 340px;
+    max-height: calc(100% - 24px);
+    border-radius: var(--card-radius);
+    box-shadow: 0 10px 28px var(--shadow-sea);
+  }
+}
+
 .gameview-side {
   grid-area: side;
   display: flex;
@@ -242,6 +326,22 @@
   gap: 8px;
   overflow-y: auto;
   min-height: 0;
+}
+
+/* Only the log / chat box gives way when the column is short. */
+.gameview-side > :not(.sidetabs) {
+  flex-shrink: 0;
+}
+
+/* Short desktop windows (a quarter of a monitor): tighter player rows. */
+@media (min-width: 901px) and (max-height: 640px) {
+  .gameview-side {
+    gap: 6px;
+  }
+  .gameview-side .opp {
+    padding: 5px 10px;
+    gap: 3px;
+  }
 }
 
 .gameview-toast {
@@ -350,6 +450,17 @@
     display: inline-flex;
   }
 
+  .gameview-trade-dock {
+    bottom: 8px;
+    width: min(440px, calc(100% - 16px));
+    max-height: calc(100% - 16px);
+  }
+
+  /* No room for both: a counter being written is seeded from the offer. */
+  .gameview-trade-dock.is-composing > .ptbanner {
+    display: none;
+  }
+
   .gameview-side {
     position: fixed;
     inset: auto 0 0 0;
@@ -446,6 +557,16 @@
     flex-shrink: 0;
   }
 
+  .gameview-bottom.is-trading {
+    max-height: 62dvh;
+  }
+
+  .gameview-bottom .gameview-trade-compose {
+    order: -1;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
   .gameview-rulebook-overlay {
     padding: 8px;
   }
@@ -467,6 +588,13 @@
     padding: 6px;
   }
 
+  /* The hand and controls are the column on the right: trade beside them. */
+  .gameview-trade-dock {
+    left: auto;
+    right: 8px;
+    transform: none;
+  }
+
   .gameview-bottom {
     flex-direction: column;
     height: auto;
@@ -480,6 +608,12 @@
 
   .gameview-bottom > * {
     flex-shrink: 0;
+  }
+
+  .gameview-bottom .gameview-trade-compose {
+    order: -1;
+    flex: 0 0 auto;
+    overflow: visible;
   }
 
   .gameview-side {

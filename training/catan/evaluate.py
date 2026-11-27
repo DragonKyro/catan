@@ -35,7 +35,7 @@ import numpy as np
 import torch
 
 from env_client import ROLE_LEARNER, ROLE_OPPONENT, CatanEnv
-from model import CatanNet, Topology, load_policy, masked_logits
+from model import CatanNet, Topology, load_policy, masked_logits, policy_rules
 
 EVAL_SEED = 777_000_001
 HEURISTIC = "heuristic"
@@ -119,9 +119,13 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         net_b = None if path_b == HEURISTIC or "B" not in lineup else net(path_b)
         role_of = {"A": "learner", "B": "opponent" if net_b is not None else HEURISTIC, "H": HEURISTIC}
         seats = [role_of[c] for c in lineup]
+        # Each policy plays by the rules it was trained with (meta.rules; pre-v3 policies: none).
+        rules_a = policy_rules(path_a)
+        rules_b = policy_rules(path_b) if net_b is not None else None
         batches = [env.reset(num_envs=n, seed=seed + 1_000_003 * w, seats=seats, max_turns=max_turns, quota=1,
                              personas=personas, distinct_personas=distinct_personas, target_personas=target_personas,
-                             learner_setup_share=learner_setup_share, learner_setup_personas=learner_setup_personas)
+                             learner_setup_share=learner_setup_share, learner_setup_personas=learner_setup_personas,
+                             learner_rules=rules_a, opponent_rules=rules_b)
                    for w, (env, n) in enumerate(zip(envs, per))]
         episodes: list = []
         t0 = time.perf_counter()
@@ -159,6 +163,22 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         return float(np.mean([ep.get("actions", {}).get(key, [0] * players)[s] for ep, s in samples]))
 
     offers = per_game("proposeTrade")
+
+    def partner(ep: dict, s: int, j: int) -> str:
+        """Seat j as A's trade partner: its persona at heuristic seats, else its seat after A (+1 = next to play)."""
+        persona = (ep.get("personas") or [None] * players)[j]
+        if persona:
+            return persona
+        order = ep.get("order") or list(range(players))
+        return f"+{(order.index(j) - order.index(s)) % len(order)}"
+
+    trades_with: dict[str, float] = {}
+    for ep, s in samples:
+        acts = ep.get("actions", {})
+        for j in range(len(ep["roles"])):
+            if j != s:
+                key = partner(ep, s, j)
+                trades_with[key] = trades_with.get(key, 0.0) + acts.get(f"tradeWith:{j}", [0] * players)[s] / k
     return {
         "a": path_a,
         "b": path_b,
@@ -181,8 +201,23 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         "devCardsPerGame": per_game("buyDevCard"),
         "knightsPerGame": per_game("playKnight"),
         "bankTradesPerGame": per_game("bankTrade"),
+        # Player trades completed per match with each partner (persona, or seat +1..+3 after A).
+        "tradesWith": dict(sorted(trades_with.items())),
+        "countersPerGame": per_game("counterTrade"),
+        "countersRefusedPerGame": per_game("counterRefused"),
         "seconds": seconds,
     }
+
+
+SHORT = {"longestRoad": "LR", "largestArmy": "LA", "griefer": "griefer", "allRounder": "all-rounder"}
+
+
+def trade_split(s: dict, bank: bool = False) -> str:
+    """'LR 1.2, LA 0.8, griefer 0.3' (+ ', bank 4.1'): A's trades per match with each partner."""
+    parts = [f"{SHORT.get(k, k)} {v:.1f}" for k, v in (s.get("tradesWith") or {}).items()]
+    if bank:
+        parts.append(f"bank {s.get('bankTradesPerGame', 0):.1f}")
+    return ", ".join(parts)
 
 
 def report(s: dict) -> str:
@@ -192,7 +227,8 @@ def report(s: dict) -> str:
             f"(parity {100 / len(s['lineup']):.0f}%) | place {s['meanRank']:.2f} | VP {s['meanVp']:.1f} | "
             f"{s['meanTurns']:.0f} turns | {100 * s['truncated']:.1f}% cut off\n"
             f"A per match: {s['offersPerGame']:.1f} offers ({100 * s['offerTakenRate']:.0f}% taken), "
-            f"{s['tradesPerGame']:.1f} player trades, {s.get('bankTradesPerGame', 0):.1f} bank trades, "
+            f"{s['tradesPerGame']:.1f} player trades ({trade_split(s)}), {s.get('bankTradesPerGame', 0):.1f} bank trades, "
+            f"{s.get('countersPerGame', 0):.1f} counters ({s.get('countersRefusedPerGame', 0):.1f} refused), "
             f"{s['citiesPerGame']:.1f} cities, {s['settlementsPerGame']:.1f} settlements, "
             f"{s.get('roadsPerGame', 0):.1f} roads, {s.get('devCardsPerGame', 0):.1f} dev cards, "
             f"{s.get('knightsPerGame', 0):.1f} knights")

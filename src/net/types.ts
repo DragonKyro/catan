@@ -17,9 +17,12 @@ export interface LobbySeat {
   color: PlayerColor;
 }
 
-/** The Traders & Barbarians variants, which go with any rules (Event Cards: not with Cities & Knights). */
+/** Rule options (any rules) and the Traders & Barbarians variants (with a T&B scenario). */
 export interface LobbyVariants {
-  friendlyRobber: boolean;
+  /** Rule options for any game: undefined = the default for the seat count (on at 2 players). */
+  friendlyRobber?: boolean;
+  balancedDice?: boolean;
+  /** Traders & Barbarians variants (with a T&B scenario only). */
   strongestPorts: boolean;
   eventCards: boolean;
 }

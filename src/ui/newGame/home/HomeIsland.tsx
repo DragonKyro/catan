@@ -40,7 +40,7 @@ import {
   type Pt,
   type RoadPiece,
 } from './island';
-import { FX_BOX, ResourceGlyph, TERRAIN_COLORS, TerrainArt, TerrainFxArt, terrainFx, type TerrainFx } from './TerrainArt';
+import { FX_BOX, ResourceGlyph, TERRAIN_COLORS, TerrainArt, TerrainArtDefs, TerrainFxArt, terrainFx, type TerrainFx } from './TerrainArt';
 import { useReducedMotion } from './useReducedMotion';
 
 const ORIGIN: Pt = { x: 0, y: 0 };
@@ -257,6 +257,7 @@ function Defs() {
       <clipPath id="home-hexclip">
         <polygon points={hexPoints(ORIGIN, HEX - 0.8)} />
       </clipPath>
+      <TerrainArtDefs />
     </defs>
   );
 }

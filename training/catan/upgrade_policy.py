@@ -5,18 +5,28 @@ has is copied unchanged, so the upgraded policy plays exactly as before:
   - encoder (v2 appended features at the end of each row): the four input
     layers (embed_*.0.weight) gain zero-weight columns for the new features;
   - action space (v2 appended the 3:1 / 1:3 / 3:2 / 2:3 player offers after
-    every v1 slot): the global head's last layer gains one row per new slot,
-    as --new-offers says.
+    every v1 slot; v3 the mixed offers and the partner-pick slots after those):
+    the global head's last layer gains one row per new slot, as --new-offers
+    says.
 
     python training/catan/upgrade_policy.py IN.json OUT.json --new-offers frozen
     python training/catan/upgrade_policy.py IN.json OUT.json --new-offers warm
 
   frozen  the new slots are never chosen (bias -100): the policy plays exactly
-          as before. For shipped AI levels that weren't trained with them.
-  warm    each new offer copies the row of the nearest old one (3:1 and 3:2
-          from 2:1, 1:3 and 2:3 from 1:2, same resources) with its bias
-          lowered by --warm-offset (default 2, about 1/7 the odds): a starting
-          point for training that explores them.
+          as before. For shipped AI levels that weren't trained with them (they
+          keep meta.rules off, so the partner pick stays the heuristic's).
+  warm    a starting point for training that explores them:
+            v2 offers copy the row of the nearest old one (3:1 and 3:2 from
+            2:1, 1:3 and 2:3 from 1:2, same resources), bias lowered by
+            --warm-offset (default 2, about 1/7 the odds);
+            v3 mixed offers average their single-resource neighbours (1+1 wood
+            and brick for ore from 2 wood / 2 brick for ore; 2+1 for 1 from the
+            3:1s; 1 for 1+1 / 2+1 from the 1:2 / 1:3s), bias lowered by
+            --mixed-offset (default 3: there are 180 of them);
+            pick:k start even (zero weights, bias 0), pick:none at bias -2
+            (having offered, it usually trades);
+            counter copies the reject row, 3 lower (about 1 in 20 of its
+            no's become a counter at first, rather than countering everything).
 
 Needs the built env (`npm run train:build`) for this build's slot names.
 """
@@ -40,6 +50,7 @@ EMBED = {"hex": "embed_hex.0.weight", "vertex": "embed_vertex.0.weight",
 SOURCE_SHAPE = {(3, 1): (2, 1), (1, 3): (1, 2), (3, 2): (2, 1), (2, 3): (1, 2)}
 FROZEN_BIAS = -100.0
 OFFER = re.compile(r"offer:(\d)([a-z]+)>(\d)([a-z]+)")
+SIDE = re.compile(r"(\d)([a-z]+)")
 
 
 def _decode(t: dict) -> np.ndarray:
@@ -60,7 +71,36 @@ def source_slot(name: str, slots: list[str]) -> int:
     return slots.index(f"offer:{n}{m.group(2)}>{m2}{m.group(4)}")
 
 
-def upgrade_doc(doc: dict, slots: list[str], version: int, mode: str, warm_offset: float = 2.0) -> dict:
+def _side(text: str) -> dict[str, int]:
+    return {res: int(n) for n, res in SIDE.findall(text)}
+
+
+def _offer_name(give: dict[str, int], get: dict[str, int], order: list[str]) -> str:
+    side = lambda b: "+".join(f"{b[r]}{r}" for r in order if b.get(r))  # noqa: E731
+    return f"offer:{side(give)}>{side(get)}"
+
+
+RESOURCE_ORDER = ["wood", "brick", "sheep", "wheat", "ore"]
+
+
+def mixed_sources(name: str, slots: list[str]) -> list[int]:
+    """Old slots a v3 mixed offer's row averages: the same trade with all of
+    the mixed side's cards in one of its resources."""
+    give_text, get_text = name[len("offer:"):].split(">")
+    give, get = _side(give_text), _side(get_text)
+    if len(give) == 2 and len(get) == 1:
+        n = sum(give.values())
+        names = [_offer_name({r: n}, get, RESOURCE_ORDER) for r in give]
+    elif len(give) == 1 and len(get) == 2:
+        m = sum(get.values())
+        names = [_offer_name(give, {r: m}, RESOURCE_ORDER) for r in get]
+    else:
+        raise ValueError(f"don't know how to start new slot {name!r}")
+    return [slots.index(x) for x in names]
+
+
+def upgrade_doc(doc: dict, slots: list[str], version: int, mode: str, warm_offset: float = 2.0,
+                mixed_offset: float = 3.0) -> dict:
     """A copy of policy `doc` for the action space whose global slots are
     `slots` (append-only over the file's), at action space `version`."""
     old = doc["arch"]["num_globals"]
@@ -77,11 +117,24 @@ def upgrade_doc(doc: dict, slots: list[str], version: int, mode: str, warm_offse
             new_w.append(np.zeros((1, w.shape[1]), np.float32))
             new_b.append(np.array([FROZEN_BIAS], np.float32))
         elif mode == "warm":
-            k = source_slot(name, slots)
-            if k >= old:
-                raise ValueError(f"{name!r} would start from {slots[k]!r}, which is new too")
-            new_w.append(w[k:k + 1].copy())
-            new_b.append(b[k:k + 1] - warm_offset)
+            if name.startswith("pick:"):
+                new_w.append(np.zeros((1, w.shape[1]), np.float32))
+                new_b.append(np.array([-2.0 if name == "pick:none" else 0.0], np.float32))
+                continue
+            if name == "counter":
+                k = slots.index("reject")
+                new_w.append(w[k:k + 1].copy())
+                new_b.append(b[k:k + 1] - 3.0)
+                continue
+            single = OFFER.fullmatch(name) is not None
+            ks = [source_slot(name, slots)] if single else mixed_sources(name, slots)
+            # Rows so far, old and new: a v1 file going straight to v3 starts
+            # its mixed 2+1 offers from the (just added) v2 3:1 rows.
+            rows_w, rows_b = np.concatenate(new_w, 0), np.concatenate(new_b, 0)
+            if any(k >= len(rows_b) for k in ks):
+                raise ValueError(f"{name!r} would start from {[slots[k] for k in ks]!r}, which come after it")
+            new_w.append(np.mean([rows_w[k] for k in ks], axis=0, keepdims=True).astype(np.float32))
+            new_b.append(np.array([np.mean([rows_b[k] for k in ks]) - (warm_offset if single else mixed_offset)], np.float32))
         else:
             raise ValueError(f"mode {mode!r}: frozen or warm")
     out = json.loads(json.dumps(doc))  # deep copy
@@ -123,6 +176,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--new-offers", choices=("frozen", "warm"), default=None,
                    help="how new action slots start (needed only when the action space grew)")
     p.add_argument("--warm-offset", type=float, default=2.0)
+    p.add_argument("--mixed-offset", type=float, default=3.0)
     a = p.parse_args(argv)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from env_client import CatanEnv
@@ -138,7 +192,7 @@ def main(argv: list[str] | None = None) -> None:
     if out["arch"]["num_globals"] != len(slots) or out["actionSpaceVersion"] != version:
         if not a.new_offers:
             raise SystemExit("the action space grew: say how new slots start with --new-offers frozen|warm")
-        out = upgrade_doc(out, slots, version, a.new_offers, a.warm_offset)
+        out = upgrade_doc(out, slots, version, a.new_offers, a.warm_offset, a.mixed_offset)
     tmp = a.dst + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(out, f)

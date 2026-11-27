@@ -51,8 +51,10 @@ describe('online lobby game settings', () => {
     expect(maps).toContain('ckFirstGame');
     expect(maps).not.toContain('volcano');
     const box = (name: RegExp) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
-    expect(box(/Catan Event Cards/).disabled).toBe(true);
+    // The T&B variants show only with a T&B scenario; the rule options with anything.
+    expect(screen.queryByRole('checkbox', { name: /Catan Event Cards/ })).toBeNull();
     expect(box(/Friendly Robber/).disabled).toBe(false);
+    expect(box(/Balanced dice/).disabled).toBe(false);
   });
 
   it('Explorers & Pirates: no map or scenario choice, and no variants', () => {
@@ -60,8 +62,10 @@ describe('online lobby game settings', () => {
     expect(screen.queryByLabelText('Map')).toBeNull();
     expect(screen.queryByLabelText('Scenario')).toBeNull();
     const box = (name: RegExp) => screen.getByRole('checkbox', { name }) as HTMLInputElement;
+    // No robber to be friendly; balanced dice still roll the production numbers.
     expect(box(/Friendly Robber/).disabled).toBe(true);
-    expect(box(/Catan Event Cards/).disabled).toBe(true);
+    expect(box(/Balanced dice/).disabled).toBe(false);
+    expect(screen.queryByRole('checkbox', { name: /Catan Event Cards/ })).toBeNull();
   });
 
   it('Traders & Barbarians: every scenario', () => {

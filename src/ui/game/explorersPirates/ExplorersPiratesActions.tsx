@@ -149,7 +149,7 @@ export function EpMainButtons({ game, acting }: { game: GameState; acting: Playe
       <Button
         onClick={() => openDialog('playerTrade')}
         disabled={!!game.pendingTrade}
-        title="Trade with players, or 3:1 with the supply (single-resource swaps the supply can match are routed there)"
+        title="Trade with players, or 3:1 with the supply (the window's Bank button)"
       >
         🤝 Trade
       </Button>

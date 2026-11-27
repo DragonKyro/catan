@@ -161,7 +161,7 @@ def test_background_evals_with_a_fixed_opponent(tmp_path):
 
 def test_typescript_runtime_matches_pytorch(tmp_path):
     """src/ai/nn/runtime.ts (what the game plays) against model.py, on real mid-game positions."""
-    shipped = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ai", "nn", "policies", "hard-big-update2300.bin")
+    shipped = os.path.join(os.path.dirname(__file__), "..", "..", "src", "ai", "nn", "policies", "hard-v3-update3400.bin")
     with CatanEnv() as env:
         rng = np.random.default_rng(3)
         batch = env.reset(num_envs=6, seed=11, seats=["learner"] * 4)
@@ -188,13 +188,14 @@ def test_typescript_runtime_matches_pytorch(tmp_path):
 
 
 def test_upgrade_policy_appends_slots_and_keeps_every_old_one(tmp_path):
-    """Action space v2 appended offers: a v1-sized head grows, old logits stay bit-identical."""
+    """Action spaces v2 / v3 appended slots: a v1-sized head grows, old logits stay bit-identical,
+    and warm starts give v2 offers, v3 mixed offers and pick slots their documented rows."""
     import upgrade_policy as up
 
     dims, n_globals, shape, topo, versions, batch = _spec()
     slots = CatanEnv().global_slots
     n_old = slots.index("reject") + 1
-    assert n_old == 119 and n_globals == len(slots) == 199
+    assert n_old == 119 and n_globals == len(slots) == 388
     old = CatanNet(dims, n_old, width=16, rounds=1)
     path = os.path.join(tmp_path, "v1.json")
     export_policy(old, path, {**versions, "actionSpaceVersion": 1})
@@ -205,7 +206,7 @@ def test_upgrade_policy_appends_slots_and_keeps_every_old_one(tmp_path):
         before = old.global_head(g)
     for mode in ("frozen", "warm"):
         new_doc = up.upgrade_doc(doc, slots, versions["actionSpaceVersion"], mode)
-        assert new_doc["arch"]["num_globals"] == 199 and new_doc["actionSpaceVersion"] == versions["actionSpaceVersion"]
+        assert new_doc["arch"]["num_globals"] == 388 and new_doc["actionSpaceVersion"] == versions["actionSpaceVersion"]
         out = os.path.join(tmp_path, f"{mode}.json")
         with open(out, "w", encoding="utf-8") as f:
             json.dump(new_doc, f)
@@ -219,6 +220,15 @@ def test_upgrade_policy_appends_slots_and_keeps_every_old_one(tmp_path):
             k = slots.index("offer:3wood>1brick")
             src = slots.index("offer:2wood>1brick")
             assert torch.allclose(after[:, k], before[:, src] - 2.0, atol=1e-5)
+            # A mixed offer averages its single-resource neighbours, 3 lower.
+            mixed = slots.index("offer:1wood+1brick>1ore")
+            pair = (before[:, slots.index("offer:2wood>1ore")] + before[:, slots.index("offer:2brick>1ore")]) / 2
+            assert torch.allclose(after[:, mixed], pair - 3.0, atol=1e-5)
+            # Partner picks start even; walking away a little less likely.
+            assert torch.all(after[:, slots.index("pick:1")] == 0)
+            assert torch.all(after[:, slots.index("pick:none")] == -2.0)
+            # Countering starts well below saying no.
+            assert torch.allclose(after[:, slots.index("counter")], before[:, slots.index("reject")] - 3.0, atol=1e-5)
 
 
 def test_persona_tables_benchmark_and_lopsided_evals(tmp_path):

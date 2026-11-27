@@ -6,8 +6,8 @@
   color: var(--text-soft);
 }
 
-/* "Expansions", "Traders & Barbarians variants": the same field names as the
-   rest of the New Game card. */
+/* "Expansions", "Rule options": the same field names as the rest of the
+   New Game card. */
 .expansion-picker-label {
   display: block;
   margin-top: 2px;
@@ -80,4 +80,23 @@
   font-size: 1em;
   font-family: inherit;
   font-weight: 600;
+}
+
+/* The T&B variants, indented under the T&B scenario picker. */
+.expansion-picker-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 26px;
+  font-size: 0.92em;
+}
+
+.expansion-picker-sublabel {
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
+/* An option's ⓘ sits right after its name (the row's gap spaces it). */
+.expansion-picker-row .info-tip {
+  margin-left: 0;
 }

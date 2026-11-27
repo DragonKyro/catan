@@ -1,12 +1,13 @@
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import type { CommodityBank, Player } from '@/game/types';
+import type { CommodityBank, Player, ResourceBank } from '@/game/types';
 import { COMMODITIES, RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
 import { CoinIcon } from '@/ui/game/traders/TradersIcons';
 import { CommodityChip } from '@/ui/shared/CommodityChip';
 import { Button } from '@/ui/shared/Button';
+import { TradeLane } from '@/ui/shared/TradeLane';
 import { playerColorVar } from '@/ui/shared/playerColors';
 import './PendingTradeBanner.css';
 
@@ -108,6 +109,16 @@ export function PendingTradeBanner() {
   // proposer.
   const responders = game.players.filter((p) => p.id !== trade.proposerId);
 
+  // The two sides of the offer, told from the viewer's seat: the proposer
+  // reads their own offer, anyone else what taking it would mean for them.
+  const offered = tradeCards(trade.give, trade.giveGold, trade.giveCommodities);
+  const asked = tradeCards(trade.receive, trade.receiveGold, trade.receiveCommodities);
+  const lanes = isProposer
+    ? { title: isCounter ? 'Your counter' : 'Your offer', get: asked, give: offered, getLabel: 'You get', giveLabel: 'You give' }
+    : viewer
+      ? { title: `${proposer.name} ${isCounter ? 'counters' : 'offers you'}`, get: offered, give: asked, getLabel: 'You get', giveLabel: 'You give' }
+      : { title: `${proposer.name} ${isCounter ? 'counters' : 'offers'}`, get: asked, give: offered, getLabel: `${proposer.name} gets`, giveLabel: `${proposer.name} gives` };
+
   return (
     <div className="ptbanner">
       <div className="ptbanner-row">
@@ -115,32 +126,10 @@ export function PendingTradeBanner() {
           className="ptbanner-swatch"
           style={{ background: playerColorVar(proposer.color) }}
         />
-        <strong>{proposer.name}</strong>
-        <span style={{ color: 'var(--text-soft)' }}>
-          {isCounter ? 'counters with' : 'offers'}
-        </span>
-        <span className="ptbanner-baskets">
-          <span className="ptbanner-basket">
-            {RESOURCES.filter((r) => (trade.give[r] ?? 0) > 0).map((r) => (
-              <ResourceChip key={r} resource={r} count={trade.give[r]} size="sm" />
-            ))}
-            {(trade.giveGold ?? 0) > 0 && <GoldChip n={trade.giveGold!} />}
-            {COMMODITIES.filter((c) => (trade.giveCommodities?.[c] ?? 0) > 0).map((c) => (
-              <CommodityChip key={c} commodity={c} count={trade.giveCommodities![c]} size="sm" />
-            ))}
-          </span>
-          <span style={{ color: 'var(--text-soft)' }}>→</span>
-          <span className="ptbanner-basket">
-            {RESOURCES.filter((r) => (trade.receive[r] ?? 0) > 0).map((r) => (
-              <ResourceChip key={r} resource={r} count={trade.receive[r]} size="sm" />
-            ))}
-            {(trade.receiveGold ?? 0) > 0 && <GoldChip n={trade.receiveGold!} />}
-            {COMMODITIES.filter((c) => (trade.receiveCommodities?.[c] ?? 0) > 0).map((c) => (
-              <CommodityChip key={c} commodity={c} count={trade.receiveCommodities![c]} size="sm" />
-            ))}
-          </span>
-        </span>
+        <strong>{lanes.title}</strong>
       </div>
+      <TradeLane side="get" label={lanes.getLabel} cards={lanes.get} />
+      <TradeLane side="give" label={lanes.giveLabel} cards={lanes.give} />
 
       {responders.length > 0 && (
         <div className="ptbanner-row ptbanner-responders">
@@ -267,6 +256,24 @@ export function PendingTradeBanner() {
       </div>
     </div>
   );
+}
+
+// One side of an offer as chips: resources, gold (T&B coins), commodities
+// (Cities & Knights).
+function tradeCards(
+  resources: Partial<ResourceBank>,
+  gold: number | undefined,
+  commodities: Partial<CommodityBank> | undefined,
+): ReactNode[] {
+  return [
+    ...RESOURCES.filter((r) => (resources[r] ?? 0) > 0).map((r) => (
+      <ResourceChip key={r} resource={r} count={resources[r]} size="sm" />
+    )),
+    ...((gold ?? 0) > 0 ? [<GoldChip key="gold" n={gold!} />] : []),
+    ...COMMODITIES.filter((c) => (commodities?.[c] ?? 0) > 0).map((c) => (
+      <CommodityChip key={c} commodity={c} count={commodities![c]} size="sm" />
+    )),
+  ];
 }
 
 // Gold in a trade offer (T&B coins).

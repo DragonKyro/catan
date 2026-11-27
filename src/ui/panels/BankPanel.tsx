@@ -19,7 +19,7 @@ export function BankPanel() {
           </span>
         )}
         {!hasCK && !game.explorersPirates && (
-          <span className="bank-deck" title="Development cards left in the deck">
+          <span className="bank-deck" title="Development cards left in the deck" data-anim-devdeck>
             🃏{' '}
             {game.barbarianAttack
               ? game.barbarianAttack.deck.length

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/ui/shared/Button';
 import { useGameStore } from '@/store/gameStore';
 import type { PlayerKind } from '@/game/createGame';
-import type { AiLevel, PlayerColor } from '@/game/types';
-import { AI_LEVELS, AI_LEVEL_IDS, DEFAULT_AI_LEVEL, supportsNeuralAi } from '@/ai/nn';
+import type { PlayerColor } from '@/game/types';
+import { supportsNeuralAi } from '@/ai/nn/support';
 import type { CustomMap } from '@/game/customMap/types';
 import { parseCustomMap } from '@/game/customMap/parse';
 import { PLAYER_COLOR_HEX, PLAYER_COLOR_LABEL } from '@/ui/shared/playerColors';
@@ -17,6 +17,10 @@ import {
   type ExpansionPickerValue,
 } from './ExpansionPicker';
 import { ScenarioPreview } from './ScenarioPreview';
+import { RuleOptions, type RuleOptionsValue } from './RuleOptions';
+import { InfoTip } from '@/ui/shared/InfoTip';
+import { TWO_PLAYER_INFO } from '@/ui/shared/ruleOptions';
+import { TWO_PLAYER_VP_TO_WIN } from '@/game/createGame';
 import { ScreenTitle } from '@/ui/menu/ScreenTitle';
 import './NewGame.css';
 
@@ -24,12 +28,14 @@ const DEFAULT_NAMES = ['You', 'AI 1', 'AI 2', 'AI 3', 'AI 4', 'AI 5', 'AI 6', 'A
 const DEFAULT_TYPES: PlayerKind[] = ['human', 'ai', 'ai', 'ai', 'ai', 'ai', 'ai', 'ai'];
 const DEFAULT_COLORS: PlayerColor[] = ['red', 'blue', 'orange', 'white', 'purple', 'pink', 'teal', 'gold'];
 
-// Recommended VP target. Base game uses 10 VP for all player counts (the
-// official rule — more players don't change the goal, only the wait time).
-// Seafarers scenarios override this via their own defaultVpToWin, with a
-// separate defaultVpToWin5_6 for the larger 5-6 player layout.
+// Recommended VP target. Base game uses 10 VP for 3+ players (the official
+// rule — more players don't change the goal, only the wait time) and 15 for
+// two (colonist.io's 1v1). Seafarers scenarios override this via their own
+// defaultVpToWin, with a separate defaultVpToWin5_6 for the larger 5-6
+// player layout.
 function recommendedVp(numPlayers: number, expansions: ExpansionPickerValue): number {
   const scenario = activeScenario(expansions);
+  if (numPlayers === 2 && scenario.kind === 'base' && !expansions.citiesKnights) return TWO_PLAYER_VP_TO_WIN;
   if (numPlayers >= 5 && scenario.defaultVpToWin5_6 != null) {
     return scenario.defaultVpToWin5_6;
   }
@@ -52,11 +58,13 @@ export function NewGame({ onBack }: Props = {}) {
   // respecting an explicit override.
   const [vpOverride, setVpOverride] = useState<number | null>(null);
   const [turnTimer, setTurnTimer] = useState(0); // seconds; 0 = off
-  const [aiLevel, setAiLevel] = useState<AiLevel>(DEFAULT_AI_LEVEL);
   const [seed, setSeed] = useState('');
   const [expansions, setExpansions] = useState<ExpansionPickerValue>(DEFAULT_EXPANSIONS);
   const [customMap, setCustomMap] = useState<CustomMap | null>(null);
   const [customMapError, setCustomMapError] = useState<string | null>(null);
+  // Rule options the user ticked or unticked; the rest follow the default
+  // (on at 2 players, colonist.io's 1v1 rules).
+  const [ruleOverrides, setRuleOverrides] = useState<Partial<RuleOptionsValue>>({});
   const customMapInputRef = useRef<HTMLInputElement | null>(null);
   const newGame = useGameStore((s) => s.newGame);
 
@@ -68,29 +76,33 @@ export function NewGame({ onBack }: Props = {}) {
     scenario.kind === 'base' &&
     (expansions.baseScenarioId !== 'standard' || expansions.citiesKnights);
   // Custom map (when loaded) overrides the scenario for player-count + VP.
-  const minPlayers = customMap
-    ? customMap.minPlayers
-    : isFunMap
-      ? scenario.minPlayers
-      : scenario.kind === 'seafarers' || scenario.kind === 'traders' || scenario.kind === 'explorersPirates'
-        ? scenario.minPlayers
-        : 3;
-  // T&B scenarios: 3-6 (the T&B 5-6 boards; no 7-8).
-  const maxPlayers = customMap
-    ? customMap.maxPlayers
-    : isFunMap
-      ? scenario.maxPlayers
-      : scenario.kind === 'seafarers' || scenario.kind === 'traders' || scenario.kind === 'explorersPirates'
-        ? scenario.maxPlayers
-        : 8;
+  // Each rule set / map brings its seat range (the standard base board 2-8,
+  // Fun Maps and the expansions 3+; T&B scenarios 3-6, no 7-8).
+  const minPlayers = customMap ? customMap.minPlayers : scenario.minPlayers;
+  const maxPlayers = customMap ? customMap.maxPlayers : scenario.maxPlayers;
   const recommendedVpValue = customMap?.defaultVpToWin ?? recommendedVp(numPlayers, expansions);
+  // Rule options for any game: on by default at 2 players.
+  const ruleOptions: RuleOptionsValue = {
+    friendlyRobber: ruleOverrides.friendlyRobber ?? numPlayers === 2,
+    balancedDice: ruleOverrides.balancedDice ?? numPlayers === 2,
+  };
+  const tbVariants = !customMap ? activeVariants(expansions) : undefined;
+  const ruleBlocked: Partial<Record<keyof RuleOptionsValue, string>> = {
+    ...(expansions.explorersPirates && !customMap ? { friendlyRobber: 'Explorers & Pirates has no robber' } : {}),
+    ...(tbVariants?.eventCards ? { balancedDice: 'The Catan Event Cards replace the dice' } : {}),
+  };
+  const friendlyRobber = ruleOptions.friendlyRobber && !ruleBlocked.friendlyRobber;
+  const balancedDice = ruleOptions.balancedDice && !ruleBlocked.balancedDice;
+  const tradersVariants = friendlyRobber || tbVariants?.strongestPorts || tbVariants?.eventCards
+    ? { friendlyRobber, strongestPorts: !!tbVariants?.strongestPorts, eventCards: !!tbVariants?.eventCards }
+    : undefined;
   // Trained-network AI levels exist for the base game on the standard board only.
   const neuralAi = !customMap && supportsNeuralAi({
     expansions: expansionListFrom(expansions),
     baseScenarioId: usesBaseMap ? expansions.baseScenarioId : undefined,
-    tradersVariants: activeVariants(expansions),
+    tradersVariants,
+    numPlayers,
   });
-  const hasAiSeat = types.slice(0, numPlayers).includes('ai');
   const vp = vpOverride ?? recommendedVpValue;
 
   // Auto-bump the seat count when the active scenario doesn't support it
@@ -122,11 +134,13 @@ export function NewGame({ onBack }: Props = {}) {
         baseScenarioId: !customMap && usesBaseMap ? expansions.baseScenarioId : undefined,
         tradersScenarioId:
           !customMap && expansions.traders ? expansions.tradersScenarioId : undefined,
-        // T&B variants work with any rule set but Explorers & Pirates; C&K
-        // can't take Event Cards yet.
-        tradersVariants: !customMap ? activeVariants(expansions) : undefined,
+        // The Friendly Robber (any game with a robber) and, with a T&B
+        // scenario, its other variants; balanced dice with any game.
+        tradersVariants,
+        balancedDice: balancedDice || undefined,
         turnTimerSec: turnTimer > 0 ? turnTimer : undefined,
-        aiLevel: neuralAi ? aiLevel : undefined,
+        // The base game's AI seats play the trained network (Hard).
+        aiLevel: neuralAi ? 'hard' : undefined,
         customMap: customMap ?? undefined,
       },
     });
@@ -198,9 +212,17 @@ export function NewGame({ onBack }: Props = {}) {
         <ScreenTitle badge="local" title="Play on this device" subtitle="Hot-seat with friends, or take on the AI" />
 
         <label className="newgame-field">
-          <span>Players</span>
+          <span>
+            Players
+            {numPlayers === 2 && (
+              <span className="newgame-vp-hint">
+                {' '}(colonist.io 1v1 rules)
+                <InfoTip text={TWO_PLAYER_INFO} label="Two-player rules" />
+              </span>
+            )}
+          </span>
           <div className="newgame-segmented">
-            {[3, 4, 5, 6, 7, 8].map((n) => {
+            {[2, 3, 4, 5, 6, 7, 8].map((n) => {
               const disabled = n < minPlayers || n > maxPlayers;
               return (
                 <button
@@ -284,7 +306,9 @@ export function NewGame({ onBack }: Props = {}) {
             Victory points to win
             <span className="newgame-vp-hint">
               {' '}(default: {recommendedVpValue}
-              {scenario ? ` — ${scenario.name} rules` : ''})
+              {numPlayers === 2 && scenario.kind === 'base' && !expansions.citiesKnights
+                ? ' — 2-player rules'
+                : scenario ? ` — ${scenario.name} rules` : ''})
             </span>
           </span>
           <input
@@ -301,6 +325,12 @@ export function NewGame({ onBack }: Props = {}) {
         </label>
 
         <ExpansionPicker value={expansions} onChange={setExpansions} />
+
+        <RuleOptions
+          value={ruleOptions}
+          blocked={ruleBlocked}
+          onChange={(id, on) => setRuleOverrides((r) => ({ ...r, [id]: on }))}
+        />
 
         <label className="newgame-field">
           <span>Turn timer</span>
@@ -323,24 +353,6 @@ export function NewGame({ onBack }: Props = {}) {
             ))}
           </div>
         </label>
-
-        {hasAiSeat && neuralAi && (
-          <label className="newgame-field">
-            <span>AI difficulty</span>
-            <div className="newgame-segmented">
-              {AI_LEVEL_IDS.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`newgame-seg${aiLevel === id ? ' active' : ''}`}
-                  onClick={() => setAiLevel(id)}
-                >
-                  {AI_LEVELS[id].label}
-                </button>
-              ))}
-            </div>
-          </label>
-        )}
 
         <label className="newgame-field">
           <span>Seed (optional)</span>

@@ -13,6 +13,7 @@ import { placeStartingPieces } from './modules/base/scenarios/startingSetup';
 import { generateTradersBoard } from './modules/traders/board/generator';
 import { resolveAllWagonStarts } from './modules/traders/merchantTrains/trains';
 import { hasTradersVariant } from './modules/traders/variants';
+import { initialBalancedDice } from './modules/balancedDice';
 import { buildEventDeck } from './modules/traders/variants/eventCards/deck';
 import { buildInitialFishPool } from './modules/traders/fishing/pool';
 import {
@@ -146,6 +147,13 @@ function defaultVpFor(_numPlayers: number): number {
   return 10;
 }
 
+// Two players (colonist.io's 1v1 rules): the base game on the standard
+// board to 15 VP, and a 7 makes only hands of 10+ cards discard. The
+// Friendly Robber and balanced dice that go with it are the New Game
+// screen's / lobby's defaults at 2 players, not forced here.
+export const TWO_PLAYER_VP_TO_WIN = 15;
+export const TWO_PLAYER_DISCARD_LIMIT = 9;
+
 export type PlayerKind = 'human' | 'ai';
 
 export interface CreateGameOptions {
@@ -161,10 +169,10 @@ export interface CreateGameOptions {
 export function createGame(opts: CreateGameOptions): GameState {
   const numPlayers = opts.playerNames.length;
   if (numPlayers < 2 || numPlayers > 8) {
-    // The engine still tolerates 2 players (used by tests and edge cases),
-    // but the official rules and the standard new-game flow require 3-6
-    // (with 5-6 using the larger expansion map + Special Build Phase).
-    // 7-8 is an unofficial extension (37-hex board, scaled bank + dev deck).
+    // 2 players: the base game on the standard board, by colonist.io's 1v1
+    // rules (TWO_PLAYER_*; the expansions tolerate 2 for tests only). 3-6 is
+    // official (5-6 on the larger board with paired turns); 7-8 is an
+    // unofficial extension (37-hex board, scaled bank + dev deck).
     throw new Error(`Catan supports 2-8 players, got ${numPlayers}`);
   }
   if (opts.playerTypes && opts.playerTypes.length !== numPlayers) {
@@ -309,6 +317,7 @@ export function createGame(opts: CreateGameOptions): GameState {
       return sc.defaultVpToWin;
     }
     const sc = getBaseScenario(baseScenarioId);
+    if (numPlayers === 2 && !hasCitiesKnights) return TWO_PLAYER_VP_TO_WIN;
     if (numPlayers >= 5 && sc.defaultVpToWin5_6 != null) return sc.defaultVpToWin5_6;
     return sc.defaultVpToWin;
   })();
@@ -325,6 +334,11 @@ export function createGame(opts: CreateGameOptions): GameState {
     // C&K rolls the event die and red die alongside the card — not wired yet.
     throw new Error('Catan Event Cards cannot be combined with Cities & Knights yet.');
   }
+  const balancedDice = opts.settings?.balancedDice === true;
+  if (balancedDice && tradersVariants?.eventCards) {
+    throw new Error("Balanced dice can't be combined with Catan Event Cards: the cards replace the dice.");
+  }
+  const discardLimit = opts.settings?.discardLimit ?? (numPlayers === 2 ? TWO_PLAYER_DISCARD_LIMIT : undefined);
   const settings: GameSettings = {
     numPlayers,
     victoryPointsToWin:
@@ -339,6 +353,8 @@ export function createGame(opts: CreateGameOptions): GameState {
     tradersVariants: hasTradersVariant({ tradersVariants }) ? tradersVariants : undefined,
     turnTimerSec: opts.settings?.turnTimerSec,
     aiLevel: opts.settings?.aiLevel,
+    ...(balancedDice ? { balancedDice: true } : {}),
+    ...(discardLimit !== undefined ? { discardLimit } : {}),
     customMap,
     ...(hasExplorers
       ? { explorersPiratesScenarioId: EXPLORERS_PIRATES_SCENARIO_ID, setupRounds: 3 as const }
@@ -721,6 +737,7 @@ export function createGame(opts: CreateGameOptions): GameState {
     largestArmy: null,
     longestRoad: null,
     lastRoll: null,
+    ...(balancedDice ? { balancedDice: initialBalancedDice() } : {}),
     winner: null,
     boardVariant,
     turnHolderIndex: 0,

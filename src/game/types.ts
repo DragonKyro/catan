@@ -966,7 +966,12 @@ export interface RobberMoveContext {
   returnTo: 'main' | 'rollOrPlayKnight';
 }
 
-export type AiLevel = 'easy' | 'normal' | 'hard';
+/**
+ * The trained network that plays a base game's AI seats. One level now: Hard.
+ * (Older builds also offered 'easy' / 'normal'; rooms, replays and settings
+ * that still carry them play Hard — see `neuralLevel` in src/ai/nn.)
+ */
+export type AiLevel = 'hard';
 
 export interface GameSettings {
   numPlayers: number;
@@ -986,9 +991,9 @@ export interface GameSettings {
   // AI defaults, then ends the turn. AI seats ignore this — they pace
   // themselves via AIDriver.
   turnTimerSec?: number;
-  // Strength of every AI seat in a base game (standard board, no
-  // expansions): a trained network from src/ai/nn (easy / normal / hard).
-  // Other rule sets — and a base game without it — use the heuristic AI.
+  // Set (to 'hard') when a base game (standard board, no expansions) plays
+  // its AI seats with the trained network from src/ai/nn. Other rule sets —
+  // and a base game without it — use the heuristic AI.
   aiLevel?: AiLevel;
   // Traders & Barbarians: scenario picker (currently only 'riversOfCatan').
   // Only consulted when expansions includes the T&B id. Mutually exclusive
@@ -1023,6 +1028,23 @@ export interface GameSettings {
   // Explorers & Pirates: scenario id (only 'explorersPirates', the
   // Rulebook's complete scenario, ships today).
   explorersPiratesScenarioId?: string;
+  // Balanced dice (any rule set): the rolls so far bias the next one
+  // (modules/balancedDice). The engine draws the dice from the seeded RNG and
+  // ignores the action's own.
+  balancedDice?: boolean;
+  // A 7 makes everyone holding MORE than this many resource cards discard
+  // half. Undefined = 7 (the rulebook); 2-player games use 9 (createGame).
+  discardLimit?: number;
+}
+
+/** Balanced dice's memory of the rolls so far (`settings.balancedDice`). */
+export interface BalancedDiceState {
+  /** Rolls of each total, index = total (0 and 1 unused). */
+  counts: number[];
+  /** The last few totals, newest last. */
+  recent: number[];
+  /** 7s each player has rolled. */
+  sevens: Record<PlayerId, number>;
 }
 
 export interface PendingTrade {
@@ -1069,6 +1091,8 @@ export interface GameState {
   largestArmy: { holder: PlayerId; size: number } | null;
   longestRoad: { holder: PlayerId; length: number } | null;
   lastRoll: { dice: [number, number]; total: number; player: PlayerId } | null;
+  // Balanced dice's roll history (only with `settings.balancedDice`).
+  balancedDice?: BalancedDiceState;
   winner: PlayerId | null;
   // Which board layout this game uses. '5-6' = 5-6 player expansion (30 hexes,
   // 11 ports, 28 number tokens). '7-8' = unofficial 7-8 player extension

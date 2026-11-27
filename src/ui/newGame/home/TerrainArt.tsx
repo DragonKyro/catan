@@ -5,6 +5,11 @@
 // HomeIsland draws each in its own small box that animates on the
 // compositor (HomeMenu.css), so the tile itself is painted once. Their
 // shadows stay on the tile.
+//
+// Every repeated motif (pine, brick stack, mountain, rock, cactus, sheep,
+// sheaf) is drawn once in TerrainArtDefs and placed with <use>: the island is
+// a few hundred elements instead of ~2,000, which is most of the home
+// screen's first layout / style / paint work.
 
 import type { HomeTerrain } from './island';
 
@@ -21,9 +26,19 @@ function Shadow({ rx, y = 6 }: { rx: number; y?: number }) {
   return <ellipse cx={0} cy={y} rx={rx} ry={rx * 0.32} fill="#000" opacity={0.2} />;
 }
 
+/** A motif drawn once in TerrainArtDefs, placed at (x, y) and scaled. */
+function Use({ id, x = 0, y = 0, s = 1, extra }: { id: string; x?: number; y?: number; s?: number; extra?: string }) {
+  const t = `${x || y ? `translate(${x} ${y}) ` : ''}${s !== 1 ? `scale(${s}) ` : ''}${extra ?? ''}`.trim();
+  return <use href={`#${id}`} xlinkHref={`#${id}`} transform={t || undefined} />;
+}
+
 function Pine({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
+  return <Use id="home-pine" x={x} y={y} s={s} />;
+}
+
+function PineArt() {
   return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
+    <g id="home-pine">
       <Shadow rx={6.5} y={5.5} />
       <rect x={-1} y={2.5} width={2} height={3.5} fill="#5b3a1d" />
       <path d="M0,-5 L7,3.5 L-7,3.5 Z" fill="#1f5a28" />
@@ -91,8 +106,12 @@ export function TerrainFxArt({ fx }: { fx: TerrainFx }) {
 }
 
 function SheepBody({ flip }: { flip: boolean }) {
+  return <Use id="home-sheep" extra={flip ? 'scale(-1 1)' : undefined} />;
+}
+
+function SheepArt() {
   return (
-    <g transform={flip ? 'scale(-1 1)' : undefined}>
+    <g id="home-sheep">
       <g>
         {[-3.2, -1.2, 1.4, 3.2].map((lx) => (
           <rect key={lx} x={lx - 0.6} y={1.5} width={1.2} height={3.4} rx={0.5} fill="#2d2a26" />
@@ -136,8 +155,12 @@ function Fence({ x, y, w }: { x: number; y: number; w: number }) {
 }
 
 function SheafBody() {
+  return <Use id="home-sheaf" />;
+}
+
+function SheafArt() {
   return (
-    <g>
+    <g id="home-sheaf">
       {[-16, 0, 16].map((rot) => (
         <g key={rot} transform={`rotate(${rot} 0 5)`}>
           <line x1={0} y1={5} x2={0} y2={-6} stroke="#9a6d12" strokeWidth={0.9} />
@@ -155,6 +178,10 @@ function SheafBody() {
 }
 
 function BrickStack({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
+  return <Use id="home-bricks" x={x} y={y} s={s} />;
+}
+
+function BrickStackArt() {
   const brick = (bx: number, by: number) => (
     <g key={`${bx},${by}`}>
       <rect x={bx} y={by} width={4.6} height={2.8} rx={0.4} fill="#b6461f" stroke="#6b2710" strokeWidth={0.5} />
@@ -162,7 +189,7 @@ function BrickStack({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
     </g>
   );
   return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
+    <g id="home-bricks">
       <Shadow rx={8} y={3.6} />
       {[-7, -2.3, 2.4].map((bx) => brick(bx, 0))}
       {[-4.6, 0].map((bx) => brick(bx, -3))}
@@ -172,8 +199,12 @@ function BrickStack({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
 }
 
 function Mountain({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
+  return <Use id="home-mountain" x={x} y={y} s={s} />;
+}
+
+function MountainArt() {
   return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
+    <g id="home-mountain">
       <Shadow rx={10} y={6.5} />
       <path d="M-11,6.5 L-1,-11 L11,6.5 Z" fill="#696977" />
       <path d="M-1,-11 L-11,6.5 L-2.5,6.5 L1.2,-2 Z" fill="#8e8e9c" />
@@ -184,8 +215,12 @@ function Mountain({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
 }
 
 function Rock({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
+  return <Use id="home-rock" x={x} y={y} s={s} />;
+}
+
+function RockArt() {
   return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
+    <g id="home-rock">
       <Shadow rx={4} y={2.4} />
       <path d="M-3.6,2 L-2.4,-1.8 L0.6,-3 L3.4,-0.6 L2.8,2 Z" fill="#5f5f6c" />
       <path d="M-2.4,-1.8 L0.6,-3 L0.2,-0.4 L-3.6,2 Z" fill="#8b8b98" />
@@ -194,8 +229,12 @@ function Rock({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
 }
 
 function Cactus({ x, y, s = 1 }: { x: number; y: number; s?: number }) {
+  return <Use id="home-cactus" x={x} y={y} s={s} />;
+}
+
+function CactusArt() {
   return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
+    <g id="home-cactus">
       <Shadow rx={4} y={6} />
       <g stroke="#2f6b33" strokeLinecap="round" fill="none">
         <path d="M0,6 L0,-6" strokeWidth={3.2} />
@@ -218,6 +257,21 @@ function Stripes({ color, gap, width, angle }: { color: string; gap: number; wid
         ))}
       </g>
     </g>
+  );
+}
+
+/** The motifs every tile places with <use> — render once, inside some SVG's <defs>. */
+export function TerrainArtDefs() {
+  return (
+    <>
+      <PineArt />
+      <SheepArt />
+      <SheafArt />
+      <BrickStackArt />
+      <MountainArt />
+      <RockArt />
+      <CactusArt />
+    </>
   );
 }
 

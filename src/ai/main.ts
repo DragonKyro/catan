@@ -1,3 +1,4 @@
+import { discardLimit } from '@/game/helpers';
 import type {
   GameState,
   PlayerId,
@@ -237,15 +238,15 @@ export function chooseMainPhaseAction(
       needs.goal === 'city' &&
       player.settlements.length > 0 &&
       cityShortfall <= 2 &&
-      handSize <= 8;
+      handSize <= discardLimit(state) + 1;
     const placedSettlesAndCities = player.settlements.length + player.cities.length;
     const earlyGame = placedSettlesAndCities < 2;
     // Play styles (persona.ts): the cities and expansion styles keep their
     // wheat / ore (sheep / wheat) for their own builds unless the hand is
     // about to be cut by a 7.
     const styleHolds =
-      (style === 'citiesFirst' && player.settlements.length > 0 && handSize < 8) ||
-      (style === 'expansion' && handSize < 8);
+      (style === 'citiesFirst' && player.settlements.length > 0 && handSize <= discardLimit(state)) ||
+      (style === 'expansion' && handSize <= discardLimit(state));
     if (!saveForCity && !earlyGame && !styleHolds) {
       return { type: 'buyDevCard', playerId };
     }
@@ -546,10 +547,10 @@ export function tryBankTrade(state: GameState, playerId: PlayerId): Action | nul
   // back-and-forth churn: AI with 4 brick would trade for wood, then trade
   // back to brick the next turn. Now:
   //  1) Goal-driven: we have a concrete build goal AND a specific shortfall.
-  //  2) Discard-imminent: handSize >= 7 (at 8 we're forced to discard;
-  //     starting the spend-down at 7 gives a one-turn buffer).
+  //  2) Discard-imminent: handSize >= the discard limit (7; one more card
+  //     and a 7 forces a discard, so the spend-down starts a card early).
   const wantingForGoal = needs.goal !== 'none';
-  const discardImminent = handSize >= 7;
+  const discardImminent = handSize >= discardLimit(state);
   if (!wantingForGoal && !discardImminent) return null;
 
   // Pick the resource we want most. Goal mode targets the needed resource;

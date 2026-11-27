@@ -311,7 +311,7 @@
     0 0 0 3px var(--accent);
 }
 
-/* Traders & Barbarians variants (any rules; Event Cards not with C&K). */
+/* Rule options (any rules) and the Traders & Barbarians variants (T&B only). */
 .lobby-variants {
   display: flex;
   flex-wrap: wrap;
@@ -337,4 +337,8 @@
 .lobby-variant input:disabled + span {
   color: var(--text-soft);
   cursor: not-allowed;
+}
+
+.lobby-variant .info-tip {
+  margin-left: 0;
 }

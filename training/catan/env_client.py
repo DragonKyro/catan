@@ -146,6 +146,8 @@ class CatanEnv:
         target_personas: list[str] | None = None,
         learner_setup_share: float = 0.0,
         learner_setup_personas: list[str] | None = None,
+        learner_rules: dict | None = None,
+        opponent_rules: dict | None = None,
     ) -> Batch:
         """seats: a role per seat, 'learner' | 'opponent' | 'heuristic' (rotated one
         seat per match). quota: matches per env before it idles (0 = forever).
@@ -156,7 +158,10 @@ class CatanEnv:
         distinct_personas: no persona twice at a table (while the pool lasts).
         target_personas: personas whose seats aim the robber / cut-offs at a learner seat.
         learner_setup_share: share of learner seats whose opening a persona from
-        learner_setup_personas plays (the network takes over at the first roll)."""
+        learner_setup_personas plays (the network takes over at the first roll).
+        learner_rules / opponent_rules: how learner / frozen-opponent seats play the
+        action space v3 additions (src/ai/nn/actions.ts PolicyRules, e.g.
+        {"tradePick": True, "offerNeeds": True}; default off = pre-v3 play)."""
         options = {
             "numEnvs": num_envs,
             "seed": seed,
@@ -182,6 +187,10 @@ class CatanEnv:
             options["learnerSetupPersonas"] = learner_setup_personas
         if reward is not None:
             options["reward"] = reward
+        if learner_rules:
+            options["learnerRules"] = learner_rules
+        if opponent_rules:
+            options["opponentRules"] = opponent_rules
         return self._batch(self._call({"cmd": "reset", "options": options}))
 
     def step(self, actions) -> Batch:
@@ -195,9 +204,15 @@ class CatanEnv:
         return self._batch(self._recv())
 
     def configure(self, seats: list[str] | None = None, teacher: bool | None = None,
-                  personas: list[str] | None = None) -> None:
-        """New seat roles / heuristic personas for matches that start from now on; teacher labels on / off."""
+                  personas: list[str] | None = None, learner_rules: dict | None = None,
+                  opponent_rules: dict | None = None) -> None:
+        """New seat roles / heuristic personas for matches that start from now on; teacher labels on / off;
+        the rules learner / frozen-opponent seats play by (see reset)."""
         options: dict = {}
+        if learner_rules is not None:
+            options["learnerRules"] = learner_rules
+        if opponent_rules is not None:
+            options["opponentRules"] = opponent_rules
         if seats is not None:
             options["seats"] = seats
         if teacher is not None:

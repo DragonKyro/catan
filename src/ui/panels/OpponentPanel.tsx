@@ -91,6 +91,7 @@ export function OpponentPanel() {
           <div
             key={p.id}
             className={`opp ${isActing ? 'opp-acting' : ''} ${isPartner ? 'opp-partner' : ''}`}
+            data-anim-player={p.id}
           >
             <div className="opp-head">
               <span

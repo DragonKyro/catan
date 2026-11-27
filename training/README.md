@@ -220,9 +220,18 @@ bundle in `training/dist-analysis/`, so it's safe to run during training
 `ENCODER_VERSION` (`src/ai/nn/encode.ts`) and `ACTION_SPACE_VERSION`
 (`src/ai/nn/actions.ts`) are pinned by tests with the feature / slot sizes.
 Checkpoints and policy files record both and refuse to load on a mismatch —
-retrain after changing either. The app's frozen levels (`src/ai/nn/policies/`) are
-checked the same way by `src/ai/nn/levels.test.ts`, so a version bump means
-re-freezing all three.
+retrain after changing either. The app's frozen level (`src/ai/nn/policies/`) is
+checked the same way by `src/ai/nn/levels.test.ts`. When a version only
+appended features / slots (v2, v3), `upgrade_policy.py --new-offers frozen`
+carries a policy over playing exactly as before; `--new-offers warm` gives the
+new slots a starting point for training instead.
+
+Action space v3 adds rules a policy plays by, saved in its file's
+`meta.rules` (`--rules`, default `tradePick,offerNeeds`): picking the partner
+for its own offer, and offering only what some opponent needs. Policies
+without them (everything trained before v3, the shipped Hard) play as they
+always did — in the game, as frozen opponents (each worker's `opponent_rules`
+follow the policy it plays) and in `evaluate.py`.
 
 ## Shipping a policy
 

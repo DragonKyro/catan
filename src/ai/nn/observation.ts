@@ -24,7 +24,7 @@
 // Maps keep the heuristic AI.
 
 import type {
-  BoardState, DevCardType, EdgeId, GamePhase, GameSettings, GameState, HexId, PlayerId, PortType, Resource,
+  BoardState, DevCardType, EdgeId, GamePhase, GameState, HexId, PlayerId, PortType, Resource,
   ResourceBank, VertexId,
 } from '@/game/types';
 import { RESOURCES } from '@/game/types';
@@ -36,17 +36,7 @@ import {
   DEV_TYPES, PLAYABLE_DEV, estimateHands, type CatanKnowledge, type HandEstimate, type PlayableDev,
 } from './knowledge';
 
-/** Rule sets the learned agent is trained for: the base game on the standard board, any player count. */
-export function supportsNeuralAi(
-  settings: Pick<GameSettings, 'expansions' | 'baseScenarioId' | 'customMap' | 'tradersVariants'>,
-): boolean {
-  return settings.expansions.length === 0
-    && (settings.baseScenarioId ?? 'standard') === 'standard'
-    && !settings.customMap
-    && !settings.tradersVariants?.friendlyRobber
-    && !settings.tradersVariants?.strongestPorts
-    && !settings.tradersVariants?.eventCards;
-}
+export { supportsNeuralAi } from './support';
 
 export type DevCounts = Record<DevCardType, number>;
 
@@ -85,6 +75,8 @@ export interface CatanDraft {
   discard?: Partial<ResourceBank>;
   robberHex?: HexId;
   roadBuilding?: EdgeId[];
+  /** Chose to counter the offer it's answering; the counter itself comes next. */
+  counter?: true;
 }
 
 /** What the viewer has to decide right now. */
@@ -103,7 +95,23 @@ export type CatanDecision =
   | { type: 'roadBuilding'; placed: EdgeId[] }
   /** Accept / reject an offer. `give` / `get` are from the viewer's side.
    *  `counter`: the viewer is the turn player answering a counter-offer. */
-  | { type: 'tradeResponse'; proposerOffset: number; give: ResourceBank; get: ResourceBank; counter: boolean };
+  | { type: 'tradeResponse'; proposerOffset: number; give: ResourceBank; get: ResourceBank; counter: boolean }
+  /** The viewer's own offer has a yes from these seats (offsets): trade with
+   *  one of them, or walk away. Only for policies that pick their own partner
+   *  (ObserveOptions.tradePick); otherwise the heuristic picks. */
+  | { type: 'tradePick'; give: ResourceBank; get: ResourceBank; acceptors: number[] }
+  /** Having chosen to counter (the `counter` slot), which offer to counter with. */
+  | { type: 'counterOffer'; proposerOffset: number; give: ResourceBank; get: ResourceBank };
+
+/** An offer made this turn and its answers, seats as offsets (knowledge.ts TurnOffer). */
+export interface ObservedOffer {
+  proposerOffset: number;
+  give: ResourceBank;
+  receive: ResourceBank;
+  accepted: number[];
+  rejected: number[];
+  tradedWithOffset: number | null;
+}
 
 export interface CatanObservation {
   viewerId: PlayerId;
@@ -139,6 +147,8 @@ export interface CatanObservation {
   tradedThisTurn: { given: Resource[]; received: Resource[] };
   /** Offers the viewer has already made this turn. */
   offeredThisTurn: Array<{ give: ResourceBank; receive: ResourceBank }>;
+  /** Every offer made this turn, anyone's, with who said yes / no. */
+  turnOffers: ObservedOffer[];
   largestArmy: { holderOffset: number; size: number } | null;
   longestRoad: { holderOffset: number; length: number } | null;
   decision: CatanDecision | null;
@@ -146,6 +156,9 @@ export interface CatanObservation {
 
 export interface ObserveOptions {
   draft?: CatanDraft | null;
+  /** The viewer picks its own trade partner (a `tradePick` decision) — set
+   *  for policies trained with it (PolicyRules.tradePick in actions.ts). */
+  tradePick?: boolean;
 }
 
 const bank = (b: Partial<ResourceBank> = {}): ResourceBank => ({
@@ -244,9 +257,21 @@ export function observe(
       : null,
     tradedThisTurn: { given: traded?.given.slice() ?? [], received: traded?.received.slice() ?? [] },
     offeredThisTurn: (state.proposedTradesThisTurn?.[viewerId] ?? []).map((t) => ({ give: bank(t.give), receive: bank(t.receive) })),
+    turnOffers: knowledge.turnOffers.map((t) => {
+      const seat = (i: number) => offsetOf(knowledge.playerIds[i]!);
+      const side = (xs: number[]) => bank(Object.fromEntries(RESOURCES.map((r, j) => [r, xs[j] ?? 0])));
+      return {
+        proposerOffset: seat(t.proposer),
+        give: side(t.give),
+        receive: side(t.receive),
+        accepted: t.accepted.map(seat),
+        rejected: t.rejected.map(seat),
+        tradedWithOffset: t.tradedWith === null ? null : seat(t.tradedWith),
+      };
+    }),
     largestArmy: state.largestArmy ? { holderOffset: offsetOf(state.largestArmy.holder), size: state.largestArmy.size } : null,
     longestRoad: state.longestRoad ? { holderOffset: offsetOf(state.longestRoad.holder), length: state.longestRoad.length } : null,
-    decision: decisionFor(state, viewerId, offsetOf, opts.draft ?? null),
+    decision: decisionFor(state, viewerId, offsetOf, opts.draft ?? null, opts.tradePick ?? false),
   };
 }
 
@@ -255,6 +280,7 @@ function decisionFor(
   viewerId: PlayerId,
   offsetOf: (id: PlayerId) => number,
   draft: CatanDraft | null,
+  tradePick: boolean,
 ): CatanDecision | null {
   const acting = state.playerOrder[state.currentPlayerIndex]!;
   const viewer = state.players.find((p) => p.id === viewerId)!;
@@ -289,11 +315,17 @@ function decisionFor(
     case 'main': {
       const pt = state.pendingTrade;
       if (pt) {
-        if (pt.proposerId === viewerId) return null; // waiting on answers
+        if (pt.proposerId === viewerId) {
+          // Its own offer (not a counter): once someone says yes it may pick.
+          const yes = (pt.acceptedBy ?? []).map(offsetOf).sort((a, b) => a - b);
+          if (!tradePick || acting !== viewerId || yes.length === 0) return null; // waiting on answers
+          return { type: 'tradePick', give: bank(pt.give), get: bank(pt.receive), acceptors: yes };
+        }
         const answer = { proposerOffset: offsetOf(pt.proposerId), give: bank(pt.receive), get: bank(pt.give) };
         // A counter-offer is answered by the turn player alone.
         if (pt.proposerId !== acting) return acting === viewerId ? { type: 'tradeResponse', ...answer, counter: true } : null;
         if (pt.rejectedBy.includes(viewerId) || (pt.acceptedBy ?? []).includes(viewerId)) return null; // answered
+        if (draft?.counter) return { type: 'counterOffer', ...answer };
         return { type: 'tradeResponse', ...answer, counter: false };
       }
       if (acting !== viewerId) return null;

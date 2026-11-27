@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { act, render, fireEvent } from '@testing-library/react';
+import { act, render, fireEvent, within } from '@testing-library/react';
 import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { runSetupPhase, giveResources } from '@/game/__testHelpers';
@@ -36,20 +36,30 @@ describe('countering an offer from the banner', () => {
     useGameStore.setState({ game: aiOffer(), dialog: null, tradeCounter: null, error: null });
   });
 
+  it('shows the offer from my seat: what I would get and what I would give', () => {
+    const view = render(<Table />);
+    expect(view.getByText('Ann offers you')).toBeTruthy();
+    expect(view.container.querySelector('.ptbanner .tlane-get .rchip-wood')).toBeTruthy();
+    expect(view.container.querySelector('.ptbanner .tlane-give .rchip-brick')).toBeTruthy();
+    view.unmount();
+  });
+
   it('opens as my counter, seeded with the offer turned round, and sends it', () => {
     const view = render(<Table />);
     fireEvent.click(view.getByText('Counter'));
-    expect(view.getByText('Counter the offer')).toBeTruthy();
-    // My hand (Bo's), not the proposer's.
+    const dialog = within(view.getByRole('dialog'));
+    expect(dialog.getByText('Counter the offer')).toBeTruthy();
+    // My hand (Bo's), not the proposer's: the brick left after the one given.
     const bo = useGameStore.getState().game!.players[1]!;
-    expect(view.getAllByText(`have ${bo.resources.brick}`).length).toBeGreaterThan(0);
+    expect(dialog.getByLabelText('Give one brick').textContent).toContain(String(bo.resources.brick - 1));
     // Asks for the wood they offered, gives the brick they asked for.
-    expect(view.container.querySelector('.ptrade-row.is-get')?.textContent).toMatch(/\+1/);
-    expect(view.container.querySelector('.ptrade-row.is-give')?.textContent).toMatch(/−1/);
+    const lanes = view.getByRole('dialog');
+    expect(lanes.querySelector('.tlane-get .rchip-wood')?.textContent).toMatch(/1/);
+    expect(lanes.querySelector('.tlane-give .rchip-brick')?.textContent).toMatch(/1/);
 
     // Ask for one more wood, then send.
-    fireEvent.click(view.getByLabelText('Receive one wood'));
-    fireEvent.click(view.getByText('Send counter'));
+    fireEvent.click(dialog.getByLabelText('Get one wood'));
+    fireEvent.click(dialog.getByText('Send counter'));
     const after = useGameStore.getState();
     expect(after.error).toBeNull();
     expect(after.dialog).toBeNull();
@@ -60,12 +70,12 @@ describe('countering an offer from the banner', () => {
   it('stays open while others answer, and closes with a note if the offer is withdrawn', () => {
     const view = render(<Table />);
     fireEvent.click(view.getByText('Counter'));
-    fireEvent.click(view.getByLabelText('Receive one wood'));
+    fireEvent.click(view.getByLabelText('Get one wood'));
 
     // Another AI says no: the offer still stands, the counter stays open, edits kept.
     act(() => useGameStore.getState().dispatch({ type: 'rejectTrade', playerId: 'p2' }));
     expect(useGameStore.getState().dialog).toBe('playerTrade');
-    expect(view.container.querySelector('.ptrade-row.is-get')?.textContent).toMatch(/\+2/);
+    expect(view.getByRole('dialog').querySelector('.tlane-get .rchip-wood')?.textContent).toMatch(/2/);
 
     // The proposer walks away: nothing left to counter.
     act(() => useGameStore.getState().dispatch({ type: 'cancelTrade', playerId: 'p0' }));

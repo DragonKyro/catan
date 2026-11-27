@@ -89,7 +89,9 @@ from torch.utils.tensorboard import SummaryWriter
 
 import evaluate as ev
 from env_client import ROLE_LEARNER, ROLE_OPPONENT, Batch, CatanEnv
-from model import (CatanNet, Topology, export_policy, load_checkpoint, load_policy, masked_logits, read_policy_meta,
+from model import (OUTCOME_SEATS, RULE_NAMES, CatanNet, Topology, export_policy, load_checkpoint, load_policy,
+                   masked_logits,
+                   policy_rules, read_policy_meta,
                    net_from_checkpoint, save_checkpoint)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -179,6 +181,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                        help="after imitation, weight of a pull toward the heuristic's choice ...")
     learn.add_argument("--bc-anchor-updates", type=int, default=300,
                        help="... decaying linearly to 0 over this many updates")
+    learn.add_argument("--aux-coef", type=float, default=0.1,
+                       help="weight of the outcome-prediction loss (each seat's final points and win, training only)")
     learn.add_argument("--guard-max-shift", type=int, default=2,
                        help="self-play workers the guard may move to heuristic tables (0 = no guard)")
 
@@ -193,6 +197,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     save.add_argument("--eval-past-gap", type=int, default=5, help="compare with the checkpoint this many saves back")
     save.add_argument("--eval-past-every", type=int, default=0,
                       help="updates between evals vs the earlier checkpoint (0 = every --eval-every)")
+    game.add_argument("--rules", default="tradePick,offerNeeds,counter",
+                      help="action space v3 rules the learner plays by (comma list of tradePick, offerNeeds, counter; "
+                           "'' = pre-v3 play): it picks its own trade partner / offers only what some opponent "
+                           "needs / counters an offer (once a turn). Saved in every exported policy's meta.rules")
+    game.add_argument("--mix-schedule", default="",
+                      help="later table mixes: 'U:spec;U:spec' (spec as --mix, same worker count) used from "
+                           "update U on — e.g. more self-play as the learning rate falls")
+    game.add_argument("--mixed-personas", type=int, default=1,
+                      help="heuristic (persona) seats at a mixed table; the rest of the opponents are past checkpoints")
     save.add_argument("--benchmark", default=None, metavar="POLICY",
                       help="eval only: vs three copies of this policy (a .json, RUN@N, ...) instead of the earlier "
                            "checkpoint; training seats are unaffected")
@@ -220,6 +233,20 @@ def worker_roles(n: int, self_share: float, heuristic_share: float, mixed_share:
 KINDS = ("self", "heuristic", "mixed", "past", "blend")
 
 
+def parse_schedule(spec: str) -> list[tuple[int, list[str]]]:
+    """'3300:self=4,heuristic=2,mixed=2;4300:...' → [(3300, roles), ...] in update order."""
+    out = []
+    for part in spec.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        at, _, mix = part.partition(":")
+        if not at.strip().isdigit() or not mix.strip():
+            raise SystemExit(f"--mix-schedule: bad entry {part!r} (want U:spec)")
+        out.append((int(at), parse_mix(mix)))
+    return sorted(out, key=lambda x: x[0])
+
+
 def parse_mix(spec: str) -> list[str]:
     """'heuristic=4,self=3' → ['heuristic'] * 4 + ['self'] * 3."""
     roles: list[str] = []
@@ -231,7 +258,7 @@ def parse_mix(spec: str) -> list[str]:
     return roles
 
 
-def seats_for(role: str, players: int, has_pool: bool) -> list[str]:
+def seats_for(role: str, players: int, has_pool: bool, mixed_personas: int = 1) -> list[str]:
     if role == "self":
         return ["learner"] * players
     if role == "blend":
@@ -239,7 +266,8 @@ def seats_for(role: str, players: int, has_pool: bool) -> list[str]:
     if role == "heuristic" or not has_pool:
         return ["learner"] + ["heuristic"] * (players - 1)
     if role == "mixed":
-        return ["learner", "heuristic"] + ["opponent"] * (players - 2)
+        k = max(1, min(players - 2, mixed_personas))
+        return ["learner"] + ["heuristic"] * k + ["opponent"] * (players - 1 - k)
     return ["learner"] + ["opponent"] * (players - 1)
 
 
@@ -273,7 +301,8 @@ class Rollout:
     when the rollout ends — it is carried into the next update instead of
     being trained on."""
 
-    FIELDS = ("hexes", "vertices", "edges", "glob", "mask", "action", "logp", "value", "teacher", "reward", "done")
+    FIELDS = ("hexes", "vertices", "edges", "glob", "mask", "action", "logp", "value", "teacher", "reward", "done",
+              "outcome", "outcome_mask", "has_outcome")
 
     def __init__(self, capacity: int, shape: dict, dims: dict):
         H, V, E = shape["hexes"], shape["vertices"], shape["edges"]
@@ -289,12 +318,19 @@ class Rollout:
         self.reward = np.zeros(capacity, np.float32)
         self.done = np.zeros(capacity, bool)
         self.next = np.full(capacity, -1, np.int64)
+        # How the match ended, for the outcome head: by seat offset from the
+        # row's seat, final points / target then 1 for the winner; known once
+        # the match is over (set on its last row, spread back along `next`).
+        self.outcome = np.zeros((capacity, 2 * OUTCOME_SEATS), np.float32)
+        self.outcome_mask = np.zeros((capacity, OUTCOME_SEATS), bool)
+        self.has_outcome = np.zeros(capacity, bool)
         self.n = 0
 
     def clear(self) -> None:
         self.reward[: self.n] = 0
         self.done[: self.n] = False
         self.next[: self.n] = -1
+        self.has_outcome[: self.n] = False
         self.n = 0
 
     def add(self, **rows: np.ndarray) -> np.ndarray:
@@ -461,10 +497,19 @@ class Trainer:
         n_params = sum(p.numel() for p in self.net.parameters())
 
 
-        roles = parse_mix(a.mix) if a.mix else worker_roles(a.workers, a.self_play, a.vs_heuristic, a.mixed)
+        self.base_roles = parse_mix(a.mix) if a.mix else worker_roles(a.workers, a.self_play, a.vs_heuristic, a.mixed)
+        self.schedule = parse_schedule(a.mix_schedule)
+        for at, stage in self.schedule:
+            if len(stage) != len(self.base_roles):
+                raise SystemExit(f"--mix-schedule {at}: {len(stage)} workers, --mix has {len(self.base_roles)}")
+        roles = self.roles_for(self.update)
         a.workers = len(roles)
         for k in self.guard_workers:  # self-play workers the guard had moved to heuristic tables
             roles[k] = "heuristic"
+        names = [x.strip() for x in a.rules.split(",") if x.strip()]
+        if set(names) - set(RULE_NAMES):
+            raise SystemExit(f"--rules: unknown {sorted(set(names) - set(RULE_NAMES))} (known: {', '.join(RULE_NAMES)})")
+        self.learner_rules = {k: k in names for k in RULE_NAMES}
         self.fixed_path = ev.resolve(a.fixed_opponent) if a.fixed_opponent else None
         self.bench_path = ev.resolve(a.benchmark) if a.benchmark else None
         self.bench_label = ""
@@ -489,12 +534,15 @@ class Trainer:
             env = CatanEnv(players=a.players)
             seed = a.seed * 10_007 + w * 7_919 + self.update * 104_729
             worker = Worker(role, env)
+            opp_rules = None
             if fixed is not None and role in ("past", "mixed", "blend"):
                 worker.opponent, worker.opponent_name = fixed, self.fixed_label
+                opp_rules = policy_rules(self.fixed_path)
             worker.batch = env.reset(num_envs=a.envs_per_worker, seed=seed,
-                                     seats=seats_for(role, a.players, fixed is not None),
+                                     seats=self.seats(role, fixed is not None),
                                      max_turns=a.max_turns, vp_shaping=a.vp_shaping, teacher=env_teacher,
-                                     refused_offer_penalty=a.refused_offer_penalty, **self.opponent_options())
+                                     refused_offer_penalty=a.refused_offer_penalty, learner_rules=self.learner_rules,
+                                     opponent_rules=opp_rules, **self.opponent_options())
             self.workers.append(worker)
         # After the workers: --mix decides how many there are.
         with open(os.path.join(self.run_dir, "config.json"), "w", encoding="utf-8") as f:
@@ -707,10 +755,45 @@ class Trainer:
                 ok = lw[:, s] >= 0
                 buf.reward[lw[ok, s]] += w.batch.reward[ok, s]
                 buf.done[lw[ok & w.batch.done, s]] = True
+            for ep in w.batch.episodes:
+                if ep.get("aborted"):
+                    continue
+                for s in range(self.args.players):
+                    r = lw[ep["env"], s]
+                    if r >= 0:
+                        self.set_outcome(r, ep, s)
             lw[w.batch.done] = -1
             for ep in w.batch.episodes:
                 self.episodes += 1
                 self.record_episode(w.role, ep)
+
+    def set_outcome(self, row: int, ep: dict, seat: int) -> None:
+        """How the match ended, from `seat`'s point of view (offset 0 = itself), on its last row."""
+        buf = self.buf
+        order = ep["order"]
+        n = len(order)
+        pos = order.index(seat)
+        target = ep.get("vpToWin") or 10
+        buf.outcome[row] = 0
+        buf.outcome_mask[row] = False
+        for o in range(min(n, OUTCOME_SEATS)):
+            j = order[(pos + o) % n]
+            buf.outcome[row, o] = min(1.5, ep["vp"][j] / target)
+            buf.outcome[row, OUTCOME_SEATS + o] = 1.0 if ep["winnerSeat"] == j else 0.0
+            buf.outcome_mask[row, o] = True
+        buf.has_outcome[row] = True
+
+    def spread_outcomes(self) -> None:
+        """Copy each finished match's outcome back along its rows (streams run forward in `next`)."""
+        buf = self.buf
+        for i in range(buf.n - 1, -1, -1):
+            if buf.has_outcome[i] or buf.done[i]:
+                continue
+            j = buf.next[i]
+            if j >= 0 and buf.has_outcome[j]:
+                buf.outcome[i] = buf.outcome[j]
+                buf.outcome_mask[i] = buf.outcome_mask[j]
+                buf.has_outcome[i] = True
 
     def record_episode(self, role: str, ep: dict) -> None:
         self.fallbacks += ep.get("fallbacks", 0)
@@ -759,6 +842,10 @@ class Trainer:
         advantage = torch.from_numpy(adv[idx]).to(dev)
         returns = advantage + torch.from_numpy(buf.value[idx]).to(dev)
         teacher = torch.from_numpy(buf.teacher[idx]).to(dev)
+        self.spread_outcomes()
+        outcome_t = torch.from_numpy(buf.outcome[idx]).to(dev)
+        outcome_m = torch.from_numpy(buf.outcome_mask[idx]).to(dev)
+        has_outcome = torch.from_numpy(buf.has_outcome[idx]).to(dev)
         anchor = self.anchor_weight()
         # Normalised once over the whole update (a tiny last minibatch has no usable std).
         norm_adv = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
@@ -769,7 +856,7 @@ class Trainer:
             perm = torch.randperm(n, device=dev)
             for start in range(0, n, a.minibatch):
                 b = perm[start:start + a.minibatch]
-                logits, value = self.net(hexes[b], vertices[b], edges[b], glob[b])
+                logits, value, outcome = self.net(hexes[b], vertices[b], edges[b], glob[b], outcome=True)
                 logp_all = F.log_softmax(masked_logits(logits, mask[b]), dim=-1)
                 entropy = -(logp_all.exp() * logp_all).sum(-1).mean()
                 labelled = teacher[b] >= 0
@@ -804,6 +891,18 @@ class Trainer:
                         stats["anchor_loss"].append(imitation.item())
                 v_loss = 0.5 * (value - returns[b]).pow(2).mean()
                 loss = pi_loss + a.vf_coef * v_loss - a.ent_coef * entropy
+                known = has_outcome[b]
+                if a.aux_coef > 0 and known.any():
+                    # Each seat's final points (/ target) and whether it won, by offset.
+                    pred, tgt = outcome[known].float(), outcome_t[b][known]
+                    seat = outcome_m[b][known].float()
+                    vp_loss = ((pred[:, :OUTCOME_SEATS] - tgt[:, :OUTCOME_SEATS]).pow(2) * seat).sum() / seat.sum()
+                    win_loss = (F.binary_cross_entropy_with_logits(pred[:, OUTCOME_SEATS:], tgt[:, OUTCOME_SEATS:],
+                                                                   reduction="none") * seat).sum() / seat.sum()
+                    loss = loss + a.aux_coef * (vp_loss + win_loss)
+                    stats["outcome_vp_loss"].append(vp_loss.item())
+                    stats["outcome_win_loss"].append(win_loss.item())
+                    stats["outcome_rows"].append(known.float().mean().item())
                 if not torch.isfinite(loss):
                     stats["skipped_steps"].append(1.0)
                     continue
@@ -836,8 +935,37 @@ class Trainer:
         path = os.path.join(self.run_dir, "policies", f"update_{u:06d}.json")
         export_policy(self.net, path, self.versions,
                       meta={"run": os.path.basename(self.run_dir), "update": u, "decisions": self.decisions,
-                            "phase": "imitation" if u <= a.bc_updates else "ppo"})
+                            "phase": "imitation" if u <= a.bc_updates else "ppo", "rules": self.learner_rules})
         return path
+
+    def seats(self, role: str, has_pool: bool) -> list[str]:
+        return seats_for(role, self.args.players, has_pool, self.args.mixed_personas)
+
+    def roles_for(self, update: int) -> list[str]:
+        """The table mix --mix / --mix-schedule sets for `update`."""
+        roles = self.base_roles
+        for at, stage in self.schedule:
+            if update >= at:
+                roles = stage
+        return list(roles)
+
+    def apply_mix_schedule(self) -> None:
+        """Switch workers to the mix --mix-schedule sets from this update (matches already running finish as they were)."""
+        if not any(at == self.update for at, _ in self.schedule):
+            return
+        target = self.roles_for(self.update)
+        self.guard_workers = [k for k in self.guard_workers if target[k] == "self"]
+        pool = bool(ev.list_policies(self.run_dir)) or self.fixed_path is not None
+        for k, w in enumerate(self.workers):
+            new = "heuristic" if k in self.guard_workers else target[k]
+            if new == w.role:
+                continue
+            w.role = new
+            # Its opponent net stays: matches already running still have its seats.
+            w.env.configure(seats=self.seats(new, pool))
+        counts = collections.Counter(w.role for w in self.workers)
+        print(f"  mix from u{self.update}: " + ", ".join(f"{n} {r}" for r, n in sorted(counts.items())), flush=True)
+        self.refresh_past_opponents()
 
     def opponent_options(self) -> dict:
         """The heuristic seats' settings, for training envs."""
@@ -896,11 +1024,13 @@ class Trainer:
         for path in picks:
             net = load_policy(path, self.versions, self.device)
             net.topology, net.amp = self.topology, self.net.amp
-            nets.append((net, os.path.basename(path)))
+            nets.append((net, os.path.basename(path), policy_rules(path)))
         for k, w in enumerate(past):
-            if w.opponent is None:
-                w.env.configure(seats=seats_for(w.role, self.args.players, True))
-            w.opponent, w.opponent_name = nets[k % len(nets)]
+            net, name, rules = nets[k % len(nets)]
+            # Its seats play by that policy's own rules (pre-v3 policies: none).
+            w.env.configure(seats=self.seats(w.role, True) if w.opponent is None else None,
+                            opponent_rules=rules)
+            w.opponent, w.opponent_name = net, name
 
     # ------------------------------------------------------------ logging
 
@@ -1055,10 +1185,13 @@ class Trainer:
                  "bench": f"vs 3× {self.bench_label or 'benchmark'}",
                  "skew": f"lopsided opening vs 3× {self.bench_label or 'benchmark'}"}
         extra = [t for t in ("bench", "skew", "past", "fixed", "blend") if t in tags]
+        # Trades per match split by partner (persona or seat after the agent) and the bank, where they're interesting.
+        split = [t for t in ("bench",) if t in tags]
         head = (f"| update | hours | decisions | vs {self.heuristic_name}: win (95% CI) | place | VP | turns | "
-                f"offers (taken) | trades |")
-        head += "".join(f" {names[t]}: win (95% CI) | place |" for t in extra)
-        lines = [head, "|" + "---:|" * (9 + 2 * len(extra))]
+                f"offers (taken) | trades | trades with each, and bank |")
+        head += "".join(f" {names[t]}: win (95% CI) | place |" + (" trades with each, and bank |" if t in split else "")
+                        for t in extra)
+        lines = [head, "|" + "---:|" * (10 + 2 * len(extra) + len(split))]
         def win(x: dict | None) -> str:
             return f"{100 * x['winRate']:.1f}% ({100 * x['winCi95'][0]:.1f}-{100 * x['winCi95'][1]:.1f})" if x else ""
 
@@ -1074,9 +1207,13 @@ class Trainer:
                      win(h), num(h, "meanRank", ".2f"), num(h, "meanVp", ".1f"), num(h, "meanTurns", ".0f"),
                      (f"{h['offersPerGame']:.1f} ({100 * h['offerTakenRate']:.0f}%)" if h and "offersPerGame" in h else ""),
                      (f"{h['tradesPerGame']:.1f}" if h and "tradesPerGame" in h else ""),
+                     (ev.trade_split(h, bank=True) if h and "tradesWith" in h else ""),
                      ]
             for t in extra:
                 cells += [win(r.get(t)), num(r.get(t), "meanRank", ".2f")]
+                if t in split:
+                    x = r.get(t)
+                    cells.append(ev.trade_split(x, bank=True) if x and "tradesWith" in x else "")
             lines.append("| " + " | ".join(cells) + " |")
         heur = [u for u in done if "heuristic" in self.eval_results[u]]
         if heur:
@@ -1098,7 +1235,8 @@ class Trainer:
                f"and (columns further right) against three copies of an earlier policy or the benchmark, or at the 4-way table, "
                f"where it holds two seats and its win % is per seat. Seats rotate round the table. "
                f"Win 25% = parity with each opponent seat; place 1 = first, "
-               f"{a.players} = last (2.5 = average); offers / trades are the agent's per match vs the heuristics. Updated {time.strftime('%Y-%m-%d %H:%M')}, update "
+               f"{a.players} = last (2.5 = average); offers / trades are the agent's per match vs the heuristics, split by "
+               f"partner (LR / LA / griefer = the personas; +1..+3 = the seat that many after it) and the bank. Updated {time.strftime('%Y-%m-%d %H:%M')}, update "
                f"{self.update}/{a.updates}, {self.train_seconds / 3600:.1f} h trained.",
                "",
                "## Latest 10 checkpoints",
@@ -1142,6 +1280,7 @@ class Trainer:
                 stats = self.learn(pending, self.advantages(pending))
                 t2 = time.perf_counter()
                 self.update += 1
+                self.apply_mix_schedule()
                 self.train_seconds += t2 - t0
                 stats["collect_seconds"], stats["learn_seconds"] = t1 - t0, t2 - t1
                 stats["decisions"] = self.decisions - d0
