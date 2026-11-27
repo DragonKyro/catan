@@ -63,7 +63,9 @@ describe('countering an offer from the banner', () => {
     const after = useGameStore.getState();
     expect(after.error).toBeNull();
     expect(after.dialog).toBeNull();
-    expect(after.game!.pendingTrade).toMatchObject({ proposerId: 'p1', give: { brick: 1 }, receive: { wood: 2 } });
+    // The counter sits beside the offer, which stays open to the others.
+    expect(after.game!.pendingTrade).toMatchObject({ proposerId: 'p0' });
+    expect(after.game!.pendingTrade!.counters).toEqual([{ by: 'p1', give: { brick: 1 }, receive: { wood: 2 } }]);
     view.unmount();
   });
 

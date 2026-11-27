@@ -1066,9 +1066,25 @@ export interface PendingTrade {
   // Players who said yes to the active player's offer. A yes moves nothing:
   // the proposer then picks one of them (`confirmTrade`) or walks away, so
   // they choose when several accept, and can refuse to deal with, say, the
-  // leader. (A counter-offer, whose proposer isn't the active player, is
-  // still completed by its accept.)
+  // leader.
   acceptedBy?: PlayerId[];
+  // Counter-offers, one per player at most. They sit beside the offer, which
+  // stays open to everyone else; the proposer may take one instead
+  // (`confirmTrade { with, counter: true }`). Countering is that player's
+  // answer to the offer (it drops their yes / no; a no withdraws it).
+  counters?: CounterOffer[];
+}
+
+/** A counter-offer to the pending trade, from its maker's side. */
+export interface CounterOffer {
+  by: PlayerId;
+  /** What the counterer gives / wants. */
+  give: Partial<ResourceBank>;
+  receive: Partial<ResourceBank>;
+  giveGold?: number;
+  receiveGold?: number;
+  giveCommodities?: Partial<CommodityBank>;
+  receiveCommodities?: Partial<CommodityBank>;
 }
 
 export interface GameState {
@@ -1088,6 +1104,9 @@ export interface GameState {
   hasRolledThisTurn: boolean;
   hasPlayedDevCardThisTurn: boolean;
   tradesProposedThisTurn: number;
+  // Counter-offers each player has made this turn (absent = none); the AI
+  // limits itself with it (src/ai/counterLimits.ts), humans are unlimited.
+  countersThisTurn?: Partial<Record<PlayerId, number>>;
   largestArmy: { holder: PlayerId; size: number } | null;
   longestRoad: { holder: PlayerId; length: number } | null;
   lastRoll: { dice: [number, number]; total: number; player: PlayerId } | null;
@@ -1649,6 +1668,8 @@ export interface AcceptTradeAction extends ActionBase {
 export interface ConfirmTradeAction extends ActionBase {
   type: 'confirmTrade';
   with: PlayerId;
+  /** Take `with`'s counter-offer (its terms) instead of the offer they said yes to. */
+  counter?: boolean;
 }
 
 export interface CancelTradeAction extends ActionBase {

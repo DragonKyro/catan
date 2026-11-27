@@ -3,7 +3,10 @@ import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { runSetupPhase, giveResources } from '@/game/__testHelpers';
 import type { GameState } from '@/game/types';
-import { chooseTradePartner, nextTradeResponder, pendingTradeStep } from './trade';
+import { hasAnsweredTrade } from '@/game/actions/trade';
+import { chooseTradePartner, nextTradeResponder, pendingTradeStep, tryCounterTrade, tryExtractCounter } from './trade';
+import { MAX_AI_COUNTERS_PER_SEAT, MAX_AI_COUNTERS_PER_TURN, aiMayCounter } from './counterLimits';
+import { sampleGames } from './nn/testSupport';
 
 /** Four players after setup, p0 to play, with an offer of 1 wood for 1 brick out. */
 function offerOut(): GameState {
@@ -74,5 +77,42 @@ describe('pendingTradeStep (headless games)', () => {
     let t = offerOut();
     for (let i = 0; i < 3; i++) t = applyAction(t, pendingTradeStep(t, () => false));
     expect(t.pendingTrade).toBeUndefined();
+  });
+});
+
+describe('counter-offer limits (like the 2 offers a turn)', () => {
+  /** States from all-AI games where some AI would counter the offer on the table. */
+  function wouldCounter(): Array<{ s: GameState; id: string; other: string }> {
+    const out: Array<{ s: GameState; id: string; other: string }> = [];
+    for (const { state: s } of sampleGames({ players: 4, games: 3, seed: 91, every: 1, maxSteps: 1500 })) {
+      const pt = s.pendingTrade;
+      if (!pt) continue;
+      for (const p of s.players) {
+        if (p.id === pt.proposerId || hasAnsweredTrade(pt, p.id)) continue;
+        if (!tryExtractCounter(s, p.id) && !tryCounterTrade(s, p.id)) continue;
+        const other = s.players.find((x) => x.id !== p.id && x.id !== pt.proposerId)!.id;
+        out.push({ s, id: p.id, other });
+        break;
+      }
+      if (out.length >= 10) break;
+    }
+    return out;
+  }
+  const counters = (s: GameState, id: string) => tryExtractCounter(s, id) ?? tryCounterTrade(s, id);
+  const made = (s: GameState, by: Record<string, number>): GameState => ({ ...s, countersThisTurn: by });
+
+  it('each AI counters at most once a turn, and the AIs together at most once a turn', () => {
+    expect([MAX_AI_COUNTERS_PER_SEAT, MAX_AI_COUNTERS_PER_TURN]).toEqual([1, 1]);
+    const cases = wouldCounter();
+    expect(cases.length).toBeGreaterThan(0);
+    for (const { s, id, other } of cases) {
+      expect(counters(s, id)).not.toBeNull();
+      expect(counters(made(s, { [id]: 1 }), id)).toBeNull(); // its own counter this turn
+      expect(counters(made(s, { [other]: 1 }), id)).toBeNull(); // another AI's
+      // A human's counters don't use up the AIs' allowance.
+      const human = { ...s, players: s.players.map((p) => (p.id === other ? { ...p, isAI: false } : p)) };
+      expect(aiMayCounter(made(human, { [other]: 3 }), id)).toBe(true);
+      expect(counters(made(human, { [other]: 3 }), id)).not.toBeNull();
+    }
   });
 });

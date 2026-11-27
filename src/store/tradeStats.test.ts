@@ -23,7 +23,7 @@ describe('trades by partner (end-of-game summary)', () => {
     dispatch({ type: 'confirmTrade', playerId: 'p0', with: 'p1' });
     dispatch({ type: 'proposeTrade', playerId: 'p0', give: { brick: 1 }, receive: { sheep: 1 } });
     dispatch({ type: 'counterTrade', playerId: 'p2', give: { sheep: 1 }, receive: { brick: 2 } });
-    dispatch({ type: 'acceptTrade', playerId: 'p0' });
+    dispatch({ type: 'confirmTrade', playerId: 'p0', with: 'p2', counter: true });
     dispatch({ type: 'proposeTrade', playerId: 'p0', give: { wheat: 1 }, receive: { ore: 1 } });
     dispatch({ type: 'rejectTrade', playerId: 'p1' });
     dispatch({ type: 'rejectTrade', playerId: 'p2' });

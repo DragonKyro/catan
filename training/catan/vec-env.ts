@@ -59,7 +59,6 @@ import { DEFAULT_REWARD_WEIGHTS, finalStandings, terminalRewards, type RewardWei
 import { heuristicAction, teacherSlot } from './teacher';
 import { PERSONAS, PERSONA_IDS, isPersonaId, type HeuristicPersona, type PersonaId } from '@/ai/persona';
 import { isSetupPhase } from '@/game/actions/setup';
-import { isCounterOffer } from '@/game/actions/trade';
 import { nextTradeResponder } from '@/ai/trade';
 
 export type SeatRole = 'learner' | 'opponent' | 'heuristic';
@@ -508,7 +507,7 @@ export class CatanVecEnv {
       }
       const id = decidingSeat(s);
       const seat = s.players.findIndex((p) => p.id === id);
-      if (s.pendingTrade?.proposerId === id && !isCounterOffer(s) && !this.rulesFor(env.roles[seat]!).tradePick) {
+      if (s.pendingTrade?.proposerId === id && !this.rulesFor(env.roles[seat]!).tradePick) {
         // Everyone has answered the offer; this seat's policy doesn't pick
         // its own partner (pre-v3 rules), so the heuristic picks for it.
         this.heuristicMove(i, seat, id);
@@ -651,8 +650,8 @@ function validateSeats(seats: SeatRole[], players: number): void {
 function decidingSeat(s: GameState): PlayerId {
   const pt = s.pendingTrade;
   if (pt) {
-    if (isCounterOffer(s)) return s.playerOrder[s.currentPlayerIndex]!; // the turn player answers
-    // Each opponent answers in turn; then the proposer picks a partner.
+    // Each opponent answers in turn (yes, no or a counter-offer); then the
+    // proposer settles it.
     return nextTradeResponder(s) ?? pt.proposerId;
   }
   return getActingPlayerId(s);

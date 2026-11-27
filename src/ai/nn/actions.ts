@@ -40,7 +40,9 @@
 //               `counter` slot (next to accept / reject, so a policy can learn
 //               how often to counter on its own), then — a `counterOffer`
 //               decision — an offer from the same menu (the offer slots, as a
-//               counterTrade). At most MAX_COUNTERS_PER_TURN a turn, never one
+//               counterTrade). At most MAX_COUNTERS_PER_TURN a turn (and
+//               none once the AI seats together have made
+//               MAX_AI_COUNTERS_PER_TURN, src/ai/counterLimits.ts), never one
 //               that is just the offer accepted, one the bank or a harbor
 //               gives as well, or one the offerer couldn't pay (or, with
 //               offerNeeds, has no use for). The turn player's yes / no to a
@@ -56,6 +58,7 @@ import { COSTS, RESOURCES } from '@/game/types';
 import { analyseBoard, type BoardFacts } from './encode';
 import { AFFORD_COSTS } from './knowledge';
 import type { CatanDraft, CatanObservation, ObservedPlayer } from './observation';
+import { MAX_AI_COUNTERS_PER_SEAT, MAX_AI_COUNTERS_PER_TURN } from '../counterLimits';
 
 export const ACTION_SPACE_VERSION = 3;
 
@@ -67,8 +70,8 @@ export interface PolicyRules {
 }
 export const NO_RULES: PolicyRules = { tradePick: false, offerNeeds: false, counter: false };
 export const V3_RULES: PolicyRules = { tradePick: true, offerNeeds: true, counter: true };
-/** Counter-offers a seat may make per turn (counter rule). */
-export const MAX_COUNTERS_PER_TURN = 1;
+/** Counter-offers a seat may make per turn (counter rule); the heuristic's limit too. */
+export const MAX_COUNTERS_PER_TURN = MAX_AI_COUNTERS_PER_SEAT;
 
 /** A policy file's rules (meta.rules); anything missing is off. */
 export function rulesFromMeta(meta: Record<string, unknown> | undefined): PolicyRules {
@@ -242,7 +245,7 @@ function counterOffers(
   rules: PolicyRules,
 ): number[] {
   const countered = obs.turnOffers.filter((o) => o.proposerOffset === 0).length;
-  if (obs.currentOffset === 0 || countered >= MAX_COUNTERS_PER_TURN) return [];
+  if (obs.currentOffset === 0 || countered >= MAX_COUNTERS_PER_TURN || obs.aiCountersThisTurn >= MAX_AI_COUNTERS_PER_TURN) return [];
   const me = obs.players[0]!;
   const hand = me.hand!;
   const proposer = obs.players[d.proposerOffset]!;
@@ -360,6 +363,13 @@ export const randomDice = (): [number, number] => [1 + Math.floor(Math.random() 
 /** What slot `slot` means for the viewer's current decision: a reducer action,
  *  or the next draft of a multi-part answer. Throws on an illegal slot.
  *  `mask` — legalMask(obs), if the caller already has it. */
+/** The counter-offers decided on before `offset`'s (they come in the pending trade's order). */
+function declinedSoFar(obs: CatanObservation, offset: number): number[] {
+  const order = (obs.pendingTrade?.counters ?? []).map((c) => c.byOffset);
+  const at = order.indexOf(offset);
+  return at < 0 ? [] : order.slice(0, at);
+}
+
 export function decodeSlot(
   obs: CatanObservation,
   slot: number,
@@ -408,10 +418,24 @@ export function decodeSlot(
     case 'playRoadBuilding':
       return { kind: 'draft', draft: { roadBuilding: [] } };
     case 'accept':
+      // A counter-offer to its own offer: take it.
+      if (d.type === 'tradeResponse' && d.counter) {
+        return act({ type: 'confirmTrade', playerId, with: obs.players[d.proposerOffset]!.id, counter: true });
+      }
       return act({ type: 'acceptTrade', playerId });
     case 'reject':
-      return act(d.type === 'tradeResponse' && d.counter ? { type: 'cancelTrade', playerId } : { type: 'rejectTrade', playerId });
+      if (d.type === 'tradeResponse' && d.counter) {
+        // Turn this counter down: the next one, or (none left) walk away.
+        if ((d.rest ?? 0) > 0) {
+          const declined = [...declinedSoFar(obs, d.proposerOffset), d.proposerOffset];
+          return { kind: 'draft', draft: { pickedNone: true, declined } };
+        }
+        return act({ type: 'cancelTrade', playerId });
+      }
+      return act({ type: 'rejectTrade', playerId });
     case 'pick:none':
+      // Passing on every yes: the counter-offers next, if any.
+      if (d.type === 'tradePick' && (d.counters ?? 0) > 0) return { kind: 'draft', draft: { pickedNone: true } };
       return act({ type: 'cancelTrade', playerId });
     case 'counter':
       return { kind: 'draft', draft: { counter: true } };
@@ -503,6 +527,8 @@ export function slotForAction(obs: CatanObservation, action: Action): number {
     case 'cancelTrade':
       return G0 + (d?.type === 'tradePick' ? PICK_NONE : globalSlot('reject'));
     case 'confirmTrade': {
+      // Taking a counter-offer is the accept of that counter's decision.
+      if (action.counter) return d?.type === 'tradeResponse' && d.counter ? G0 + globalSlot('accept') : -1;
       if (d?.type !== 'tradePick') return -1;
       const off = obs.players.find((p) => p.id === action.with)?.offset;
       return off === undefined || off < 1 || off > MAX_VICTIM_OFFSET ? -1 : G0 + PICK_BASE + off - 1;

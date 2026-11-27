@@ -172,7 +172,10 @@ export const TOPICS: Topic[] = [
           <li>
             <strong>Player trade.</strong> Propose any combination of resources
             to anyone at the table. Any opponent with the asked-for cards may
-            accept, counter, or reject.
+            accept, counter, or reject. A counter-offer sits beside your offer
+            (everyone else can still take the original); once the answers are
+            in you trade with one player who accepted, take one counter, or
+            walk away.
           </li>
         </ul>
         <PortDiagram />

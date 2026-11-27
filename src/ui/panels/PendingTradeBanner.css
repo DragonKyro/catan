@@ -88,3 +88,40 @@
 .ptbanner-responder-name {
   font-size: 0.95em;
 }
+
+/* Counter-offers beside the offer: who, the terms, and (for the proposer) Take. */
+.ptbanner-counters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--panel-border);
+}
+
+.ptbanner-counter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 0.85em;
+}
+
+.ptbanner-counter-who {
+  font-weight: 700;
+}
+
+.ptbanner-counter-terms {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  color: var(--text-soft);
+}
+
+.ptbanner-counter-sep {
+  margin: 0 2px;
+}
+
+.ptbanner-counter .btn {
+  margin-left: auto;
+}

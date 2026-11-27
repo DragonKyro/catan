@@ -1,7 +1,8 @@
 import { useLayoutEffect, type ReactNode } from 'react';
 import { useGameStore, getActingPlayerId } from '@/store/gameStore';
 import { useNetworkStore, getMyPlayerId } from '@/store/networkStore';
-import type { CommodityBank, Player, ResourceBank } from '@/game/types';
+import type { CommodityBank, CounterOffer, Player, ResourceBank } from '@/game/types';
+import { hasAnsweredTrade } from '@/game/actions/trade';
 import { COMMODITIES, RESOURCES } from '@/game/types';
 import { ResourceChip } from '@/ui/shared/ResourceChip';
 import { CoinIcon } from '@/ui/game/traders/TradersIcons';
@@ -28,7 +29,7 @@ export function PendingTradeBanner() {
     for (const p of game.players) {
       if (p.id === t.proposerId) continue;
       if (p.isAI) continue; // AIs handle themselves
-      if (t.rejectedBy.includes(p.id) || t.acceptedBy?.includes(p.id)) continue;
+      if (hasAnsweredTrade(t, p.id)) continue;
       // T&B coins: the gold asked for counts like a card.
       let canAccept = (t.receiveGold ?? 0) <= (p.gold ?? 0);
       for (const r of RESOURCES) {
@@ -53,7 +54,12 @@ export function PendingTradeBanner() {
   const trade = game.pendingTrade;
   const proposer = game.players.find((p) => p.id === trade.proposerId)!;
   const acting = getActingPlayerId(game);
-  const currentTurnId = game.playerOrder[game.currentPlayerIndex]!;
+  const counters = trade.counters ?? [];
+  const nameOf = (id: string) => game.players.find((p) => p.id === id)?.name ?? id;
+  const colorOf = (id: string) => {
+    const p = game.players.find((x) => x.id === id);
+    return p ? playerColorVar(p.color) : undefined;
+  };
 
   // Who can press the human-facing buttons (accept/counter/reject)?
   // - solo: when a human is acting it's that human. When an AI is acting (so
@@ -83,27 +89,25 @@ export function PendingTradeBanner() {
   };
 
   const isProposer = viewerId === trade.proposerId;
-  const isCurrent = viewerId === currentTurnId;
-  // It's a counter if the proposer of the current pendingTrade isn't the
-  // active turn player. In that case the original proposer (current turn
-  // player) may accept or cancel.
-  const isCounter = trade.proposerId !== currentTurnId;
   const canViewerAccept =
     !!viewer && !isProposer && hasResources(viewer, trade.receive);
-  const canViewerCounter =
-    !!viewer && !viewer.isAI && !isProposer && !isCounter && isCurrent === false;
+  const canViewerCounter = !!viewer && !viewer.isAI && !isProposer;
   const viewerHasRejected = viewerId
     ? trade.rejectedBy.includes(viewerId)
     : false;
+  const viewerCounter = viewerId ? counters.find((c) => c.by === viewerId) : undefined;
+  // Can the proposer pay what a counter-offer asks for?
+  const proposerCanPay = (c: CounterOffer) =>
+    RESOURCES.every((r) => (c.receive[r] ?? 0) <= proposer.resources[r])
+    && (c.receiveGold ?? 0) <= (proposer.gold ?? 0)
+    && holdsCommodities(proposer, c.receiveCommodities);
   // Who said yes to the active player's offer: the proposer picks one of them.
   const accepted = trade.acceptedBy ?? [];
   const viewerHasAccepted = !!viewerId && accepted.includes(viewerId);
   const acceptors = accepted
     .map((id) => game.players.find((p) => p.id === id))
     .filter((p): p is Player => !!p);
-  const waitingOn = game.players.filter(
-    (p) => p.id !== trade.proposerId && !trade.rejectedBy.includes(p.id) && !accepted.includes(p.id),
-  );
+  const waitingOn = game.players.filter((p) => p.id !== trade.proposerId && !hasAnsweredTrade(trade, p.id));
 
   // List of opponents to display as "responder dots" — everyone except the
   // proposer.
@@ -114,10 +118,10 @@ export function PendingTradeBanner() {
   const offered = tradeCards(trade.give, trade.giveGold, trade.giveCommodities);
   const asked = tradeCards(trade.receive, trade.receiveGold, trade.receiveCommodities);
   const lanes = isProposer
-    ? { title: isCounter ? 'Your counter' : 'Your offer', get: asked, give: offered, getLabel: 'You get', giveLabel: 'You give' }
+    ? { title: 'Your offer', get: asked, give: offered, getLabel: 'You get', giveLabel: 'You give' }
     : viewer
-      ? { title: `${proposer.name} ${isCounter ? 'counters' : 'offers you'}`, get: offered, give: asked, getLabel: 'You get', giveLabel: 'You give' }
-      : { title: `${proposer.name} ${isCounter ? 'counters' : 'offers'}`, get: asked, give: offered, getLabel: `${proposer.name} gets`, giveLabel: `${proposer.name} gives` };
+      ? { title: `${proposer.name} offers you`, get: offered, give: asked, getLabel: 'You get', giveLabel: 'You give' }
+      : { title: `${proposer.name} offers`, get: asked, give: offered, getLabel: `${proposer.name} gets`, giveLabel: `${proposer.name} gives` };
 
   return (
     <div className="ptbanner">
@@ -136,6 +140,7 @@ export function PendingTradeBanner() {
           {responders.map((p) => {
             const rejected = trade.rejectedBy.includes(p.id);
             const yes = accepted.includes(p.id);
+            const countered = counters.some((c) => c.by === p.id);
             const can = hasResources(p, trade.receive);
             return (
               <span
@@ -146,9 +151,11 @@ export function PendingTradeBanner() {
                     ? `${p.name} rejected`
                     : yes
                       ? `${p.name} accepted`
-                      : can
-                        ? `${p.name} could accept`
-                        : `${p.name} can't (insufficient resources)`
+                      : countered
+                        ? `${p.name} made a counter-offer`
+                        : can
+                          ? `${p.name} could accept`
+                          : `${p.name} can't (insufficient resources)`
                 }
               >
                 <span
@@ -158,14 +165,59 @@ export function PendingTradeBanner() {
                 <span className="ptbanner-responder-name">{p.name}</span>
                 {rejected && <span className="ptbanner-responder-mark">✗</span>}
                 {yes && <span className="ptbanner-responder-yes">✓</span>}
+                {countered && <span className="ptbanner-responder-yes" aria-label="countered">↔</span>}
               </span>
             );
           })}
         </div>
       )}
 
+      {/* Counter-offers sit beside the offer, which stays open to everyone. */}
+      {counters.length > 0 && (
+        <div className="ptbanner-counters">
+          {counters.map((c) => {
+            const theirs = tradeCards(c.give, c.giveGold, c.giveCommodities);
+            const wants = tradeCards(c.receive, c.receiveGold, c.receiveCommodities);
+            const mine = c.by === viewerId;
+            return (
+              <div key={c.by} className="ptbanner-counter">
+                <span className="ptbanner-responder-dot" style={{ background: colorOf(c.by) }} />
+                <span className="ptbanner-counter-who">{mine ? 'Your counter' : `${nameOf(c.by)} counters`}</span>
+                {/* Told from the proposer's side when it's theirs to take. */}
+                <span className="ptbanner-counter-terms">
+                  {isProposer ? 'you get' : mine ? 'you give' : 'gives'} {theirs}
+                  <span className="ptbanner-counter-sep">·</span>
+                  {isProposer ? 'you give' : mine ? 'for' : 'wants'} {wants}
+                </span>
+                {isProposer && (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={!proposerCanPay(c)}
+                    onClick={() => dispatch({ type: 'confirmTrade', playerId: proposer.id, with: c.by, counter: true })}
+                    title={proposerCanPay(c) ? `Take ${nameOf(c.by)}'s counter-offer` : "You don't have what it asks for"}
+                  >
+                    Take
+                  </Button>
+                )}
+                {mine && viewer && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => dispatch({ type: 'rejectTrade', playerId: viewer.id })}
+                    title="Withdraw your counter-offer"
+                  >
+                    Take back
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="ptbanner-row ptbanner-actions">
-        {isProposer && !isCounter && (
+        {isProposer && (
           <>
             {acceptors.map((p) => (
               <Button
@@ -179,10 +231,10 @@ export function PendingTradeBanner() {
                 Trade with {p.name}
               </Button>
             ))}
-            {acceptors.length === 0 && (
+            {acceptors.length === 0 && counters.length === 0 && (
               <span className="ptbanner-note">Waiting for answers…</span>
             )}
-            {acceptors.length > 0 && waitingOn.length > 0 && (
+            {(acceptors.length > 0 || counters.length > 0) && waitingOn.length > 0 && (
               <span className="ptbanner-note">
                 {waitingOn.length === 1 ? `${waitingOn[0]!.name} hasn't answered` : `${waitingOn.length} haven't answered`}
               </span>
@@ -213,6 +265,7 @@ export function PendingTradeBanner() {
         )}
         {!isProposer && viewer && !viewer.isAI && !viewerHasAccepted && (
           <>
+            {viewerCounter && <span className="ptbanner-note">Or take the offer as it is:</span>}
             <Button
               size="sm"
               variant={canViewerAccept ? 'primary' : 'secondary'}
@@ -221,34 +274,23 @@ export function PendingTradeBanner() {
               title={
                 !canViewerAccept
                   ? "You don't have the resources"
-                  : isCounter
-                    ? 'Accept this counter-offer'
-                    : `Accept — ${proposer.name} then picks who to trade with`
+                  : `Accept — ${proposer.name} then picks who to trade with`
               }
             >
               Accept
             </Button>
             {canViewerCounter && (
               <Button size="sm" onClick={() => openCounterDialog(viewer.id)}>
-                Counter
+                {viewerCounter ? 'Change counter' : 'Counter'}
               </Button>
             )}
-            {!isCurrent && !viewerHasRejected && (
+            {!viewerHasRejected && !viewerCounter && (
               <Button
                 size="sm"
                 variant="secondary"
                 onClick={() => dispatch({ type: 'rejectTrade', playerId: viewer.id })}
               >
                 Reject
-              </Button>
-            )}
-            {isCurrent && (
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => dispatch({ type: 'cancelTrade', playerId: viewer.id })}
-              >
-                Walk away
               </Button>
             )}
           </>

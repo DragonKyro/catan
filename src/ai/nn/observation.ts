@@ -31,6 +31,7 @@ import { RESOURCES } from '@/game/types';
 import { isPairedPlayer2 } from '@/game/helpers';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
+import { aiCountersThisTurn } from '../counterLimits';
 import { boardIndex, type BoardIndex } from './board';
 import {
   DEV_TYPES, PLAYABLE_DEV, estimateHands, type CatanKnowledge, type HandEstimate, type PlayableDev,
@@ -77,6 +78,10 @@ export interface CatanDraft {
   roadBuilding?: EdgeId[];
   /** Chose to counter the offer it's answering; the counter itself comes next. */
   counter?: true;
+  /** Settling its own offer: passed on every yes (`pick:none`), so the counter-offers come next. */
+  pickedNone?: true;
+  /** ... and the counter-offers (by their makers' offsets) it has turned down so far. */
+  declined?: number[];
 }
 
 /** What the viewer has to decide right now. */
@@ -95,11 +100,13 @@ export type CatanDecision =
   | { type: 'roadBuilding'; placed: EdgeId[] }
   /** Accept / reject an offer. `give` / `get` are from the viewer's side.
    *  `counter`: the viewer is the turn player answering a counter-offer. */
-  | { type: 'tradeResponse'; proposerOffset: number; give: ResourceBank; get: ResourceBank; counter: boolean }
+  /** Answering an offer — or, with `counter`, deciding on a counter-offer to its own offer
+   *  (`rest` = the other counter-offers still to decide on). */
+  | { type: 'tradeResponse'; proposerOffset: number; give: ResourceBank; get: ResourceBank; counter: boolean; rest?: number }
   /** The viewer's own offer has a yes from these seats (offsets): trade with
    *  one of them, or walk away. Only for policies that pick their own partner
    *  (ObserveOptions.tradePick); otherwise the heuristic picks. */
-  | { type: 'tradePick'; give: ResourceBank; get: ResourceBank; acceptors: number[] }
+  | { type: 'tradePick'; give: ResourceBank; get: ResourceBank; acceptors: number[]; counters?: number }
   /** Having chosen to counter (the `counter` slot), which offer to counter with. */
   | { type: 'counterOffer'; proposerOffset: number; give: ResourceBank; get: ResourceBank };
 
@@ -142,7 +149,16 @@ export interface CatanObservation {
   hasPlayedDevCard: boolean;
   pairedPlayer2: boolean;
   tradesProposedThisTurn: number;
-  pendingTrade: { proposerOffset: number; give: ResourceBank; receive: ResourceBank; rejectedBy: number[] } | null;
+  /** Counter-offers the AI seats have made this turn, together (public; the counter rule's table limit). */
+  aiCountersThisTurn: number;
+  pendingTrade: {
+    proposerOffset: number;
+    give: ResourceBank;
+    receive: ResourceBank;
+    rejectedBy: number[];
+    /** Counter-offers beside it, from their makers' side. */
+    counters: Array<{ byOffset: number; give: ResourceBank; receive: ResourceBank }>;
+  } | null;
   /** Resources the viewer has given / received by trade this turn. */
   tradedThisTurn: { given: Resource[]; received: Resource[] };
   /** Offers the viewer has already made this turn. */
@@ -252,8 +268,15 @@ export function observe(
     hasPlayedDevCard: state.hasPlayedDevCardThisTurn,
     pairedPlayer2: isPairedPlayer2(state),
     tradesProposedThisTurn: state.tradesProposedThisTurn,
+    aiCountersThisTurn: aiCountersThisTurn(state),
     pendingTrade: pt
-      ? { proposerOffset: offsetOf(pt.proposerId), give: bank(pt.give), receive: bank(pt.receive), rejectedBy: pt.rejectedBy.map(offsetOf) }
+      ? {
+        proposerOffset: offsetOf(pt.proposerId),
+        give: bank(pt.give),
+        receive: bank(pt.receive),
+        rejectedBy: pt.rejectedBy.map(offsetOf),
+        counters: (pt.counters ?? []).map((c) => ({ byOffset: offsetOf(c.by), give: bank(c.give), receive: bank(c.receive) })),
+      }
       : null,
     tradedThisTurn: { given: traded?.given.slice() ?? [], received: traded?.received.slice() ?? [] },
     offeredThisTurn: (state.proposedTradesThisTurn?.[viewerId] ?? []).map((t) => ({ give: bank(t.give), receive: bank(t.receive) })),
@@ -316,15 +339,24 @@ function decisionFor(
       const pt = state.pendingTrade;
       if (pt) {
         if (pt.proposerId === viewerId) {
-          // Its own offer (not a counter): once someone says yes it may pick.
+          // Settling its own offer: a partner among the yes's (tradePick),
+          // then — passing on them, or with none — each counter-offer in turn.
+          if (!tradePick || acting !== viewerId) return null;
           const yes = (pt.acceptedBy ?? []).map(offsetOf).sort((a, b) => a - b);
-          if (!tradePick || acting !== viewerId || yes.length === 0) return null; // waiting on answers
-          return { type: 'tradePick', give: bank(pt.give), get: bank(pt.receive), acceptors: yes };
+          const declined = draft?.declined ?? [];
+          const open = (pt.counters ?? []).filter((c) => !declined.includes(offsetOf(c.by)));
+          if (yes.length > 0 && !draft?.pickedNone) {
+            return { type: 'tradePick', give: bank(pt.give), get: bank(pt.receive), acceptors: yes, counters: open.length };
+          }
+          const c = open[0];
+          if (!c) return null; // waiting on answers
+          // From its side: it gives what the counter asks for and gets what it gives.
+          return { type: 'tradeResponse', proposerOffset: offsetOf(c.by), give: bank(c.receive), get: bank(c.give), counter: true, rest: open.length - 1 };
         }
+        const answered = pt.rejectedBy.includes(viewerId) || (pt.acceptedBy ?? []).includes(viewerId)
+          || (pt.counters ?? []).some((c) => c.by === viewerId);
+        if (answered) return null;
         const answer = { proposerOffset: offsetOf(pt.proposerId), give: bank(pt.receive), get: bank(pt.give) };
-        // A counter-offer is answered by the turn player alone.
-        if (pt.proposerId !== acting) return acting === viewerId ? { type: 'tradeResponse', ...answer, counter: true } : null;
-        if (pt.rejectedBy.includes(viewerId) || (pt.acceptedBy ?? []).includes(viewerId)) return null; // answered
         if (draft?.counter) return { type: 'counterOffer', ...answer };
         return { type: 'tradeResponse', ...answer, counter: false };
       }

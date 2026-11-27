@@ -1,5 +1,7 @@
 import type {
   GameState,
+  CounterOffer,
+  PendingTrade,
   BankTradeAction,
   ProposeTradeAction,
   AcceptTradeAction,
@@ -197,15 +199,63 @@ export function handleProposeTrade(
   };
 }
 
-/** Is the pending trade a counter-offer (its proposer isn't the active player)? */
-export function isCounterOffer(state: GameState): boolean {
-  return !!state.pendingTrade && state.pendingTrade.proposerId !== currentPlayerId(state);
+/** Has `id` answered the pending offer (a yes, a no, or a counter-offer)? */
+export function hasAnsweredTrade(trade: PendingTrade, id: PlayerId): boolean {
+  return trade.rejectedBy.includes(id)
+    || (trade.acceptedBy ?? []).includes(id)
+    || (trade.counters ?? []).some((c) => c.by === id);
+}
+
+/** `trade` without `id`'s yes, no and counter (before they answer again). */
+function withoutAnswer(trade: PendingTrade, id: PlayerId): PendingTrade {
+  const counters = (trade.counters ?? []).filter((c) => c.by !== id);
+  const accepted = (trade.acceptedBy ?? []).filter((x) => x !== id);
+  return {
+    ...trade,
+    rejectedBy: trade.rejectedBy.filter((x) => x !== id),
+    ...(trade.acceptedBy ? { acceptedBy: accepted } : {}),
+    ...(trade.counters ? { counters } : {}),
+  };
 }
 
 /**
- * Accept the pending trade. On the active player's offer this is a yes: the
- * acceptor joins `acceptedBy` and nothing moves until the proposer picks a
- * partner (`confirmTrade`). On a counter-offer it completes the trade.
+ * `with`'s counter-offer as an offer from the proposer that `with` has
+ * accepted: the proposer gives what the counter asks for and gets what it
+ * gives. Completing it is then the ordinary confirm (base and C&K alike).
+ */
+export function counterAsOffer(trade: PendingTrade, c: CounterOffer): PendingTrade {
+  return {
+    proposerId: trade.proposerId,
+    give: { ...c.receive },
+    receive: { ...c.give },
+    ...(c.receiveGold ? { giveGold: c.receiveGold } : {}),
+    ...(c.giveGold ? { receiveGold: c.giveGold } : {}),
+    ...(c.receiveCommodities ? { giveCommodities: c.receiveCommodities } : {}),
+    ...(c.giveCommodities ? { receiveCommodities: c.giveCommodities } : {}),
+    rejectedBy: [],
+    acceptedBy: [c.by],
+  };
+}
+
+/**
+ * A confirm of a counter-offer, rewritten as the confirm of that counter's
+ * terms (or the state as it is for an ordinary confirm). Shared by the base
+ * and the Cities & Knights confirm handlers.
+ */
+export function stateForConfirm(state: GameState, action: ConfirmTradeAction): GameState {
+  if (!action.counter) return state;
+  const trade = state.pendingTrade;
+  if (!trade) throw new Error('No trade to confirm');
+  if (action.playerId !== trade.proposerId) throw new Error('Only the proposer picks who to trade with');
+  const c = (trade.counters ?? []).find((x) => x.by === action.with);
+  if (!c) throw new Error("That player hasn't made a counter-offer");
+  return { ...state, pendingTrade: counterAsOffer(trade, c) };
+}
+
+/**
+ * Accept the pending trade: a yes. The acceptor joins `acceptedBy` (dropping
+ * any no or counter of theirs) and nothing moves until the proposer picks a
+ * partner (`confirmTrade`).
  */
 export function handleAcceptTrade(
   state: GameState,
@@ -237,21 +287,18 @@ export function handleAcceptTrade(
   if ((proposer.gold ?? 0) < (trade.giveGold ?? 0)) {
     throw new Error('The proposer no longer has the offered gold');
   }
-  if (isCounterOffer(state)) return completeTrade(state, action.playerId);
   const accepted = trade.acceptedBy ?? [];
   if (accepted.includes(action.playerId)) return state;
+  const rest = withoutAnswer(trade, action.playerId);
   return {
     ...state,
-    pendingTrade: {
-      ...trade,
-      acceptedBy: [...accepted, action.playerId],
-      rejectedBy: trade.rejectedBy.filter((id) => id !== action.playerId),
-    },
+    pendingTrade: { ...rest, acceptedBy: [...(rest.acceptedBy ?? []), action.playerId] },
   };
 }
 
-/** The proposer trades with one of the players who accepted their offer. */
-export function handleConfirmTrade(state: GameState, action: ConfirmTradeAction): GameState {
+/** The proposer trades with one of the players who accepted their offer, or takes a counter-offer. */
+export function handleConfirmTrade(input: GameState, action: ConfirmTradeAction): GameState {
+  const state = stateForConfirm(input, action);
   const trade = state.pendingTrade;
   if (!trade) throw new Error('No trade to confirm');
   if (action.playerId !== trade.proposerId) {
@@ -336,6 +383,15 @@ export function handleCancelTrade(
   return { ...state, pendingTrade: undefined };
 }
 
+/** Everyone but the proposer said no (and nobody has a counter standing): the offer closes. */
+function closesIfAllRejected(state: GameState, trade: PendingTrade): GameState {
+  const others = state.players.filter((p) => p.id !== trade.proposerId);
+  if (others.every((p) => trade.rejectedBy.includes(p.id)) && (trade.counters ?? []).length === 0) {
+    return { ...state, pendingTrade: undefined };
+  }
+  return { ...state, pendingTrade: trade };
+}
+
 export function handleRejectTrade(
   state: GameState,
   action: RejectTradeAction,
@@ -344,26 +400,13 @@ export function handleRejectTrade(
   if (action.playerId === state.pendingTrade.proposerId) {
     throw new Error("You can't reject your own trade");
   }
-  if (state.pendingTrade.rejectedBy.includes(action.playerId)) return state;
-  const newRejected = [...state.pendingTrade.rejectedBy, action.playerId];
-  // Auto-cancel once every non-proposer has rejected — no point keeping the
+  const trade = state.pendingTrade;
+  if (trade.rejectedBy.includes(action.playerId)) return state;
+  // A no after a yes takes the yes back; after a counter it withdraws it.
+  const rest = withoutAnswer(trade, action.playerId);
+  // Auto-cancel once every non-proposer has said no — no point keeping the
   // pending trade alive when nobody can/will accept.
-  const others = state.players.filter(
-    (p) => p.id !== state.pendingTrade!.proposerId,
-  );
-  if (others.every((p) => newRejected.includes(p.id))) {
-    return { ...state, pendingTrade: undefined };
-  }
-  // A rejection after a yes takes the yes back.
-  const accepted = state.pendingTrade.acceptedBy?.filter((id) => id !== action.playerId);
-  return {
-    ...state,
-    pendingTrade: {
-      ...state.pendingTrade,
-      rejectedBy: newRejected,
-      ...(accepted ? { acceptedBy: accepted } : {}),
-    },
-  };
+  return closesIfAllRejected(state, { ...rest, rejectedBy: [...rest.rejectedBy, action.playerId] });
 }
 
 export function handleCounterTrade(
@@ -397,16 +440,28 @@ export function handleCounterTrade(
   if ((counterer.gold ?? 0) < gold.giveGold) {
     throw new Error("You don't have the gold you're offering");
   }
-  // Replace the pending trade. The counterer becomes the new proposer; the
-  // original proposer is implicit (still the current player) and can accept.
+  return addCounter(state, {
+    by: action.playerId,
+    give: { ...action.give },
+    receive: { ...action.receive },
+    ...goldFields(gold),
+  });
+}
+
+/**
+ * Put `c` beside the pending offer (replacing any earlier counter of its
+ * maker's, and their yes / no): the offer stays open to everyone else, and
+ * the proposer may take the counter instead. Only the proposer's (the active
+ * player's) offer can be countered.
+ */
+export function addCounter(state: GameState, c: CounterOffer): GameState {
+  const trade = state.pendingTrade!;
+  if (trade.proposerId !== currentPlayerId(state)) throw new Error('Only the active player\'s offer can be countered');
+  const rest = withoutAnswer(trade, c.by);
+  const made = state.countersThisTurn?.[c.by] ?? 0;
   return {
     ...state,
-    pendingTrade: {
-      proposerId: action.playerId,
-      give: { ...action.give },
-      receive: { ...action.receive },
-      ...goldFields(gold),
-      rejectedBy: [],
-    },
+    pendingTrade: { ...rest, counters: [...(rest.counters ?? []), c] },
+    countersThisTurn: { ...state.countersThisTurn, [c.by]: made + 1 },
   };
 }

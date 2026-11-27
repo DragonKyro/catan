@@ -193,15 +193,21 @@ export function observeTransition(
     case 'acceptTrade':
     case 'rejectTrade':
     case 'confirmTrade': {
-      const last = k.turnOffers[k.turnOffers.length - 1];
-      if (!last || !before.pendingTrade) break;
+      if (!before.pendingTrade) break;
+      // Answers are to the offer (the latest by its proposer); a counter-offer
+      // taken marks the counter (the latest by its maker).
+      const proposer = seatOf(before.pendingTrade.proposerId);
+      const by = action.type === 'confirmTrade' && action.counter ? seatOf(action.with) : proposer;
+      let idx = -1;
+      for (let j = k.turnOffers.length - 1; j >= 0 && idx < 0; j--) if (k.turnOffers[j]!.proposer === by) idx = j;
+      if (idx < 0) break;
+      const o = k.turnOffers[idx]!;
       let offer: TurnOffer;
-      if (action.type === 'confirmTrade') offer = { ...last, tradedWith: seatOf(action.with) };
+      if (action.type === 'confirmTrade') offer = { ...o, tradedWith: action.counter ? proposer : seatOf(action.with) };
       else if (action.type === 'rejectTrade') {
-        offer = { ...last, accepted: last.accepted.filter((s) => s !== actor), rejected: [...last.rejected.filter((s) => s !== actor), actor] };
-      } else if (after.pendingTrade) offer = { ...last, accepted: [...last.accepted.filter((s) => s !== actor), actor] };
-      else offer = { ...last, tradedWith: actor }; // a counter-offer accepted: done at once
-      edit().turnOffers = [...k.turnOffers.slice(0, -1), offer];
+        offer = { ...o, accepted: o.accepted.filter((x) => x !== actor), rejected: [...o.rejected.filter((x) => x !== actor), actor] };
+      } else offer = { ...o, accepted: [...o.accepted.filter((x) => x !== actor), actor] };
+      edit().turnOffers = k.turnOffers.map((x, j) => (j === idx ? offer : x));
       break;
     }
     case 'endTurn':

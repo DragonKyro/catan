@@ -7,8 +7,8 @@ import type {
   ProposeTradeAction,
   CounterTradeAction,
 } from '@/game/types';
-import { isCounterOffer } from '@/game/actions/trade';
-import { currentPlayerId } from '@/game/helpers';
+import { hasAnsweredTrade } from '@/game/actions/trade';
+import type { CounterOffer } from '@/game/types';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { RESOURCES, COSTS } from '@/game/types';
 import { canAfford } from '@/game/resources';
@@ -17,6 +17,7 @@ import { assessThreats, isRival } from './threats';
 import { goldValue } from './traders/gold';
 import { ckShouldAcceptTrade, tradeHasCommodities } from './citiesAndKnights/trade';
 import { withPersona, type HeuristicPersona, type PersonaId } from './persona';
+import { aiMayCounter } from './counterLimits';
 
 // Threshold for accepting a trade as-is. Lower than before so AI doesn't
 // stonewall reasonable swaps — colonist.io's AI accepts pretty liberally.
@@ -213,9 +214,9 @@ export function chooseTradePartner(state: GameState, proposerId: PlayerId): Play
  * (sims, diagnostics, the training env): each opponent who hasn't answered
  * the active player's offer, in turn order after the proposer, accepts (when
  * `accepts(id)` and they can pay) or rejects; once everyone has answered the
- * proposer trades with its pick of the acceptors (`chooseTradePartner`) or
- * cancels. A counter-offer is answered by the active player: accept, or
- * cancel. (When every opponent rejects, the engine closes the offer itself.)
+ * proposer settles it (`chooseTradeResolution`: its pick of the acceptors,
+ * else the best counter-offer it would take, else walk away). (When every
+ * opponent rejects, the engine closes the offer itself.)
  */
 export function pendingTradeStep(state: GameState, accepts: (id: PlayerId) => boolean): Action {
   const trade = state.pendingTrade!;
@@ -223,29 +224,72 @@ export function pendingTradeStep(state: GameState, accepts: (id: PlayerId) => bo
     const p = state.players.find((x) => x.id === id)!;
     return RESOURCES.every((r) => p.resources[r] >= (trade.receive[r] ?? 0)) && (p.gold ?? 0) >= (trade.receiveGold ?? 0);
   };
-  if (isCounterOffer(state)) {
-    const active = currentPlayerId(state);
-    return canPay(active) && accepts(active) ? { type: 'acceptTrade', playerId: active } : { type: 'cancelTrade', playerId: active };
-  }
   const answer = nextTradeResponder(state);
   if (answer) {
     return canPay(answer) && accepts(answer) ? { type: 'acceptTrade', playerId: answer } : { type: 'rejectTrade', playerId: answer };
   }
-  const partner = chooseTradePartner(state, trade.proposerId);
-  return partner
-    ? { type: 'confirmTrade', playerId: trade.proposerId, with: partner }
-    : { type: 'cancelTrade', playerId: trade.proposerId };
+  return chooseTradeResolution(state, trade.proposerId);
+}
+
+/** A counter-offer as the pending trade its maker proposes to `trade`'s proposer (for judging it from the proposer's side). */
+function counterAsProposal(c: CounterOffer): NonNullable<GameState['pendingTrade']> {
+  return {
+    proposerId: c.by,
+    give: c.give,
+    receive: c.receive,
+    ...(c.giveGold ? { giveGold: c.giveGold } : {}),
+    ...(c.receiveGold ? { receiveGold: c.receiveGold } : {}),
+    ...(c.giveCommodities ? { giveCommodities: c.giveCommodities } : {}),
+    ...(c.receiveCommodities ? { receiveCommodities: c.receiveCommodities } : {}),
+    rejectedBy: [],
+  };
+}
+
+/**
+ * The best counter-offer to `proposerId`'s pending offer that it would take
+ * (judged as if the counter's maker had offered it), or null.
+ */
+export function bestCounterToTake(state: GameState, proposerId: PlayerId): CounterOffer | null {
+  const trade = state.pendingTrade;
+  if (!trade || trade.proposerId !== proposerId) return null;
+  let best: CounterOffer | null = null;
+  let bestScore = -Infinity;
+  for (const c of trade.counters ?? []) {
+    const asked = { ...state, pendingTrade: counterAsProposal(c) };
+    if (!shouldAcceptTrade(asked, proposerId)) continue;
+    const score = tradeHasCommodities(asked.pendingTrade)
+      ? 0
+      : tradeScore(state, proposerId, c.give, c.receive) - threatPenaltyForGiving(state, proposerId, c.by, c.receive);
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+  return best;
+}
+
+/**
+ * How the proposer settles its offer once the answers are in: trade with its
+ * pick of the players who said yes (`chooseTradePartner`), else take the best
+ * counter-offer it would accept, else walk away.
+ */
+export function chooseTradeResolution(state: GameState, proposerId: PlayerId): Action {
+  const partner = chooseTradePartner(state, proposerId);
+  if (partner) return { type: 'confirmTrade', playerId: proposerId, with: partner };
+  const c = bestCounterToTake(state, proposerId);
+  if (c) return { type: 'confirmTrade', playerId: proposerId, with: c.by, counter: true };
+  return { type: 'cancelTrade', playerId: proposerId };
 }
 
 /** The next opponent (turn order after the proposer) yet to answer the active player's offer, or null. */
 export function nextTradeResponder(state: GameState): PlayerId | null {
   const trade = state.pendingTrade;
-  if (!trade || isCounterOffer(state)) return null;
+  if (!trade) return null;
   const n = state.playerOrder.length;
   const at = state.playerOrder.indexOf(trade.proposerId);
   for (let k = 1; k < n; k++) {
     const id = state.playerOrder[(at + k) % n]!;
-    if (!trade.rejectedBy.includes(id) && !(trade.acceptedBy ?? []).includes(id)) return id;
+    if (!hasAnsweredTrade(trade, id)) return id;
   }
   return null;
 }
@@ -296,6 +340,7 @@ export function tryExtractCounter(
   const trade = state.pendingTrade;
   if (!trade) return null;
   if (trade.proposerId === playerId) return null;
+  if (!aiMayCounter(state, playerId)) return null;
   // The counter search only edits resource cards; leave offers with coins
   // or commodities alone.
   if (trade.giveGold || trade.receiveGold) return null;
@@ -396,6 +441,7 @@ function tryCounterTradeAs(
   const trade = state.pendingTrade;
   if (!trade) return null;
   if (trade.proposerId === playerId) return null;
+  if (!aiMayCounter(state, playerId)) return null;
   // The counter search only edits resource cards; leave offers with coins
   // or commodities alone.
   if (trade.giveGold || trade.receiveGold) return null;

@@ -728,13 +728,17 @@ export const useLogStore = create<LogStore>((set, get) => ({
         // offer moves nothing (the proposer then picks a partner).
         const trade = before.pendingTrade;
         if (trade && !after.pendingTrade) {
+          // A counter-offer taken: its terms, from the proposer's side.
+          const c = action.type === 'confirmTrade' && action.counter
+            ? (trade.counters ?? []).find((x) => x.by === action.with)
+            : undefined;
           append.push({
             id: stamp(),
             kind: 'tradeAccepted',
             proposer: trade.proposerId,
             acceptor: action.type === 'confirmTrade' ? action.with : action.playerId,
-            give: trade.give,
-            receive: trade.receive,
+            give: c ? c.receive : trade.give,
+            receive: c ? c.give : trade.receive,
           });
         }
         break;

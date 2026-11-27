@@ -12,7 +12,7 @@ import { canPlaceSettlement, canConnectRoad, canPlaceCity } from '@/game/placeme
 import { canAfford } from '@/game/resources';
 import { getBankTradeRate } from '@/game/actions/trade';
 import { vertexScore, reportNeeds, RESOURCE_WEIGHT } from './value';
-import { chooseTradePartner, tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
+import { chooseTradeResolution, tryProposeTrade, tryProposeFavorableTrade, shouldAcceptTrade } from './trade';
 import { chooseDevCardPlay } from './devcard';
 import { calculateRouteLength } from '@/game/engine';
 import { calculateVictoryPoints } from '@/game/scoring/points';
@@ -61,19 +61,16 @@ export function chooseMainPhaseAction(
   if (!player) return null;
 
   // Handle any pending trade involving us before doing anything else:
-  // - If we proposed it, trade with our pick of whoever accepted, else walk
-  //   away (the driver's wait already gave everyone time to answer).
-  // - If it's a counter to our trade (or any trade we're now the current
-  //   player on), accept if beneficial, otherwise cancel.
+  // - If we proposed it, trade with our pick of whoever said yes, else take
+  //   the best counter-offer we'd accept, else walk away (the driver's wait
+  //   already gave everyone time to answer).
+  // - Someone else's offer: yes if it's worth it, otherwise no.
   if (state.pendingTrade) {
-    if (state.pendingTrade.proposerId === playerId) {
-      const partner = chooseTradePartner(state, playerId);
-      return partner ? { type: 'confirmTrade', playerId, with: partner } : { type: 'cancelTrade', playerId };
-    }
+    if (state.pendingTrade.proposerId === playerId) return chooseTradeResolution(state, playerId);
     if (shouldAcceptTrade(state, playerId)) {
       return { type: 'acceptTrade', playerId };
     }
-    return { type: 'cancelTrade', playerId };
+    return { type: 'rejectTrade', playerId };
   }
 
   // 0) Play a dev card if it would clearly help (knight to clear robber etc.)

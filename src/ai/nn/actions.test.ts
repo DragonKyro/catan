@@ -109,11 +109,23 @@ describe('catan action space', () => {
     let s: GameState = { ...base.state, players: base.state.players.map((p) => ({ ...p, resources: { wood: 3, brick: 3, sheep: 3, wheat: 3, ore: 3 } })) };
     const turn = s.playerOrder[s.currentPlayerIndex]!;
     const me = s.playerOrder.find((id) => id !== turn)!;
-    let k: CatanKnowledge = { ...base.knowledge[me]!, hypotheses: [{ hands: s.players.flatMap(() => [3, 3, 3, 3, 3]), weight: 1 }] };
+    const other = s.playerOrder.find((id) => id !== turn && id !== me)!;
+    const even = [{ hands: s.players.flatMap(() => [3, 3, 3, 3, 3]), weight: 1 }];
+    let k: CatanKnowledge = { ...base.knowledge[me]!, hypotheses: even };
+    let kt: CatanKnowledge = { ...base.knowledge[turn]!, hypotheses: even };
+    let ko: CatanKnowledge = { ...base.knowledge[other]!, hypotheses: even };
     const step = (action: Action) => {
       const next = applyAction(s, action);
       k = observeTransition(k, s, action, next);
+      kt = observeTransition(kt, s, action, next);
+      ko = observeTransition(ko, s, action, next);
       s = next;
+    };
+    const otherNames = () => {
+      const obs = observe(s, other, ko);
+      const mask = legalMask(obs, undefined, rules);
+      const G0 = slotLayout(obs).total - GLOBAL_SLOTS.length;
+      return [...mask.keys()].filter((i) => mask[i]).map((i) => GLOBAL_SLOTS[i - G0] ?? `board:${i}`);
     };
     const rules = { tradePick: false, offerNeeds: false, counter: true };
     const legal = (draft?: CatanDraft) => {
@@ -128,6 +140,7 @@ describe('catan action space', () => {
     expect([...legalMask(plain).keys()].filter((i) => legalMask(plain)[i]).map((i) => GLOBAL_SLOTS[i - G])).toEqual(['accept', 'reject']); // pre-v3
     const answer = legal();
     expect(answer.names).toEqual(['accept', 'reject', 'counter']);
+    expect(otherNames()).toEqual(['accept', 'reject', 'counter']);
     const chose = decodeSlot(answer.obs, answer.G0 + GLOBAL_SLOTS.indexOf('counter'), undefined, answer.mask);
     expect(chose).toEqual({ kind: 'draft', draft: { counter: true } });
     const pick = legal({ counter: true });
@@ -142,7 +155,22 @@ describe('catan action space', () => {
     expect(slotForAction(answer.obs, counter)).toBe(answer.G0 + GLOBAL_SLOTS.indexOf('counter'));
     expect(slotForAction(pick.obs, counter)).toBe(first);
     step(counter);
-    expect(s.pendingTrade?.proposerId).toBe(me);
+    // The offer stays the turn player's, with the counter beside it; the counterer has answered.
+    expect(s.pendingTrade?.proposerId).toBe(turn);
+    expect(s.pendingTrade?.counters?.map((c) => c.by)).toEqual([me]);
+    expect(observe(s, me, k).decision).toBeNull();
+    // The AI seats together counter at most once a turn (src/ai/counterLimits.ts): the others may only say yes or no.
+    expect(otherNames()).toEqual(['accept', 'reject']);
+    // The turn player (a policy that picks its partner) decides on the counter: take it, or (the only one) walk away.
+    const owner = observe(s, turn, kt, { tradePick: true });
+    expect(owner.decision).toMatchObject({ type: 'tradeResponse', counter: true, rest: 0 });
+    const OG = slotLayout(owner).total - GLOBAL_SLOTS.length;
+    const ownerMask = legalMask(owner, undefined, { tradePick: true, offerNeeds: false, counter: true });
+    const take = decodeSlot(owner, OG + GLOBAL_SLOTS.indexOf('accept'), undefined, ownerMask);
+    expect(take).toEqual({ kind: 'action', action: { type: 'confirmTrade', playerId: turn, with: me, counter: true } });
+    expect(slotForAction(owner, (take as { action: Action }).action)).toBe(OG + GLOBAL_SLOTS.indexOf('accept'));
+    expect(decodeSlot(owner, OG + GLOBAL_SLOTS.indexOf('reject'), undefined, ownerMask))
+      .toEqual({ kind: 'action', action: { type: 'cancelTrade', playerId: turn } });
     // The turn player walks away; a second offer this turn can't be countered again.
     step({ type: 'cancelTrade', playerId: turn });
     step({ type: 'proposeTrade', playerId: turn, give: { brick: 1 }, receive: { sheep: 1 } });

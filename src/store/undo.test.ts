@@ -81,7 +81,8 @@ describe('undo', () => {
     const beforeOffer = game();
     dispatch({ type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: { ore: 1 } });
     dispatch({ type: 'counterTrade', playerId: 'p1', give: { ore: 1 }, receive: { wood: 2 } });
-    dispatch({ type: 'acceptTrade', playerId: 'p0' });
+    dispatch({ type: 'rejectTrade', playerId: 'p2' }); // the other AI's answer doesn't count as a move
+    dispatch({ type: 'confirmTrade', playerId: 'p0', with: 'p1', counter: true });
     expect(useGameStore.getState().undoStack).toHaveLength(1);
     undo();
     expect(game()).toBe(beforeOffer);

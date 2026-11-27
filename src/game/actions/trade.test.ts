@@ -138,17 +138,60 @@ describe('player-to-player trade', () => {
     expect(() => applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p1' })).toThrow(/hasn't accepted/);
   });
 
-  it('a counter-offer is completed by its accept (only one possible partner)', () => {
+  it('a counter-offer sits beside the offer, which stays open; the proposer may take it', () => {
     let s = reachMainPhase();
     s = giveResources(s, 'p0', { wood: 2, sheep: 2 });
     s = giveResources(s, 'p1', { brick: 2 });
     s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: { brick: 1 } });
     s = applyAction(s, { type: 'counterTrade', playerId: 'p1', give: { brick: 1 }, receive: { wood: 1, sheep: 1 } });
+    // The original offer is still up, with p1's counter beside it.
+    expect(s.pendingTrade).toMatchObject({ proposerId: 'p0', give: { wood: 1 }, receive: { brick: 1 } });
+    expect(s.pendingTrade!.counters).toEqual([{ by: 'p1', give: { brick: 1 }, receive: { wood: 1, sheep: 1 } }]);
+    // The proposer can't "accept" its own trade; it takes the counter with confirmTrade.
+    expect(() => applyAction(s, { type: 'acceptTrade', playerId: 'p0' })).toThrow();
     const before = s.players[0]!.resources;
-    s = applyAction(s, { type: 'acceptTrade', playerId: 'p0' });
+    s = applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p1', counter: true });
     expect(s.pendingTrade).toBeUndefined();
     expect(s.players[0]!.resources.brick).toBe(before.brick + 1);
     expect(s.players[0]!.resources.sheep).toBe(before.sheep - 1);
+    expect(s.players[0]!.resources.wood).toBe(before.wood - 1);
+  });
+
+  it('others can still say yes to the offer after a counter; a no withdraws a counter', () => {
+    let s = reachMainPhase4();
+    s = giveResources(s, 'p0', { wood: 2 });
+    s = giveResources(s, 'p1', { brick: 2 });
+    s = giveResources(s, 'p2', { brick: 2 });
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: { brick: 1 } });
+    s = applyAction(s, { type: 'counterTrade', playerId: 'p1', give: { brick: 1 }, receive: { wood: 2 } });
+    s = applyAction(s, { type: 'acceptTrade', playerId: 'p2' });
+    expect(s.pendingTrade!.acceptedBy).toEqual(['p2']);
+    expect(s.pendingTrade!.counters).toHaveLength(1);
+    // p1 changes its mind: a no takes the counter back, and it can't be taken any more.
+    s = applyAction(s, { type: 'rejectTrade', playerId: 'p1' });
+    expect(s.pendingTrade!.counters).toEqual([]);
+    expect(() => applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p1', counter: true })).toThrow(/counter-offer/);
+    // The proposer trades with p2 on the original terms.
+    s = applyAction(s, { type: 'confirmTrade', playerId: 'p0', with: 'p2' });
+    expect(s.pendingTrade).toBeUndefined();
+  });
+
+  it('counts the counter-offers each player makes in a turn (the AI limit) and clears them when the turn passes', () => {
+    let s = reachMainPhase4();
+    s = giveResources(s, 'p0', { wood: 3, sheep: 2 });
+    s = giveResources(s, 'p1', { brick: 3 });
+    expect(s.countersThisTurn).toBeUndefined();
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { wood: 1 }, receive: { brick: 1 } });
+    s = applyAction(s, { type: 'counterTrade', playerId: 'p1', give: { brick: 1 }, receive: { wood: 2 } });
+    s = applyAction(s, { type: 'counterTrade', playerId: 'p1', give: { brick: 1 }, receive: { wood: 1, sheep: 1 } });
+    expect(s.pendingTrade!.counters).toHaveLength(1); // the second replaced the first ...
+    expect(s.countersThisTurn).toEqual({ p1: 2 }); // ... but both count
+    s = applyAction(s, { type: 'cancelTrade', playerId: 'p0' });
+    s = applyAction(s, { type: 'proposeTrade', playerId: 'p0', give: { sheep: 1 }, receive: { brick: 1 } });
+    s = applyAction(s, { type: 'counterTrade', playerId: 'p1', give: { brick: 1 }, receive: { sheep: 2 } });
+    expect(s.countersThisTurn).toEqual({ p1: 3 }); // across the turn's offers
+    s = applyAction(s, { type: 'endTurn', playerId: 'p0' });
+    expect(s.countersThisTurn).toBeUndefined();
   });
 
   it('cannot accept your own trade', () => {
