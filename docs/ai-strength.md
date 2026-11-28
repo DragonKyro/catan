@@ -239,6 +239,51 @@ mixed tables and self-play. u3400 is the best and steadiest head to head
 and is now Hard (`src/ai/nn/levels.ts`); fp16 packing keeps its top move in
 3,200 of 3,200 sampled positions.
 
+## 9. 3-player and 2-player networks (runs `p3` / `p2`, fresh deals, 2026-11-27)
+
+Hard (v3 u3400) was trained only at 4 players. Two fine-tunes from it, run
+side by side (2,000 PPO updates each, u3400 -> u5400, lr 3e-5 -> 0, fresh
+optimizer, 4 workers x 64 envs, ~4.6 h): `p3` at 3 players, 10 VP (2 self-play,
+1 persona, 1 mixed); `p2` at 2 players under colonist.io's 1v1 rules (15 VP,
+discard above 9, Friendly Robber, balanced dice; 2 self-play, 1 persona, 1 past
+checkpoint). Personas: all-rounder, Longest Road, Largest Army, griefer (the
+griefer aimed at the learner). Trading was taxed so it doesn't drag the game
+out: every offer / counter cost 0.002 (p3) / 0.004 (p2) of reward, one nobody
+took (or a counter not taken) 0.006 / 0.01 more. The 2-player heuristic now
+takes a trade only when it helps it more than the proposer (`twoPlayerTradeOk`).
+
+Fresh deals, 800 games per deal set (seeds 777 / 888), pooled = 1,600. "vs
+heuristic" = plain all-rounders. Offers, counters and trades are the agent's
+per game; "table offers" counts every seat's offers.
+
+3 players (parity 33.3%):
+
+| | vs 2x Hard | vs 2 heuristics | turns | offers (taken) | counters | trades | table offers |
+|---|---|---|---|---|---|---|---|
+| Hard u3400 (today) | 33.3% (mirror) | 77.2% | 66 | 25.5 (29%) | 10.7 | 9.8 | 53.5 |
+| p3 u5000 | 37.2% | 78.9% | 65 | 13.4 (36%) | 0.2 | 6.6 | 41 |
+| **p3 u5200** | **38.9%** (40.4 / 37.5) | **80.4%** | 65 | 13.7 (36%) | 0.1 | 7.1 | 41 |
+| p3 u5400 | 36.2% | 79.2% | 65 | 13.2 (37%) | 0.1 | 7.0 | 41 |
+
+2 players, 1v1 rules (parity 50%):
+
+| | vs Hard | vs heuristic | turns | offers (taken) | counters | trades | table offers |
+|---|---|---|---|---|---|---|---|
+| Hard u3400 (today's network) | 50% (mirror) | 60.6% | 93.5 | 26.3 (15%) | 7.5 | 4.9 | 42.6 |
+| **p2 u4800** | **80.2%** (80.2 / 80.2) | 87.1% | 82 | 0.4 (46%) | 0 | 1.9 | 17 |
+| p2 u4900 | 78.9% | 87.9% | 82 | 0.4 | 0 | 1.9 | 17 |
+| p2 u5300 | 79.0% | 86.4% | 80 | 0.4 | 0 | 2.1 | 16 |
+| p2 u5400 | 78.8% | 88.5% | 81 | 0.5 | 0 | 2.2 | 16 |
+
+p3 is a modest gain (about +5.6 points over a parity seat head to head, +3
+vs heuristics) with half the offers and almost no counters; games are the same
+length. p2 is a big gain: it beats Hard 4 games in 5 and the heuristic (today's
+2-player AI) 7 in 8, almost never offers a trade (0.4 a game, about half taken),
+never counters, and still makes ~2 player trades a game by taking offers that
+suit it, plus ~10 bank trades; games are ~12 turns shorter. Its remaining
+table offers are the opponent's. In-run numbers (400 games) under-read p3
+here (33-36.5% in-run vs 36-39% fresh).
+
 ## What it says
 
 - **Only the two bonus chasers beat the all-rounder**, both one-vs-three and

@@ -34,7 +34,7 @@ import time
 import numpy as np
 import torch
 
-from env_client import ROLE_LEARNER, ROLE_OPPONENT, CatanEnv
+from env_client import ROLE_LEARNER, ROLE_OPPONENT, CatanEnv, add_game_args, game_options, rules_label
 from model import CatanNet, Topology, load_policy, masked_logits, policy_rules
 
 EVAL_SEED = 777_000_001
@@ -94,8 +94,10 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
              seed: int = EVAL_SEED, max_turns: int = 200, device: str | None = None,
              lineup: str | None = None, personas: list[str] | None = None, distinct_personas: bool = False,
              target_personas: list[str] | None = None, learner_setup_share: float = 0.0,
-             learner_setup_personas: list[str] | None = None) -> dict:
-    """`games` fresh deals at the `lineup` table (default A in one seat, B in every other)."""
+             learner_setup_personas: list[str] | None = None, rules: dict | None = None) -> dict:
+    """`games` fresh deals at the `lineup` table (default A in one seat, B in every other),
+    under `rules` (env_client.game_options; default the app's for the seat count)."""
+    rules = rules or game_options(players)
     lineup = (lineup or "A" + "B" * (players - 1)).upper()
     if len(lineup) != players or set(lineup) - set("ABH") or "A" not in lineup:
         raise ValueError(f"lineup {lineup!r}: one of A / B / H per seat ({players}), at least one A")
@@ -125,7 +127,7 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         batches = [env.reset(num_envs=n, seed=seed + 1_000_003 * w, seats=seats, max_turns=max_turns, quota=1,
                              personas=personas, distinct_personas=distinct_personas, target_personas=target_personas,
                              learner_setup_share=learner_setup_share, learner_setup_personas=learner_setup_personas,
-                             learner_rules=rules_a, opponent_rules=rules_b)
+                             learner_rules=rules_a, opponent_rules=rules_b, **rules)
                    for w, (env, n) in enumerate(zip(envs, per))]
         episodes: list = []
         t0 = time.perf_counter()
@@ -163,6 +165,10 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         return float(np.mean([ep.get("actions", {}).get(key, [0] * players)[s] for ep, s in samples]))
 
     offers = per_game("proposeTrade")
+
+    def table(key: str) -> float:
+        """Every seat's count of one action kind per match, together."""
+        return float(np.mean([sum(ep.get("actions", {}).get(key, [0])) for ep in episodes])) if episodes else 0.0
 
     def partner(ep: dict, s: int, j: int) -> str:
         """Seat j as A's trade partner: its persona at heuristic seats, else its seat after A (+1 = next to play)."""
@@ -205,6 +211,11 @@ def evaluate(a: str, b: str = HEURISTIC, games: int = 400, workers: int = 3, pla
         "tradesWith": dict(sorted(trades_with.items())),
         "countersPerGame": per_game("counterTrade"),
         "countersRefusedPerGame": per_game("counterRefused"),
+        # The whole table's offers and counters per match (each one someone has to answer).
+        "tableOffersPerGame": table("proposeTrade"),
+        "tableCountersPerGame": table("counterTrade"),
+        "tableTradesPerGame": table("tradeDone") / 2,
+        "rules": rules_label(players, rules),
         "seconds": seconds,
     }
 
@@ -222,7 +233,7 @@ def trade_split(s: dict, bank: bool = False) -> str:
 
 def report(s: dict) -> str:
     lo, hi = s["winCi95"]
-    return (f"A {s['a']}\nB {s['b']}\ntable {s['lineup']} (A = agent A, B = agent B, H = heuristic)\n"
+    return (f"A {s['a']}\nB {s['b']}\ntable {s['lineup']} (A = agent A, B = agent B, H = heuristic), {s.get('rules', '')}\n"
             f"{s['games']} matches in {s['seconds']:.0f}s: A wins {100 * s['winRate']:.1f}% [{100 * lo:.1f}-{100 * hi:.1f}] "
             f"(parity {100 / len(s['lineup']):.0f}%) | place {s['meanRank']:.2f} | VP {s['meanVp']:.1f} | "
             f"{s['meanTurns']:.0f} turns | {100 * s['truncated']:.1f}% cut off\n"
@@ -231,7 +242,9 @@ def report(s: dict) -> str:
             f"{s.get('countersPerGame', 0):.1f} counters ({s.get('countersRefusedPerGame', 0):.1f} refused), "
             f"{s['citiesPerGame']:.1f} cities, {s['settlementsPerGame']:.1f} settlements, "
             f"{s.get('roadsPerGame', 0):.1f} roads, {s.get('devCardsPerGame', 0):.1f} dev cards, "
-            f"{s.get('knightsPerGame', 0):.1f} knights")
+            f"{s.get('knightsPerGame', 0):.1f} knights\n"
+            f"Whole table per match: {s.get('tableOffersPerGame', 0):.1f} offers, "
+            f"{s.get('tableCountersPerGame', 0):.1f} counters, {s.get('tableTradesPerGame', 0):.1f} player trades")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -254,6 +267,7 @@ def main(argv: list[str] | None = None) -> None:
         q.add_argument("--learner-setup-share", type=float, default=0.0,
                        help="share of A's seats whose opening a persona from --learner-setup-personas plays")
         q.add_argument("--learner-setup-personas", default="woodBrick,oreWheatSheep,portStack")
+        add_game_args(q)
 
     m = sub.add_parser("match", help="A in one seat vs B in the others")
     m.add_argument("a")
@@ -274,7 +288,8 @@ def main(argv: list[str] | None = None) -> None:
               max_turns=args.max_turns, device=args.device, personas=personas,
               distinct_personas=args.distinct_personas, target_personas=split(args.target_personas) or None,
               learner_setup_share=args.learner_setup_share,
-              learner_setup_personas=split(args.learner_setup_personas) or None)
+              learner_setup_personas=split(args.learner_setup_personas) or None,
+              rules=game_options(args.players, args.vp, args.friendly_robber, args.balanced_dice))
     if args.cmd == "match":
         s = evaluate(args.a, args.b, lineup=args.lineup, **kw)
         print(json.dumps(s) if args.json else report(s), flush=True)

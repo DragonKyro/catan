@@ -35,7 +35,8 @@ export const RULE_OPTION_TOPICS: Topic[] = [
         <p className="rb-muted">
           Pick 2 players on the New Game screen (or seat two in the online lobby). Friendly Robber
           and Balanced dice are on by default and can be turned off under Rule options; the VP
-          target can be changed too. AI opponents play the heuristic AI at 2 players.
+          target can be changed too. The AI opponent is a trained AI made for these 1v1 rules: it
+          rarely offers trades, since in a 2-player game any trade helps your only rival.
         </p>
       </>
     ),

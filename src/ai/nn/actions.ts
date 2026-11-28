@@ -195,13 +195,6 @@ export function bankRate(p: ObservedPlayer, give: Resource): number {
   return p.ports.includes(give) ? 2 : p.ports.includes('generic') ? 3 : 4;
 }
 
-/** Seats (offsets) the robber could steal from on `hex`. */
-function victimsOn(obs: CatanObservation, hex: string): number[] {
-  const corners = obs.board.hexes[hex]!.corners;
-  return obs.players
-    .filter((p) => p.offset !== 0 && p.handSize > 0 && corners.some((v) => p.settlements.includes(v) || p.cities.includes(v)))
-    .map((p) => p.offset);
-}
 
 // Build costs in RESOURCES order (knowledge.ts AFFORD_COSTS: road, settlement, city, dev card).
 const [ROAD_COST, SETTLEMENT_COST, CITY_COST, DEV_COST] = AFFORD_COSTS as [number[], number[], number[], number[]];
@@ -298,7 +291,7 @@ export function legalMask(obs: CatanObservation, facts?: BoardFacts, rules: Poli
       RESOURCES.forEach((r, i) => { if (hand[r] - d.chosen[r] > 0) mask[G0 + DISCARD_BASE + i] = 1; });
       break;
     case 'robberHex':
-      obs.index.hexIds.forEach((id, h) => { if (id !== obs.board.robberHex) mask[H0 + h] = 1; });
+      for (const t of d.targets) mask[H0 + obs.index.hexIndex.get(t.hex)!] = 1;
       break;
     case 'robberVictim':
       for (const off of d.candidates) if (off <= MAX_VICTIM_OFFSET) mask[G0 + VICTIM_BASE + off - 1] = 1;
@@ -399,7 +392,8 @@ export function decodeSlot(
   }
   if (slot < L.vertices + L.edges + L.hexes) {
     const hex = idx.hexIds[slot - L.vertices - L.edges]!;
-    const victims = victimsOn(obs, hex);
+    const d = obs.decision;
+    const victims = (d?.type === 'robberHex' ? d.targets.find((t) => t.hex === hex)?.victims : undefined) ?? [];
     if (victims.length >= 2) return { kind: 'draft', draft: { robberHex: hex } };
     return act({ type: 'moveRobber', playerId, hex, stealFrom: victims.length === 1 ? obs.players[victims[0]!]!.id : null });
   }

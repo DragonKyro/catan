@@ -21,16 +21,16 @@ import { calculateVictoryPoints } from '@/game/scoring/points';
 import type { Action, AiLevel, EdgeId, GameState, PlayerId, Resource, ResourceBank } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { chooseAction, shouldAcceptTrade } from '../index';
-import { AI_LEVELS, loadedAiLevel, setAiLevelNet } from './levels';
+import { AI_POLICIES, loadedAiPolicy, setAiPolicyNet } from './levels';
 import { KnowledgeSession, chooseNeuralAction } from './index';
 import { CatanPolicyNet, decodePolicyBinary } from './runtime';
 
 type Kind = 'heuristic' | AiLevel;
 
 const LEVEL: AiLevel = (process.env.DIAG_LEVEL as AiLevel) ?? 'hard';
-setAiLevelNet(
-  LEVEL,
-  new CatanPolicyNet(decodePolicyBinary(readFileSync(resolve('src/ai/nn/policies', AI_LEVELS[LEVEL].file)))),
+setAiPolicyNet(
+  'hard',
+  new CatanPolicyNet(decodePolicyBinary(readFileSync(resolve('src/ai/nn/policies', AI_POLICIES.hard.file)))),
 );
 
 interface Stat {
@@ -180,7 +180,7 @@ function play(seed: number, kinds: Kind[], stats: Record<string, Stat>) {
     if (netSeats.includes(id)) {
       const known = session.sync(initial, actions, s, netSeats)!;
       action =
-        chooseNeuralAction(s, id, known[id]!, loadedAiLevel(LEVEL)!) ??
+        chooseNeuralAction(s, id, known[id]!, loadedAiPolicy('hard')!) ??
         (s.pendingTrade?.proposerId === id
           ? chooseAction(s, id)!
           : chooseAction(s, id) ?? { type: 'endTurn', playerId: id });

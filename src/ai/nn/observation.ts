@@ -29,6 +29,7 @@ import type {
 } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { isPairedPlayer2 } from '@/game/helpers';
+import { robberHexAllowed, robberStealCandidates } from '@/game/engine';
 import { calculateVictoryPoints } from '@/game/scoring/points';
 import { calculateLongestRoad } from '@/game/scoring/longestRoad';
 import { aiCountersThisTurn } from '../counterLimits';
@@ -93,7 +94,10 @@ export type CatanDecision =
   | { type: 'main'; canPlayDev: boolean; playerTrades: boolean }
   /** Discard `required` cards in all, one at a time; `chosen` so far. */
   | { type: 'discard'; required: number; chosen: ResourceBank }
-  | { type: 'robberHex'; reason: 'sevenRoll' | 'knight' }
+  /** Move the robber: `targets` are the hexes it may go to (the engine's rule,
+   *  so the Friendly Robber's protected hexes are left out), each with the
+   *  seats (offsets) it could then rob. */
+  | { type: 'robberHex'; reason: 'sevenRoll' | 'knight'; targets: Array<{ hex: HexId; victims: number[] }> }
   /** Robber placed on `hex`: steal from one of these seats (offsets). */
   | { type: 'robberVictim'; hex: HexId; candidates: number[] }
   /** Road Building: `placed` edges so far (0 or 1). */
@@ -326,14 +330,14 @@ function decisionFor(
     case 'moveRobber': {
       if (acting !== viewerId) return null;
       const hex = draft?.robberHex;
-      if (!hex) return { type: 'robberHex', reason: state.pendingRobberMove?.reason === 'knight' ? 'knight' : 'sevenRoll' };
-      const corners = state.board.hexes[hex]!.corners;
-      const candidates = state.players
-        .filter((p) => p.id !== viewerId && handTotal(p.resources) > 0
-          && corners.some((v) => p.settlements.includes(v) || p.cities.includes(v)))
-        .map((p) => offsetOf(p.id))
-        .sort((a, b) => a - b);
-      return { type: 'robberVictim', hex, candidates };
+      const victims = (h: HexId) => robberStealCandidates(state, viewerId, h).map(offsetOf).sort((a, b) => a - b);
+      if (!hex) {
+        const targets = Object.keys(state.board.hexes)
+          .filter((h) => h !== state.board.robberHex && robberHexAllowed(state, h, viewerId))
+          .map((h) => ({ hex: h, victims: victims(h) }));
+        return { type: 'robberHex', reason: state.pendingRobberMove?.reason === 'knight' ? 'knight' : 'sevenRoll', targets };
+      }
+      return { type: 'robberVictim', hex, candidates: victims(hex) };
     }
     case 'main': {
       const pt = state.pendingTrade;

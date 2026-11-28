@@ -81,8 +81,16 @@ export interface VecEnvOptions {
   quota: number;
   /** Label learner rows with the heuristic's choice (`VecBatch.teacher`). */
   teacher: boolean;
-  /** Charged to a seat whenever an offer of theirs is rejected by everyone. */
+  /** Charged to a seat whenever an offer of theirs closes with nobody saying
+   *  yes and no trade, and for each counter-offer of theirs not taken. */
   refusedOfferPenalty: number;
+  /** Charged to a seat for every offer and counter-offer it makes, taken or
+   *  not: each one costs the other players time to answer. */
+  offerCost: number;
+  /** The Friendly Robber (a player with 2 public VPs or fewer can't be robbed). */
+  friendlyRobber: boolean;
+  /** Balanced dice (src/game/modules/balancedDice). */
+  balancedDice: boolean;
   /** Heuristic personas (src/ai/persona.ts) heuristic seats are drawn from, one
    *  per seat per match from the match seed; `['all']` = every persona. An
    *  entry `name:weight` draws that persona `weight` times as often (default 1). */
@@ -118,6 +126,9 @@ export const DEFAULT_VEC_ENV_OPTIONS: VecEnvOptions = {
   quota: 0,
   teacher: false,
   refusedOfferPenalty: 0,
+  offerCost: 0,
+  friendlyRobber: false,
+  balancedDice: false,
   personas: ['allRounder'],
   distinctPersonas: false,
   targetPersonas: [],
@@ -349,7 +360,11 @@ export class CatanVecEnv {
       playerNames: Array.from({ length: players }, (_, k) => `p${k}`),
       playerTypes: Array.from({ length: players }, () => 'ai' as const),
       seed,
-      settings: { victoryPointsToWin: this.opts.victoryPoints },
+      settings: {
+        victoryPointsToWin: this.opts.victoryPoints,
+        ...(this.opts.friendlyRobber ? { tradersVariants: { friendlyRobber: true } } : {}),
+        ...(this.opts.balancedDice ? { balancedDice: true } : {}),
+      },
     });
     const shift = (i + episode) % players;
     const roles = state.players.map((_, k) => seats[(k + shift) % players]!);
@@ -449,18 +464,26 @@ export class CatanVecEnv {
       count(`tradeWith:${seatOf(partner)}`, pt.proposerId);
       count(`tradeWith:${seatOf(pt.proposerId)}`, partner);
     }
-    if (action.type === 'cancelTrade' && pt && pt.proposerId !== action.playerId) {
-      // The turn player turned a counter-offer down: charged like an offer nobody took.
-      count('counterRefused', pt.proposerId);
-      const s = after.players.findIndex((p) => p.id === pt.proposerId);
-      this.batch.reward[i * this.opts.players + s]! -= this.opts.refusedOfferPenalty;
-    }
-    if (action.type === 'rejectTrade' && before.pendingTrade && !after.pendingTrade) {
-      // The last answer was a rejection too: nobody took the offer.
-      const proposer = before.pendingTrade.proposerId;
-      count('offerRefused', proposer);
-      const s = after.players.findIndex((p) => p.id === proposer);
-      this.batch.reward[i * this.opts.players + s]! -= this.opts.refusedOfferPenalty;
+    const charge = (id: PlayerId, amount: number) => {
+      if (amount === 0) return;
+      this.batch.reward[i * this.opts.players + after.players.findIndex((p) => p.id === id)]! -= amount;
+    };
+    if (action.type === 'proposeTrade' || action.type === 'counterTrade') charge(action.playerId, this.opts.offerCost);
+    if (pt && !after.pendingTrade) {
+      // The offer closed (a trade, the proposer walking away, everyone saying
+      // no, or the turn ending). Counters not taken were turned down; the
+      // offer itself was refused when nobody said yes and no trade came of it.
+      const counterTaken = action.type === 'confirmTrade' && action.counter ? action.with : null;
+      for (const c of pt.counters ?? []) {
+        if (c.by === counterTaken) continue;
+        count('counterRefused', c.by);
+        charge(c.by, this.opts.refusedOfferPenalty);
+      }
+      const traded = action.type === 'confirmTrade';
+      if (!traded && (pt.acceptedBy ?? []).length === 0) {
+        count('offerRefused', pt.proposerId);
+        charge(pt.proposerId, this.opts.refusedOfferPenalty);
+      }
     }
     env.state = after;
     env.steps++;

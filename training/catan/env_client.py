@@ -141,6 +141,9 @@ class CatanEnv:
         reward: dict | None = None,
         teacher: bool = False,
         refused_offer_penalty: float = 0.0,
+        offer_cost: float = 0.0,
+        friendly_robber: bool = False,
+        balanced_dice: bool = False,
         personas: list[str] | None = None,
         distinct_personas: bool = False,
         target_personas: list[str] | None = None,
@@ -152,7 +155,11 @@ class CatanEnv:
         """seats: a role per seat, 'learner' | 'opponent' | 'heuristic' (rotated one
         seat per match). quota: matches per env before it idles (0 = forever).
         teacher: label learner rows with the heuristic's slot (Batch.teacher).
-        refused_offer_penalty: charged to a seat whose offer everyone rejects.
+        refused_offer_penalty: charged to a seat whose offer closes with no yes and no
+        trade, and for each counter-offer of theirs not taken.
+        offer_cost: charged for every offer / counter-offer a seat makes.
+        friendly_robber / balanced_dice: those rule options (colonist.io's 1v1 rules
+        with victory_points=15 at 2 players; the 9-card limit comes with 2 players).
         personas: heuristic personas heuristic seats are drawn from (src/ai/persona.ts;
         ['all'] = every one; 'name:weight' draws one more often; default the all-rounder).
         distinct_personas: no persona twice at a table (while the pool lasts).
@@ -175,6 +182,12 @@ class CatanEnv:
             "teacher": teacher,
             "refusedOfferPenalty": refused_offer_penalty,
         }
+        if offer_cost:
+            options["offerCost"] = offer_cost
+        if friendly_robber:
+            options["friendlyRobber"] = True
+        if balanced_dice:
+            options["balancedDice"] = True
         if personas:
             options["personas"] = personas
         if distinct_personas:
@@ -236,6 +249,45 @@ class CatanEnv:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+
+def add_game_args(parser: argparse.ArgumentParser) -> None:
+    """The game's rules: VP target and rule options (see game_options)."""
+    parser.add_argument("--vp", type=int, default=0,
+                        help="points to win (0 = the app's default: 15 at 2 players, colonist.io's 1v1, else 10)")
+    parser.add_argument("--friendly-robber", choices=("auto", "on", "off"), default="auto",
+                        help="the Friendly Robber (auto = on at 2 players, as the New Game screen)")
+    parser.add_argument("--balanced-dice", choices=("auto", "on", "off"), default="auto",
+                        help="balanced dice (auto = on at 2 players, as the New Game screen)")
+
+
+def game_options(players: int, vp: int = 0, friendly_robber: str = "auto", balanced_dice: str = "auto") -> dict:
+    """env.reset keyword arguments for a game's rules, the app's defaults for the
+    seat count unless set: 2 players = colonist.io's 1v1 (15 VP, Friendly Robber,
+    balanced dice; createGame adds the 9-card limit), else 10 VP and neither."""
+    two = players == 2
+    on = lambda v: two if v == "auto" else v == "on"  # noqa: E731
+    return {"victory_points": vp or (15 if two else 10),
+            "friendly_robber": on(friendly_robber), "balanced_dice": on(balanced_dice)}
+
+
+def game_flags(rules: dict) -> list[str]:
+    """game_options' result as evaluate.py flags."""
+    return ["--vp", str(rules["victory_points"]),
+            "--friendly-robber", "on" if rules["friendly_robber"] else "off",
+            "--balanced-dice", "on" if rules["balanced_dice"] else "off"]
+
+
+def rules_label(players: int, rules: dict) -> str:
+    """'15 VP, Friendly Robber, balanced dice' — for reports."""
+    parts = [f"{rules['victory_points']} VP"]
+    if rules["friendly_robber"]:
+        parts.append("Friendly Robber")
+    if rules["balanced_dice"]:
+        parts.append("balanced dice")
+    if players == 2:
+        parts.append("discard above 9")
+    return ", ".join(parts)
 
 
 def random_actions(mask: np.ndarray, rng: np.random.Generator) -> np.ndarray:

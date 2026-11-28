@@ -124,7 +124,7 @@ describe('online lobby game choice', () => {
     const game = startedGame(two);
     expect(game.settings).toMatchObject({ victoryPointsToWin: 15, discardLimit: 9, balancedDice: true });
     expect(game.settings.tradersVariants?.friendlyRobber).toBe(true);
-    expect(game.settings.aiLevel).toBeUndefined();
+    expect(game.settings.aiLevel).toBe('hard'); // the 2-player network, trained under these rules
     // The host can turn them off; at 3+ seats they're off unless chosen.
     const off = lobby({ ...g, variants: { ...g.variants, friendlyRobber: false, balancedDice: false } }, 2);
     expect(lobbyVariantLabels(off)).toEqual([]);

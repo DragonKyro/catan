@@ -6,7 +6,8 @@
 //      "globalSlots":[…],"layouts":{hex,vertex,edge,global},"topology":{…},
 //      "encoderVersion":…,"actionSpaceVersion":…}
 //   → {"cmd":"reset","options":{numEnvs, seed, players, seats, maxTurns, maxSteps,
-//      vpShaping, victoryPoints, reward, quota, teacher, refusedOfferPenalty}}
+//      vpShaping, victoryPoints, reward, quota, teacher, refusedOfferPenalty,
+//      offerCost, friendlyRobber, balancedDice, …}}
 //   → {"cmd":"step","actions":[slot, …]}          (one per env)
 //   ← {"ok":true,"n":…,"seat":[…],"role":[…],"reward":[…],"done":[…],"episodes":[…],
 //      "binary":[["hexes",bytes],["vertices",bytes],["edges",bytes],["global",bytes],["mask",bytes],

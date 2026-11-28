@@ -4,7 +4,7 @@ import { applyAction } from '@/game/engine';
 import { runSetupPhase, giveResources } from '@/game/__testHelpers';
 import type { GameState } from '@/game/types';
 import { hasAnsweredTrade } from '@/game/actions/trade';
-import { chooseTradePartner, nextTradeResponder, pendingTradeStep, tryCounterTrade, tryExtractCounter } from './trade';
+import { chooseTradePartner, nextTradeResponder, pendingTradeStep, shouldAcceptTrade, tryCounterTrade, tryExtractCounter } from './trade';
 import { MAX_AI_COUNTERS_PER_SEAT, MAX_AI_COUNTERS_PER_TURN, aiMayCounter } from './counterLimits';
 import { sampleGames } from './nn/testSupport';
 
@@ -114,5 +114,22 @@ describe('counter-offer limits (like the 2 offers a turn)', () => {
       expect(aiMayCounter(made(human, { [other]: 3 }), id)).toBe(true);
       expect(counters(made(human, { [other]: 3 }), id)).not.toBeNull();
     }
+  });
+});
+
+describe('2 players: a trade is judged against what it does for the proposer', () => {
+  function twoPlayerOffer(give: Record<string, number>, receive: Record<string, number>): GameState {
+    let s = runSetupPhase(createGame({ playerNames: ['A', 'B'], seed: 42, randomizeTurnOrder: false }));
+    s = applyAction(s, { type: 'rollDice', playerId: 'p0', dice: [3, 3] });
+    const empty = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+    s = { ...s, players: s.players.map((p) => ({ ...p, resources: { ...empty } })) };
+    s = giveResources(s, 'p0', { sheep: 3, wheat: 2 });
+    s = giveResources(s, 'p1', { brick: 4 });
+    return applyAction(s, { type: 'proposeTrade', playerId: 'p0', give, receive });
+  }
+
+  it('refuses an even swap the proposer asked for (it helps them more), takes a generous one', () => {
+    expect(shouldAcceptTrade(twoPlayerOffer({ sheep: 1 }, { brick: 1 }), 'p1')).toBe(false);
+    expect(shouldAcceptTrade(twoPlayerOffer({ sheep: 2, wheat: 1 }, { brick: 1 }), 'p1')).toBe(true);
   });
 });

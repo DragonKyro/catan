@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyAction } from '@/game/engine';
+import { applyAction, robberHexAllowed } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
 import { canConnectRoad, canPlaceSettlement } from '@/game/placement';
 import { canAfford } from '@/game/resources';
@@ -256,6 +256,44 @@ describe('catan action space', () => {
       'endTurn', 'discard', 'moveRobber', 'proposeTrade', 'acceptTrade', 'rejectTrade']) {
       expect(kinds).toContain(t);
     }
+  });
+
+  it('2 players, 1v1 rules: every legal slot is one the engine accepts; the robber goes only where the Friendly Robber allows', () => {
+    const oneVOne = sampleGames({
+      players: 2, games: 2, seed: 64, every: 2, maxSteps: 3000, vpTarget: 15,
+      settings: { balancedDice: true, tradersVariants: { friendlyRobber: true } },
+    });
+    const u = rng(11);
+    let tried = 0;
+    let robberChecks = 0;
+    let ruledOut = 0;
+    for (const s of oneVOne) {
+      for (const p of deciders(s)) {
+        const k = s.knowledge[p.id]!;
+        const obs = observe(s.state, p.id, k);
+        const mask = legalMask(obs);
+        if (obs.decision?.type === 'robberHex') {
+          const L = slotLayout(obs);
+          const H0 = L.vertices + L.edges;
+          obs.index.hexIds.forEach((hex, h) => {
+            const ok = hex !== s.state.board.robberHex && robberHexAllowed(s.state, hex, p.id);
+            expect(mask[H0 + h], hex).toBe(ok ? 1 : 0);
+            if (!ok && hex !== s.state.board.robberHex) ruledOut++;
+          });
+          robberChecks++;
+        }
+        for (let slot = 0; slot < mask.length; slot++) {
+          if (!mask[slot]) continue;
+          const d = decodeSlot(obs, slot);
+          const action = d.kind === 'action' ? d.action : finish(s.state, p.id, k, d.draft, u);
+          expect(() => applyAction(s.state, action), `${obs.decision!.type} → ${JSON.stringify(action)}`).not.toThrow();
+          tried++;
+        }
+      }
+    }
+    expect(tried).toBeGreaterThan(500);
+    expect(robberChecks).toBeGreaterThan(0);
+    expect(ruledOut).toBeGreaterThan(0); // the Friendly Robber did rule hexes out
   });
 
   it('slotForAction inverts decodeSlot', () => {

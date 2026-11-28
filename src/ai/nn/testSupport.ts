@@ -6,7 +6,7 @@ import { createGame } from '@/game/createGame';
 import { applyAction } from '@/game/engine';
 import { getActingPlayerId } from '@/game/helpers';
 import { nextRng, rollDice, shuffle } from '@/game/rng';
-import type { Action, DevCardType, GameState, PlayerId, ResourceBank } from '@/game/types';
+import type { Action, DevCardType, GameSettings, GameState, PlayerId, ResourceBank } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { chooseAction, shouldAcceptTrade } from '../index';
 import { pendingTradeStep } from '../trade';
@@ -21,6 +21,8 @@ export interface SimOptions {
   players: number;
   seed: number;
   vpTarget?: number;
+  /** More game settings (rule options), merged over the VP target. */
+  settings?: Partial<GameSettings>;
   /** Keep every `every`-th state (default 1). */
   every?: number;
   maxSteps?: number;
@@ -42,7 +44,7 @@ export function playGame(
     playerNames: names,
     playerTypes: names.map(() => 'ai' as const),
     seed: opts.seed,
-    settings: { victoryPointsToWin: opts.vpTarget ?? 10 },
+    settings: { victoryPointsToWin: opts.vpTarget ?? 10, ...opts.settings },
   });
   let dice = (opts.seed * 2654435761) >>> 0;
   let knowledge: Record<PlayerId, CatanKnowledge> = {};

@@ -324,8 +324,25 @@ function shouldAcceptTradeAs(state: GameState, playerId: PlayerId): boolean {
   // Threat penalty: accepting means we GIVE `trade.receive` to the proposer.
   // If giving them those resources advances their win, refuse the trade.
   const penalty = threatPenaltyForGiving(state, playerId, trade.proposerId, trade.receive);
+  // Two players: there's no one else to win, so whatever the trade does for
+  // the proposer it does against us — take it only when it helps us more
+  // than them (their side priced from what's public: the cards' values,
+  // and that they asked for these cards, so presumably need them).
+  if (state.players.length === 2 && !twoPlayerTradeOk(state, score, trade)) return false;
   return score - penalty >= ACCEPT_THRESHOLD;
 }
+
+/** What a 2-player trade gains the proposer, from public info, vs what it gains us. */
+function twoPlayerTradeOk(state: GameState, ourScore: number, trade: NonNullable<GameState['pendingTrade']>): boolean {
+  void state;
+  let asked = 0;
+  for (const r of RESOURCES) asked += trade.receive[r] ?? 0;
+  const theirs = partialValue(trade.receive) - partialValue(trade.give) + asked * TWO_PLAYER_NEED_GUESS;
+  return ourScore - theirs >= TWO_PLAYER_ACCEPT_MARGIN;
+}
+// Per card asked for: how much the proposer is taken to need it (tradeScore's need bonus).
+const TWO_PLAYER_NEED_GUESS = 0.7;
+const TWO_PLAYER_ACCEPT_MARGIN = 0;
 
 // When the proposer looks desperate (the trade would let them immediately
 // build a settle/city, OR they're asking for a resource they don't produce

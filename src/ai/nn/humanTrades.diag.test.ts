@@ -16,13 +16,13 @@ import type { Action, PlayerId, Resource } from '@/game/types';
 import { RESOURCES } from '@/game/types';
 import { chooseAction, shouldAcceptTrade } from '../index';
 import { tryCounterTrade, tryExtractCounter } from '../trade';
-import { AI_LEVELS } from './levels';
+import { AI_POLICIES } from './levels';
 import { hasAnsweredTrade } from '@/game/actions/trade';
 import { KnowledgeSession, chooseNeuralAction } from './index';
 import { CatanPolicyNet, decodePolicyBinary } from './runtime';
 
 const HEURISTIC = !!process.env.HEURISTIC;
-const net = new CatanPolicyNet(decodePolicyBinary(readFileSync(resolve('src/ai/nn/policies', AI_LEVELS.hard.file))));
+const net = new CatanPolicyNet(decodePolicyBinary(readFileSync(resolve('src/ai/nn/policies', AI_POLICIES.hard.file))));
 
 interface Failure { seed: number; step: number; who: PlayerId; where: string; action: Action; error: string; phase: string; trade: unknown }
 interface CounterStats { counters: number; taken: number; turns: number; maxBySeatInTurn: number }

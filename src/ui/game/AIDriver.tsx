@@ -7,7 +7,7 @@ import type { Action, GameState, PlayerId } from '@/game/types';
 import { chooseAction, shouldAcceptTrade } from '@/ai';
 import { tryCounterTrade, tryExtractCounter } from '@/ai/trade';
 import { hasAnsweredTrade } from '@/game/actions/trade';
-import { KnowledgeSession, chooseNeuralAction, loadAiLevel, loadedAiLevel, neuralLevel } from '@/ai/nn';
+import { KnowledgeSession, chooseNeuralAction, loadAiPolicy, loadedAiPolicy, neuralPolicy } from '@/ai/nn';
 
 // Each AI seat's knowledge (card counting etc.) for the trained-network AI,
 // replayed from the game log. One game is driven at a time.
@@ -18,8 +18,8 @@ let warned: string | null = null;
  *  set, or undefined when the heuristic AI should decide (other rule sets, the
  *  network still loading, a log that can't be replayed, or nothing to decide). */
 function neuralAction(game: GameState, playerId: PlayerId): Action | undefined {
-  const level = neuralLevel(game);
-  const net = level ? loadedAiLevel(level) : null;
+  const policy = neuralPolicy(game);
+  const net = policy ? loadedAiPolicy(policy) : null;
   if (!net) return undefined;
   const log = useLogStore.getState();
   const seats = game.players.filter((p) => p.isAI).map((p) => p.id);
@@ -115,25 +115,25 @@ export function AIDriver() {
   // When the AI's current offer first showed (AI_MIN_OFFER_MS).
   const offerShown = useRef<{ key: string; at: number } | null>(null);
 
-  // Trained-network AI: fetch the level's policy file once, and hold the AI
-  // seats until it's in (a failed fetch falls back to the classic AI).
-  const level = game ? neuralLevel(game) : null;
+  // Trained-network AI: fetch the table size's policy file once, and hold the
+  // AI seats until it's in (a failed fetch falls back to the classic AI).
+  const policy = game ? neuralPolicy(game) : null;
   const [loadTick, setLoadTick] = useState(0);
   const [loadFailed, setLoadFailed] = useState<string | null>(null);
   useEffect(() => {
-    if (!canDriveAI || !level || loadedAiLevel(level)) return;
+    if (!canDriveAI || !policy || loadedAiPolicy(policy)) return;
     let live = true;
-    loadAiLevel(level)
+    loadAiPolicy(policy)
       .then(() => live && setLoadTick((t) => t + 1))
       .catch((e) => {
-        console.warn(`[AIDriver] could not load the ${level} AI, using the classic AI:`, (e as Error).message);
-        if (live) setLoadFailed(level);
+        console.warn(`[AIDriver] could not load the ${policy} AI, using the classic AI:`, (e as Error).message);
+        if (live) setLoadFailed(policy);
       });
     return () => {
       live = false;
     };
-  }, [level, canDriveAI]);
-  const waitingForNet = level !== null && loadFailed !== level && !loadedAiLevel(level);
+  }, [policy, canDriveAI]);
+  const waitingForNet = policy !== null && loadFailed !== policy && !loadedAiPolicy(policy);
 
   // Main turn-loop driver
   useEffect(() => {

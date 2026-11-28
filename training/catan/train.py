@@ -88,7 +88,7 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 import evaluate as ev
-from env_client import ROLE_LEARNER, ROLE_OPPONENT, Batch, CatanEnv
+from env_client import ROLE_LEARNER, ROLE_OPPONENT, Batch, CatanEnv, add_game_args, game_flags, game_options, rules_label
 from model import (OUTCOME_SEATS, RULE_NAMES, CatanNet, Topology, export_policy, load_checkpoint, load_policy,
                    masked_logits,
                    policy_rules, read_policy_meta,
@@ -149,6 +149,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                       help="share of learner seats whose opening a persona from --learner-setup-personas plays")
     game.add_argument("--learner-setup-personas", default="woodBrick,oreWheatSheep,portStack",
                       help="lopsided openings for --learner-setup-share (comma list)")
+    add_game_args(game)
+    game.add_argument("--offer-cost", type=float, default=0.0,
+                      help="reward charged for every offer / counter-offer a learner makes, taken or not "
+                           "(each costs the table time to answer)")
     game.add_argument("--refused-offer-penalty", type=float, default=0.002,
                       help="charged when everyone rejects an offer (a VP of shaping is 0.05, a place 0.17)")
 
@@ -262,6 +266,8 @@ def seats_for(role: str, players: int, has_pool: bool, mixed_personas: int = 1) 
     if role == "self":
         return ["learner"] * players
     if role == "blend":
+        if players < 3:
+            raise SystemExit("blend tables (two learners + a heuristic) need 3+ players")
         return ["learner", "learner", "heuristic"] + ["opponent" if has_pool else "heuristic"] * (players - 3)
     if role == "heuristic" or not has_pool:
         return ["learner"] + ["heuristic"] * (players - 1)
@@ -351,9 +357,9 @@ class Evaluator:
     """Runs `evaluate.py match` jobs one at a time on a thread, each in its own
     process (own GIL, own CUDA context), so training never waits for an eval."""
 
-    def __init__(self, games: int, workers: int, device: str, max_turns: int, players: int):
+    def __init__(self, games: int, workers: int, device: str, max_turns: int, players: int, game_flags: list[str]):
         self.games, self.workers, self.device = games, workers, device
-        self.max_turns, self.players = max_turns, players
+        self.max_turns, self.players, self.game_flags = max_turns, players, game_flags
         self.jobs: queue.Queue = queue.Queue()
         self.results: queue.Queue = queue.Queue()
         self.thread = threading.Thread(target=self._loop, daemon=True)
@@ -367,7 +373,8 @@ class Evaluator:
             update, tag, policy, opponent, lineup, extra = job
             cmd = [sys.executable, "-u", os.path.join(HERE, "evaluate.py"), "match", policy, opponent,
                    "--games", str(self.games), "--workers", str(self.workers), "--device", self.device,
-                   "--max-turns", str(self.max_turns), "--players", str(self.players), "--json", *extra]
+                   "--max-turns", str(self.max_turns), "--players", str(self.players), "--json",
+                   *self.game_flags, *extra]
             if lineup:
                 cmd += ["--lineup", lineup]
             try:
@@ -510,6 +517,8 @@ class Trainer:
         if set(names) - set(RULE_NAMES):
             raise SystemExit(f"--rules: unknown {sorted(set(names) - set(RULE_NAMES))} (known: {', '.join(RULE_NAMES)})")
         self.learner_rules = {k: k in names for k in RULE_NAMES}
+        # The game's rules (VP target, rule options): the app's defaults for the seat count unless set.
+        self.rules = game_options(a.players, a.vp, a.friendly_robber, a.balanced_dice)
         self.fixed_path = ev.resolve(a.fixed_opponent) if a.fixed_opponent else None
         self.bench_path = ev.resolve(a.benchmark) if a.benchmark else None
         self.bench_label = ""
@@ -541,8 +550,9 @@ class Trainer:
             worker.batch = env.reset(num_envs=a.envs_per_worker, seed=seed,
                                      seats=self.seats(role, fixed is not None),
                                      max_turns=a.max_turns, vp_shaping=a.vp_shaping, teacher=env_teacher,
-                                     refused_offer_penalty=a.refused_offer_penalty, learner_rules=self.learner_rules,
-                                     opponent_rules=opp_rules, **self.opponent_options())
+                                     refused_offer_penalty=a.refused_offer_penalty, offer_cost=a.offer_cost,
+                                     learner_rules=self.learner_rules,
+                                     opponent_rules=opp_rules, **self.opponent_options(), **self.rules)
             self.workers.append(worker)
         # After the workers: --mix decides how many there are.
         with open(os.path.join(self.run_dir, "config.json"), "w", encoding="utf-8") as f:
@@ -584,7 +594,7 @@ class Trainer:
                     with open(path_, "w", encoding="utf-8") as f:
                         f.writelines(json.dumps(r) + "\n" for r in kept)
         self.fallbacks = self.aborted = 0
-        self.evaluator = (Evaluator(a.eval_games, a.eval_workers, a.device, a.max_turns, a.players)
+        self.evaluator = (Evaluator(a.eval_games, a.eval_workers, a.device, a.max_turns, a.players, game_flags(self.rules))
                           if a.eval_every > 0 else None)
         self.window: dict[str, collections.deque] = collections.defaultdict(lambda: collections.deque(maxlen=400))
         self.update_seconds: collections.deque = collections.deque(maxlen=50)
@@ -1180,10 +1190,11 @@ class Trainer:
         rows = done[-last:] if last else done
         gap = a.eval_past_gap * a.save_every
         tags = {t for u in rows for t in self.eval_results[u]}
-        names = {"past": f"vs {gap} updates earlier", "fixed": f"vs 3× {self.fixed_label or 'fixed'}",
-                 "blend": f"4-way (2× agent, heuristic, {self.fixed_label or 'fixed'})",
-                 "bench": f"vs 3× {self.bench_label or 'benchmark'}",
-                 "skew": f"lopsided opening vs 3× {self.bench_label or 'benchmark'}"}
+        k = f"{a.players - 1}×"  # copies of the opponent at the table
+        names = {"past": f"vs {gap} updates earlier", "fixed": f"vs {k} {self.fixed_label or 'fixed'}",
+                 "blend": f"{a.players}-way (2× agent, heuristic, {self.fixed_label or 'fixed'})",
+                 "bench": f"vs {k} {self.bench_label or 'benchmark'}",
+                 "skew": f"lopsided opening vs {k} {self.bench_label or 'benchmark'}"}
         extra = [t for t in ("bench", "skew", "past", "fixed", "blend") if t in tags]
         # Trades per match split by partner (persona or seat after the agent) and the bank, where they're interesting.
         split = [t for t in ("bench",) if t in tags]
@@ -1219,24 +1230,25 @@ class Trainer:
         if heur:
             best = max(heur, key=lambda u: self.eval_results[u]["heuristic"]["winRate"])
             lines.append(f"\nbest vs {self.heuristic_name} so far: update {best} at "
-                         f"{100 * self.eval_results[best]['heuristic']['winRate']:.1f}% (25% = as good as each heuristic seat)")
+                         f"{100 * self.eval_results[best]['heuristic']['winRate']:.1f}% ({100 / self.args.players:.0f}% = as good as each heuristic seat)")
         return "\n".join(lines)
 
     def write_progress(self) -> None:
         a = self.args
         v = self.versions
+        others = {1: "one", 2: "two", 3: "three"}.get(a.players - 1, str(a.players - 1))
         doc = [f"# {os.path.basename(self.run_dir)} progress",
                "",
-               f"Base-game Catan, {a.players} players. Encoder v{v['encoderVersion']}, action space "
+               f"Base-game Catan, {a.players} players ({rules_label(a.players, self.rules)}). Encoder v{v['encoderVersion']}, action space "
                f"v{v['actionSpaceVersion']} ({self.shape['slots']} slots), graph net {self.net.width}x{self.net.n_rounds}. "
-               f"Each checkpoint plays {a.eval_games} greedy matches per table: as one seat against three heuristic "
-               f"AIs ({a.heuristic_personas}"
+               f"Each checkpoint plays {a.eval_games} greedy matches per table: as one seat against {others} heuristic "
+               f"AI{'s' if a.players > 2 else ''} ({a.heuristic_personas}"
                f"{', distinct' if a.distinct_personas else ''}{', targeting it: ' + a.target_personas if a.target_personas else ''}), "
-               f"and (columns further right) against three copies of an earlier policy or the benchmark, or at the 4-way table, "
+               f"and (columns further right) against {others} cop{'ies' if a.players > 2 else 'y'} of an earlier policy or the benchmark, or at the {a.players}-way table, "
                f"where it holds two seats and its win % is per seat. Seats rotate round the table. "
-               f"Win 25% = parity with each opponent seat; place 1 = first, "
-               f"{a.players} = last (2.5 = average); offers / trades are the agent's per match vs the heuristics, split by "
-               f"partner (LR / LA / griefer = the personas; +1..+3 = the seat that many after it) and the bank. Updated {time.strftime('%Y-%m-%d %H:%M')}, update "
+               f"Win {100 / a.players:.0f}% = parity with each opponent seat; place 1 = first, "
+               f"{a.players} = last ({(a.players + 1) / 2:g} = average); offers / trades are the agent's per match vs the heuristics, split by "
+               f"partner (LR / LA / griefer = the personas; +1..+{a.players - 1} = the seat that many after it) and the bank. Updated {time.strftime('%Y-%m-%d %H:%M')}, update "
                f"{self.update}/{a.updates}, {self.train_seconds / 3600:.1f} h trained.",
                "",
                "## Latest 10 checkpoints",

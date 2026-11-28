@@ -14,8 +14,12 @@ describe('2-player games (1v1 rules)', () => {
     let smallestDiscardHand = Infinity;
     let sevens = 0;
     let rolls = 0;
+    let offers = 0;
+    let trades = 0;
     for (let seed = 1; seed <= 8; seed++) {
       const { final, steps } = simulate(seed, 2, ONE_V_ONE, 12000, (before, action, after) => {
+        if (action.type === 'proposeTrade') offers++;
+        if (action.type === 'confirmTrade') trades++;
         if (action.type === 'rollDice' && after.lastRoll) {
           rolls++;
           if (after.lastRoll.total === 7) sevens++;
@@ -35,7 +39,8 @@ describe('2-player games (1v1 rules)', () => {
     // A 7 only cuts hands of 10 or more.
     if (discards > 0) expect(smallestDiscardHand).toBeGreaterThanOrEqual(10);
     if (process.env.DIAG) {
-      console.log(`rolls per game ${turns.join(', ')}; 7s ${sevens}/${rolls}; discards ${discards}`);
+      console.log(`rolls per game ${turns.join(', ')}; 7s ${sevens}/${rolls}; discards ${discards}; `
+        + `per game ${(offers / 8).toFixed(1)} offers, ${(trades / 8).toFixed(1)} player trades`);
     }
   }, 120_000);
 });
